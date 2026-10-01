@@ -230,6 +230,19 @@ var defaultPaths = []py.Object{
 func resolveRunPath(runPath string, opts py.CompileOpts, pathObjs []py.Object, tryPath func(pyPath string) (bool, error)) error {
 	runPath = strings.TrimSuffix(runPath, "/")
 
+	// An absolute pathname is complete on its own: it must not be joined with
+	// the search paths, which would strip its leading separator.
+	if filepath.IsAbs(runPath) {
+		cont, err := tryPath(runPath)
+		if err != nil {
+			return err
+		}
+		if cont {
+			return py.ExceptionNewf(py.FileNotFoundError, "Failed to resolve %q", runPath)
+		}
+		return nil
+	}
+
 	var (
 		err  error
 		cwd  string

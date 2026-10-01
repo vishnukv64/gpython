@@ -570,10 +570,18 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	newC.Code.Argcount = int32(len(Args.Args))
 	newC.Code.Kwonlyargcount = int32(len(Args.Kwonlyargs))
 
+	// Decorators are evaluated first and stay at the bottom of the stack.
+	// MAKE_FUNCTION pops the defaults, keyword-defaults and annotations from
+	// the top of the stack, so everything it consumes must be pushed above
+	// the decorators, and the function then ends up on top where the
+	// decorator calls below expect their callable.
+	c.Exprs(DecoratorList)
+
 	// Defaults
 	c.Exprs(Args.Defaults)
 
-	// KwDefaults
+	// KwDefaults: MAKE_FUNCTION pops the default value first and then the
+	// kw-only argument name, so each entry is pushed as (name, value).
 	if len(Args.KwDefaults) > len(Args.Kwonlyargs) {
 		panic("compile: more KwDefaults than Kwonlyargs")
 	}
@@ -606,16 +614,13 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 		c.LoadConst(annotations)
 	}
 
-	// Load decorators onto stack
-	c.Exprs(DecoratorList)
-
-	// Make function or closure, leaving it on the stack
+	// Make function or closure, leaving it on the stack.
 	posdefaults := uint32(len(Args.Defaults))
 	kwdefaults := uint32(len(Args.KwDefaults))
 	args := uint32(posdefaults + (kwdefaults << 8) + (num_annotations << 16))
 	c.makeClosure(newC.Code, args, newC, newC.qualname)
 
-	// Call decorators
+	// Apply the decorators, innermost first
 	for range DecoratorList {
 		c.OpArg(vm.CALL_FUNCTION, 1) // 1 positional, 0 keyword pair
 	}

@@ -1429,30 +1429,52 @@ func do_CALL_FUNCTION(vm *Vm, argc int32) error {
 }
 
 // Implementation for MAKE_FUNCTION and MAKE_CLOSURE
-func _make_function(vm *Vm, argc int32, opcode OpCode) {
+func _make_function(vm *Vm, argc int32, opcode OpCode) error {
 	posdefaults := argc & 0xff
 	kwdefaults := (argc >> 8) & 0xff
 	num_annotations := (argc >> 16) & 0x7fff
 	qualname := vm.POP()
 	code := vm.POP()
-	function := py.NewFunction(vm.context, code.(*py.Code), vm.frame.Globals, string(qualname.(py.String)))
+
+	codeObj, ok := code.(*py.Code)
+	if !ok {
+		return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: code must be a code object, not %s", code.Type().Name)
+	}
+
+	// Python 3.3-3.10 push the function name (not the qualname) and
+	// CPython tolerates it being any object, so only convert real strings.
+	var qualnameStr string
+	if q, ok := qualname.(py.String); ok {
+		qualnameStr = string(q)
+	}
+	function := py.NewFunction(vm.context, codeObj, vm.frame.Globals, qualnameStr)
 
 	if opcode == MAKE_CLOSURE {
-		function.Closure = vm.POP().(py.Tuple)
+		closure, ok := vm.POP().(py.Tuple)
+		if !ok {
+			return py.ExceptionNewf(py.SystemError, "MAKE_CLOSURE: closure must be a tuple")
+		}
+		function.Closure = closure
 	}
 
 	if num_annotations > 0 {
-		names := vm.POP().(py.Tuple) // names of args with annotations
+		names, ok := vm.POP().(py.Tuple) // names of args with annotations
+		if !ok {
+			return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: annotations must be a tuple")
+		}
 		anns := py.NewStringDict()
 		name_ix := int32(len(names))
 		if num_annotations != name_ix+1 {
-			panic("vm: num_annotations wrong - corrupt bytecode?")
+			return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: num_annotations wrong - corrupt bytecode?")
 		}
 		for name_ix > 0 {
 			name_ix--
-			name := names[name_ix]
+			name, ok := names[name_ix].(py.String)
+			if !ok {
+				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: annotation name must be a string")
+			}
 			value := vm.POP()
-			anns[string(name.(py.String))] = value
+			anns[string(name)] = value
 		}
 		function.Annotations = anns
 	}
@@ -1462,7 +1484,11 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) {
 		for kwdefaults--; kwdefaults >= 0; kwdefaults-- {
 			v := vm.POP()   // default value
 			key := vm.POP() // kw only arg name
-			defs[string(key.(py.String))] = v
+			keyStr, ok := key.(py.String)
+			if !ok {
+				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: keyword argument name must be a string")
+			}
+			defs[string(keyStr)] = v
 		}
 		function.KwDefaults = defs
 	}
@@ -1476,6 +1502,7 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) {
 	}
 
 	vm.PUSH(function)
+	return nil
 }
 
 // Pushes a new function object on the stack. TOS is the code
@@ -1484,8 +1511,7 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) {
 //
 // FIXME these docs are slightly wrong.
 func do_MAKE_FUNCTION(vm *Vm, argc int32) error {
-	_make_function(vm, argc, MAKE_FUNCTION)
-	return nil
+	return _make_function(vm, argc, MAKE_FUNCTION)
 }
 
 // Creates a new function object, sets its func_closure slot, and
@@ -1494,8 +1520,7 @@ func do_MAKE_FUNCTION(vm *Vm, argc int32) error {
 // variables. The function also has argc default parameters, which are
 // found below the cells.
 func do_MAKE_CLOSURE(vm *Vm, argc int32) error {
-	_make_function(vm, argc, MAKE_CLOSURE)
-	return nil
+	return _make_function(vm, argc, MAKE_CLOSURE)
 }
 
 // Pushes a slice object on the stack. argc must be 2 or 3. If it is

@@ -25,6 +25,16 @@ import (
 
 var RegenTestData = flag.Bool("regen", false, "Regenerate golden files from current testdata.")
 
+// containsString reports whether the list of objects holds the given string.
+func containsString(items []py.Object, want string) bool {
+	for _, item := range items {
+		if s, ok := item.(py.String); ok && string(s) == want {
+			return true
+		}
+	}
+	return false
+}
+
 var gContext = py.NewContext(py.DefaultContextOpts())
 
 // Compile the program in the file prog to code in the module that is returned
@@ -54,11 +64,21 @@ func CompileSrc(t testing.TB, ctx py.Context, pySrc string, prog string) (*py.Mo
 
 	module, err := ctx.Store().NewModule(ctx, &py.ModuleImpl{
 		Info: py.ModuleInfo{
+			Name:     py.MainModuleName,
 			FileDesc: prog,
 		},
 	})
 	if err != nil {
 		t.Fatalf("%s: NewModule failed: %v", prog, err)
+	}
+
+	// The directory of the script being run is its first search path, which is
+	// what lets it import the helper modules sitting next to it.  This is the
+	// same rule CPython applies to "python script.py".
+	sysMod := ctx.Store().MustGetModule("sys")
+	paths, ok := sysMod.Globals["path"].(*py.List)
+	if ok && !containsString(paths.Items, path.Dir(prog)) {
+		paths.Items = append([]py.Object{py.String(path.Dir(prog))}, paths.Items...)
 	}
 
 	return module, code

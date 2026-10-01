@@ -252,6 +252,33 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Type metadata readable from Python (cls.__name__, cls.__doc__, ...)
+	TypeType.Dict["__name__"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return String(self.(*Type).Name), nil
+		},
+	}
+	TypeType.Dict["__qualname__"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return String(self.(*Type).Name), nil
+		},
+	}
+	TypeType.Dict["__doc__"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return String(self.(*Type).Doc), nil
+		},
+	}
+	TypeType.Dict["__bases__"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Type).Bases, nil
+		},
+	}
+	TypeType.Dict["__dict__"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Type).Dict, nil
+		},
+	}
 }
 
 // Make a new type from a name

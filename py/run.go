@@ -4,6 +4,11 @@
 
 package py
 
+import (
+	"os"
+	"path/filepath"
+)
+
 type CompileMode string
 
 const (
@@ -95,6 +100,11 @@ var (
 			SysPaths: DefaultCoreSysPaths,
 		}
 		opts.SysPaths = append(opts.SysPaths, DefaultAuxSysPaths...)
+		// A PYTHONPATH is searched before the built-in defaults, as in CPython.
+		if pythonPath := os.Getenv("PYTHONPATH"); pythonPath != "" {
+			paths := filepath.SplitList(pythonPath)
+			opts.SysPaths = append(paths, opts.SysPaths...)
+		}
 		return opts
 	}
 

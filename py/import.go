@@ -7,7 +7,6 @@
 package py
 
 import (
-	"path/filepath"
 	"strings"
 )
 
@@ -81,44 +80,74 @@ func Import(ctx Context, names ...string) error {
 // Changed in version 3.3: Negative values for level are no longer
 // supported (which also changes the default value to 0).
 func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDict, fromlist Tuple, level int) (Object, error) {
+	if globals == nil {
+		globals = StringDict{}
+	}
+
+	// Resolve explicit relative imports against the importing module's package
+	if level > 0 {
+		absName, err := resolveRelativeImport(name, level, globals)
+		if err != nil {
+			return nil, err
+		}
+		name = absName
+	} else {
+		name = strings.TrimPrefix(name, ".")
+	}
+
+	if name == "" {
+		return nil, ExceptionNewf(ValueError, "Empty module name")
+	}
+
+	// Import the module and every one of its parent packages.  "import a.b.c"
+	// binds "a", but each package on the way must be loaded first and the
+	// child bound onto its parent as an attribute.
+	parts := strings.Split(name, ".")
+	var module *Module
+	var err error
+	var parent *Module
+	for i := range parts {
+		module, err = importOne(ctx, strings.Join(parts[:i+1], "."))
+		if err != nil {
+			return nil, err
+		}
+		if parent != nil {
+			parent.Globals[parts[i]] = module
+		}
+		parent = module
+	}
+
+	// "from pkg import a, b" -- import any of the names that are submodules
+	if err := ensureFromlist(ctx, module, name, fromlist); err != nil {
+		return nil, err
+	}
+
+	if len(fromlist) == 0 {
+		// Plain "import a.b.c" returns the top level package "a"
+		return importOne(ctx, parts[0])
+	}
+
+	return module, nil
+}
+
+// importOne imports the module with the given absolute dotted name, returning
+// an already loaded instance when there is one.
+func importOne(ctx Context, name string) (*Module, error) {
 	// Module already loaded - return that
 	if module, err := ctx.GetModule(name); err == nil {
 		return module, nil
 	}
 
-	// See if the module is a registered embeddded module that has not been loaded into this ctx yet.
+	// Registered embedded module that has not been loaded into this ctx yet
 	if impl := GetModuleImpl(name); impl != nil {
-		module, err := ctx.ModuleInit(impl)
-		if err != nil {
-			return nil, err
-		}
-		return module, nil
+		return ctx.ModuleInit(impl)
 	}
 
-	if level != 0 {
-		return nil, ExceptionNewf(SystemError, "Relative import not supported yet")
-	}
-
-	// Convert import's dot separators into path seps
-	parts := strings.Split(name, ".")
-	srcPathname := filepath.Join(parts...)
-
-	opts := CompileOpts{
-		UseSysPaths: true,
-	}
-
-	if fromFile, ok := globals["__file__"]; ok {
-		if fromFileStr, ok := fromFile.(String); ok {
-			opts.CurDir = filepath.Dir(string(fromFileStr))
-		}
-	}
-
-	module, err := RunFile(ctx, srcPathname, opts, name)
+	path, isPkg, err := findModule(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-
-	return module, nil
+	return initModuleFromPath(ctx, name, path, isPkg)
 }
 
 // Straight port of the python code
@@ -359,7 +388,7 @@ func BuiltinImport(ctx Context, self Object, args Tuple, kwargs StringDict, curr
 	}
 	levelInt, err := levelObj.GoInt()
 	if err != nil {
-	    return nil, err
+		return nil, err
 	}
 
 	globalsDict, ok := globals.(StringDict)

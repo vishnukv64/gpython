@@ -239,6 +239,16 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 		dict := I.GetDict()
 		res, ok = dict[key]
 		if ok {
+			// A type's dict is its class namespace, and class attributes
+			// still go through the descriptor protocol: a staticmethod in
+			// the class body yields the plain function, a classmethod a
+			// method bound to the class, and a property the property
+			// object itself (its getter is only run for an instance).
+			if _, isType := self.(*Type); isType {
+				if I, ok := res.(I__get__); ok {
+					return I.M__get__(None, self)
+				}
+			}
 			return res, err
 		}
 	}
