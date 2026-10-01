@@ -241,3 +241,21 @@ func (store *ModuleStore) OnContextClosed() {
 		}
 	}
 }
+
+// GetModuleImplOrNil returns the registered module of that name, loading it
+// if it has not been loaded yet, or nil when nothing registers the name.
+//
+// It is for one embedded module that needs another's objects without an
+// import statement, which is not possible at package level because that
+// would be an import cycle.
+func GetModuleImplOrNil(name string) *Module {
+	impl := GetModuleImpl(name)
+	if impl == nil {
+		return nil
+	}
+	mod, err := NewModuleStore().NewModule(nil, impl)
+	if err != nil {
+		return nil
+	}
+	return mod
+}

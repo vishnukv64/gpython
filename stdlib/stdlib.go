@@ -34,6 +34,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/sys"
 	_ "github.com/vishnukv64/gpython/stdlib/tempfile"
 	_ "github.com/vishnukv64/gpython/stdlib/time"
+	_ "github.com/vishnukv64/gpython/stdlib/typing"
 )
 
 func init() {
