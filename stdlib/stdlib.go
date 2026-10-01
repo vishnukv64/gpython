@@ -23,6 +23,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/array"
 	_ "github.com/vishnukv64/gpython/stdlib/binascii"
 	_ "github.com/vishnukv64/gpython/stdlib/builtin"
+	_ "github.com/vishnukv64/gpython/stdlib/codecs"
 	_ "github.com/vishnukv64/gpython/stdlib/collections"
 	_ "github.com/vishnukv64/gpython/stdlib/contextlib"
 	_ "github.com/vishnukv64/gpython/stdlib/datetime"
