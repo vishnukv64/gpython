@@ -80,6 +80,18 @@ func init() {
 	// os.path is the posixpath module object, so os.path.join and friends
 	// reach the functions registered there, and "os.path is posixpath" holds.
 	globals["path"] = PathModule()
+	// The separator constants, which code joins paths with.
+	globals["pathsep"] = osPathsep
+	globals["linesep"] = osLinesep
+	globals["altsep"] = osAltsep
+	// os.PathLike: the protocol a path-like object implements.  It needs to
+	// be a class, since "os.PathLike[str]" appears in annotations and real
+	// code tests for it, and it must accept a subscription.
+	pathLikeType := py.NewType("os.PathLike", "Abstract base class for objects representing a file system path.")
+	pathLikeType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters.")
+	globals["PathLike"] = pathLikeType
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

@@ -1824,3 +1824,56 @@ func (t *Type) IsEnumBase() bool {
 
 // TPFLAGS_ENUM marks a class that derives from enum.Enum.
 const TPFLAGS_ENUM uint = 1 << 20
+
+// M__or__ gives "type | type" a result.
+//
+// PEP 604 unions appear in evaluated positions - a class base, a default
+// value - where deferring annotations does not help, so the type object has
+// to answer "|" rather than raising.  The result is a union type that exists
+// to be used as a base or passed around; it is not a run-time membership
+// test.
+func (t *Type) M__or__(other Object) (Object, error) {
+	return unionOf(t, other)
+}
+
+// unionOf builds (or reuses) the union type of two types.
+func unionOf(a, b Object) (Object, error) {
+	name := "Union"
+	if at, ok := a.(*Type); ok {
+		name += "[" + at.Name
+	}
+	if bt, ok := b.(*Type); ok {
+		name += ", " + bt.Name
+	}
+	name += "]"
+
+	union := NewType("typing."+name, "A union of types, from X | Y.")
+	union.Flags |= TPFLAGS_BASETYPE
+	// The union is a set of types rather than one, so deriving from it is
+	// allowed and gives a class whose base is the union.
+	if at, ok := a.(*Type); ok {
+		union.Base = at
+	} else if bt, ok := b.(*Type); ok {
+		union.Base = bt
+	}
+	return union, nil
+}
+
+// UnionType is the type of a union made from "|".
+var UnionType = NewType("typing.UnionType", "The type of a union made with X | Y.")
+
+func init() {
+	// __or__ on a type produces a union, which is what makes
+	// "class C(str | bytes)" work.  It is set on TypeType so every type has
+	// it, and the Go interface above is what the VM actually reaches.
+	orMethod := MustNewMethod("__or__", func(self Object, args Tuple) (Object, error) {
+		var other Object
+		if err := UnpackTuple(args, nil, "__or__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		return unionOf(self, other)
+	}, 0, "Return the union of two types.")
+	if TypeType.Dict != nil {
+		TypeType.Dict["__or__"] = orMethod
+	}
+}

@@ -101,10 +101,33 @@ func (s *specialForm) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object,
 	return s, nil
 }
 
+// M__or__ supports the PEP 604 union syntax: "SupportsInt | None" is
+// evaluated at run time unless annotations are deferred, so an inert form
+// that could not be combined with "|" would break the annotation it appears
+// in.  The result is another inert form, since the union has no run-time
+// meaning either.
+func (s *specialForm) M__or__(other py.Object) (py.Object, error) {
+	return form(s.name + " | " + nameOf(other)), nil
+}
+
+func nameOf(v py.Object) string {
+	if sf, ok := v.(*specialForm); ok {
+		return sf.name
+	}
+	if t, ok := v.(*py.Type); ok {
+		return t.Name
+	}
+	if text, err := py.ReprAsString(v); err == nil {
+		return text
+	}
+	return "?"
+}
+
 var (
 	_ py.I__repr__    = (*specialForm)(nil)
 	_ py.I__getitem__ = (*specialForm)(nil)
 	_ py.I__call__    = (*specialForm)(nil)
+	_ py.I__or__      = (*specialForm)(nil)
 )
 
 func form(name string) *specialForm {
@@ -186,6 +209,10 @@ func init() {
 		"Reversible", "Self", "Sequence", "Set", "Sized", "Text",
 		"TextIO", "Tuple", "Type", "TypeAlias", "TypeGuard", "Union",
 		"Unpack", "ValuesView", "final", "overload", "runtime_checkable",
+		"SupportsInt", "SupportsFloat", "SupportsComplex", "SupportsBytes",
+		"SupportsAbs", "SupportsRound", "SupportsIndex", "SupportsRichComparison",
+		"Buffer", "LiteralString", "Self", "Never", "NoReturn", "AnyStr",
+		"TypeVarTuple", "TypeAliasType", "Generic", "Protocol",
 	} {
 		globals[name] = form(name)
 	}
@@ -235,12 +262,71 @@ func init() {
 	globals["NamedTuple"] = py.MustNewMethod("NamedTuple", namedTupleNew, 0, "Typed version of collections.namedtuple.")
 	// Generic and Protocol are used as bases, so they are real classes with
 	// a class-getitem, rather than inert forms.
+	// TypedDict is a class base for a dict-shaped record, and is also called
+	// as a factory.  As a base it needs a real class; calling it returns the
+	// class itself, since the fields carry no run-time meaning here.
+	typedDictType := py.NewType("typing.TypedDict", "A dictionary with a fixed set of keys.")
+	typedDictType.Flags |= py.TPFLAGS_BASETYPE
+	typedDictType.Dict["__call__"] = py.MustNewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the field specification.")
+
 	genericType := py.NewType("typing.Generic", "Abstract base class for generic types.")
 	genericType.Flags |= py.TPFLAGS_BASETYPE
 	genericType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
 	}, 0, "Return the class, ignoring the subscription parameters.")
 	globals["Generic"] = genericType
+	globals["TypedDict"] = typedDictType
+
+	// ParamSpec and Concatenate are used in signatures: P = ParamSpec("P"),
+	// then Callable[Concatenate[T, P], R].  They need to be callable and
+	// subscriptable, which the inert forms already are.
+	globals["ParamSpec"] = py.MustNewMethod("ParamSpec", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return form("ParamSpec"), nil
+	}, 0, "Return a parameter specification, subscriptable by a type checker only.")
+	globals["TypeVarTuple"] = py.MustNewMethod("TypeVarTuple", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return form("TypeVarTuple"), nil
+	}, 0, "Return a variadic type variable.")
+	globals["TypeAliasType"] = py.MustNewMethod("TypeAliasType", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) > 1 {
+			return args[1], nil
+		}
+		return form("TypeAliasType"), nil
+	}, 0, "Create a type alias.")
+	globals["get_protocol_members"] = py.MustNewMethod("get_protocol_members", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.NewListFromItems(nil), nil
+	}, 0, "Return the members of a protocol.")
+	globals["is_protocol"] = py.MustNewMethod("is_protocol", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.False, nil
+	}, 0, "Return whether the class is a protocol.")
+	globals["assert_type"] = py.MustNewMethod("assert_type", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) == 0 {
+			return py.None, nil
+		}
+		return args[0], nil
+	}, 0, "Return the value, for a type checker to assert on.")
+	globals["assert_never"] = py.MustNewMethod("assert_never", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.None, nil
+	}, 0, "Mark unreachable code.")
+	globals["reveal_type"] = py.MustNewMethod("reveal_type", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) == 0 {
+			return py.None, nil
+		}
+		return args[0], nil
+	}, 0, "Reveal the type of an expression.")
+	globals["dataclass_transform"] = py.MustNewMethod("dataclass_transform", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		// Used as a decorator, with or without arguments.
+		if len(args) == 1 {
+			return args[0], nil
+		}
+		return &passthroughDecorator{}, nil
+	}, 0, "Mark a class or function as a dataclass-like transform.")
+	globals["override"] = py.MustNewMethod("override", passthrough, 0, "Mark a method as overriding its base.")
+	globals["deprecated"] = py.MustNewMethod("deprecated", passthrough, 0, "Mark a function as deprecated.")
+	globals["get_overloads"] = py.MustNewMethod("get_overloads", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.NewListFromItems(nil), nil
+	}, 0, "Return the overloads of a function.")
 
 	protocolType := py.NewType("typing.Protocol", "Base class for protocol classes.")
 	protocolType.Flags |= py.TPFLAGS_BASETYPE
@@ -369,4 +455,44 @@ func getArgs(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Tuple{}, nil
 	}
 	return py.Tuple{tp}, nil
+}
+
+// passthroughDecorator is returned when a decorator is used with arguments.
+type passthroughDecorator struct{}
+
+var passthroughDecoratorType = py.NewType("typing._decorator", "A decorator awaiting its function.")
+
+func (p *passthroughDecorator) Type() *py.Type { return passthroughDecoratorType }
+
+func (p *passthroughDecorator) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+	return py.None, nil
+}
+
+var _ py.I__call__ = (*passthroughDecorator)(nil)
+
+// The PEP 604 union operator on the types themselves.
+//
+// "str | bytes" appears in evaluated positions - a class base, a default -
+// where deferring annotations does not help, so a type has to support "|".
+// The result is an inert union object: it is only ever used as a base class
+// or passed around, never to test membership.
+func init() {
+	unionType := py.NewType("typing.UnionType", "The result of X | Y.")
+	unionType.Flags |= py.TPFLAGS_BASETYPE
+	unionType.Dict["__or__"] = py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var other py.Object
+		if err := py.UnpackTuple(args, nil, "__or__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		return form("Union"), nil
+	}, 0, "Return the union of two types.")
+
+	// Every type gains __or__, which is what makes "str | bytes" work.
+	py.TypeType.Dict["__or__"] = py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return form("Union"), nil
+	}, 0, "Return the union of two types.")
+	py.ObjectType.Dict["__or__"] = py.TypeType.Dict["__or__"]
 }

@@ -76,7 +76,22 @@ var pathImpl = &py.ModuleImpl{
 // every package variable initialiser before any init function, and os.go's
 // init binds os.path.  Registering in init() would be too late, because init
 // functions run in file order and os.go comes first.
+// pathGlobals holds the constants, and is attached before registration so
+// that the module os.path resolves to has them: a Globals map built later in
+// init() was never seen.
+var pathGlobals = py.StringDict{
+	"sep":     osSep,
+	"altsep":  osAltsep,
+	"pathsep": osPathsep,
+	"curdir":  py.String("."),
+	"pardir":  py.String(".."),
+	"extsep":  py.String("."),
+	"defpath": osDefpath,
+	"devnull": osDevnull,
+}
+
 var pathRegistered = func() bool {
+	pathImpl.Globals = pathGlobals
 	py.RegisterModule(pathImpl)
 	py.RegisterModuleAlias("ntpath", "posixpath")
 	return true
@@ -121,14 +136,11 @@ func unusedInit() {
 
 	// The module is registered under both names a program may import, and
 	// the same object is what os.path is bound to.
-	py.RegisterModule(&py.ModuleImpl{
-		Info: py.ModuleInfo{
-			Name: "posixpath",
-			Doc:  pathModule_doc,
-		},
-		Methods: methods,
-		Globals: globals,
-	})
+	// The constants are attached to the module implementation that os.path
+	// resolves to; building a Globals map and not attaching it left the
+	// module with its methods but none of the constants, so
+	// "os.path.pathsep" raised AttributeError.
+	pathImpl.Globals = globals
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
 			Name: "ntpath",
