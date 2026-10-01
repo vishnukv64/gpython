@@ -44,6 +44,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/tempfile"
 	_ "github.com/vishnukv64/gpython/stdlib/threading"
 	_ "github.com/vishnukv64/gpython/stdlib/time"
+	_ "github.com/vishnukv64/gpython/stdlib/types"
 	_ "github.com/vishnukv64/gpython/stdlib/typing"
 	_ "github.com/vishnukv64/gpython/stdlib/yaml"
 )
