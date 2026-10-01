@@ -388,3 +388,55 @@ var (
 	_ I__str__  = (*Exception)(nil)
 	_ I__repr__ = (*Exception)(nil)
 )
+
+// errnoValues is what OSError exposes as .errno and .strerror.
+//
+// CPython takes these from the two-argument form OSError(errno, strerror);
+// the interpreter's own errors carry only a message, so a handler that reads
+// .errno (which is how code recognises a missing file or a closed pipe)
+// would otherwise see AttributeError.  Nothing here sets them yet; they are
+// present so the attribute exists and reads as None, as it does in CPython
+// for an OSError built from a message alone.
+func init() {
+	setErrno := func(self Object) (Object, error) {
+		if e, ok := self.(*Exception); ok {
+			if v, ok := e.Dict["errno"]; ok {
+				return v, nil
+			}
+		}
+		return None, nil
+	}
+	setStrerror := func(self Object) (Object, error) {
+		if e, ok := self.(*Exception); ok {
+			if v, ok := e.Dict["strerror"]; ok {
+				return v, nil
+			}
+		}
+		return None, nil
+	}
+	OSError.Dict["errno"] = &Property{Fget: setErrno}
+	OSError.Dict["strerror"] = &Property{Fget: setStrerror}
+	OSError.Dict["filename"] = &Property{Fget: func(self Object) (Object, error) {
+		if e, ok := self.(*Exception); ok {
+			if v, ok := e.Dict["filename"]; ok {
+				return v, nil
+			}
+		}
+		return None, nil
+	}}
+
+	// SetErrno records an errno on an OSError, which is what the operating
+	// system wrappers in the standard library use.
+	SetErrno = func(e *Exception, errno int, strerror string) {
+		if e.Dict == nil {
+			e.Dict = make(StringDict)
+		}
+		e.Dict["errno"] = Int(errno)
+		e.Dict["strerror"] = String(strerror)
+	}
+}
+
+// SetErrno attaches an errno and its message to an OSError.  It is a
+// variable so that the standard library can call it without this package
+// knowing anything about errno.
+var SetErrno func(e *Exception, errno int, strerror string)
