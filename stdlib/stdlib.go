@@ -30,6 +30,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/future"
 	_ "github.com/vishnukv64/gpython/stdlib/glob"
 	_ "github.com/vishnukv64/gpython/stdlib/inspect"
+	_ "github.com/vishnukv64/gpython/stdlib/json"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
 	_ "github.com/vishnukv64/gpython/stdlib/os"
 	_ "github.com/vishnukv64/gpython/stdlib/string"
