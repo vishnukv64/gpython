@@ -297,3 +297,62 @@ func (f *Frame) LocalsToFast(clear bool) {
 		}
 	}
 }
+
+// The frame attributes below are the subset of the CPython frame interface
+// that Python code uses to walk out to a caller - which is what
+// inspect.currentframe().f_back.f_globals needs.
+func init() {
+	FrameType.Dict["f_back"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			f := self.(*Frame)
+			if f.Back == nil {
+				return None, nil
+			}
+			return f.Back, nil
+		},
+		Doc: "previous frame, or None if this is the outermost",
+	}
+	FrameType.Dict["f_globals"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Frame).Globals, nil
+		},
+		Doc: "global namespace as seen by this frame",
+	}
+	FrameType.Dict["f_locals"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			f := self.(*Frame)
+			// A running frame keeps its locals in slots, so they have to be
+			// materialised before the mapping is read.
+			f.FastToLocals()
+			return f.Locals, nil
+		},
+		Doc: "local namespace as seen by this frame",
+	}
+	FrameType.Dict["f_code"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Frame).Code, nil
+		},
+		Doc: "code object being executed in this frame",
+	}
+	FrameType.Dict["f_builtins"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Frame).Builtins, nil
+		},
+		Doc: "builtins namespace seen by this frame",
+	}
+	FrameType.Dict["f_lasti"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			// The instruction pointer is not tracked here, so there is no
+			// honest value to give; -1 is what CPython reports for a frame
+			// that has not started executing.
+			return Int(-1), nil
+		},
+		Doc: "index of last attempted instruction, or -1",
+	}
+	FrameType.Dict["f_lineno"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return Int(self.(*Frame).Code.Firstlineno), nil
+		},
+		Doc: "current line number, from the code object's first line",
+	}
+}

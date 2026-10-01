@@ -1661,11 +1661,40 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 			}
 		case py.InternalMethodDir:
 			return builtinDir(f, args)
+		case py.InternalMethodGetFrame:
+			return builtinGetFrame(f, args)
 		default:
 			return nil, py.ExceptionNewf(py.SystemError, "Internal method %v not found", x)
 		}
 	}
 	return py.Call(fn, args, kwargs)
+}
+
+// builtinGetFrame implements sys._getframe([depth]).  It lives here because
+// the frame stack belongs to the running interpreter, not to any module.
+func builtinGetFrame(f *py.Frame, args py.Tuple) (py.Object, error) {
+	depth := 0
+	if len(args) > 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "_getframe expected at most 1 argument, got %d", len(args))
+	}
+	if len(args) == 1 {
+		n, err := py.IndexInt(args[0])
+		if err != nil {
+			return nil, err
+		}
+		depth = n
+	}
+	// CPython counts from the frame that called _getframe, as seen by
+	// Python; here the caller of the internal method is the Python frame, so
+	// start there and walk out.
+	at := f.Context.Store().CurrentFrame()
+	for i := 0; i < depth && at != nil; i++ {
+		at = at.Back
+	}
+	if at == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "call stack is not deep enough")
+	}
+	return at, nil
 }
 
 // builtinDir implements dir().  It lives here rather than in the builtin

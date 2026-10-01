@@ -79,11 +79,15 @@ func (s *ModuleStore) PushFrame(f *Frame) {
 // PopFrame removes a frame that has finished executing.  It drops the
 // last entry rather than searching for f, because frames finish in the
 // order they start; the identity check guards against a mismatch.
+//
+// The frame keeps its Back pointer.  A frame that has been returned to the
+// caller (sys._getframe() handed out inside a call) stays walkable, which
+// is what CPython does - and it is why CPython documents that keeping a
+// frame creates a reference cycle.
 func (s *ModuleStore) PopFrame(f *Frame) {
 	s.frameMu.Lock()
 	defer s.frameMu.Unlock()
 	if n := len(s.frameStack); n > 0 && s.frameStack[n-1] == f {
-		f.Back = nil
 		s.frameStack = s.frameStack[:n-1]
 	}
 }

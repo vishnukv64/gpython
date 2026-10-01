@@ -264,3 +264,47 @@ func (co *Code) M__ne__(other Object) (Object, error) {
 // Check interface is satisfied
 var _ I__eq__ = (*Code)(nil)
 var _ I__ne__ = (*Code)(nil)
+
+// The code object attributes.  Python code reads these for tracebacks,
+// introspection and debugging; inspect and the traceback machinery both
+// depend on co_name and co_varnames in particular.
+func init() {
+	strAttr := func(get func(*Code) string) *Property {
+		return &Property{Fget: func(self Object) (Object, error) {
+			return String(get(self.(*Code))), nil
+		}}
+	}
+	intAttr := func(get func(*Code) int32) *Property {
+		return &Property{Fget: func(self Object) (Object, error) {
+			return Int(get(self.(*Code))), nil
+		}}
+	}
+	strTuple := func(get func(*Code) []string) *Property {
+		return &Property{Fget: func(self Object) (Object, error) {
+			names := get(self.(*Code))
+			items := make(Tuple, len(names))
+			for i, n := range names {
+				items[i] = String(n)
+			}
+			return items, nil
+		}}
+	}
+
+	CodeType.Dict["co_name"] = strAttr(func(c *Code) string { return c.Name })
+	CodeType.Dict["co_filename"] = strAttr(func(c *Code) string { return c.Filename })
+	CodeType.Dict["co_qualname"] = strAttr(func(c *Code) string { return c.Name })
+	CodeType.Dict["co_argcount"] = intAttr(func(c *Code) int32 { return c.Argcount })
+	CodeType.Dict["co_posonlyargcount"] = intAttr(func(c *Code) int32 { return c.Posonlyargcount })
+	CodeType.Dict["co_kwonlyargcount"] = intAttr(func(c *Code) int32 { return c.Kwonlyargcount })
+	CodeType.Dict["co_nlocals"] = intAttr(func(c *Code) int32 { return c.Nlocals })
+	CodeType.Dict["co_stacksize"] = intAttr(func(c *Code) int32 { return c.Stacksize })
+	CodeType.Dict["co_flags"] = intAttr(func(c *Code) int32 { return c.Flags })
+	CodeType.Dict["co_firstlineno"] = intAttr(func(c *Code) int32 { return c.Firstlineno })
+	CodeType.Dict["co_varnames"] = strTuple(func(c *Code) []string { return c.Varnames })
+	CodeType.Dict["co_names"] = strTuple(func(c *Code) []string { return c.Names })
+	CodeType.Dict["co_freevars"] = strTuple(func(c *Code) []string { return c.Freevars })
+	CodeType.Dict["co_cellvars"] = strTuple(func(c *Code) []string { return c.Cellvars })
+	CodeType.Dict["co_consts"] = &Property{Fget: func(self Object) (Object, error) {
+		return self.(*Code).Consts, nil
+	}}
+}

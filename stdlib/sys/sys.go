@@ -450,28 +450,6 @@ for depth is zero, returning the frame at the top of the call stack.
 This function should be used for internal and specialized
 purposes only.`
 
-func sys_getframe(self py.Object, args py.Tuple) (py.Object, error) {
-	// PyFrameObject *f = PyThreadState_GET()->frame;
-	// int depth = -1;
-
-	// if (!PyArg_ParseTuple(args, "|i:_getframe", &depth)) {
-	//     return nil;
-	// }
-
-	// while (depth > 0 && f != nil) {
-	//     f = f->f_back;
-	//     --depth;
-	// }
-	// if (f == nil) {
-	//     PyErr_SetString(PyExc_ValueError,
-	//                     "call stack is not deep enough");
-	//     return nil;
-	// }
-	// Py_INCREF(f);
-	// return (PyObject*)f;
-	return nil, py.NotImplementedError
-}
-
 const current_frames_doc = `_current_frames() -> dictionary
 
 Return a dictionary mapping each current thread T's thread id to T's
@@ -643,7 +621,7 @@ func init() {
 		py.MustNewMethod("getrefcount", sys_getrefcount, 0, getrefcount_doc),
 		py.MustNewMethod("getrecursionlimit", sys_getrecursionlimit, 0, getrecursionlimit_doc),
 		py.MustNewMethod("getsizeof", sys_getsizeof, 0, getsizeof_doc),
-		py.MustNewMethod("_getframe", sys_getframe, 0, getframe_doc),
+		py.MustNewMethod("_getframe", py.InternalMethodGetFrame, 0, getframe_doc),
 		py.MustNewMethod("intern", sys_intern, 0, intern_doc),
 		py.MustNewMethod("setcheckinterval", sys_setcheckinterval, 0, setcheckinterval_doc),
 		py.MustNewMethod("getcheckinterval", sys_getcheckinterval, 0, getcheckinterval_doc),
