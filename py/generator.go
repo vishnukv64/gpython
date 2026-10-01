@@ -116,8 +116,95 @@ func (it *Generator) Send(arg Object) (Object, error) {
 // StopIteration exception is raised. If the generator function does
 // not catch the passed-in exception, or raises a different exception,
 // then that exception propagates to the caller.
+// generator.throw(typ[, value[, traceback]])
+//
+// Raises an exception at the point where the generator is paused, and
+// returns the next value it yields.  If the generator does not catch it, the
+// exception propagates to the caller.
+//
+// The mechanism is to set the frame's exception and jump to the same unwind
+// path the VM takes for a raised exception (whyException), which is what lets
+// an "except" inside the generator catch it.
 func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
-	return nil, NotImplementedError
+	if it.Running {
+		return nil, ExceptionNewf(ValueError, "generator already executing")
+	}
+	if !it.Frame.Yielded {
+		// The generator has finished or never started: the exception is
+		// simply raised in the caller, which is what CPython does.
+		return it.throwIntoCaller(args)
+	}
+
+	var exc *Exception
+	switch len(args) {
+	case 0:
+		return nil, ExceptionNewf(TypeError, "throw() takes at least 1 argument")
+	case 1:
+		// The single argument may be an exception instance or a class.
+		switch v := args[0].(type) {
+		case *Exception:
+			exc = v
+		case *Type:
+			newExc, err := ExceptionNew(v, Tuple{}, nil)
+			if err != nil {
+				return nil, err
+			}
+			exc, _ = newExc.(*Exception)
+		default:
+			return nil, ExceptionNewf(TypeError, "exceptions must be classes or instances")
+		}
+	default:
+		typ, ok := args[0].(*Type)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "exceptions must be classes or instances")
+		}
+		// The remaining arguments become the exception's arguments.
+		newExc, err := ExceptionNew(typ, Tuple{args[1]}, nil)
+		if err != nil {
+			return nil, err
+		}
+		exc, _ = newExc.(*Exception)
+	}
+
+	it.Frame.Yielded = false
+	it.Running = true
+	it.Frame.PendingException = exc
+
+	res, err := VmRunFrame(it.Frame)
+	it.Running = false
+	it.Frame.PendingException = nil
+	if err == GeneratorExit || err == StopIteration {
+		return nil, StopIteration
+	}
+	if err != nil {
+		return nil, err
+	}
+	if it.Frame.Yielded {
+		return res, nil
+	}
+	return nil, StopIteration
+}
+
+// throwIntoCaller raises the given exception in the calling code, for a
+// generator that is not suspended.
+func (it *Generator) throwIntoCaller(args Tuple) (Object, error) {
+	if len(args) == 0 {
+		return nil, ExceptionNewf(TypeError, "throw() takes at least 1 argument")
+	}
+	switch v := args[0].(type) {
+	case *Exception:
+		return nil, v
+	case *Type:
+		newExc, err := ExceptionNew(v, Tuple{}, nil)
+		if err != nil {
+			return nil, err
+		}
+		if e, ok := newExc.(*Exception); ok {
+			return nil, e
+		}
+		return nil, ExceptionNewf(TypeError, "exceptions must be classes or instances")
+	}
+	return nil, ExceptionNewf(TypeError, "exceptions must be classes or instances")
 }
 
 // generator.close()

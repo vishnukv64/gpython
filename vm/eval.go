@@ -1915,8 +1915,27 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 	var arg int32
 	opcodes := frame.Code.Code
 	for vm.why == whyNot {
+		// A pending exception means generator.throw() was called: it is
+		// raised here, at the point the frame resumes, so the frame's own
+		// handlers see it exactly as if the generator had raised it.  This
+		// has to happen inside the loop: the block-unwinding below runs at
+		// the end of each iteration, and setting why before the loop would
+		// stop the loop from ever running.
+		injected := false
+		if frame.PendingException != nil {
+			pending := frame.PendingException
+			frame.PendingException = nil
+			vm.SetException(pending)
+			injected = true
+		}
 		if debugging {
 			debugf("* %4d:", frame.Lasti)
+		}
+		if injected {
+			// Do not execute an instruction with the exception pending: go
+			// straight to the unwinding at the end of the loop body, which
+			// is what finds the frame's own exception handler.
+			goto unwind
 		}
 		opcode = OpCode(opcodes[frame.Lasti])
 		frame.Lasti++
@@ -1960,6 +1979,7 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 			goto fast_yield
 		}
 
+	unwind:
 		// Something exceptional has happened - unwind the block stack
 		// and find out what
 		for vm.why != whyNot && frame.Block != nil {

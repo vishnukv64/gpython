@@ -57,6 +57,12 @@ type Frame struct {
 
 	// FIXME Tstate *PyThreadState
 	Lasti int32 // Last instruction if called
+
+	// PendingException is an exception to raise as soon as this frame
+	// resumes, set by generator.throw().  The VM reads it on entry and
+	// unwinds through the frame's own handlers, so an "except" inside a
+	// suspended generator catches what the caller threw at it.
+	PendingException *Exception
 	// Call PyFrame_GetLineNumber() instead of reading this field
 	// directly.  As of 2.3 f_lineno is only valid when tracing is
 	// active (i.e. when f_trace is set).  At other times we use
