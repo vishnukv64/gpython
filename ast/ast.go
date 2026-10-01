@@ -688,12 +688,17 @@ type ExceptHandler struct {
 
 type Arguments struct {
 	Pos
-	Args       []*Arg
-	Vararg     *Arg
-	Kwonlyargs []*Arg
-	KwDefaults []Expr
-	Kwarg      *Arg
-	Defaults   []Expr
+	Args []*Arg
+	// Posonlyargs are the arguments before the "/" marker (PEP 570).  They
+	// are also present at the head of Args, as in CPython, so that defaults,
+	// varnames and code-object numbering line up; len(Posonlyargs) is the
+	// count of leading entries that are positional-only.
+	Posonlyargs []*Arg
+	Vararg      *Arg
+	Kwonlyargs  []*Arg
+	KwDefaults  []Expr
+	Kwarg       *Arg
+	Defaults    []Expr
 }
 
 type Arg struct {

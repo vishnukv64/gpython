@@ -19,17 +19,18 @@ import (
 // Cellvars are names of local variables referenced by functions with
 // a closure.
 type Code struct {
-	Argcount       int32    // #arguments, except *args
-	Kwonlyargcount int32    // #keyword only arguments
-	Nlocals        int32    // #local variables
-	Stacksize      int32    // #entries needed for evaluation stack
-	Flags          int32    // CO_..., see below
-	Code           string   // instruction opcodes
-	Consts         Tuple    // list (constants used)
-	Names          []string // list of strings (names used)
-	Varnames       []string // tuple of strings (local variable names)
-	Freevars       []string // tuple of strings (free variable names)
-	Cellvars       []string // tuple of strings (cell variable names)
+	Argcount        int32    // #arguments, except *args
+	Kwonlyargcount  int32    // #keyword only arguments
+	Posonlyargcount int32    // #positional-only arguments, a prefix of Argcount
+	Nlocals         int32    // #local variables
+	Stacksize       int32    // #entries needed for evaluation stack
+	Flags           int32    // CO_..., see below
+	Code            string   // instruction opcodes
+	Consts          Tuple    // list (constants used)
+	Names           []string // list of strings (names used)
+	Varnames        []string // tuple of strings (local variable names)
+	Freevars        []string // tuple of strings (free variable names)
+	Cellvars        []string // tuple of strings (cell variable names)
 	// The rest doesn't count for hash or comparisons
 	Cell2arg    []byte // Maps cell vars which are arguments.
 	Filename    string // unicode (where it was loaded from)

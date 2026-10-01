@@ -215,6 +215,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	case *ast.Lambda:
 		code.Argcount = int32(len(node.Args.Args))
 		code.Kwonlyargcount = int32(len(node.Args.Kwonlyargs))
+		code.Posonlyargcount = int32(len(node.Args.Posonlyargs))
 		// Make None the first constant as lambda can't have a docstring
 		c.Const(py.None)
 		code.Name = "<lambda>"
@@ -224,6 +225,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	case *ast.FunctionDef:
 		code.Argcount = int32(len(node.Args.Args))
 		code.Kwonlyargcount = int32(len(node.Args.Kwonlyargs))
+		code.Posonlyargcount = int32(len(node.Args.Posonlyargs))
 		code.Name = string(node.Name)
 		c.setQualname()
 		c.Stmts(c.docString(node.Body, true))
@@ -569,6 +571,7 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	newC := c.newCompilerScope(compilerScope, Ast, "")
 	newC.Code.Argcount = int32(len(Args.Args))
 	newC.Code.Kwonlyargcount = int32(len(Args.Kwonlyargs))
+	newC.Code.Posonlyargcount = int32(len(Args.Posonlyargs))
 
 	// Decorators are evaluated first and stay at the bottom of the stack.
 	// MAKE_FUNCTION pops the defaults, keyword-defaults and annotations from

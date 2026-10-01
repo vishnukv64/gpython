@@ -16,6 +16,14 @@ import (
 
 // NB can put code blocks in not just at the end
 
+// posonlyArgs carries the positional-only parameters of a function
+// definition (PEP 570) from the posonly_prefix rule down to the
+// typedargslist rules that build the ast.Arguments.
+type posonlyArgs struct {
+	args     []*ast.Arg
+	defaults []ast.Expr
+}
+
 // Returns a Tuple if > 1 items or a trailing comma, otherwise returns
 // the first item in elts
 func tupleOrExpr(pos ast.Pos, elts []ast.Expr, optional_comma bool) ast.Expr {
@@ -127,6 +135,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	withitems	[]*ast.WithItem
 	arg		*ast.Arg
 	annassign	*ast.AnnAssign
+	posonly		posonlyArgs
 	args		[]*ast.Arg
 	arguments	*ast.Arguments
 }
@@ -136,6 +145,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %type <stmts> simple_stmt stmt nl_or_stmt small_stmts stmts suite optional_else
 %type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated
 %type <op> augassign
+%type <posonly> posonly_prefix
 %type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
 %type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests test_colon_tests trailers equals_yield_expr_or_testlist_star_expr decorators
 %type <cmpop> comp_op
@@ -462,11 +472,68 @@ optional_tfpdef:
 		$$ = $1
 	}
 
+// posonly_prefix is the part of an argument list before the "/" marker
+// (PEP 570), including the marker and any comma that follows it.  Its value
+// carries the positional-only names and their defaults, which the
+// typedargslist rules below combine with whatever follows.
+posonly_prefix:
+	tfpdeftests1 ',' '/' optional_comma
+	{
+		$$ = posonlyArgs{args: $1, defaults: $<exprs>1}
+	}
+
 // FIXME this isn't checking all the python rules for args before kwargs etc
 typedargslist: 
 	tfpdeftests1 optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1}
+	}
+|	posonly_prefix
+	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1.args, Defaults: $1.defaults, Posonlyargs: $1.args}
+	}
+|	posonly_prefix tfpdeftests1 optional_comma
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args}
+	}
+|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6}
+	}
+|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6, Kwarg: $9}
+	}
+|	posonly_prefix tfpdeftests1 ',' STARSTAR tfpdef
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Kwarg: $5}
+	}
+|	posonly_prefix '*' optional_tfpdef tfpdeftests
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4}
+	}
+|	posonly_prefix '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
+	}
+|	posonly_prefix STARSTAR tfpdef
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Kwarg: $3}
 	}
 |	tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests
 	{
@@ -476,7 +543,7 @@ typedargslist:
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Vararg: $4, Kwonlyargs: $5, KwDefaults: $<exprs>5, Kwarg: $8}
 	}
-|	tfpdeftests1 ',' STARSTAR tfpdef
+|	tfpdeftests1 ',' STARSTAR tfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Kwarg: $4}
 	}

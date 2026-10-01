@@ -2181,7 +2181,12 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 	}
 	for keyword, value := range kws {
 		j := 0
+		// Positional-only arguments are matched by position and must not be
+		// passed by keyword (PEP 570): skip them when looking for a name.
 		for ; j < total_args; j++ {
+			if co.Posonlyargcount > 0 && j < int(co.Posonlyargcount) {
+				continue
+			}
 			if co.Varnames[j] == keyword {
 				goto kw_found
 			}
