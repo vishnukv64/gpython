@@ -190,10 +190,15 @@ func GetItem(self Object, key Object) (Object, error) {
 	// classes do, and the parameters only matter to a type checker - so the
 	// class itself is the result.
 	if t, ok := self.(*Type); ok {
+		// "X[params]" on a class is __class_getitem__ in Python 3.7 and
+		// later.  The classes that define it accept any parameters - the
+		// abstract base classes do, and the parameters only matter to a type
+		// checker - so the class itself is the result.  Anything else falls
+		// through, so a class that defines __getitem__ (an enum class
+		// looking itself up by name) is answered by TypeCall1 below.
 		if t.GetAttrOrNil("__class_getitem__") != nil {
 			return self, nil
 		}
-		return nil, ExceptionNewf(TypeError, "'%s' object is not subscriptable", self.Type().Name)
 	}
 	if I, ok := self.(I__getitem__); ok {
 		return I.M__getitem__(key)

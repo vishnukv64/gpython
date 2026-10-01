@@ -535,6 +535,15 @@ func (t *Type) CallMethod(name string, args Tuple, kwargs StringDict) (Object, b
 	if fn == nil {
 		return nil, false, nil
 	}
+	// A method registered in the type's Dict has to be given its self
+	// explicitly: py.Call would treat the first argument as an ordinary
+	// positional one, and the method would receive the wrong object (or
+	// none) as self.  This is the path that makes len(), repr(), 'in' and
+	// subscripting work on the instances of a natively defined type.
+	if m, ok := fn.(*Method); ok && len(args) > 0 {
+		res, err := m.Call(args[0], args[1:])
+		return res, true, err
+	}
 	res, err := Call(fn, args, kwargs)
 	return res, true, err
 }
@@ -1791,11 +1800,27 @@ var _ IGetDict = (*Type)(nil)
 var _ I__repr__ = (*Type)(nil)
 var _ I__str__ = (*Type)(nil)
 
-// MatchesABC reports whether obj satisfies the abstract base class, for
-// objects whose concrete type does not derive from it.
+// ABCHooks are consulted by isinstance for objects whose concrete type does
+// not derive from the class being tested for.
 //
 // isinstance() cannot know about structural conformance on its own - a list
-// is Iterable without deriving from the Iterable class - and the abstract
-// base classes live in a standard library package that must not be imported
-// from here, so collections.abc installs the check at init time.
-var MatchesABC func(obj Object, class *Type) bool
+// is Iterable without deriving from the Iterable class, an enum member is an
+// Enum without deriving from it - and those classes live in standard library
+// packages that must not be imported from here, so they install their checks
+// at init time.  It is a slice so that several modules can contribute.
+var ABCHooks []func(obj Object, class *Type) bool
+
+// BuildEnumClass, when set, turns the body of a class that derives from an
+// enum into an enum class.  Python does this with a metaclass, and
+// metaclasses are not supported here, so __build_class__ offers the hook
+// instead.  It is installed by the enum module.
+var BuildEnumClass func(name string, bases []Object, ns StringDict) (Object, error)
+
+// IsEnumBase reports whether the type is an enum class, which is how
+// __build_class__ recognises the bases that need BuildEnumClass.
+func (t *Type) IsEnumBase() bool {
+	return t.Flags&TPFLAGS_ENUM != 0
+}
+
+// TPFLAGS_ENUM marks a class that derives from enum.Enum.
+const TPFLAGS_ENUM uint = 1 << 20

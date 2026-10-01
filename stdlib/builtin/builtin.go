@@ -489,6 +489,25 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	// fmt.Printf("result = %#v err = %s\n", cell, err)
 	// fmt.Printf("locals = %#v\n", locals)
 	// fmt.Printf("ns = %#v\n", ns)
+
+	// A class deriving from an enum is built by the enum module rather than
+	// by type(): Python uses a metaclass for this, and metaclasses are not
+	// supported here, so the body is handed over instead.
+	if py.BuildEnumClass != nil {
+		for _, base := range bases {
+			if baseType, ok := base.(*py.Type); ok && baseType.IsEnumBase() {
+				enumCls, err := py.BuildEnumClass(string(name), bases, ns)
+				if err != nil {
+					return nil, err
+				}
+				if c, ok := cell.(*py.Cell); ok {
+					c.Set(enumCls)
+				}
+				return enumCls, nil
+			}
+		}
+	}
+
 	if cell != nil {
 		// fmt.Printf("Calling %v\n", meta)
 		cls, err = py.Call(meta, py.Tuple{name, bases, ns}, mkw)
@@ -993,11 +1012,13 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 			}
 		}
 
-		// Structural checks registered by collections.abc, for an object
-		// whose concrete type is outside the base chain (a list is Iterable
-		// without deriving from the Iterable class).
-		if py.MatchesABC != nil && py.MatchesABC(obj, class) {
-			return true, nil
+		// Structural checks registered by the modules that define the
+		// classes, for an object whose concrete type is outside the base
+		// chain (a list is Iterable without deriving from Iterable).
+		for _, hook := range py.ABCHooks {
+			if hook(obj, class) {
+				return true, nil
+			}
 		}
 		return false, nil
 	}

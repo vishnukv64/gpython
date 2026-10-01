@@ -23,6 +23,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/binascii"
 	_ "github.com/vishnukv64/gpython/stdlib/builtin"
 	_ "github.com/vishnukv64/gpython/stdlib/collections"
+	_ "github.com/vishnukv64/gpython/stdlib/enum"
 	_ "github.com/vishnukv64/gpython/stdlib/future"
 	_ "github.com/vishnukv64/gpython/stdlib/glob"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
