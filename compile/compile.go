@@ -184,6 +184,18 @@ func (c *compiler) SetLineno(node ast.Ast) {
 // Create a new compiler object at Ast, using private for name mangling
 func (c *compiler) newCompilerScope(compilerScope compilerScopeType, Ast ast.Ast, private string) (newC *compiler) {
 	newSymTable := c.SymTable.FindChild(Ast)
+	if newSymTable == nil && compilerScope == compilerScopeComprehension {
+		// The symtable keys a comprehension scope by the comprehension NODE,
+		// and the compiler is handed the element expression instead, so the
+		// lookup misses.  A comprehension has exactly one child scope, which
+		// is unambiguous to fall back to.
+		for _, child := range c.SymTable.Children {
+			switch child.Name {
+			case "listcomp", "setcomp", "dictcomp", "genexpr":
+				newSymTable = child
+			}
+		}
+	}
 	if newSymTable == nil {
 		panic(fmt.Sprintf("No symtable found for scope type %v", compilerScope))
 	}
@@ -1838,8 +1850,34 @@ func (c *compiler) Expr(expr ast.Expr) {
 		if n != len(node.Values) {
 			panic("compile: Dict keys and values differing sizes")
 		}
-		c.OpArg(vm.BUILD_MAP, uint32(n))
+		// A "**mapping" entry has no key node, which is how PEP 448 unpacking
+		// is represented: "{**a, k: v}" must not be built with BUILD_MAP,
+		// which would need a key for every entry.
+		hasUnpack := false
+		for _, key := range node.Keys {
+			if key == nil {
+				hasUnpack = true
+				break
+			}
+		}
+		if !hasUnpack {
+			c.OpArg(vm.BUILD_MAP, uint32(n))
+			for i := range node.Keys {
+				c.Expr(node.Values[i])
+				c.Expr(node.Keys[i])
+				c.Op(vm.STORE_MAP)
+			}
+			break
+		}
+		// The dict is built in place: an empty dict, then each entry either
+		// stored or merged in, leaving one dict on the stack.
+		c.OpArg(vm.BUILD_MAP, 0)
 		for i := range node.Keys {
+			if node.Keys[i] == nil {
+				c.Expr(node.Values[i])
+				c.OpArg(vm.DICT_UPDATE, 1)
+				continue
+			}
 			c.Expr(node.Values[i])
 			c.Expr(node.Keys[i])
 			c.Op(vm.STORE_MAP)

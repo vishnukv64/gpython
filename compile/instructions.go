@@ -87,7 +87,7 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return 2
 	case vm.UNARY_POSITIVE, vm.UNARY_NEGATIVE, vm.UNARY_NOT, vm.UNARY_INVERT:
 		return 0
-	case vm.SET_ADD, vm.LIST_APPEND, vm.LIST_EXTEND:
+	case vm.SET_ADD, vm.LIST_APPEND, vm.LIST_EXTEND, vm.DICT_UPDATE:
 		return -1
 	case vm.MAP_ADD:
 		return -2

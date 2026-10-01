@@ -219,6 +219,25 @@ func (st *SymTable) addArgumentsToSymbolTable(node *ast.Arguments) {
 	}
 }
 
+// AdoptChildren registers another table's child scopes as this table's own,
+// keyed by the nodes they belong to.
+//
+// It exists for an expression that was parsed on its own - the expression
+// part of an f-string - whose comprehension scopes were built against a
+// throwaway table.  Without this the compiler cannot find them, because the
+// lookup goes through the node the scope was created for.
+func (st *SymTable) AdoptChildren(other *SymTable) {
+	if other == nil {
+		return
+	}
+	for node, child := range other.LookupChild {
+		if _, exists := st.LookupChild[node]; !exists {
+			st.LookupChild[node] = child
+			st.Children = append(st.Children, child)
+		}
+	}
+}
+
 // Parse the ast into the symbol table
 func (st *SymTable) Parse(Ast ast.Ast) {
 	ast.Walk(Ast, func(Ast ast.Ast) bool {
@@ -333,16 +352,16 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			// return false to stop the parse
 			return false
 		case *ast.ListComp:
-			st.parseComprehension(Ast, "listcomp", node.Generators, node.Elt, nil)
+			st.parseComprehension(node, "listcomp", node.Generators, node.Elt, nil)
 			return false
 		case *ast.SetComp:
-			st.parseComprehension(Ast, "setcomp", node.Generators, node.Elt, nil)
+			st.parseComprehension(node, "setcomp", node.Generators, node.Elt, nil)
 			return false
 		case *ast.DictComp:
-			st.parseComprehension(Ast, "dictcomp", node.Generators, node.Key, node.Value)
+			st.parseComprehension(node, "dictcomp", node.Generators, node.Key, node.Value)
 			return false
 		case *ast.GeneratorExp:
-			st.parseComprehension(Ast, "genexpr", node.Generators, node.Elt, nil)
+			st.parseComprehension(node, "genexpr", node.Generators, node.Elt, nil)
 			return false
 		case *ast.ExceptHandler:
 			if node.Name != "" {

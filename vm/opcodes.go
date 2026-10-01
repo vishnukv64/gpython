@@ -145,6 +145,8 @@ const (
 	LOAD_CLASSDEREF OpCode = 148 // New in Python 3.4
 
 	LIST_EXTEND OpCode = 149 // Extend the list at TOS1[-i] with TOS (PEP 448)
+
+	DICT_UPDATE OpCode = 150 // Update the dict at TOS1[-i] with TOS (PEP 448)
 )
 
 // Rich comparison opcodes

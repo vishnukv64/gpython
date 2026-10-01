@@ -11,6 +11,7 @@ import (
 	"github.com/vishnukv64/gpython/ast"
 	"github.com/vishnukv64/gpython/parser"
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/symtable"
 	"github.com/vishnukv64/gpython/vm"
 )
 
@@ -217,6 +218,17 @@ func (c *compiler) compileFString(node *ast.FString) {
 				c.panicSyntaxErrorf(node, "f-string: %v", err)
 				return
 			}
+			// The expression was parsed on its own, so a comprehension
+			// inside it has a symbol table built against a throwaway
+			// parent.  Adopting its child scopes into the enclosing table
+			// is what lets the compiler find them: f"{' '.join(x for x in
+			// y)}" otherwise fails with "No symtable found for scope
+			// type 4".
+			if containsComprehension(expr) {
+				if table, tableErr := symtable.NewSymTable(&ast.Expression{Body: expr}, c.Filename); tableErr == nil {
+					c.SymTable.AdoptChildren(table)
+				}
+			}
 			c.Expr(expr)
 
 			// Order matches CPython: the conversion is applied first, then
@@ -276,4 +288,20 @@ func unescapePart(text string, raw bool) string {
 		return text
 	}
 	return out.String()
+}
+
+// containsComprehension reports whether the expression holds a
+// comprehension anywhere, which is the only node that needs a child scope of
+// its own.
+func containsComprehension(expr ast.Expr) bool {
+	found := false
+	ast.Walk(expr, func(node ast.Ast) bool {
+		switch node.(type) {
+		case *ast.ListComp, *ast.SetComp, *ast.DictComp, *ast.GeneratorExp:
+			found = true
+			return false
+		}
+		return !found
+	})
+	return found
 }

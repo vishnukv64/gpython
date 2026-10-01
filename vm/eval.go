@@ -598,6 +598,33 @@ func do_LIST_EXTEND(vm *Vm, i int32) error {
 	return nil
 }
 
+// Updates the dict at TOS1[-i] with the mapping at TOS, as in "{**a, b: c}".
+// Used to implement PEP 448 unpacking in a dict display.
+func do_DICT_UPDATE(vm *Vm, i int32) error {
+	source := vm.POP()
+	target := vm.PEEK(int(i))
+	dict, ok := target.(py.StringDict)
+	if !ok {
+		return py.ExceptionNewf(py.SystemError, "DICT_UPDATE: expected a dict, got %s", target.Type().Name)
+	}
+	// The mapping is read through the dict protocol, so any mapping whose
+	// items can be iterated updates the target.
+	src, ok := source.(py.IGetDict)
+	if !ok {
+		return py.ExceptionNewf(py.TypeError, "'%s' object is not a mapping", source.Type().Name)
+	}
+	for encoded, value := range src.GetDict() {
+		key, err := py.DictKeyDecode(encoded)
+		if err != nil {
+			return err
+		}
+		if _, err := dict.M__setitem__(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Calls dict.setitem(TOS1[-i], TOS, TOS1). Used to implement dict comprehensions.
 func do_MAP_ADD(vm *Vm, i int32) error {
 	key := vm.TOP()
@@ -1882,7 +1909,12 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 	// exception, or a yield that suspends the frame.
 	store := frame.Context.Store()
 	store.PushFrame(frame)
-	defer store.PopFrame(frame)
+	prevFrame := gCurrentFrame
+	gCurrentFrame = frame
+	defer func() {
+		gCurrentFrame = prevFrame
+		store.PopFrame(frame)
+	}()
 
 	var vm = Vm{
 		frame:   frame,
@@ -2354,3 +2386,15 @@ func init() {
 	py.VmEvalCode = EvalCode
 	py.VmRunFrame = RunFrame
 }
+
+// init wires the frame accessor for the no-argument form of super(), which
+// needs the frame that is executing to read __class__ and self.
+func init() {
+	py.SetCurrentFrame(func() *py.Frame {
+		return gCurrentFrame
+	})
+}
+
+// gCurrentFrame is the frame the interpreter is executing, recorded by
+// RunFrame so that py code can read it without importing this package.
+var gCurrentFrame *py.Frame

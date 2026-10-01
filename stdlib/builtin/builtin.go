@@ -102,10 +102,10 @@ func init() {
 		"slice":        py.SliceType,
 		"staticmethod": py.StaticMethodType,
 		"str":          py.StringType,
-		// "super":          py.SuperType, // FIXME: SuperType is unimplemented
-		"tuple": py.TupleType,
-		"type":  py.TypeType,
-		"zip":   py.ZipType,
+		"super":        py.SuperType,
+		"tuple":        py.TupleType,
+		"type":         py.TypeType,
+		"zip":          py.ZipType,
 
 		// Exceptions
 		"ArithmeticError":           py.ArithmeticError,

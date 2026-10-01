@@ -161,6 +161,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	withitems	[]*ast.WithItem
 	arg		*ast.Arg
 	annassign	*ast.AnnAssign
+	dictexpr	*ast.Dict
 	posonly		posonlyArgs
 	args		[]*ast.Arg
 	arguments	*ast.Arguments
@@ -172,8 +173,9 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated
 %type <op> augassign
 %type <posonly> posonly_prefix
+%type <dictexpr> dictentries
 %type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
-%type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests test_colon_tests trailers equals_yield_expr_or_testlist_star_expr decorators
+%type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators
 %type <cmpop> comp_op
 %type <comma> optional_comma
 %type <comprehensions> comp_for
@@ -1890,27 +1892,42 @@ testlistraw:
 	}
 
 // (',' test ':' test)*
-test_colon_tests:
+// dictentries is a dict display's contents, which may mix "key: value" with
+// the "**mapping" unpacking of PEP 448.  A nil key marks an unpacked entry,
+// which is how the compiler recognises it.
+//
+// Every entry is one alternative so that a comma always continues the list;
+// the trailing comma is optional_comma at the dictorsetmaker level, which is
+// what keeps "{a: 1, b: 2}" and "{a: 1, b: 2,}" both valid without the
+// comma being consumed early.
+dictentries:
 	test ':' test
 	{
-		$$ = nil
-		$$ = append($$, $1, $3)	// key, value order
+		$$ = &ast.Dict{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{$1}, Values: []ast.Expr{$3}}
 	}
-|	test_colon_tests ',' test ':' test
+|	STARSTAR test
 	{
-		$$ = append($$, $3, $5)
+		$$ = &ast.Dict{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{nil}, Values: []ast.Expr{$2}}
+	}
+|	dictentries ',' test ':' test
+	{
+		d := $1
+		d.Keys = append(d.Keys, $3)
+		d.Values = append(d.Values, $5)
+		$$ = d
+	}
+|	dictentries ',' STARSTAR test
+	{
+		d := $1
+		d.Keys = append(d.Keys, nil)
+		d.Values = append(d.Values, $4)
+		$$ = d
 	}
 
 dictorsetmaker:
-	test_colon_tests optional_comma
+	dictentries optional_comma
 	{
-		keyValues := $1
-		d := &ast.Dict{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: nil, Values: nil}
-		for i := 0; i < len(keyValues)-1; i += 2 {
-			d.Keys = append(d.Keys, keyValues[i])
-			d.Values = append(d.Values, keyValues[i+1])
-		}
-		$$ = d
+		$$ = $1
 	}
 |	test ':' test comp_for
 	{
