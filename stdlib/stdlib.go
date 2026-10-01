@@ -25,6 +25,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/builtin"
 	_ "github.com/vishnukv64/gpython/stdlib/collections"
 	_ "github.com/vishnukv64/gpython/stdlib/contextlib"
+	_ "github.com/vishnukv64/gpython/stdlib/datetime"
 	_ "github.com/vishnukv64/gpython/stdlib/enum"
 	_ "github.com/vishnukv64/gpython/stdlib/errno"
 	_ "github.com/vishnukv64/gpython/stdlib/functools"
