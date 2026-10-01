@@ -10,6 +10,8 @@ package parser
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/ast"
 )
@@ -22,6 +24,30 @@ import (
 type posonlyArgs struct {
 	args     []*ast.Arg
 	defaults []ast.Expr
+}
+
+// dottedNameExpr turns a dotted name into the attribute access it stands
+// for: "os.path.join" becomes Attribute(Attribute(Name(os), path), join).
+//
+// Building a single Name with the dots left in it - which is what this used
+// to do - makes the decorator resolve as a name that does not exist, so
+// "@os.path.join" raised NameError instead of reaching the function.
+func dottedNameExpr(pos ast.Pos, name string) ast.Expr {
+	parts := strings.Split(name, ".")
+	var expr ast.Expr = &ast.Name{
+		ExprBase: ast.ExprBase{Pos: pos},
+		Id:       ast.Identifier(parts[0]),
+		Ctx:      ast.Load,
+	}
+	for _, part := range parts[1:] {
+		expr = &ast.Attribute{
+			ExprBase: ast.ExprBase{Pos: pos},
+			Value:    expr,
+			Attr:     ast.Identifier(part),
+			Ctx:      ast.Load,
+		}
+	}
+	return expr
 }
 
 // Returns a Tuple if > 1 items or a trailing comma, otherwise returns
@@ -343,7 +369,7 @@ optional_arglist_call:
 decorator:
 	'@' dotted_name optional_arglist_call NEWLINE
 	{
-		fn := &ast.Name{ExprBase: ast.ExprBase{Pos: $<pos>$}, Id: ast.Identifier($2), Ctx: ast.Load}
+		fn := dottedNameExpr($<pos>$, $2)
 		if $3 == nil {
 			$$ = fn
 		} else {

@@ -181,11 +181,13 @@ var all = map[string]*py.Type{
 func init() {
 	for _, t := range all {
 		subscriptable(t)
+		// The abstract base classes exist to be derived from.
+		t.Flags |= py.TPFLAGS_BASETYPE
 	}
 
 	// Structural conformance.  Every test is a method presence check, which
 	// is how Python's own ABCs behave for the methods they declare abstract.
-	py.MatchesABC = func(obj py.Object, class *py.Type) bool {
+	py.ABCHooks = append(py.ABCHooks, func(obj py.Object, class *py.Type) bool {
 		// Types are not instances of the ABCs; only their instances are.
 		if _, isType := obj.(*py.Type); isType {
 			return false
@@ -228,7 +230,7 @@ func init() {
 			return has(obj, "__len__") && hasIter(obj)
 		}
 		return false
-	}
+	})
 
 	globals := py.StringDict{}
 	for name, t := range all {

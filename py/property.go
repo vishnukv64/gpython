@@ -12,6 +12,10 @@ type Property struct {
 	Fset func(self, value Object) error
 	Fdel func(self Object) error
 	Doc  string
+	// Abstract records that abc.abstractproperty (or abstractmethod applied
+	// to a getter) marked this property, which is what __isabstractmethod__
+	// reports.
+	Abstract bool
 }
 
 var PropertyType = NewTypeX("property", `property(fget=None, fset=None, fdel=None, doc=None)

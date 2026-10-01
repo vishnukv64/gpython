@@ -58,7 +58,41 @@ func (s *specialForm) M__repr__() (py.Object, error) {
 }
 
 func (s *specialForm) M__getitem__(key py.Object) (py.Object, error) {
-	return s, nil
+	// A subscripted construct is still a class, because it is used as a base:
+	// "class ParamType(Generic[_T], ABC)".  Returning the form itself would
+	// make that a TypeError ("not an acceptable base type"), so a real type
+	// is returned, named after the construct and deriving from the form's
+	// own class.
+	return &subscribedForm{form: s, name: s.name + "[" + describe(key) + "]"}, nil
+}
+
+// subscribedForm is the class that "Generic[T]" or "Optional[int]" produces
+// when it is used as a base class.
+type subscribedForm struct {
+	form *specialForm
+	name string
+}
+
+var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted typing construct.", nil, nil)
+
+func init() {
+	// "Generic[T]" is used as a base class, so the class it produces must be
+	// one that can be derived from.
+	subscribedFormType.Flags |= py.TPFLAGS_BASETYPE
+}
+
+func (s *subscribedForm) Type() *py.Type { return subscribedFormType }
+
+func (s *subscribedForm) M__repr__() (py.Object, error) {
+	return py.String("typing." + s.name), nil
+}
+
+func describe(key py.Object) string {
+	text, err := py.ReprAsString(key)
+	if err != nil {
+		return "?"
+	}
+	return text
 }
 
 // callable, so that constructs used with parameters - TypeVar("T"), or the
@@ -143,12 +177,12 @@ func init() {
 		"AsyncIterable", "AsyncIterator", "Awaitable", "BinaryIO", "ByteString",
 		"Callable", "ClassVar", "Collection", "Concatenate", "Container",
 		"ContextManager", "Coroutine", "DefaultDict", "Deque", "Dict",
-		"Final", "ForwardRef", "FrozenSet", "Generator", "Generic",
+		"Final", "ForwardRef", "FrozenSet", "Generator",
 		"Hashable", "IO", "ItemsView", "Iterable", "Iterator", "KeysView",
 		"List", "Literal", "LiteralString", "Mapping", "MappingView",
 		"Match", "MutableMapping", "MutableSequence", "MutableSet",
 		"NamedTuple", "Never", "NoReturn", "NotRequired", "Optional",
-		"OrderedDict", "ParamSpec", "Protocol", "ReadOnly", "Required",
+		"OrderedDict", "ParamSpec", "ReadOnly", "Required",
 		"Reversible", "Self", "Sequence", "Set", "Sized", "Text",
 		"TextIO", "Tuple", "Type", "TypeAlias", "TypeGuard", "Union",
 		"Unpack", "ValuesView", "final", "overload", "runtime_checkable",
@@ -199,6 +233,22 @@ func init() {
 	globals["TypeVar"] = py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)")
 	globals["NewType"] = py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument.")
 	globals["NamedTuple"] = py.MustNewMethod("NamedTuple", namedTupleNew, 0, "Typed version of collections.namedtuple.")
+	// Generic and Protocol are used as bases, so they are real classes with
+	// a class-getitem, rather than inert forms.
+	genericType := py.NewType("typing.Generic", "Abstract base class for generic types.")
+	genericType.Flags |= py.TPFLAGS_BASETYPE
+	genericType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters.")
+	globals["Generic"] = genericType
+
+	protocolType := py.NewType("typing.Protocol", "Base class for protocol classes.")
+	protocolType.Flags |= py.TPFLAGS_BASETYPE
+	protocolType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters.")
+	globals["Protocol"] = protocolType
+
 	globals["get_type_hints"] = py.MustNewMethod("get_type_hints", getTypeHints, 0, "Return the annotations of an object.")
 	globals["get_args"] = py.MustNewMethod("get_args", getArgs, 0, "Return the arguments of a subscripted type, as far as they are kept.")
 	globals["get_origin"] = py.MustNewMethod("get_origin", getArgs, 0, "Return the unsubscripted type.")
