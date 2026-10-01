@@ -10,8 +10,8 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/go-python/gpython/ast"
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/ast"
+	"github.com/vishnukv64/gpython/py"
 )
 
 var debugLevel = flag.Int("debugLevel", 0, "Debug level 0-4")

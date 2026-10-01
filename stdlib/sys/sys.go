@@ -21,7 +21,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 const module_doc = `This module provides access to some objects used or maintained by the

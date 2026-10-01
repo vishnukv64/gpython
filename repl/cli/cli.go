@@ -12,8 +12,8 @@ import (
 	"os/user"
 	"path/filepath"
 
-	"github.com/go-python/gpython/py"
-	"github.com/go-python/gpython/repl"
+	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/repl"
 	"github.com/peterh/liner"
 )
 

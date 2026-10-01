@@ -26,7 +26,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 const (

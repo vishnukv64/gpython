@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 // FIXME(sbinet): consider creating an "array handler" type for each of the typecodes

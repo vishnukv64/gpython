@@ -11,8 +11,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/go-python/gpython/py"
-	"github.com/go-python/gpython/stdlib/marshal"
+	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/marshal"
 )
 
 // Compile with python3.4 - not used any more but keep for the moment!

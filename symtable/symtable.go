@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-python/gpython/ast"
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/ast"
+	"github.com/vishnukv64/gpython/py"
 )
 
 //go:generate stringer -type=Scope,BlockType -output stringer.go

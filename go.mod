@@ -1,4 +1,4 @@
-module github.com/go-python/gpython
+module github.com/vishnukv64/gpython
 
 go 1.18
 

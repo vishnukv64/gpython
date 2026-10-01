@@ -13,11 +13,11 @@ import (
 	"log"
 	"runtime"
 
-	"github.com/go-python/gpython/repl"
+	"github.com/vishnukv64/gpython/repl"
 	"github.com/gopherjs/gopherwasm/js" // gopherjs to wasm converter shim
 
 	// import required modules
-	_ "github.com/go-python/gpython/stdlib"
+	_ "github.com/vishnukv64/gpython/stdlib"
 )
 
 // Implement the replUI interface

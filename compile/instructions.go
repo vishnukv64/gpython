@@ -4,7 +4,7 @@
 
 package compile
 
-import "github.com/go-python/gpython/vm"
+import "github.com/vishnukv64/gpython/vm"
 
 // FIXME detect if label is not in the instruction stream by setting
 // Pos to 0xFFFF say by default, ie we made a label but forgot to add

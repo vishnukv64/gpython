@@ -7,7 +7,7 @@
 package py
 
 import (
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 // Load the frozen module

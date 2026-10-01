@@ -6,7 +6,7 @@
 package vm
 
 import (
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 //go:generate stringer -type=vmStatus,OpCode -output stringer.go

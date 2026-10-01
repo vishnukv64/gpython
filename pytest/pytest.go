@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-python/gpython/compile"
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/compile"
+	"github.com/vishnukv64/gpython/py"
 	"github.com/google/go-cmp/cmp"
 
-	_ "github.com/go-python/gpython/stdlib"
+	_ "github.com/vishnukv64/gpython/stdlib"
 )
 
 var RegenTestData = flag.Bool("regen", false, "Regenerate golden files from current testdata.")

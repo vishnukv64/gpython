@@ -10,7 +10,7 @@ package ast
 import (
 	"fmt"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 type Identifier py.String

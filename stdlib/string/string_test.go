@@ -7,7 +7,7 @@ package string_test
 import (
 	"testing"
 
-	"github.com/go-python/gpython/pytest"
+	"github.com/vishnukv64/gpython/pytest"
 )
 
 func TestString(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 func dumpItem(v interface{}) string {

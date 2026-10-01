@@ -10,12 +10,12 @@ import (
 
 	// This initializes gpython for runtime execution and is essential.
 	// It defines forward-declared symbols and registers native built-in modules, such as sys and time.
-	_ "github.com/go-python/gpython/stdlib"
+	_ "github.com/vishnukv64/gpython/stdlib"
 
 	// Commonly consumed gpython
-	"github.com/go-python/gpython/py"
-	"github.com/go-python/gpython/repl"
-	"github.com/go-python/gpython/repl/cli"
+	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/repl"
+	"github.com/vishnukv64/gpython/repl/cli"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 // These gpython py.Object type delcarations are the bridge between gpython and embedded Go types.
@@ -43,7 +43,7 @@ func init() {
 		},
 		Methods: methods,
 		Globals: py.StringDict{
-			"PY_VERSION": py.String("Python 3.4 (github.com/go-python/gpython)"),
+			"PY_VERSION": py.String("Python 3.4 (github.com/vishnukv64/gpython)"),
 			"GO_VERSION": py.String(fmt.Sprintf("%s on %s %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)),
 			"MYLIB_VERS": py.String("Vacation 1.0 by Fletch F. Fletcher"),
 		},

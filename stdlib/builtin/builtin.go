@@ -14,8 +14,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/go-python/gpython/compile"
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/compile"
+	"github.com/vishnukv64/gpython/py"
 )
 
 const builtin_doc = `Built-in functions, exceptions, and other objects.

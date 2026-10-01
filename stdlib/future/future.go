@@ -13,7 +13,7 @@ package future
 import (
 	"strings"
 
-	"github.com/go-python/gpython/py"
+	"github.com/vishnukv64/gpython/py"
 )
 
 const module_doc = `Record of the features known to this interpreter.
