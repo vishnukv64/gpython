@@ -1846,6 +1846,15 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 //
 // This is the equivalent of PyEval_EvalFrame
 func RunFrame(frame *py.Frame) (res py.Object, err error) {
+	// Every frame that executes passes through here - a function call, a
+	// class body, a module body, and a generator each time it is resumed -
+	// so this is the one place that needs to keep the chain of executing
+	// frames correct.  The defer covers every exit: a return, a raised
+	// exception, or a yield that suspends the frame.
+	store := frame.Context.Store()
+	store.PushFrame(frame)
+	defer store.PopFrame(frame)
+
 	var vm = Vm{
 		frame:   frame,
 		context: frame.Context,

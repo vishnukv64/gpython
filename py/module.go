@@ -54,6 +54,49 @@ type ModuleStore struct {
 	// this should be the frozen module importlib/_bootstrap.py generated
 	// by Modules/_freeze_importlib.c into Python/importlib.h
 	Importlib *Module
+
+	// frameStack is the chain of frames currently executing in this
+	// context.  It is what gives a frame its Back pointer, so that Python
+	// code can walk out to its caller (inspect.currentframe().f_back).
+	//
+	// It is guarded because a context may be shared by goroutines: the
+	// frame a goroutine is executing is its own, and the lock only covers
+	// the bookkeeping.
+	frameMu    sync.Mutex
+	frameStack []*Frame
+}
+
+// PushFrame records a frame as executing and links it to its caller.
+func (s *ModuleStore) PushFrame(f *Frame) {
+	s.frameMu.Lock()
+	defer s.frameMu.Unlock()
+	if n := len(s.frameStack); n > 0 {
+		f.Back = s.frameStack[n-1]
+	}
+	s.frameStack = append(s.frameStack, f)
+}
+
+// PopFrame removes a frame that has finished executing.  It drops the
+// last entry rather than searching for f, because frames finish in the
+// order they start; the identity check guards against a mismatch.
+func (s *ModuleStore) PopFrame(f *Frame) {
+	s.frameMu.Lock()
+	defer s.frameMu.Unlock()
+	if n := len(s.frameStack); n > 0 && s.frameStack[n-1] == f {
+		f.Back = nil
+		s.frameStack = s.frameStack[:n-1]
+	}
+}
+
+// CurrentFrame returns the frame that is executing, or nil when the
+// interpreter is between calls.
+func (s *ModuleStore) CurrentFrame() *Frame {
+	s.frameMu.Lock()
+	defer s.frameMu.Unlock()
+	if n := len(s.frameStack); n > 0 {
+		return s.frameStack[n-1]
+	}
+	return nil
 }
 
 func RegisterModule(module *ModuleImpl) {

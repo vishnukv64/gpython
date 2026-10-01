@@ -25,7 +25,7 @@ type TryBlock struct {
 
 // A python Frame object
 type Frame struct {
-	// Back       *Frame        // previous frame, or nil
+	Back            *Frame     // the frame that was executing when this one was called, or nil
 	Context         Context    // host module (state) context
 	Code            *Code      // code segment
 	Builtins        StringDict // builtin symbol table
