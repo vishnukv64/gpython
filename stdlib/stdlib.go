@@ -21,6 +21,7 @@ import (
 	_ "github.com/go-python/gpython/stdlib/array"
 	_ "github.com/go-python/gpython/stdlib/binascii"
 	_ "github.com/go-python/gpython/stdlib/builtin"
+	_ "github.com/go-python/gpython/stdlib/future"
 	_ "github.com/go-python/gpython/stdlib/glob"
 	_ "github.com/go-python/gpython/stdlib/math"
 	_ "github.com/go-python/gpython/stdlib/os"
