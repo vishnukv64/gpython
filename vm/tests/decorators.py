@@ -198,7 +198,7 @@ context = dict(nullval=None, unimp=unimp)
 
 for expr, exc in [ ("undef", NameError),
                    ("nullval", TypeError),
-                   ("nullval.attr", NameError), # FIXME    ("nullval.attr", AttributeError),
+                   ("nullval.attr", AttributeError),
                    ("unimp", NotImplementedError)]:
     codestr = "@%s\ndef f(): pass\nassert f() is None" % expr
     code = compile(codestr, "test", "exec")
