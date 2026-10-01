@@ -1790,3 +1790,12 @@ var _ I__call__ = (*Type)(nil)
 var _ IGetDict = (*Type)(nil)
 var _ I__repr__ = (*Type)(nil)
 var _ I__str__ = (*Type)(nil)
+
+// MatchesABC reports whether obj satisfies the abstract base class, for
+// objects whose concrete type does not derive from it.
+//
+// isinstance() cannot know about structural conformance on its own - a list
+// is Iterable without deriving from the Iterable class - and the abstract
+// base classes live in a standard library package that must not be imported
+// from here, so collections.abc installs the check at init time.
+var MatchesABC func(obj Object, class *Type) bool

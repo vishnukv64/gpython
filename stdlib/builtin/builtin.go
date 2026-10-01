@@ -983,7 +983,23 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 		if classOrTuple.Type().ObjectType != py.TypeType {
 			return false, py.ExceptionNewf(py.TypeError, "isinstance() arg 2 must be a type or tuple of types")
 		}
-		return obj.Type() == classOrTuple, nil
+		class := classOrTuple.(*py.Type)
+
+		// Walk the base chain: isinstance must accept a subclass, which is
+		// what makes the abstract base classes usable as isinstance targets.
+		for t := obj.Type(); t != nil; t = t.Base {
+			if t == class {
+				return true, nil
+			}
+		}
+
+		// Structural checks registered by collections.abc, for an object
+		// whose concrete type is outside the base chain (a list is Iterable
+		// without deriving from the Iterable class).
+		if py.MatchesABC != nil && py.MatchesABC(obj, class) {
+			return true, nil
+		}
+		return false, nil
 	}
 }
 

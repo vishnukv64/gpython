@@ -139,10 +139,10 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 	if mod == nil || len(fromlist) == 0 {
 		return nil
 	}
-	// Only packages (things with a __path__) can have submodules
-	if _, isPkg := mod.Globals["__path__"]; !isPkg {
-		return nil
-	}
+	// A module does not need a __path__ to have submodules: "from
+	// collections import abc" reaches a submodule that is registered
+	// natively rather than found as a file.
+	_, isPkg := mod.Globals["__path__"]
 	for _, item := range fromlist {
 		sub, ok := item.(String)
 		if !ok || string(sub) == "*" {
@@ -160,12 +160,16 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 			mod.Globals[string(sub)] = subMod
 			continue
 		}
-		path, isPkg, err := findModule(ctx, full)
+		if !isPkg {
+			// Not a package, so the name can only be an attribute
+			continue
+		}
+		path, isPkg2, err := findModule(ctx, full)
 		if err != nil {
 			// Not a submodule: it should be a plain attribute of the module
 			continue
 		}
-		subMod, err := initModuleFromPath(ctx, full, path, isPkg)
+		subMod, err := initModuleFromPath(ctx, full, path, isPkg2)
 		if err != nil {
 			return err
 		}

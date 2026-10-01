@@ -18,6 +18,7 @@ import (
 	"github.com/vishnukv64/gpython/stdlib/marshal"
 	"github.com/vishnukv64/gpython/vm"
 
+	_ "github.com/vishnukv64/gpython/stdlib/abc"
 	_ "github.com/vishnukv64/gpython/stdlib/array"
 	_ "github.com/vishnukv64/gpython/stdlib/binascii"
 	_ "github.com/vishnukv64/gpython/stdlib/builtin"
