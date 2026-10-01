@@ -1528,6 +1528,48 @@ func (c *compiler) comprehension(expr ast.Expr, generators []ast.Comprehension) 
 	c.OpArg(vm.CALL_FUNCTION, 1)
 }
 
+// compileListDisplay compiles a list display, honouring PEP 448 unpacking
+// ("[*a, b]").
+//
+// It builds the list incrementally: an empty list is created and each
+// element is appended, with a starred element extending the list instead.
+// That is the same shape as the comprehension code, and it is the only way
+// to express unpacking with this bytecode set.
+func (c *compiler) compileListDisplay(ctx ast.ExprContext, elts []ast.Expr) {
+	if ctx != ast.Load {
+		c.tupleOrList(vm.BUILD_LIST, ctx, elts)
+		return
+	}
+	// With no starred element the ordinary BUILD_LIST is shorter and is
+	// what the rest of the interpreter already produces.
+	starred := false
+	for _, elt := range elts {
+		if _, ok := elt.(*ast.Starred); ok {
+			starred = true
+			break
+		}
+	}
+	if !starred {
+		c.tupleOrList(vm.BUILD_LIST, ctx, elts)
+		return
+	}
+
+	// The list is built up in place: each element is pushed on top of it and
+	// immediately consumed, so the list is always one below the top and the
+	// oparg is a constant 1 (unlike the comprehension form, where the
+	// iterator sits between them).
+	c.OpArg(vm.BUILD_LIST, 0)
+	for _, elt := range elts {
+		if star, ok := elt.(*ast.Starred); ok {
+			c.Expr(star.Value)
+			c.OpArg(vm.LIST_EXTEND, 1)
+			continue
+		}
+		c.Expr(elt)
+		c.OpArg(vm.LIST_APPEND, 1)
+	}
+}
+
 // Compile a tuple or a list
 func (c *compiler) tupleOrList(op vm.OpCode, ctx ast.ExprContext, elts []ast.Expr) {
 	const INT_MAX = 0x7FFFFFFF
@@ -1952,7 +1994,7 @@ func (c *compiler) Expr(expr ast.Expr) {
 	case *ast.List:
 		// Elts []Expr
 		// Ctx  ExprContext
-		c.tupleOrList(vm.BUILD_LIST, node.Ctx, node.Elts)
+		c.compileListDisplay(node.Ctx, node.Elts)
 	case *ast.Tuple:
 		// Elts []Expr
 		// Ctx  ExprContext

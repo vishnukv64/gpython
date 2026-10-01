@@ -581,6 +581,23 @@ func do_LIST_APPEND(vm *Vm, i int32) error {
 	return nil
 }
 
+// Extends the list at TOS1[-i] with the iterable at TOS, as in
+// "[*a, b]".  Used to implement PEP 448 unpacking in a list display.
+func do_LIST_EXTEND(vm *Vm, i int32) error {
+	iterable := vm.POP()
+	listObj := vm.PEEK(int(i))
+	list, ok := listObj.(*py.List)
+	if !ok {
+		return py.ExceptionNewf(py.SystemError, "LIST_EXTEND: expected a list, got %s", listObj.Type().Name)
+	}
+	items, err := py.SequenceList(iterable)
+	if err != nil {
+		return err
+	}
+	list.Items = append(list.Items, items.Items...)
+	return nil
+}
+
 // Calls dict.setitem(TOS1[-i], TOS, TOS1). Used to implement dict comprehensions.
 func do_MAP_ADD(vm *Vm, i int32) error {
 	key := vm.TOP()

@@ -138,6 +138,7 @@ func init() {
 	jumpTable[EXTENDED_ARG] = do_EXTENDED_ARG
 
 	jumpTable[LIST_APPEND] = do_LIST_APPEND
+	jumpTable[LIST_EXTEND] = do_LIST_EXTEND
 	jumpTable[SET_ADD] = do_SET_ADD
 	jumpTable[MAP_ADD] = do_MAP_ADD
 
