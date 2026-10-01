@@ -665,15 +665,29 @@ func (x *yyLex) readOperator() int {
 	return eof
 }
 
-const pointFloat = `([0-9]*\.[0-9]+|[0-9]+\.)`
+// Numeric literals may use "_" as a digit separator (PEP 515):
+// 1_000, 0x_FF, 1_0.5_2e1_0.  The regexps accept the separators and
+// stripUnderscores removes them before the value is parsed.
+const (
+	digitSeq   = `[0-9](_?[0-9])*`
+	pointFloat = `(` + digitSeq + `\.` + digitSeq + `|\.[0-9](_?[0-9])*|` + digitSeq + `\.)`
+)
+
+// stripUnderscores removes the digit separators from a numeric literal.
+func stripUnderscores(s string) string {
+	if !strings.Contains(s, "_") {
+		return s
+	}
+	return strings.ReplaceAll(s, "_", "")
+}
 
 var (
-	decimalInteger        = regexp.MustCompile(`^[0-9]+[jJ]?`)
+	decimalInteger        = regexp.MustCompile(`^` + digitSeq + `[jJ]?`)
 	illegalDecimalInteger = regexp.MustCompile(`^0[0-9]*[1-9][0-9]*$`)
-	octalInteger          = regexp.MustCompile(`^0[oO][0-7]+`)
-	hexInteger            = regexp.MustCompile(`^0[xX][0-9a-fA-F]+`)
-	binaryInteger         = regexp.MustCompile(`^0[bB][01]+`)
-	floatNumber           = regexp.MustCompile(`^(([0-9]+|` + pointFloat + `)[eE][+-]?[0-9]+|` + pointFloat + `)[jJ]?`)
+	octalInteger          = regexp.MustCompile(`^0[oO]_?[0-7](_?[0-7])*`)
+	hexInteger            = regexp.MustCompile(`^0[xX]_?[0-9a-fA-F](_?[0-9a-fA-F])*`)
+	binaryInteger         = regexp.MustCompile(`^0[bB]_?[01](_?[01])*`)
+	floatNumber           = regexp.MustCompile(`^((` + digitSeq + `|` + pointFloat + `)[eE][+-]?` + digitSeq + `|` + pointFloat + `)[jJ]?`)
 )
 
 // Read one of the many types of python number
@@ -701,27 +715,27 @@ isNumber:
 	var s string
 	var err error
 	if s = octalInteger.FindString(x.line); s != "" {
-		value, err = py.IntFromString(s[2:], 8)
+		value, err = py.IntFromString(stripUnderscores(s[2:]), 8)
 		if err != nil {
 			panic(err)
 		}
 	} else if s = hexInteger.FindString(x.line); s != "" {
-		value, err = py.IntFromString(s[2:], 16)
+		value, err = py.IntFromString(stripUnderscores(s[2:]), 16)
 		if err != nil {
 			panic(err)
 		}
 	} else if s = binaryInteger.FindString(x.line); s != "" {
-		value, err = py.IntFromString(s[2:], 2)
+		value, err = py.IntFromString(stripUnderscores(s[2:]), 2)
 		if err != nil {
 			panic(err)
 		}
 	} else if s = floatNumber.FindString(x.line); s != "" {
 		last := s[len(s)-1]
 		imaginary := false
-		toParse := s
+		toParse := stripUnderscores(s)
 		if last == 'j' || last == 'J' {
 			imaginary = true
-			toParse = s[:len(s)-1]
+			toParse = toParse[:len(toParse)-1]
 		}
 		value, err = py.FloatFromString(toParse)
 		if err != nil {
@@ -733,7 +747,7 @@ isNumber:
 	} else if s = decimalInteger.FindString(x.line); s != "" {
 		last := s[len(s)-1]
 		if last == 'j' || last == 'J' {
-			toParse := s[:len(s)-1]
+			toParse := stripUnderscores(s[:len(s)-1])
 			value, err = py.FloatFromString(toParse)
 			if err != nil {
 				panic(err)
@@ -746,7 +760,7 @@ isNumber:
 				x.SyntaxError("illegal decimal with leading zero")
 				return eofError, nil
 			}
-			value, err = py.IntFromString(s, 10)
+			value, err = py.IntFromString(stripUnderscores(s), 10)
 			if err != nil {
 				panic(err)
 			}
