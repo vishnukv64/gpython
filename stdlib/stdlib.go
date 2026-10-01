@@ -39,6 +39,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/json"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
 	_ "github.com/vishnukv64/gpython/stdlib/os"
+	_ "github.com/vishnukv64/gpython/stdlib/re"
 	_ "github.com/vishnukv64/gpython/stdlib/stat"
 	_ "github.com/vishnukv64/gpython/stdlib/string"
 	_ "github.com/vishnukv64/gpython/stdlib/subprocess"
