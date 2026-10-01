@@ -54,6 +54,11 @@ type yyLex struct {
 	brace         int        // number of open { }
 	mod           ast.Mod    // output
 	tokens        []int      // buffered tokens to output
+
+	// lastToken is the token most recently returned, which is how the
+	// lexer knows whether a soft keyword (match, case) sits where a
+	// statement could begin.
+	lastToken int
 }
 
 // Create a new lexer
@@ -379,6 +384,11 @@ func (x *yyLex) Lex(yylval *yySymType) (ret int) {
 	// Clear out the yySymType on each token (copied from rsc's cc)
 	*yylval = yySymType{}
 	x.yylval = yylval
+	// Record whatever token is returned, which is how the soft keywords
+	// know whether they sit where a statement can begin.  Doing it here
+	// covers every return path in this method rather than only the ones
+	// that were easy to find.
+	defer func() { x.lastToken = ret }()
 	if yyDebug >= 2 {
 		defer func() {
 			lt := newLexToken(ret, yylval)
@@ -389,7 +399,8 @@ func (x *yyLex) Lex(yylval *yySymType) (ret int) {
 	// Return queued tokens if there are any
 	if !x.queueEmpty() {
 		yylval.pos = x.pos
-		return x.dequeue()
+		x.lastToken = x.dequeue()
+		return x.lastToken
 	}
 
 	for {
@@ -647,7 +658,31 @@ func (x *yyLex) readIdentifierOrKeyword() (int, string) {
 	if ok {
 		return token, identifier
 	}
+	// match and case are SOFT keywords (PEP 634): they are only keywords at
+	// the start of a statement, so "match = 1", "x.match(y)" and
+	// "re.match(p, s)" keep working.  A hard keyword would break all three.
+	if soft, ok := softKeywords[identifier]; ok && x.atStatementStart() {
+		return soft, identifier
+	}
 	return NAME, identifier
+}
+
+// softKeywords maps the words that are keywords only at a statement start to
+// the tokens the generated parser defines for them (see grammar.y).
+var softKeywords = map[string]int{
+	"match": MATCH,
+	"case":  CASE,
+}
+
+// atStatementStart reports whether the token about to be produced begins a
+// statement: at the very start, or after a NEWLINE, INDENT, DEDENT, ';'
+// or the ':' that ends a clause header.
+func (x *yyLex) atStatementStart() bool {
+	switch x.lastToken {
+	case 0, NEWLINE, INDENT, DEDENT, ';', ':':
+		return true
+	}
+	return false
 }
 
 // Read operator - returns token or eof for not found

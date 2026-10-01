@@ -269,6 +269,22 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 				}
 				st.AddDef(node, name, DefGlobal)
 			}
+		case *ast.MatchCapture:
+			// A match case's capture binds a local, which the symbol table
+			// has to record or the name cannot be stored as a fast local.
+			st.AddDef(node, node.Name, DefLocal)
+		case *ast.MatchStar:
+			if node.Name != "" {
+				st.AddDef(node, node.Name, DefLocal)
+			}
+		case *ast.MatchAs:
+			if node.Name != "" {
+				st.AddDef(node, node.Name, DefLocal)
+			}
+		case *ast.MatchMapping:
+			if node.Rest != "" {
+				st.AddDef(node, node.Rest, DefLocal)
+			}
 		case *ast.Name:
 			if node.Ctx == ast.Load {
 				st.AddDef(node, node.Id, DefUse)

@@ -115,6 +115,63 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		walkExprs(node.Targets)
 		walk(node.Value)
 
+	case *MatchStmt:
+		// Subject Expr
+		// Cases   []*MatchCase
+		walk(node.Subject)
+		for _, c := range node.Cases {
+			walk(c)
+		}
+
+	case *MatchCase:
+		// Pattern Expr
+		// Body    []Stmt
+		if node.Pattern != nil {
+			walk(node.Pattern)
+		}
+		for _, stmt := range node.Body {
+			walk(stmt)
+		}
+
+	case *MatchValue:
+		// Value Expr
+		walk(node.Value)
+
+	case *MatchCapture:
+		// Name Identifier
+
+	case *MatchWildcard:
+
+	case *MatchSequence:
+		// Patterns []Expr
+		walkExprs(node.Patterns)
+
+	case *MatchStar:
+		// Name Identifier
+
+	case *MatchMapping:
+		// Keys     []Expr
+		// Patterns []Expr
+		walkExprs(node.Keys)
+		walkExprs(node.Patterns)
+
+	case *MatchClass:
+		// Cls      Expr
+		// Patterns []Expr
+		walk(node.Cls)
+		walkExprs(node.Patterns)
+
+	case *MatchOr:
+		// Patterns []Expr
+		walkExprs(node.Patterns)
+
+	case *MatchAs:
+		// Pattern Expr
+		// Name    Identifier
+		if node.Pattern != nil {
+			walk(node.Pattern)
+		}
+
 	case *AnnAssign:
 		// Target     Expr
 		// Annotation Expr

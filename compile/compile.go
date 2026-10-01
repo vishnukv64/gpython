@@ -1211,6 +1211,13 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		c.loops.Pop()
 		c.Stmts(node.Orelse)
 		c.Label(endpopblock)
+	case *ast.MatchStmt:
+		// Subject Expr
+		// Cases   []*MatchCase
+		c.matchStmt(node)
+	case *ast.MatchCase:
+		// A case is compiled by its enclosing match, never on its own.
+		panic("compile: MatchCase outside a MatchStmt")
 	case *ast.If:
 		// Test   Expr
 		// Body   []Stmt
@@ -2079,6 +2086,13 @@ func (c *compiler) Expr(expr ast.Expr) {
 		// Elts []Expr
 		// Ctx  ExprContext
 		c.tupleOrList(vm.BUILD_TUPLE, node.Ctx, node.Elts)
+	case *ast.MatchValue, *ast.MatchCapture, *ast.MatchWildcard, *ast.MatchSequence,
+		*ast.MatchStar, *ast.MatchMapping, *ast.MatchClass, *ast.MatchOr, *ast.MatchAs,
+		*ast.MatchGuard:
+		// A pattern is lowered by matchPattern, reached through matchStmt.
+		// Getting here means a pattern was used as a value, so say that
+		// rather than leaving it to the default case.
+		c.panicSyntaxErrorf(expr, "a match pattern cannot be used as an expression")
 	default:
 		panic(fmt.Sprintf("Unknown ExprBase: %v", expr))
 	}

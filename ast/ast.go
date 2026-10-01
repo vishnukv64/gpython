@@ -322,6 +322,93 @@ type AugAssign struct {
 	Value  Expr
 }
 
+// MatchStmt is a structural pattern match statement (PEP 634):
+//
+//	match subject:
+//	    case pattern:
+//	        body
+//
+// Subject is the expression being matched and Cases holds the clauses.
+type MatchStmt struct {
+	StmtBase
+	Subject Expr
+	Cases   []*MatchCase
+}
+
+// MatchCase is one "case <pattern>: <body>" clause.
+type MatchCase struct {
+	StmtBase
+	Pattern Expr // nil for the wildcard "case _"
+	Body    []Stmt
+}
+
+// MatchValue matches a literal or dotted name; MatchCapture binds a name;
+// MatchSequence matches a sequence of patterns; MatchClass matches "C(...)";
+// MatchOr matches any of its patterns.
+type MatchValue struct {
+	ExprBase
+	Value Expr
+}
+
+// MatchCapture binds the subject to a name.
+type MatchCapture struct {
+	ExprBase
+	Name Identifier
+}
+
+// MatchWildcard is the "_" pattern, which matches anything without binding.
+type MatchWildcard struct {
+	ExprBase
+}
+
+// MatchSequence matches a sequence against a list of patterns.
+type MatchSequence struct {
+	ExprBase
+	Patterns []Expr
+}
+
+// MatchStar is the "*rest" pattern inside a sequence.
+type MatchStar struct {
+	ExprBase
+	Name Identifier
+}
+
+// MatchMapping matches a mapping against key/pattern pairs.
+type MatchMapping struct {
+	ExprBase
+	Keys     []Expr
+	Patterns []Expr
+	Rest     Identifier
+}
+
+// MatchClass matches an instance of a class against keyword patterns.
+type MatchClass struct {
+	ExprBase
+	Cls      Expr
+	Patterns []Expr
+}
+
+// MatchOr matches when any of its patterns match.
+type MatchOr struct {
+	ExprBase
+	Patterns []Expr
+}
+
+// MatchAs is a pattern with a capture: "p as name".
+type MatchAs struct {
+	ExprBase
+	Pattern Expr
+	Name    Identifier
+}
+
+// MatchGuard is a case with an "if" guard; it is not an expression node in
+// CPython but is convenient to carry the guard alongside the pattern.
+type MatchGuard struct {
+	ExprBase
+	Pattern Expr
+	Guard   Expr
+}
+
 // AnnAssign is an annotated assignment (PEP 526): "x: int" or "x: int = 1".
 //
 // At module or class level a bare annotation records the annotation in

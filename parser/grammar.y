@@ -162,6 +162,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	arg		*ast.Arg
 	annassign	*ast.AnnAssign
 	dictexpr	*ast.Dict
+	matchthing	interface{}
 	posonly		posonlyArgs
 	args		[]*ast.Arg
 	arguments	*ast.Arguments
@@ -174,8 +175,12 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %type <op> augassign
 %type <posonly> posonly_prefix
 %type <dictexpr> dictentries
+%type <stmt> match_stmt match_case
+%type <stmts> match_cases
+%type <expr> pattern or_pattern closed_pattern value_pattern
+%type <matchthing> sequence_patterns mapping_patterns mapping_patterns1 mapping_item
 %type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
-%type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators
+%type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators sequence_patterns1
 %type <cmpop> comp_op
 %type <comma> optional_comma
 %type <comprehensions> comp_for
@@ -255,6 +260,8 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %token PASS // pass
 %token RAISE // raise
 %token RETURN // return
+%token MATCH // match (soft keyword, PEP 634)
+%token CASE  // case (soft keyword)
 %token TRY // try
 %token WHILE // while
 %token WITH // with
@@ -578,6 +585,20 @@ typedargslist:
 |	'*' optional_tfpdef tfpdeftests
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3}
+	}
+|	'*' ','
+	{
+		// A bare "*" with nothing after it: the keyword-only separator with
+		// no keyword-only arguments, which a trailing comma makes explicit.
+		$$ = &ast.Arguments{Pos: $<pos>$}
+	}
+|	'*' optional_tfpdef ',' tfpdeftests
+	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $4, KwDefaults: $<exprs>4}
+	}
+|	'*' optional_tfpdef ',' tfpdeftests ',' STARSTAR tfpdef
+	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
 	}
 |	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
 	{
@@ -1168,7 +1189,11 @@ assert_stmt:
 	}
 
 compound_stmt:
-	if_stmt
+	match_stmt
+	{
+		$$ = $1
+	}
+|	if_stmt
 	{
 		$$ = $1
 	}
@@ -1225,6 +1250,232 @@ optional_else:
 |	ELSE ':' suite
 	{
 		$$ = $3
+	}
+
+// match_stmt is PEP 634 structural pattern matching.  match and case are
+// SOFT keywords: the lexer only produces these tokens where a statement can
+// begin, so "match = 1" and "re.match(p, s)" still parse as names.
+match_stmt:
+	MATCH test ':' NEWLINE INDENT match_cases DEDENT
+	{
+		m := &ast.MatchStmt{StmtBase: ast.StmtBase{Pos: $<pos>$}, Subject: $2}
+		for _, c := range $6 {
+			m.Cases = append(m.Cases, c.(*ast.MatchCase))
+		}
+		$$ = m
+	}
+
+match_cases:
+	match_case
+	{
+		$$ = nil
+		$$ = append($$, $1)
+	}
+|	match_cases match_case
+	{
+		$$ = append($$, $2)
+	}
+
+match_case:
+	CASE pattern ':' suite
+	{
+		$$ = &ast.MatchCase{StmtBase: ast.StmtBase{Pos: $<pos>$}, Pattern: $2, Body: $4}
+	}
+|	CASE pattern IF test ':' suite
+	{
+		// A guarded case: the pattern is wrapped so the compiler can find
+		// the guard alongside it.
+		guarded := &ast.MatchGuard{ExprBase: ast.ExprBase{Pos: $<pos>$}, Pattern: $2, Guard: $4}
+		$$ = &ast.MatchCase{StmtBase: ast.StmtBase{Pos: $<pos>$}, Pattern: guarded, Body: $6}
+	}
+
+// pattern covers the forms real code writes.  Each alternative is listed so
+// that no production is ambiguous.
+pattern:
+	or_pattern
+	{
+		$$ = $1
+	}
+|	pattern AS NAME
+	{
+		$$ = &ast.MatchAs{ExprBase: ast.ExprBase{Pos: $<pos>$}, Pattern: $1, Name: ast.Identifier($3)}
+	}
+
+or_pattern:
+	closed_pattern
+	{
+		$$ = $1
+	}
+|	or_pattern '|' closed_pattern
+	{
+		// A chain of alternatives becomes one or-pattern.
+		if existing, ok := $1.(*ast.MatchOr); ok {
+			existing.Patterns = append(existing.Patterns, $3)
+			$$ = existing
+		} else {
+			$$ = &ast.MatchOr{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: []ast.Expr{$1, $3}}
+		}
+	}
+
+closed_pattern:
+	NAME
+	{
+		// A bare name is a capture, except "_" which is the wildcard.  This
+		// alternative comes before value_pattern because "_" is also a
+		// dotted_name, and taking that path made it a value pattern naming
+		// a variable called "_" - a NameError at run time.
+		if $1 == "_" {
+			$$ = &ast.MatchWildcard{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+		} else {
+			$$ = &ast.MatchCapture{ExprBase: ast.ExprBase{Pos: $<pos>$}, Name: ast.Identifier($1)}
+		}
+	}
+|	value_pattern
+	{
+		$$ = $1
+	}
+|	NUMBER
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $1}}
+	}
+|	strings
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: $1.(py.String)}}
+	}
+|	'-' NUMBER
+	{
+		inner := &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $2}
+		neg := &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.USub, Operand: inner}
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: neg}
+	}
+|	NONE
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.None}}
+	}
+|	TRUE
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.True}}
+	}
+|	FALSE
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.False}}
+	}
+|	'(' pattern ')'
+	{
+		$$ = $2
+	}
+|	'[' sequence_patterns ']'
+	{
+		$$ = &ast.MatchSequence{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: $2.([]ast.Expr)}
+	}
+|	'(' sequence_patterns ')'
+	{
+		$$ = &ast.MatchSequence{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: $2.([]ast.Expr)}
+	}
+|	'{' mapping_patterns '}'
+	{
+		$$ = $2.(*ast.MatchMapping)
+	}
+|	dotted_name '(' sequence_patterns ')'
+	{
+		// A class pattern: Class(...) with positional sub-patterns.
+		$$ = &ast.MatchClass{ExprBase: ast.ExprBase{Pos: $<pos>$}, Cls: dottedNameExpr($<pos>$, $1), Patterns: $3.([]ast.Expr)}
+	}
+|	dotted_name '(' ')'
+	{
+		$$ = &ast.MatchClass{ExprBase: ast.ExprBase{Pos: $<pos>$}, Cls: dottedNameExpr($<pos>$, $1)}
+	}
+
+// A dotted name is a value pattern: it names a constant.
+value_pattern:
+	dotted_name
+	{
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: dottedNameExpr($<pos>$, $1)}
+	}
+
+sequence_patterns:
+	{
+		$$ = nil
+	}
+|	sequence_patterns1
+	{
+		$$ = $1
+	}
+|	sequence_patterns1 ','
+	{
+		$$ = $1
+	}
+
+sequence_patterns1:
+	pattern
+	{
+		$$ = []ast.Expr{$1}
+	}
+|	'*' NAME
+	{
+		$$ = []ast.Expr{&ast.MatchStar{ExprBase: ast.ExprBase{Pos: $<pos>$}, Name: ast.Identifier($2)}}
+	}
+|	'*' '_'
+	{
+		$$ = []ast.Expr{&ast.MatchStar{ExprBase: ast.ExprBase{Pos: $<pos>$}}}
+	}
+|	sequence_patterns1 ',' pattern
+	{
+		$$ = append($$, $3)
+	}
+|	sequence_patterns1 ',' '*' NAME
+	{
+		$$ = append($$, &ast.MatchStar{ExprBase: ast.ExprBase{Pos: $<pos>$}, Name: ast.Identifier($4)})
+	}
+
+mapping_patterns:
+	{
+		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+	}
+|	mapping_patterns1
+	{
+		$$ = $1
+	}
+|	mapping_patterns1 ','
+	{
+		$$ = $1
+	}
+
+mapping_patterns1:
+	mapping_item
+	{
+		$$ = $1
+	}
+|	'*' '*' NAME
+	{
+		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Rest: ast.Identifier($3)}
+	}
+|	mapping_patterns1 ',' mapping_item
+	{
+		d := $1.(*ast.MatchMapping)
+		item := $3.(*ast.MatchMapping)
+		d.Keys = append(d.Keys, item.Keys...)
+		d.Patterns = append(d.Patterns, item.Patterns...)
+		if item.Rest != "" {
+			d.Rest = item.Rest
+		}
+		$$ = d
+	}
+
+mapping_item:
+	value_pattern ':' pattern
+	{
+		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{$1}, Patterns: []ast.Expr{$3}}
+	}
+|	NUMBER ':' pattern
+	{
+		key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $1}}
+		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{key}, Patterns: []ast.Expr{$3}}
+	}
+|	strings ':' pattern
+	{
+		key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: $1.(py.String)}}
+		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{key}, Patterns: []ast.Expr{$3}}
 	}
 
 if_stmt:

@@ -158,12 +158,21 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 		if !ok {
 			return nil, ExceptionNewf(TypeError, "exceptions must be classes or instances")
 		}
-		// The remaining arguments become the exception's arguments.
-		newExc, err := ExceptionNew(typ, Tuple{args[1]}, nil)
-		if err != nil {
-			return nil, err
+		// throw(typ, value): when the value is already an exception
+		// instance it IS the exception to raise - rebuilding one from it
+		// would make the instance its sole argument, so str(e) would try to
+		// format an exception into a string and fail.  Otherwise the
+		// remaining arguments are the new exception's arguments, passed
+		// through as they are, since ExceptionNew takes the args tuple.
+		if instance, ok := args[1].(*Exception); ok {
+			exc = instance
+		} else {
+			newExc, err := ExceptionNew(typ, args[1:], nil)
+			if err != nil {
+				return nil, err
+			}
+			exc, _ = newExc.(*Exception)
 		}
-		exc, _ = newExc.(*Exception)
 	}
 
 	it.Frame.Yielded = false
