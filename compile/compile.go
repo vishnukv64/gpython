@@ -83,6 +83,13 @@ type compiler struct {
 	parent      *compiler
 	depth       int
 	interactive bool
+
+	// src is the source being compiled, and stringAnnotations records that
+	// "from __future__ import annotations" is in effect: annotations are
+	// then kept as their source text rather than compiled, so that a name
+	// that only exists for a type checker cannot fail at run time (PEP 563).
+	src               string
+	stringAnnotations bool
 }
 
 // Set in py to avoid circular import
@@ -119,11 +126,25 @@ func Compile(src, srcDesc string, mode py.CompileMode, futureFlags int, dont_inh
 	}
 	c := newCompiler(nil, compilerScopeModule)
 	c.Filename = srcDesc
+	c.src = src
 	err = c.compileAst(Ast, srcDesc, futureFlags, dont_inherit, SymTable)
 	if err != nil {
 		return nil, err
 	}
 	return c.Code, nil
+}
+
+// moduleStatements returns the top level statements of a parsed unit.
+func moduleStatements(node ast.Ast) []ast.Stmt {
+	switch n := node.(type) {
+	case *ast.Module:
+		return n.Body
+	case *ast.Interactive:
+		return n.Body
+	case *ast.Suite:
+		return n.Body
+	}
+	return nil
 }
 
 // Make a new compiler object with empty code object
@@ -142,6 +163,8 @@ func newCompiler(parent *compiler, scopeType compilerScopeType) *compiler {
 	if parent != nil {
 		c.depth = parent.depth + 1
 		c.Filename = parent.Filename
+		c.src = parent.src
+		c.stringAnnotations = parent.stringAnnotations
 	}
 	return c
 }
@@ -192,6 +215,21 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 			err = py.MakeException(r)
 		}
 	}()
+	// "from __future__ import annotations" changes how every annotation in
+	// this unit is compiled, so it is detected before anything is emitted.
+	if c.scopeType == compilerScopeModule {
+		for _, stmt := range moduleStatements(Ast) {
+			imp, ok := stmt.(*ast.ImportFrom)
+			if !ok || imp.Module != "__future__" {
+				continue
+			}
+			for _, alias := range imp.Names {
+				if alias.Name == "annotations" {
+					c.stringAnnotations = true
+				}
+			}
+		}
+	}
 	c.SymTable = SymTable
 	code := c.Code
 	code.Filename = filename
@@ -598,7 +636,9 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	addAnnotation := func(args ...*ast.Arg) {
 		for _, arg := range args {
 			if arg != nil && arg.Annotation != nil {
-				c.Expr(arg.Annotation)
+				if err := c.loadAnnotation(arg.Annotation); err != nil {
+					return
+				}
 				annotations = append(annotations, py.String(arg.Arg))
 			}
 		}
@@ -608,7 +648,9 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	addAnnotation(Args.Kwonlyargs...)
 	addAnnotation(Args.Kwarg)
 	if Returns != nil {
-		c.Expr(Returns)
+		if err := c.loadAnnotation(Returns); err != nil {
+			return
+		}
 		annotations = append(annotations, py.String("return"))
 	}
 	num_annotations := uint32(len(annotations))
