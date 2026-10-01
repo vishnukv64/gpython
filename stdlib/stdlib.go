@@ -50,6 +50,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/types"
 	_ "github.com/vishnukv64/gpython/stdlib/typing"
 	_ "github.com/vishnukv64/gpython/stdlib/uuid"
+	_ "github.com/vishnukv64/gpython/stdlib/weakref"
 	_ "github.com/vishnukv64/gpython/stdlib/yaml"
 )
 

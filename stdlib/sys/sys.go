@@ -20,7 +20,9 @@ package sys
 import (
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
+	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -641,7 +643,8 @@ func init() {
 	stdout := &py.File{File: os.Stdout, FileMode: py.FileWrite}
 	stderr := &py.File{File: os.Stderr, FileMode: py.FileWrite}
 
-	executable, err := os.Executable()
+	var err error
+	executable, err = os.Executable()
 	if err != nil {
 		switch runtime.GOOS {
 		case "js", "wasip1":
@@ -668,6 +671,26 @@ func init() {
 		"__stdout__": stdout,
 		"__stderr__": stderr,
 		"executable": py.String(executable),
+
+		// The platform and version attributes, which code branches on.
+		"platform":             py.String(runtime.GOOS),
+		"byteorder":            py.String(byteOrder()),
+		"version":              py.String("3.4.0 (gpython)"),
+		"version_info":         py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)},
+		"prefix":               py.String(prefix()),
+		"exec_prefix":          py.String(prefix()),
+		"base_prefix":          py.String(prefix()),
+		"base_exec_prefix":     py.String(prefix()),
+		"implementation":       implementationInfo(),
+		"builtin_module_names": py.NewListFromStrings(builtinModuleNames()),
+		"modules":              py.NewStringDict(),
+		"dont_write_bytecode":  py.False,
+		"flags":                py.NewStringDict(),
+		"warnoptions":          py.NewList(),
+		"ps1":                  py.String(">>> "),
+		"ps2":                  py.String("... "),
+		"api_version":          py.Int(1013),
+		"copyright":            py.String("Copyright (c) gpython contributors."),
 
 		//"version": py.Int(MARSHAL_VERSION),
 		//     /* stdin/stdout/stderr are now set by pythonrun.c */
@@ -821,4 +844,42 @@ func floatInfo() py.Object {
 	d["radix"] = py.Int(2)
 	d["rounds"] = py.Int(1)
 	return d
+}
+
+// executablePath is the interpreter's own path, read once so that prefix()
+// can reach it.
+var executable = ""
+
+// byteOrder is the host's byte order.
+func byteOrder() string {
+	var x uint16 = 0x0102
+	b := (*[2]byte)(unsafe.Pointer(&x))
+	if b[0] == 1 {
+		return "big"
+	}
+	return "little"
+}
+
+// prefix is the directory the interpreter is installed in.
+func prefix() string {
+	if executable != "" {
+		return filepath.Dir(executable)
+	}
+	return ""
+}
+
+// implementationInfo describes the interpreter, as sys.implementation does.
+func implementationInfo() py.Object {
+	d := py.NewStringDict()
+	d["name"] = py.String("gpython")
+	d["version"] = py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)}
+	d["hexversion"] = py.Int(0x030400F0)
+	d["cache_tag"] = py.String("gpython-34")
+	return d
+}
+
+// builtinModuleNames lists the modules the interpreter has built in.
+func builtinModuleNames() []string {
+	return []string{"builtins", "sys", "math", "time", "os", "collections",
+		"json", "re", "itertools", "functools", "yaml"}
 }
