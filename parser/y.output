@@ -4620,9 +4620,9 @@ state 322
 	optional_comma  goto 390
 
 state 323
-	arglist:  optional_arguments.'*' test arguments2 
-	arglist:  optional_arguments.'*' test arguments2 ',' STARSTAR test 
-	arglist:  optional_arguments.STARSTAR test 
+	arglist:  optional_arguments.'*' test arguments2 optional_comma 
+	arglist:  optional_arguments.'*' test arguments2 ',' STARSTAR test optional_comma 
+	arglist:  optional_arguments.STARSTAR test optional_comma 
 
 	STARSTAR  shift 392
 	'*'  shift 391
@@ -5571,8 +5571,8 @@ state 390
 
 
 state 391
-	arglist:  optional_arguments '*'.test arguments2 
-	arglist:  optional_arguments '*'.test arguments2 ',' STARSTAR test 
+	arglist:  optional_arguments '*'.test arguments2 optional_comma 
+	arglist:  optional_arguments '*'.test arguments2 ',' STARSTAR test optional_comma 
 
 	NAME  shift 84
 	STRING  shift 91
@@ -5609,7 +5609,7 @@ state 391
 	comparison  goto 68
 
 state 392
-	arglist:  optional_arguments STARSTAR.test 
+	arglist:  optional_arguments STARSTAR.test optional_comma 
 
 	NAME  shift 84
 	STRING  shift 91
@@ -6466,8 +6466,8 @@ state 437
 
 
 state 438
-	arglist:  optional_arguments '*' test.arguments2 
-	arglist:  optional_arguments '*' test.arguments2 ',' STARSTAR test 
+	arglist:  optional_arguments '*' test.arguments2 optional_comma 
+	arglist:  optional_arguments '*' test.arguments2 ',' STARSTAR test optional_comma 
 	arguments2: .    (304)
 
 	.  reduce 304 (src line 1936)
@@ -6475,10 +6475,13 @@ state 438
 	arguments2  goto 469
 
 state 439
-	arglist:  optional_arguments STARSTAR test.    (309)
+	arglist:  optional_arguments STARSTAR test.optional_comma 
+	optional_comma: .    (101)
 
-	.  reduce 309 (src line 1972)
+	','  shift 462
+	.  reduce 101 (src line 829)
 
+	optional_comma  goto 470
 
 state 440
 	argument:  test '=' test.    (312)
@@ -6489,7 +6492,7 @@ state 440
 state 441
 	import_from_arg:  '(' import_as_names optional_comma.')' 
 
-	')'  shift 470
+	')'  shift 471
 	.  error
 
 
@@ -6510,7 +6513,7 @@ state 444
 	varargslist:  vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests.    (64)
 	varargslist:  vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests.',' STARSTAR vfpdef 
 
-	','  shift 471
+	','  shift 472
 	.  reduce 64 (src line 631)
 
 
@@ -6526,7 +6529,7 @@ state 446
 	NAME  shift 167
 	.  error
 
-	vfpdef  goto 472
+	vfpdef  goto 473
 
 state 447
 	subscripts:  subscripts ',' subscript.    (273)
@@ -6547,7 +6550,7 @@ state 449
 	':'  shift 411
 	.  reduce 282 (src line 1802)
 
-	sliceop  goto 473
+	sliceop  goto 474
 
 state 450
 	subscript:  ':' test sliceop.    (279)
@@ -6567,13 +6570,13 @@ state 452
 	comp_for:  FOR exprlist IN or_test.comp_iter 
 
 	FOR  shift 286
-	IF  shift 477
+	IF  shift 478
 	OR  shift 157
 	.  reduce 315 (src line 2017)
 
-	comp_if  goto 476
-	comp_iter  goto 474
-	comp_for  goto 475
+	comp_if  goto 477
+	comp_iter  goto 475
+	comp_for  goto 476
 
 state 453
 	test_colon_tests:  test_colon_tests ',' test ':' test.    (294)
@@ -6584,7 +6587,7 @@ state 453
 state 454
 	elifs:  elifs ELIF test.':' suite 
 
-	':'  shift 478
+	':'  shift 479
 	.  error
 
 
@@ -6610,7 +6613,7 @@ state 458
 	try_stmt:  TRY ':' suite except_clauses ELSE ':' suite.    (181)
 	try_stmt:  TRY ':' suite except_clauses ELSE ':' suite.FINALLY ':' suite 
 
-	FINALLY  shift 479
+	FINALLY  shift 480
 	.  reduce 181 (src line 1252)
 
 
@@ -6623,7 +6626,7 @@ state 459
 state 460
 	except_clause:  EXCEPT test AS.NAME 
 
-	NAME  shift 480
+	NAME  shift 481
 	.  error
 
 
@@ -6646,7 +6649,7 @@ state 463
 
 	.  reduce 31 (src line 435)
 
-	tfpdeftests  goto 481
+	tfpdeftests  goto 482
 
 state 464
 	typedargslist:  tfpdeftests1 ',' STARSTAR tfpdef.optional_comma 
@@ -6655,7 +6658,7 @@ state 464
 	','  shift 462
 	.  reduce 101 (src line 829)
 
-	optional_comma  goto 482
+	optional_comma  goto 483
 
 state 465
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*'.optional_tfpdef tfpdeftests 
@@ -6666,7 +6669,7 @@ state 465
 	.  reduce 35 (src line 466)
 
 	tfpdef  goto 383
-	optional_tfpdef  goto 483
+	optional_tfpdef  goto 484
 
 state 466
 	typedargslist:  posonly_prefix tfpdeftests1 ',' STARSTAR.tfpdef 
@@ -6674,14 +6677,14 @@ state 466
 	NAME  shift 318
 	.  error
 
-	tfpdef  goto 484
+	tfpdef  goto 485
 
 state 467
 	tfpdeftests:  tfpdeftests.',' tfpdeftest 
 	typedargslist:  posonly_prefix '*' optional_tfpdef tfpdeftests.    (44)
 	typedargslist:  posonly_prefix '*' optional_tfpdef tfpdeftests.',' STARSTAR tfpdef 
 
-	','  shift 485
+	','  shift 486
 	.  reduce 44 (src line 523)
 
 
@@ -6690,69 +6693,77 @@ state 468
 	typedargslist:  '*' optional_tfpdef tfpdeftests ','.STARSTAR tfpdef 
 
 	NAME  shift 318
-	STARSTAR  shift 487
+	STARSTAR  shift 488
 	.  error
 
-	tfpdeftest  goto 486
+	tfpdeftest  goto 487
 	tfpdef  goto 317
 
 state 469
 	arguments2:  arguments2.',' argument 
-	arglist:  optional_arguments '*' test arguments2.    (307)
-	arglist:  optional_arguments '*' test arguments2.',' STARSTAR test 
+	arglist:  optional_arguments '*' test arguments2.optional_comma 
+	arglist:  optional_arguments '*' test arguments2.',' STARSTAR test optional_comma 
+	optional_comma: .    (101)
 
-	','  shift 488
-	.  reduce 307 (src line 1951)
+	','  shift 489
+	.  reduce 101 (src line 829)
 
+	optional_comma  goto 490
 
 state 470
+	arglist:  optional_arguments STARSTAR test optional_comma.    (309)
+
+	.  reduce 309 (src line 1972)
+
+
+state 471
 	import_from_arg:  '(' import_as_names optional_comma ')'.    (142)
 
 	.  reduce 142 (src line 1031)
 
 
-state 471
+state 472
 	vfpdeftests:  vfpdeftests ','.vfpdeftest 
 	varargslist:  vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ','.STARSTAR vfpdef 
 
 	NAME  shift 167
-	STARSTAR  shift 489
+	STARSTAR  shift 491
 	.  error
 
 	vfpdeftest  goto 445
 	vfpdef  goto 166
 
-state 472
+state 473
 	varargslist:  '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef.    (68)
 
 	.  reduce 68 (src line 647)
 
 
-state 473
+state 474
 	subscript:  test ':' test sliceop.    (283)
 
 	.  reduce 283 (src line 1806)
 
 
-state 474
+state 475
 	comp_for:  FOR exprlist IN or_test comp_iter.    (316)
 
 	.  reduce 316 (src line 2027)
 
 
-state 475
+state 476
 	comp_iter:  comp_for.    (313)
 
 	.  reduce 313 (src line 2005)
 
 
-state 476
+state 477
 	comp_iter:  comp_if.    (314)
 
 	.  reduce 314 (src line 2011)
 
 
-state 477
+state 478
 	comp_if:  IF.test_nocond 
 	comp_if:  IF.test_nocond comp_iter 
 
@@ -6763,7 +6774,7 @@ state 477
 	FALSE  shift 90
 	NONE  shift 88
 	TRUE  shift 89
-	LAMBDA  shift 493
+	LAMBDA  shift 495
 	NOT  shift 67
 	'('  shift 81
 	'['  shift 82
@@ -6784,13 +6795,13 @@ state 477
 	power  goto 79
 	atom  goto 80
 	not_test  goto 66
-	test_nocond  goto 490
-	lambdef_nocond  goto 492
-	or_test  goto 491
+	test_nocond  goto 492
+	lambdef_nocond  goto 494
+	or_test  goto 493
 	and_test  goto 64
 	comparison  goto 68
 
-state 478
+state 479
 	elifs:  elifs ELIF test ':'.suite 
 
 	NEWLINE  shift 226
@@ -6827,7 +6838,7 @@ state 478
 	strings  goto 86
 	simple_stmt  goto 225
 	small_stmts  goto 8
-	suite  goto 494
+	suite  goto 496
 	small_stmt  goto 17
 	expr_stmt  goto 26
 	del_stmt  goto 27
@@ -6865,82 +6876,83 @@ state 478
 	yield_expr  goto 54
 	test_or_star_exprs  goto 49
 
-state 479
+state 480
 	try_stmt:  TRY ':' suite except_clauses ELSE ':' suite FINALLY.':' suite 
 
-	':'  shift 495
+	':'  shift 497
 	.  error
 
 
-state 480
+state 481
 	except_clause:  EXCEPT test AS NAME.    (191)
 
 	.  reduce 191 (src line 1306)
 
 
-state 481
+state 482
 	tfpdeftests:  tfpdeftests.',' tfpdeftest 
 	typedargslist:  tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests.    (47)
 	typedargslist:  tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests.',' STARSTAR tfpdef 
 
-	','  shift 496
+	','  shift 498
 	.  reduce 47 (src line 538)
 
 
-state 482
+state 483
 	typedargslist:  tfpdeftests1 ',' STARSTAR tfpdef optional_comma.    (49)
 
 	.  reduce 49 (src line 546)
 
 
-state 483
+state 484
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef.tfpdeftests 
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef.tfpdeftests ',' STARSTAR tfpdef 
 	tfpdeftests: .    (31)
 
 	.  reduce 31 (src line 435)
 
-	tfpdeftests  goto 497
+	tfpdeftests  goto 499
 
-state 484
+state 485
 	typedargslist:  posonly_prefix tfpdeftests1 ',' STARSTAR tfpdef.    (43)
 
 	.  reduce 43 (src line 516)
 
 
-state 485
+state 486
 	tfpdeftests:  tfpdeftests ','.tfpdeftest 
 	typedargslist:  posonly_prefix '*' optional_tfpdef tfpdeftests ','.STARSTAR tfpdef 
 
 	NAME  shift 318
-	STARSTAR  shift 498
+	STARSTAR  shift 500
 	.  error
 
-	tfpdeftest  goto 486
+	tfpdeftest  goto 487
 	tfpdef  goto 317
 
-state 486
+state 487
 	tfpdeftests:  tfpdeftests ',' tfpdeftest.    (32)
 
 	.  reduce 32 (src line 440)
 
 
-state 487
+state 488
 	typedargslist:  '*' optional_tfpdef tfpdeftests ',' STARSTAR.tfpdef 
 
 	NAME  shift 318
 	.  error
 
-	tfpdef  goto 499
+	tfpdef  goto 501
 
-state 488
+state 489
+	optional_comma:  ','.    (102)
 	arguments2:  arguments2 ','.argument 
-	arglist:  optional_arguments '*' test arguments2 ','.STARSTAR test 
+	arglist:  optional_arguments '*' test arguments2 ','.STARSTAR test optional_comma 
 
 	NAME  shift 84
 	STRING  shift 91
 	NUMBER  shift 85
-	STARSTAR  shift 501
+	STARSTAR  shift 503
 	ELIPSIS  shift 87
 	FALSE  shift 90
 	NONE  shift 88
@@ -6953,7 +6965,7 @@ state 488
 	'-'  shift 77
 	'{'  shift 83
 	'~'  shift 78
-	.  error
+	.  reduce 102 (src line 833)
 
 	strings  goto 86
 	expr  goto 69
@@ -6971,29 +6983,35 @@ state 488
 	or_test  goto 61
 	and_test  goto 64
 	comparison  goto 68
-	argument  goto 500
+	argument  goto 502
 
-state 489
+state 490
+	arglist:  optional_arguments '*' test arguments2 optional_comma.    (307)
+
+	.  reduce 307 (src line 1951)
+
+
+state 491
 	varargslist:  vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ',' STARSTAR.vfpdef 
 
 	NAME  shift 167
 	.  error
 
-	vfpdef  goto 502
+	vfpdef  goto 504
 
-state 490
+state 492
 	comp_if:  IF test_nocond.    (317)
 	comp_if:  IF test_nocond.comp_iter 
 
 	FOR  shift 286
-	IF  shift 477
+	IF  shift 478
 	.  reduce 317 (src line 2039)
 
-	comp_if  goto 476
-	comp_iter  goto 503
-	comp_for  goto 475
+	comp_if  goto 477
+	comp_iter  goto 505
+	comp_for  goto 476
 
-state 491
+state 493
 	test_nocond:  or_test.    (199)
 	or_test:  or_test.OR and_test 
 
@@ -7001,34 +7019,34 @@ state 491
 	.  reduce 199 (src line 1347)
 
 
-state 492
+state 494
 	test_nocond:  lambdef_nocond.    (200)
 
 	.  reduce 200 (src line 1352)
 
 
-state 493
+state 495
 	lambdef_nocond:  LAMBDA.':' test_nocond 
 	lambdef_nocond:  LAMBDA.varargslist ':' test_nocond 
 
 	NAME  shift 167
 	STARSTAR  shift 164
-	':'  shift 504
+	':'  shift 506
 	'*'  shift 163
 	.  error
 
 	vfpdeftest  goto 165
 	vfpdef  goto 166
 	vfpdeftests1  goto 162
-	varargslist  goto 505
+	varargslist  goto 507
 
-state 494
+state 496
 	elifs:  elifs ELIF test ':' suite.    (172)
 
 	.  reduce 172 (src line 1181)
 
 
-state 495
+state 497
 	try_stmt:  TRY ':' suite except_clauses ELSE ':' suite FINALLY ':'.suite 
 
 	NEWLINE  shift 226
@@ -7065,7 +7083,7 @@ state 495
 	strings  goto 86
 	simple_stmt  goto 225
 	small_stmts  goto 8
-	suite  goto 506
+	suite  goto 508
 	small_stmt  goto 17
 	expr_stmt  goto 26
 	del_stmt  goto 27
@@ -7103,48 +7121,48 @@ state 495
 	yield_expr  goto 54
 	test_or_star_exprs  goto 49
 
-state 496
+state 498
 	tfpdeftests:  tfpdeftests ','.tfpdeftest 
 	typedargslist:  tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ','.STARSTAR tfpdef 
 
 	NAME  shift 318
-	STARSTAR  shift 507
+	STARSTAR  shift 509
 	.  error
 
-	tfpdeftest  goto 486
+	tfpdeftest  goto 487
 	tfpdef  goto 317
 
-state 497
+state 499
 	tfpdeftests:  tfpdeftests.',' tfpdeftest 
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests.    (41)
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests.',' STARSTAR tfpdef 
 
-	','  shift 508
+	','  shift 510
 	.  reduce 41 (src line 502)
 
 
-state 498
+state 500
 	typedargslist:  posonly_prefix '*' optional_tfpdef tfpdeftests ',' STARSTAR.tfpdef 
 
 	NAME  shift 318
 	.  error
 
-	tfpdef  goto 509
+	tfpdef  goto 511
 
-state 499
+state 501
 	typedargslist:  '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef.    (51)
 
 	.  reduce 51 (src line 554)
 
 
-state 500
+state 502
 	arguments2:  arguments2 ',' argument.    (305)
 
 	.  reduce 305 (src line 1940)
 
 
-state 501
-	arglist:  optional_arguments '*' test arguments2 ',' STARSTAR.test 
+state 503
+	arglist:  optional_arguments '*' test arguments2 ',' STARSTAR.test optional_comma 
 
 	NAME  shift 84
 	STRING  shift 91
@@ -7173,26 +7191,26 @@ state 501
 	factor  goto 75
 	power  goto 79
 	atom  goto 80
-	test  goto 510
+	test  goto 512
 	not_test  goto 66
 	lambdef  goto 62
 	or_test  goto 61
 	and_test  goto 64
 	comparison  goto 68
 
-state 502
+state 504
 	varargslist:  vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef.    (65)
 
 	.  reduce 65 (src line 635)
 
 
-state 503
+state 505
 	comp_if:  IF test_nocond comp_iter.    (318)
 
 	.  reduce 318 (src line 2045)
 
 
-state 504
+state 506
 	lambdef_nocond:  LAMBDA ':'.test_nocond 
 
 	NAME  shift 84
@@ -7202,7 +7220,7 @@ state 504
 	FALSE  shift 90
 	NONE  shift 88
 	TRUE  shift 89
-	LAMBDA  shift 493
+	LAMBDA  shift 495
 	NOT  shift 67
 	'('  shift 81
 	'['  shift 82
@@ -7223,63 +7241,66 @@ state 504
 	power  goto 79
 	atom  goto 80
 	not_test  goto 66
-	test_nocond  goto 511
-	lambdef_nocond  goto 492
-	or_test  goto 491
+	test_nocond  goto 513
+	lambdef_nocond  goto 494
+	or_test  goto 493
 	and_test  goto 64
 	comparison  goto 68
 
-state 505
+state 507
 	lambdef_nocond:  LAMBDA varargslist.':' test_nocond 
 
-	':'  shift 512
+	':'  shift 514
 	.  error
 
 
-state 506
+state 508
 	try_stmt:  TRY ':' suite except_clauses ELSE ':' suite FINALLY ':' suite.    (183)
 
 	.  reduce 183 (src line 1260)
 
 
-state 507
+state 509
 	typedargslist:  tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR.tfpdef 
 
 	NAME  shift 318
 	.  error
 
-	tfpdef  goto 513
+	tfpdef  goto 515
 
-state 508
+state 510
 	tfpdeftests:  tfpdeftests ','.tfpdeftest 
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ','.STARSTAR tfpdef 
 
 	NAME  shift 318
-	STARSTAR  shift 514
+	STARSTAR  shift 516
 	.  error
 
-	tfpdeftest  goto 486
+	tfpdeftest  goto 487
 	tfpdef  goto 317
 
-state 509
+state 511
 	typedargslist:  posonly_prefix '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef.    (45)
 
 	.  reduce 45 (src line 528)
 
 
-state 510
-	arglist:  optional_arguments '*' test arguments2 ',' STARSTAR test.    (308)
+state 512
+	arglist:  optional_arguments '*' test arguments2 ',' STARSTAR test.optional_comma 
+	optional_comma: .    (101)
 
-	.  reduce 308 (src line 1961)
+	','  shift 462
+	.  reduce 101 (src line 829)
 
+	optional_comma  goto 517
 
-state 511
+state 513
 	lambdef_nocond:  LAMBDA ':' test_nocond.    (203)
 
 	.  reduce 203 (src line 1368)
 
 
-state 512
+state 514
 	lambdef_nocond:  LAMBDA varargslist ':'.test_nocond 
 
 	NAME  shift 84
@@ -7289,7 +7310,7 @@ state 512
 	FALSE  shift 90
 	NONE  shift 88
 	TRUE  shift 89
-	LAMBDA  shift 493
+	LAMBDA  shift 495
 	NOT  shift 67
 	'('  shift 81
 	'['  shift 82
@@ -7310,47 +7331,53 @@ state 512
 	power  goto 79
 	atom  goto 80
 	not_test  goto 66
-	test_nocond  goto 515
-	lambdef_nocond  goto 492
-	or_test  goto 491
+	test_nocond  goto 518
+	lambdef_nocond  goto 494
+	or_test  goto 493
 	and_test  goto 64
 	comparison  goto 68
 
-state 513
+state 515
 	typedargslist:  tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef.    (48)
 
 	.  reduce 48 (src line 542)
 
 
-state 514
+state 516
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR.tfpdef 
 
 	NAME  shift 318
 	.  error
 
-	tfpdef  goto 516
+	tfpdef  goto 519
 
-state 515
+state 517
+	arglist:  optional_arguments '*' test arguments2 ',' STARSTAR test optional_comma.    (308)
+
+	.  reduce 308 (src line 1961)
+
+
+state 518
 	lambdef_nocond:  LAMBDA varargslist ':' test_nocond.    (204)
 
 	.  reduce 204 (src line 1374)
 
 
-state 516
+state 519
 	typedargslist:  posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef.    (42)
 
 	.  reduce 42 (src line 509)
 
 
 92 terminals, 126 nonterminals
-322 grammar rules, 517/16000 states
+322 grammar rules, 520/16000 states
 0 shift/reduce, 0 reduce/reduce conflicts reported
 175 working sets used
 memory: parser 2760/240000
 215 extra closures
-1958 shift entries, 3 exceptions
-322 goto entries
+1960 shift entries, 3 exceptions
+325 goto entries
 1684 entries saved by goto default
-Optimizer space used: output 1436/240000
-1436 table entries, 489 zero
-maximum spread: 92, maximum offset: 514
+Optimizer space used: output 1417/240000
+1417 table entries, 467 zero
+maximum spread: 92, maximum offset: 516

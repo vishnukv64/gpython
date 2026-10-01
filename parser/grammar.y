@@ -1948,7 +1948,7 @@ arglist:
 	{
 		$$ = $1
 	}
-|	optional_arguments '*' test arguments2
+|	optional_arguments '*' test arguments2 optional_comma
 	{
 		call := $1
 		call.Starargs = $3
@@ -1958,7 +1958,7 @@ arglist:
 		call.Keywords = append(call.Keywords, $4.Keywords...)
 		$$ = call
 	}
-|	optional_arguments '*' test arguments2 ',' STARSTAR test
+|	optional_arguments '*' test arguments2 ',' STARSTAR test optional_comma
 	{
 		call := $1
 		call.Starargs = $3
@@ -1969,7 +1969,7 @@ arglist:
 		call.Keywords = append(call.Keywords, $4.Keywords...)
 		$$ = call
 	}
-|	optional_arguments STARSTAR test
+|	optional_arguments STARSTAR test optional_comma
 	{
 		call := $1
 		call.Kwargs = $3
