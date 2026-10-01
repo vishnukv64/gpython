@@ -115,6 +115,16 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		walkExprs(node.Targets)
 		walk(node.Value)
 
+	case *AnnAssign:
+		// Target     Expr
+		// Annotation Expr
+		// Value      Expr
+		walk(node.Target)
+		walk(node.Annotation)
+		if node.Value != nil {
+			walk(node.Value)
+		}
+
 	case *AugAssign:
 		// Target Expr
 		// Op     OperatorNumber

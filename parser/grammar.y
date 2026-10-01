@@ -10,8 +10,8 @@ package parser
 
 import (
 	"fmt"
-	"github.com/go-python/gpython/py"
-	"github.com/go-python/gpython/ast"
+	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/ast"
 )
 
 // NB can put code blocks in not just at the end
@@ -126,6 +126,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	withitem	*ast.WithItem
 	withitems	[]*ast.WithItem
 	arg		*ast.Arg
+	annassign	*ast.AnnAssign
 	args		[]*ast.Arg
 	arguments	*ast.Arguments
 }
@@ -694,6 +695,16 @@ expr_stmt:
 |	testlist_star_expr
 	{
 		$$ = &ast.ExprStmt{StmtBase: ast.StmtBase{Pos: $<pos>$}, Value: $1}
+	}
+|	testlist_star_expr ':' test
+	{
+		setCtx(yylex, $1, ast.Store)
+		$$ = &ast.AnnAssign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: $1, Annotation: $3}
+	}
+|	testlist_star_expr ':' test '=' testlist_star_expr
+	{
+		setCtx(yylex, $1, ast.Store)
+		$$ = &ast.AnnAssign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: $1, Annotation: $3, Value: $5}
 	}
 
 yield_expr_or_testlist:
@@ -1609,6 +1620,8 @@ atom:
 			$$ = &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: s}
 		case py.Bytes:
 			$$ = &ast.Bytes{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: s}
+		case *py.FString:
+			$$ = &ast.FString{ExprBase: ast.ExprBase{Pos: $<pos>$}, Text: s.Text, Raw: s.Raw}
 		default:
 			panic("not Bytes or String in strings")
 		}

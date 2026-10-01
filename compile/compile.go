@@ -1053,6 +1053,24 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 			}
 			c.Expr(target)
 		}
+	case *ast.AnnAssign:
+		// Target     Expr
+		// Annotation Expr
+		// Value      Expr
+		//
+		// The annotation itself is not evaluated for its effect: at module
+		// and class level "x: int" only records the annotation, and the
+		// compiler has no __annotations__ store yet, so it is dropped and
+		// only a value, when present, is assigned.  Evaluating the
+		// annotation would be wrong anyway when it names a type that is not
+		// importable at run time.
+		if node.Value != nil {
+			c.Expr(node.Value)
+			if _, ok := node.Target.(ast.SetCtxer); !ok {
+				panic("compile: can't set context in AnnAssign")
+			}
+			c.Expr(node.Target)
+		}
 	case *ast.AugAssign:
 		// Target Expr
 		// Op     OperatorNumber

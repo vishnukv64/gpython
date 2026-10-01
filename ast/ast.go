@@ -322,6 +322,18 @@ type AugAssign struct {
 	Value  Expr
 }
 
+// AnnAssign is an annotated assignment (PEP 526): "x: int" or "x: int = 1".
+//
+// At module or class level a bare annotation records the annotation in
+// __annotations__ without binding anything; inside a function the target is
+// still a local.  Value is nil when there is no initialiser.
+type AnnAssign struct {
+	StmtBase
+	Target     Expr
+	Annotation Expr
+	Value      Expr
+}
+
 type For struct {
 	StmtBase
 	Target Expr
