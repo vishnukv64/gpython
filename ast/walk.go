@@ -316,6 +316,10 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 	case *Str:
 		// S py.String
 
+	case *FString:
+		// Text string
+		// Raw  bool
+
 	case *Bytes:
 		// S py.Bytes
 

@@ -91,7 +91,7 @@ func TestCompleter(t *testing.T) {
 			line:            "di",
 			pos:             2,
 			wantHead:        "",
-			wantCompletions: []string{"dict", "divmod"},
+			wantCompletions: []string{"dict", "dir", "divmod"},
 			wantTail:        "",
 		},
 		{

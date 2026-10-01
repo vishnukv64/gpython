@@ -2705,6 +2705,8 @@ yydefault:
 				yyVAL.expr = &ast.Str{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, S: s}
 			case py.Bytes:
 				yyVAL.expr = &ast.Bytes{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, S: s}
+			case *py.FString:
+				yyVAL.expr = &ast.FString{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Text: s.Text, Raw: s.Raw}
 			default:
 				panic("not Bytes or String in strings")
 			}

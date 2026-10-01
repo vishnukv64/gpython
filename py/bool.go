@@ -110,3 +110,9 @@ var _ I__str__ = Bool(false)
 var _ I__repr__ = Bool(false)
 var _ I__eq__ = Bool(false)
 var _ I__ne__ = Bool(false)
+
+func init() {
+	// bool is a subclass of int in Python: issubclass(bool, int) is True and
+	// True == 1, so bool must sit under int in the MRO.
+	BoolType.Base = IntType
+}

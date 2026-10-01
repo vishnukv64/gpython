@@ -259,6 +259,11 @@ type Expression struct {
 	Body Expr
 }
 
+// ParseExpr parses a single Python expression.  It is set by the parser
+// package so that the compiler can parse the expression parts of an
+// f-string without importing it.
+var ParseExpr func(src string) (Expr, error)
+
 type Suite struct {
 	ModBase
 	Body []Stmt
@@ -515,6 +520,18 @@ type Num struct {
 type Str struct {
 	ExprBase
 	S py.String
+}
+
+// FString is an f-string literal (PEP 498).
+//
+// The lexer produces the raw text; the compiler lowers this node into
+// ordinary "literal + conversion + format" bytecode, so it never reaches
+// the VM.  Raw records whether the literal carried an r prefix, which
+// decides whether the literal parts still need escape processing.
+type FString struct {
+	ExprBase
+	Text string
+	Raw  bool
 }
 
 type Bytes struct {

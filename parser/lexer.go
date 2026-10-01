@@ -794,10 +794,31 @@ func (x *yyLex) readString() (token int, value py.Object) {
 
 	rawString := false  // whether we are parsing a r"" string
 	byteString := false // whether we are parsing a b"" string
+	fString := false    // whether we are parsing a f"" string (PEP 498)
 	// u"" strings are just normal strings so we ignore that qualifier
 
 	// Start of string
 	if r0 == '\'' || r0 == '"' {
+		goto found
+	}
+	// Or start of f"" F"" - the raw text is kept unprocessed for the
+	// compiler to lower (PEP 498)
+	if (r0 == 'f' || r0 == 'F') && (r1 == '\'' || r1 == '"') {
+		fString = true
+		x.cut(1)
+		goto found
+	}
+	// Or start of rf"" fr"" and the other case variants
+	if (r0 == 'r' || r0 == 'R') && (r1 == 'f' || r1 == 'F') && (r2 == '\'' || r2 == '"') {
+		rawString = true
+		fString = true
+		x.cut(2)
+		goto found
+	}
+	if (r0 == 'f' || r0 == 'F') && (r1 == 'r' || r1 == 'R') && (r2 == '\'' || r2 == '"') {
+		rawString = true
+		fString = true
+		x.cut(2)
 		goto found
 	}
 	// Or start of r"" u"" b""
@@ -894,6 +915,11 @@ found:
 		x.refill()
 	}
 foundEndOfString:
+	// f-strings are handed to the compiler exactly as written: no
+	// escape processing and no brace processing happens here.
+	if fString {
+		return STRING, py.NewFString(buf.String(), rawString)
+	}
 	if !rawString {
 		var err error
 		buf, err = DecodeEscape(buf, byteString)

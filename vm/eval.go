@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -1641,11 +1642,67 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 			default:
 				return nil, py.ExceptionNewf(py.TypeError, "vars() takes at most 1 argument (%d given)", len(args))
 			}
+		case py.InternalMethodDir:
+			return builtinDir(f, args)
 		default:
 			return nil, py.ExceptionNewf(py.SystemError, "Internal method %v not found", x)
 		}
 	}
 	return py.Call(fn, args, kwargs)
+}
+
+// builtinDir implements dir().  It lives here rather than in the builtin
+// package because the no-argument form needs the interpreter frame.
+func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
+	if len(args) > 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "dir expected at most 1 argument, got %d", len(args))
+	}
+
+	if len(args) == 0 {
+		f.FastToLocals()
+		names := make([]string, 0, len(f.Locals))
+		for name := range f.Locals {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return dirList(names), nil
+	}
+
+	obj := args[0]
+	seen := map[string]bool{}
+
+	// Attributes supplied by the type and everything it inherits.
+	for t := obj.Type(); t != nil; t = t.Base {
+		for name := range t.Dict {
+			seen[name] = true
+		}
+	}
+	// Attributes carried by the object itself.
+	if d, ok := obj.(py.IGetDict); ok {
+		for name := range d.GetDict() {
+			seen[name] = true
+		}
+	}
+	if m, ok := obj.(*py.Module); ok {
+		for name := range m.Globals {
+			seen[name] = true
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return dirList(names), nil
+}
+
+func dirList(names []string) *py.List {
+	items := make([]py.Object, len(names))
+	for i, name := range names {
+		items[i] = py.String(name)
+	}
+	return py.NewListFromItems(items)
 }
 
 // Implements a function call - see CALL_FUNCTION for a description of

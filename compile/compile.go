@@ -1852,6 +1852,10 @@ func (c *compiler) Expr(expr ast.Expr) {
 	case *ast.Str:
 		// S py.String
 		c.LoadConst(node.S)
+	case *ast.FString:
+		// Text string
+		// Raw  bool
+		c.compileFString(node)
 	case *ast.Bytes:
 		// S py.Bytes
 		c.LoadConst(node.S)
