@@ -11,6 +11,11 @@ package py
 
 import (
 	"bytes"
+	"math"
+	"math/big"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 const dictDoc = `dict() -> new empty dictionary
@@ -38,7 +43,11 @@ func init() {
 		sMap := self.(StringDict)
 		o := make(Tuple, 0, len(sMap))
 		for k, v := range sMap {
-			o = append(o, Tuple{String(k), v})
+			key, err := dictKeyDecode(k)
+			if err != nil {
+				return nil, err
+			}
+			o = append(o, Tuple{key, v})
 		}
 		return NewIterator(o), nil
 	}, 0, "items() -> list of D's (key, value) pairs, as 2-tuples")
@@ -51,7 +60,11 @@ func init() {
 		sMap := self.(StringDict)
 		o := make(Tuple, 0, len(sMap))
 		for k := range sMap {
-			o = append(o, String(k))
+			key, err := dictKeyDecode(k)
+			if err != nil {
+				return nil, err
+			}
+			o = append(o, key)
 		}
 		return NewIterator(o), nil
 	}, 0, "keys() -> list of D's keys, as a list")
@@ -98,6 +111,216 @@ func init() {
 //
 // Used for variables etc where the keys can only be strings
 type StringDict map[string]Object
+
+// Python dicts accept any hashable key, but the storage here is keyed by
+// string.  Keys are therefore encoded into a reversible string form.  A
+// String key that does not begin with keyTag is stored as itself, which
+// keeps the module globals, keyword arguments and every existing literal
+// dictionary working with no encoding at all; everything else is stored
+// with keyTag and a one byte type marker.
+const keyTag = "\x00"
+
+// Encode an object as a dict key.
+//
+// Structurally encoded types (str, int, float, bool, None, bytes, tuple,
+// frozenset) are reversible, so keys() and items() can return the original
+// objects.  Types with identity hashing are not reversible and raise, which
+// is the honest answer: it is also what Python does for the unhashable
+// containers.
+func dictKey(key Object) (string, error) {
+	var b []byte
+	if err := appendKey(&b, key); err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func appendKey(b *[]byte, key Object) error {
+	switch k := key.(type) {
+	case String:
+		s := string(k)
+		if !strings.HasPrefix(s, keyTag) {
+			// The common case: stored verbatim, no encoding.
+			*b = append(*b, s...)
+			return nil
+		}
+		*b = append(*b, keyTag...)
+		*b = append(*b, 's')
+		*b = append(*b, s...)
+	case Int:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'i')
+		*b = strconv.AppendInt(*b, int64(k), 10)
+	case *BigInt:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'I')
+		*b = append(*b, []byte((*big.Int)(k).String())...)
+	case Bool:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'b')
+		if k {
+			*b = append(*b, '1')
+		} else {
+			*b = append(*b, '0')
+		}
+	case Float:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'f')
+		*b = strconv.AppendUint(*b, math.Float64bits(float64(k)), 16)
+	case NoneType:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'n')
+	case Bytes:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'y')
+		*b = strconv.AppendInt(*b, int64(len(k)), 10)
+		*b = append(*b, ':')
+		*b = append(*b, []byte(k)...)
+	case Tuple:
+		*b = append(*b, keyTag...)
+		*b = append(*b, 't')
+		*b = strconv.AppendInt(*b, int64(len(k)), 10)
+		*b = append(*b, ':')
+		for _, item := range k {
+			var sub []byte
+			if err := appendKey(&sub, item); err != nil {
+				return err
+			}
+			*b = strconv.AppendInt(*b, int64(len(sub)), 10)
+			*b = append(*b, ':')
+			*b = append(*b, sub...)
+		}
+	case *FrozenSet:
+		// Sets have no order, so sort the member encodings to give equal
+		// sets the same key.
+		members := make([]string, 0, len(k.items))
+		for item := range k.items {
+			ek, err := dictKey(item)
+			if err != nil {
+				return err
+			}
+			members = append(members, ek)
+		}
+		sort.Strings(members)
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'S')
+		*b = strconv.AppendInt(*b, int64(len(members)), 10)
+		*b = append(*b, ':')
+		for _, m := range members {
+			*b = strconv.AppendInt(*b, int64(len(m)), 10)
+			*b = append(*b, ':')
+			*b = append(*b, m...)
+		}
+	default:
+		return ExceptionNewf(TypeError, "unhashable type: '%s'", key.Type().Name)
+	}
+	return nil
+}
+
+// dictKeyDecode recovers the original key object from its encoded form.
+func dictKeyDecode(encoded string) (Object, error) {
+	key, rest, err := readKey(encoded)
+	if err != nil {
+		return nil, err
+	}
+	_ = rest
+	return key, nil
+}
+
+func readKey(s string) (Object, string, error) {
+	if !strings.HasPrefix(s, keyTag) {
+		// An unencoded string key, which runs to the end.
+		return String(s), "", nil
+	}
+	if len(s) < 2 {
+		return nil, "", ExceptionNewf(KeyError, "corrupt dict key")
+	}
+	marker, rest := s[1], s[2:]
+	switch marker {
+	case 's':
+		return String(rest), "", nil
+	case 'i':
+		i, err := strconv.ParseInt(rest, 10, 64)
+		if err != nil {
+			return nil, "", ExceptionNewf(KeyError, "corrupt dict key")
+		}
+		return Int(i), "", nil
+	case 'I':
+		i, err := IntFromString(rest, 10)
+		if err != nil {
+			return nil, "", err
+		}
+		return i, "", nil
+	case 'b':
+		return Bool(rest == "1"), "", nil
+	case 'f':
+		bits, err := strconv.ParseUint(rest, 16, 64)
+		if err != nil {
+			return nil, "", ExceptionNewf(KeyError, "corrupt dict key")
+		}
+		return Float(math.Float64frombits(bits)), "", nil
+	case 'n':
+		return None, "", nil
+	case 'y':
+		n, rest2, err := readPrefixInt(rest)
+		if err != nil {
+			return nil, "", err
+		}
+		return Bytes(rest2[:n]), rest2[n:], nil
+	case 't':
+		n, rest2, err := readPrefixInt(rest)
+		if err != nil {
+			return nil, "", err
+		}
+		items := make(Tuple, n)
+		for i := 0; i < n; i++ {
+			size, rest3, err := readPrefixInt(rest2)
+			if err != nil {
+				return nil, "", err
+			}
+			item, _, err := readKey(rest3[:size])
+			if err != nil {
+				return nil, "", err
+			}
+			items[i] = item
+			rest2 = rest3[size:]
+		}
+		return items, rest2, nil
+	case 'S':
+		n, rest2, err := readPrefixInt(rest)
+		if err != nil {
+			return nil, "", err
+		}
+		items := make([]Object, 0, n)
+		for i := 0; i < n; i++ {
+			size, rest3, err := readPrefixInt(rest2)
+			if err != nil {
+				return nil, "", err
+			}
+			item, _, err := readKey(rest3[:size])
+			if err != nil {
+				return nil, "", err
+			}
+			items = append(items, item)
+			rest2 = rest3[size:]
+		}
+		return NewFrozenSetFromItems(items), rest2, nil
+	}
+	return nil, "", ExceptionNewf(KeyError, "corrupt dict key")
+}
+
+// readPrefixInt reads a leading decimal count followed by ':'.
+func readPrefixInt(s string) (int, string, error) {
+	i := strings.IndexByte(s, ':')
+	if i < 0 {
+		return 0, "", ExceptionNewf(KeyError, "corrupt dict key")
+	}
+	n, err := strconv.Atoi(s[:i])
+	if err != nil || n < 0 {
+		return 0, "", ExceptionNewf(KeyError, "corrupt dict key")
+	}
+	return n, s[i+1:], nil
+}
 
 // DictNew
 func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
@@ -185,7 +408,11 @@ func (a StringDict) M__repr__() (Object, error) {
 		if spacer {
 			out.WriteString(", ")
 		}
-		keyStr, err := ReprAsString(String(key))
+		key, err := dictKeyDecode(key)
+		if err != nil {
+			return nil, err
+		}
+		keyStr, err := ReprAsString(key)
 		if err != nil {
 			return nil, err
 		}
@@ -206,16 +433,19 @@ func (a StringDict) M__repr__() (Object, error) {
 func (d StringDict) M__iter__() (Object, error) {
 	o := make(Tuple, 0, len(d))
 	for k := range d {
-		o = append(o, String(k))
+		key, err := dictKeyDecode(k)
+		if err != nil {
+			return nil, err
+		}
+		o = append(o, key)
 	}
 	return NewIterator(o), nil
 }
 
 func (d StringDict) M__getitem__(key Object) (Object, error) {
-	str, ok := key.(String)
-	if ok {
-		res, ok := d[string(str)]
-		if ok {
+	encoded, err := dictKey(key)
+	if err == nil {
+		if res, ok := d[encoded]; ok {
 			return res, nil
 		}
 	}
@@ -223,24 +453,23 @@ func (d StringDict) M__getitem__(key Object) (Object, error) {
 }
 
 func (d StringDict) M__delitem__(key Object) (Object, error) {
-	str, ok := key.(String)
-	if !ok {
+	encoded, err := dictKey(key)
+	if err != nil {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
-	_, ok = d[string(str)]
-	if !ok {
+	if _, ok := d[encoded]; !ok {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
-	delete(d, string(str))
+	delete(d, encoded)
 	return None, nil
 }
 
 func (d StringDict) M__setitem__(key, value Object) (Object, error) {
-	str, ok := key.(String)
-	if !ok {
-		return nil, ExceptionNewf(KeyError, "FIXME can only have string keys!: %v", key)
+	encoded, err := dictKey(key)
+	if err != nil {
+		return nil, err
 	}
-	d[string(str)] = value
+	d[encoded] = value
 	return None, nil
 }
 
@@ -283,12 +512,11 @@ func (a StringDict) M__ne__(other Object) (Object, error) {
 }
 
 func (a StringDict) M__contains__(other Object) (Object, error) {
-	key, ok := other.(String)
-	if !ok {
-		return nil, ExceptionNewf(KeyError, "FIXME can only have string keys!: %v", key)
+	encoded, err := dictKey(other)
+	if err != nil {
+		return False, nil
 	}
-
-	if _, ok := a[string(key)]; ok {
+	if _, ok := a[encoded]; ok {
 		return True, nil
 	}
 	return False, nil
