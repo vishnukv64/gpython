@@ -1,78 +1,111 @@
 # gpython
 
-[![Build Status](https://github.com/go-python/gpython/workflows/CI/badge.svg)](https://github.com/go-python/gpython/actions)
-[![codecov](https://codecov.io/gh/go-python/gpython/branch/main/graph/badge.svg)](https://codecov.io/gh/go-python/gpython)
-[![GoDoc](https://godoc.org/github.com/go-python/gpython?status.svg)](https://godoc.org/github.com/go-python/gpython)
-[![License](https://img.shields.io/badge/License-BSD--3-blue.svg)](https://github.com/go-python/gpython/blob/main/LICENSE)
-
 gpython is a part re-implementation, part port of the Python 3.4
 interpreter in Go.  Although there are many areas of improvement,
 it stands as an noteworthy achievement in capability and potential.
- 
+
+This repository is a **fork** of [go-python/gpython](https://github.com/go-python/gpython)
+maintained under [vishnukv64](https://github.com/vishnukv64).  The upstream
+project is kept as the `upstream` git remote, which is read-only here: work
+lands on this fork only.  All original copyright notices and the upstream
+lineage are preserved; see [License](#license).
+
 gpython includes:
 
   * lexer, parser, and compiler
   * runtime and high-level convenience functions
+  * a file-system import system: packages, submodules, relative imports
   * multi-context interpreter instancing
   * easy embedding into your Go application
-  * interactive mode (REPL) ([try online!](https://gpython.org))
+  * interactive mode (REPL)
 
+## What this fork adds
 
-gpython does not include many python modules as many of the core
-modules are written in C not python.  The converted modules are:
+The import system was the main obstacle to running real Python code, and it
+has been rebuilt along CPython's lines:
 
-  * builtins
-  * marshal
-  * math
-  * time
-  * sys
+  * **Packages work.** `import pkg`, `import pkg.sub`, `from pkg import sub`,
+    `from pkg.sub import name`, `from . import sibling` and `from .sub import name`
+    all resolve, both from `sys.path` and from an installed package tree.
+    Every imported module gets a `__path__` (packages) and `__package__`,
+    and submodules are bound onto their parent.
+  * **`PYTHONPATH`** is honoured, and a script is run with its own directory
+    as `sys.path[0]` — the rule that lets it import its neighbours.
+  * **`-c`, `-m <module>`, `-m <package>`** (runs `__main__`) and `--version`.
+
+Several long-standing bugs that broke ordinary Python were fixed along the way:
+
+  * Decorated functions compiled incorrectly: the decorators were emitted
+    after the function's defaults, so `MAKE_FUNCTION` consumed them.  This
+    was the cause of a hard panic on class bodies using `@property`.
+  * `property` was missing from `builtins` and could not be constructed; it
+    is now implemented and behaves as a descriptor, as do `staticmethod` and
+    `classmethod` when read from a class.
+  * `_make_function` asserted argument types unguarded and panicked instead
+    of raising.
+  * Absolute script paths never resolved (`path.Join(".", "/x")` strips the
+    leading separator).
+  * Class objects now expose `__name__`, `__qualname__`, `__doc__`,
+    `__bases__` and `__dict__`.
+
+Numeric literals accept underscores (`1_000`, `0x_FF`, `1_0.5`), and the
+`__future__` module exists so `from __future__ import ...` stops failing.
+
+## Status and limitations
+
+This is honest about where the interpreter stands:
+
+  * The grammar is a Python 3.4-era grammar.  **f-strings are not supported
+    yet** and neither is anything newer; that blocks most modern packages.
+  * `super()` is not implemented (there is no `SuperType`), though the
+    compiler already emits the `__class__` cell it would need.
+  * The standard library is mostly Go ports of the *C* modules that shipped
+    with 3.4.  Beyond the modules registered in `stdlib/`, the pure-Python
+    standard library is not present, so modules such as `itertools`,
+    `functools`, `collections`, `json`, `datetime` and `typing` do not import
+    yet.  This is the largest remaining piece of work.
+  * **C extension modules (`.so`/`.pyd`) cannot be loaded at all**, and there
+    is no plan to change that.  Packages with compiled dependencies are
+    therefore out of reach, which is the barrier the upstream README
+    describes.
+  * Namespace packages (directories without `__init__.py`) are not supported.
+
+So `pip install` does not work yet, and neither does `import re` — no
+pure-Python `re` is on `sys.path` and no native `re` module is registered
+yet.  The import machinery now finds modules correctly; what is missing is
+the modules themselves.
 
 ## Install
 
-Download directly from the [releases page](https://github.com/go-python/gpython/releases) 
+With Go installed:
 
-Or if you have Go installed:
+    go install github.com/vishnukv64/gpython@latest
 
-    go install github.com/go-python/gpython
+Or build from a checkout:
+
+    go build -o gpython .
+    ./gpython -c 'print("hello")'
 
 ## Objectives
 
-gpython started as an experiment to investigate how hard
-porting Python to Go might be.  It turns out that all those C modules
-are a significant barrier to making gpython a complete replacement
-to CPython.  
+gpython started as an experiment to investigate how hard porting Python to
+Go might be.  It turns out that all those C modules are a significant barrier
+to making gpython a complete replacement to CPython.
 
 However, to those who want to embed a highly popular and known language
 into their Go application, gpython could be a great choice over less
 capable (or lesser known) alternatives.
 
-## Status
-
-gpython currently:
- - Parses all the code in the Python 3.4 distribution
- - Runs Python 3 for the modules that are currently supported
- - Supports concurrent multi-interpreter ("multi-context") execution
-
-Speed hasn't been a goal of the conversions however it runs pystone at
-about 20% of the speed of CPython.  A [π computation test](https://github.com/go-python/gpython/tree/main/examples/pi_chudnovsky_bs.py) runs quicker under
-gpython as the Go long integer primitives are likely faster than the
-Python ones.
-
-@ncw started gpython in 2013 and work on is sporadic. If you or someone
-you know would be interested to take it futher, it would be much appreciated.
-
 ## Getting Started
 
-The [embedding example](https://github.com/go-python/gpython/tree/main/examples/embedding) demonstrates how to
-easily embed and invoke gpython from any Go application.
+The [embedding example](examples/embedding) demonstrates how to easily embed
+and invoke gpython from any Go application.
 
-Of interest, gpython is able to run multiple interpreter instances simultaneously,
-allowing you to embed gpython naturally into your Go application.  This makes it
-possible to use gpython in a server situation where complete interpreter 
-independence is paramount.  See this in action in the [multi-context example](https://github.com/go-python/gpython/tree/main/examples/multi-context).
- 
-If you are looking to get involved, a light and easy place to start is adding more convenience functions to [py/util.go](https://github.com/go-python/gpython/tree/main/py/util.go).  See [notes.txt](https://github.com/go-python/gpython/blob/main/notes.txt) for bigger ideas.
-
+gpython is able to run multiple interpreter instances simultaneously,
+allowing you to embed gpython naturally into your Go application.  This makes
+it possible to use gpython in a server situation where complete interpreter
+independence is paramount.  See this in action in the
+[multi-context example](examples/multi-context).
 
 ## Other Projects of Interest
 
@@ -80,9 +113,8 @@ If you are looking to get involved, a light and easy place to start is adding mo
 
 ## Community
 
-You can chat with the go-python community (or which gpython is part)
-at [go-python@googlegroups.com](https://groups.google.com/forum/#!forum/go-python)
-or on the [Gophers Slack](https://gophers.slack.com/) in the `#go-python` channel.
+Upstream: [go-python@googlegroups.com](https://groups.google.com/forum/#!forum/go-python),
+or the Gophers Slack in the `#go-python` channel.
 
 ## License
 
