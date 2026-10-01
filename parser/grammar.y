@@ -534,7 +534,7 @@ typedargslist:
 		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args}
 	}
-|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests
+|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests optional_comma
 	{
 		po := $1
 		args := append(append([]*ast.Arg{}, po.args...), $2...)
@@ -555,7 +555,7 @@ typedargslist:
 		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Kwarg: $5}
 	}
-|	posonly_prefix '*' optional_tfpdef tfpdeftests
+|	posonly_prefix '*' optional_tfpdef tfpdeftests optional_comma
 	{
 		po := $1
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4}
@@ -570,11 +570,11 @@ typedargslist:
 		po := $1
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Kwarg: $3}
 	}
-|	tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests
+|	tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Vararg: $4, Kwonlyargs: $5, KwDefaults: $<exprs>5}
 	}
-|	tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
+|	tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Vararg: $4, Kwonlyargs: $5, KwDefaults: $<exprs>5, Kwarg: $8}
 	}
@@ -582,23 +582,26 @@ typedargslist:
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Kwarg: $4}
 	}
-|	'*' optional_tfpdef tfpdeftests
+|	'*' optional_tfpdef tfpdeftests optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3}
+	}
+|	'*' ',' tfpdeftests1
+	{
+		// A bare "*" separator followed by keyword-only arguments:
+		// "def f(*, a=1)".  The comma is required here, which is what keeps
+		// this from colliding with the empty-list form above.
+		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3}
+	}
+|	'*' ',' tfpdeftests1 ',' STARSTAR tfpdef optional_comma
+	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
 	}
 |	'*' ','
 	{
 		// A bare "*" with nothing after it: the keyword-only separator with
 		// no keyword-only arguments, which a trailing comma makes explicit.
 		$$ = &ast.Arguments{Pos: $<pos>$}
-	}
-|	'*' optional_tfpdef ',' tfpdeftests
-	{
-		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $4, KwDefaults: $<exprs>4}
-	}
-|	'*' optional_tfpdef ',' tfpdeftests ',' STARSTAR tfpdef
-	{
-		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
 	}
 |	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
 	{
