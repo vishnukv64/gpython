@@ -107,7 +107,7 @@ func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDic
 	var err error
 	var parent *Module
 	for i := range parts {
-		module, err = importOne(ctx, strings.Join(parts[:i+1], "."))
+		module, err = importDotted(ctx, strings.Join(parts[:i+1], "."))
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +148,38 @@ func importOne(ctx Context, name string) (*Module, error) {
 		return nil, err
 	}
 	return initModuleFromPath(ctx, name, path, isPkg)
+}
+
+// importDotted imports a name that may not have a file of its own, by
+// resolving its parent and looking the leaf up as an attribute of it.
+//
+// That is what makes "import os.path" work when os.path is an attribute of
+// os rather than a module on sys.path, which is how os.path is defined
+// everywhere outside this interpreter - and the same shape covers
+// "import pkg.sub" for a submodule bound onto its package.
+func importDotted(ctx Context, name string) (*Module, error) {
+	if module, err := ctx.GetModule(name); err == nil {
+		return module, nil
+	}
+	if impl := GetModuleImpl(name); impl != nil {
+		return ctx.ModuleInit(impl)
+	}
+	if i := strings.LastIndex(name, "."); i > 0 {
+		parent, err := importDotted(ctx, name[:i])
+		if err != nil {
+			return nil, err
+		}
+		leaf := name[i+1:]
+		if child, ok := parent.Globals[leaf].(*Module); ok {
+			return child, nil
+		}
+		// A module the parent exposes but that has not been registered under
+		// its dotted name: give it that name so a later import finds it.
+		if child, err := ctx.Store().GetModule(name); err == nil {
+			return child, nil
+		}
+	}
+	return importOne(ctx, name)
 }
 
 // Straight port of the python code

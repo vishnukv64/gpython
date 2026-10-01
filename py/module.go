@@ -259,3 +259,26 @@ func GetModuleImplOrNil(name string) *Module {
 	}
 	return mod
 }
+
+// RegisterModuleAlias makes alias importable as another already registered
+// module, so that both names resolve to the one module object.  "os.path is
+// posixpath" then holds, as it does in CPython, instead of the two names
+// producing two modules that merely behave alike.
+func RegisterModuleAlias(alias, target string) {
+	gRuntime.RegisterModuleAlias(alias, target)
+}
+
+// GetModuleImplOrNilFor is the alias-aware form used by callers that need a
+// specific registered module built outside a context.
+
+// RegisterModuleAlias makes alias importable as the module already
+// registered under target, so both names resolve to one ModuleImpl - and so
+// to one module object once loaded.  It is what makes "os.path is posixpath"
+// hold rather than the two names producing two modules that behave alike.
+func (rt *Runtime) RegisterModuleAlias(alias, target string) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if impl, ok := rt.ModuleImpls[target]; ok {
+		rt.ModuleImpls[alias] = impl
+	}
+}

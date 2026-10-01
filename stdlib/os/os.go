@@ -77,6 +77,9 @@ func init() {
 		"defpath": osDefpath,
 		"devnull": osDevnull,
 	}
+	// os.path is the posixpath module object, so os.path.join and friends
+	// reach the functions registered there, and "os.path is posixpath" holds.
+	globals["path"] = PathModule()
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

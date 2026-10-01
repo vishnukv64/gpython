@@ -18,6 +18,7 @@
 package sys
 
 import (
+	"math"
 	"os"
 	"runtime"
 
@@ -653,7 +654,12 @@ func init() {
 	}
 
 	globals := py.StringDict{
-		"path":       py.NewList(),
+		"path": py.NewList(),
+		// maxsize and friends: the values a program reads to size things.
+		"maxsize":    py.Int(math.MaxInt64),
+		"maxunicode": py.Int(0x10FFFF),
+		"float_info": floatInfo(),
+		"hexversion": py.Int(0x030400F0),
 		"argv":       py.NewListFromStrings(os.Args[1:]),
 		"stdin":      stdin,
 		"stdout":     stdout,
@@ -796,4 +802,23 @@ func init() {
 		Globals: globals,
 	})
 
+}
+
+// floatInfo is the sys.float_info structure: the properties of the host's
+// double.  It is a plain attribute holder, since the interpreter reads one
+// or two of these rather than modelling the whole struct.
+func floatInfo() py.Object {
+	d := py.NewStringDict()
+	d["max"] = py.Float(math.MaxFloat64)
+	d["min"] = py.Float(math.SmallestNonzeroFloat64)
+	d["epsilon"] = py.Float(2.220446049250313e-16)
+	d["dig"] = py.Int(15)
+	d["mant_dig"] = py.Int(53)
+	d["max_exp"] = py.Int(1024)
+	d["min_exp"] = py.Int(-1021)
+	d["max_10_exp"] = py.Int(308)
+	d["min_10_exp"] = py.Int(-307)
+	d["radix"] = py.Int(2)
+	d["rounds"] = py.Int(1)
+	return d
 }
