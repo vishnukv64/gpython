@@ -217,6 +217,21 @@ func appendKey(b *[]byte, key Object) error {
 	return nil
 }
 
+// DictKey encodes an object into the string form used to store dict keys,
+// and DictKeyDecode recovers the original object from it.
+//
+// They are exported so that other mapping-like types (collections.Counter,
+// for instance) can share one key encoding with dict rather than inventing
+// a second one.
+func DictKey(key Object) (string, error) {
+	return dictKey(key)
+}
+
+// DictKeyDecode is the inverse of DictKey.
+func DictKeyDecode(encoded string) (Object, error) {
+	return dictKeyDecode(encoded)
+}
+
 // dictKeyDecode recovers the original key object from its encoded form.
 func dictKeyDecode(encoded string) (Object, error) {
 	key, rest, err := readKey(encoded)
