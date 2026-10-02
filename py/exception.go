@@ -34,21 +34,26 @@ type ExceptionInfo struct {
 
 var (
 	// Exception heirachy
-	BaseException             = ObjectType.NewTypeFlags("BaseException", "Common base class for all exceptions", ExceptionNew, nil, ObjectType.Flags|TPFLAGS_BASE_EXC_SUBCLASS)
-	SystemExit                = BaseException.NewType("SystemExit", "Request to exit from the interpreter.", nil, nil)
-	KeyboardInterrupt         = BaseException.NewType("KeyboardInterrupt", "Program interrupted by user.", nil, nil)
-	GeneratorExit             = BaseException.NewType("GeneratorExit", "Request that a generator exit.", nil, nil)
-	ExceptionType             = BaseException.NewType("Exception", "Common base class for all non-exit exceptions.", nil, nil)
-	StopIteration             = ExceptionType.NewType("StopIteration", "Signal the end from iterator.__next__().", nil, nil)
-	ArithmeticError           = ExceptionType.NewType("ArithmeticError", "Base class for arithmetic errors.", nil, nil)
-	FloatingPointError        = ArithmeticError.NewType("FloatingPointError", "Floating point operation failed.", nil, nil)
-	OverflowError             = ArithmeticError.NewType("OverflowError", "Result too large to be represented.", nil, nil)
-	ZeroDivisionError         = ArithmeticError.NewType("ZeroDivisionError", "Second argument to a division or modulo operation was zero.", nil, nil)
-	AssertionError            = ExceptionType.NewType("AssertionError", "Assertion failed.", nil, nil)
-	AttributeError            = ExceptionType.NewType("AttributeError", "Attribute not found.", nil, nil)
-	BufferError               = ExceptionType.NewType("BufferError", "Buffer error.", nil, nil)
-	EOFError                  = ExceptionType.NewType("EOFError", "Read beyond end of file.", nil, nil)
-	ImportError               = ExceptionType.NewType("ImportError", "Import can't find module, or can't find name in module.", nil, nil)
+	BaseException      = ObjectType.NewTypeFlags("BaseException", "Common base class for all exceptions", ExceptionNew, nil, ObjectType.Flags|TPFLAGS_BASE_EXC_SUBCLASS)
+	SystemExit         = BaseException.NewType("SystemExit", "Request to exit from the interpreter.", nil, nil)
+	KeyboardInterrupt  = BaseException.NewType("KeyboardInterrupt", "Program interrupted by user.", nil, nil)
+	GeneratorExit      = BaseException.NewType("GeneratorExit", "Request that a generator exit.", nil, nil)
+	ExceptionType      = BaseException.NewType("Exception", "Common base class for all non-exit exceptions.", nil, nil)
+	StopIteration      = ExceptionType.NewType("StopIteration", "Signal the end from iterator.__next__().", nil, nil)
+	ArithmeticError    = ExceptionType.NewType("ArithmeticError", "Base class for arithmetic errors.", nil, nil)
+	FloatingPointError = ArithmeticError.NewType("FloatingPointError", "Floating point operation failed.", nil, nil)
+	OverflowError      = ArithmeticError.NewType("OverflowError", "Result too large to be represented.", nil, nil)
+	ZeroDivisionError  = ArithmeticError.NewType("ZeroDivisionError", "Second argument to a division or modulo operation was zero.", nil, nil)
+	AssertionError     = ExceptionType.NewType("AssertionError", "Assertion failed.", nil, nil)
+	AttributeError     = ExceptionType.NewType("AttributeError", "Attribute not found.", nil, nil)
+	BufferError        = ExceptionType.NewType("BufferError", "Buffer error.", nil, nil)
+	EOFError           = ExceptionType.NewType("EOFError", "Read beyond end of file.", nil, nil)
+	ImportError        = ExceptionType.NewType("ImportError", "Import can't find module, or can't find name in module.", nil, nil)
+	// ModuleNotFoundError is the ImportError a failed IMPORT raises, as
+	// distinct from one a failed "from ... import ..." raises.  Libraries
+	// catch it by name to tell "this optional dependency is absent" from
+	// "this dependency is broken", so it has to exist and be an ImportError.
+	ModuleNotFoundError       = ImportError.NewType("ModuleNotFoundError", "Module not found.", nil, nil)
 	LookupError               = ExceptionType.NewType("LookupError", "Base class for lookup errors.", nil, nil)
 	IndexError                = LookupError.NewType("IndexError", "Sequence index out of range.", nil, nil)
 	KeyError                  = LookupError.NewType("KeyError", "Mapping key not found.", nil, nil)
@@ -358,8 +363,25 @@ func IsException(exception *Type, r interface{}) bool {
 }
 
 // FIXME prototype __getattr__ before we do introspection!
+// M__getattr__ answers for an attribute the exception does not have.
+//
+// It used to return the ARGUMENT TUPLE for every name, which is why
+// "e.with_traceback(None)" raised "'tuple' object is not callable": the
+// lookup succeeded and produced a tuple where a method was expected.  An
+// unknown attribute is now an AttributeError, as it is in CPython.
 func (e *Exception) M__getattr__(name string) (Object, error) {
-	return e.Args, nil // FIXME All attributes are args!
+	return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s'", e.Base.Name, name)
+}
+
+// with_traceback(tb) sets the traceback and returns self.
+//
+// A traceback is a *ExceptionInfo here rather than a Python object, so the
+// argument is accepted and ignored: the interpreter builds its own traceback
+// when the exception propagates.  The call is idiomatically used to CLEAR a
+// traceback - "e.with_traceback(None)" - and it must at least not fail.
+func (e *Exception) M__with_traceback(args Tuple) (Object, error) {
+	_ = args
+	return e, nil
 }
 
 // gCurrentException is the exception the interpreter is currently handling,
@@ -431,6 +453,35 @@ var (
 // present so the attribute exists and reads as None, as it does in CPython
 // for an OSError built from a message alone.
 func init() {
+	// with_traceback is registered on BaseException, so every exception
+	// inherits it through the ordinary lookup.  It has to be a real entry in
+	// the type dict rather than only a Go method on *Exception: the
+	// reflection shortcut in GetAttrString binds M__name for an object whose
+	// own dict has nothing, and an instance of a python class is a *Type with
+	// an empty Name, which that shortcut skips.
+	// args is the argument tuple the exception was raised with, and it is a
+	// real attribute - code reads "e.args[0]" to get at the message.  It was
+	// reachable before only by accident, because M__getattr__ answered every
+	// name with the argument tuple; now that unknown names raise, it has to
+	// be registered.
+	BaseException.Dict["args"] = &Property{
+		Fget: func(self Object) (Object, error) {
+			return self.(*Exception).Args, nil
+		},
+		Fset: func(self, value Object) error {
+			self.(*Exception).Args = value
+			return nil
+		},
+	}
+
+	BaseException.Dict["with_traceback"] = MustNewMethod("with_traceback", func(self Object, args Tuple) (Object, error) {
+		return self.(*Exception).M__with_traceback(args)
+	}, 1, `with_traceback(tb) -> set the traceback and return self.
+
+A traceback is not a Python object here, so tb is accepted and ignored: the
+interpreter builds its own when the exception propagates.  Idiomatic code
+uses this to CLEAR a traceback with None.`)
+
 	setErrno := func(self Object) (Object, error) {
 		if e, ok := self.(*Exception); ok {
 			if v, ok := e.Dict["errno"]; ok {

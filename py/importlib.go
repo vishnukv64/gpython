@@ -66,7 +66,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		base = name[i+1:]
 		parent, err := ctx.GetModule(name[:i])
 		if err != nil {
-			return "", false, ExceptionNewf(ImportError, "No module named %q", name)
+			return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
 		}
 		searchPaths = packagePaths(parent)
 	}
@@ -90,7 +90,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		}
 	}
 
-	return "", false, ExceptionNewf(ImportError, "No module named %q", name)
+	return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
 }
 
 // initModuleFromPath compiles and runs the module at path into a new Module

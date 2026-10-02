@@ -137,6 +137,7 @@ func init() {
 		"GeneratorExit":             py.GeneratorExit,
 		"IOError":                   py.OSError,
 		"ImportError":               py.ImportError,
+		"ModuleNotFoundError":       py.ModuleNotFoundError,
 		"ImportWarning":             py.ImportWarning,
 		"IndentationError":          py.IndentationError,
 		"IndexError":                py.IndexError,

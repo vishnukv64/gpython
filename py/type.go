@@ -1470,8 +1470,21 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		// 	add_weak++
 		// }
 	} else {
+		// __slots__ is IGNORED, deliberately.
+		//
+		// It is an optimisation: it tells CPython to store the named
+		// attributes in preallocated slots instead of a per-instance dict.
+		// The observable difference is that a typo'd attribute raises
+		// AttributeError rather than silently creating one, and that the
+		// instances have no __dict__.  Neither matters to code that uses the
+		// attributes it declared, and every class still WORKS.
+		//
+		// Refusing it - which is what this did, with "Can't do __slots__
+		// yet" - is not an option: __slots__ is common in ordinary library
+		// code, and a class that cannot be defined at all is far worse than
+		// one that is a little more permissive than it asked to be.  The
+		// FIXME below is the note this replaces.
 		_ = slots
-		return nil, ExceptionNewf(SystemError, "Can't do __slots__ yet")
 		/* FIXME ignore slots for the moment
 		// Have slots
 
@@ -2042,15 +2055,19 @@ func init() {
 		return self, nil
 	}, 0, "Return the class, ignoring the subscription parameters.")
 
-	// Deliberately NOT ObjectType or TypeType: every class's MRO includes
+	// ObjectType is deliberately NOT in this list: every class's MRO includes
 	// object, so putting the hook there made EVERY class subscriptable-as-
-	// class and shadowed __getitem__, which is why "g[3]" on a class that
-	// defines __getitem__ returned the instance itself.  CPython raises
-	// TypeError for "object[int]" and "type[int]", and so do we.
+	// class and shadowed __getitem__, which is why "g[3]" on a class defining
+	// __getitem__ returned the instance itself.  CPython raises TypeError for
+	// "object[int]".
+	//
+	// TypeType IS included, because "type[X]" is legal - since PEP 585 a
+	// generic alias may name a type, and typing_extensions writes
+	// "type[Warning]" in an annotation that gets evaluated.
 	for _, t := range []*Type{
 		ListType, TupleType, DictType, SetType, FrozenSetType,
 		StringType, BytesType, IntType, FloatType, BoolType,
-		SliceType, ComplexType,
+		SliceType, ComplexType, TypeType,
 	} {
 		if t != nil && t.Dict != nil {
 			t.Dict["__class_getitem__"] = getitem
