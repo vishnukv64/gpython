@@ -143,6 +143,16 @@ func (s *Set) Add(item Object) {
 	_ = s.setAdd(item)
 }
 
+// Copy returns a shallow copy of the set.  A new items map, so the copy and
+// the original are independent.
+func (s *Set) Copy() *Set {
+	ret := NewSetWithCapacity(len(s.items))
+	for k := range s.items {
+		ret.items[k] = SetValue{}
+	}
+	return ret
+}
+
 // AddErr inserts a member, reporting an unhashable one.  The VM uses this so
 // that "{[1]}" and "s.add([1])" raise rather than silently doing nothing.
 func (s *Set) AddErr(item Object) error {
@@ -243,6 +253,10 @@ func (s *Set) M__bool__() (Object, error) {
 }
 
 func (s *Set) M__repr__() (Object, error) {
+	// The EMPTY set is "set()", not "{}" - which is an empty DICT.
+	if len(s.items) == 0 {
+		return String("set()"), nil
+	}
 	var out bytes.Buffer
 	out.WriteRune('{')
 	spacer := false
@@ -384,4 +398,308 @@ func (a *Set) M__ne__(other Object) (Object, error) {
 		return False, nil
 	}
 	return True, nil
+}
+
+// The rest of the set API.
+//
+// "set" had only "add", which is why click stopped at
+// "AttributeError: 'set' has no attribute 'update'" in parser.py.  Each mutator
+// works on the encoded keys directly, which is what makes it agree with
+// membership: two equal members are one key.
+func init() {
+	// asSet returns the other operand as a *Set, or reports that it is not one.
+	// A member may be handed a *FrozenSet as well as a *Set, so the helpers
+	// work from the decoded members rather than a concrete type.
+	asIterable := func(v Object) ([]Object, error) {
+		switch o := v.(type) {
+		case *Set:
+			return o.setItems(), nil
+		case *FrozenSet:
+			return o.setItems(), nil
+		}
+		list, err := SequenceList(v)
+		if err != nil {
+			return nil, err
+		}
+		return list.Items, nil
+	}
+
+	// self-as-Set, working for a frozen set too.  A method promoted from
+	// SetType to FrozenSetType has the EMBEDDED Set as its receiver, so
+	// asserting *Set panicked for "frozenset([1]).union([2])".
+	asSet := func(self Object) *Set {
+		switch o := self.(type) {
+		case *Set:
+			return o
+		case *FrozenSet:
+			return &o.Set
+		}
+		return nil
+	}
+
+	SetType.Dict.Set("update", MustNewMethod("update", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range items {
+				if err := s.setAdd(item); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return NoneType{}, nil
+	}, 0, "update(*others) -> add every element of each iterable"))
+
+	SetType.Dict.Set("union", MustNewMethod("union", func(self Object, args Tuple) (Object, error) {
+		ret := asSet(self).Copy()
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range items {
+				if err := ret.setAdd(item); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return ret, nil
+	}, 0, "union(*others) -> a new set with elements from this set and all others"))
+
+	SetType.Dict.Set("intersection", MustNewMethod("intersection", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		ret := s.Copy()
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			// The other iterable's members as a key set.
+			keep := make(map[string]bool, len(items))
+			for _, item := range items {
+				k, err := setKey(item)
+				if err != nil {
+					return nil, err
+				}
+				keep[k] = true
+			}
+			for k := range ret.items {
+				if !keep[k] {
+					delete(ret.items, k)
+				}
+			}
+		}
+		return ret, nil
+	}, 0, "intersection(*others) -> a new set with elements common to all"))
+
+	SetType.Dict.Set("difference", MustNewMethod("difference", func(self Object, args Tuple) (Object, error) {
+		ret := asSet(self).Copy()
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range items {
+				if k, err := setKey(item); err == nil {
+					delete(ret.items, k)
+				}
+			}
+		}
+		return ret, nil
+	}, 0, "difference(*others) -> a new set with elements not in the others"))
+
+	SetType.Dict.Set("symmetric_difference", MustNewMethod("symmetric_difference", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "symmetric_difference() takes exactly one argument (%d given)", len(args))
+		}
+		s := asSet(self)
+		other, err := SequenceSet(args[0])
+		if err != nil {
+			return nil, err
+		}
+		ret := s.Copy()
+		for k := range other.items {
+			if _, ok := ret.items[k]; ok {
+				delete(ret.items, k)
+			} else {
+				ret.items[k] = SetValue{}
+			}
+		}
+		return ret, nil
+	}, 0, "symmetric_difference(other) -> elements in exactly one of the two sets"))
+
+	SetType.Dict.Set("intersection_update", MustNewMethod("intersection_update", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		res, err := s.M__and__(s)
+		_ = res
+		_ = err
+		// Reuse the non-mutating form and copy its result in.
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			keep := make(map[string]bool, len(items))
+			for _, item := range items {
+				k, err := setKey(item)
+				if err != nil {
+					return nil, err
+				}
+				keep[k] = true
+			}
+			for k := range s.items {
+				if !keep[k] {
+					delete(s.items, k)
+				}
+			}
+		}
+		return NoneType{}, nil
+	}, 0, "intersection_update(*others) -> keep only elements common to all"))
+
+	SetType.Dict.Set("difference_update", MustNewMethod("difference_update", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		for _, arg := range args {
+			items, err := asIterable(arg)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range items {
+				if k, err := setKey(item); err == nil {
+					delete(s.items, k)
+				}
+			}
+		}
+		return NoneType{}, nil
+	}, 0, "difference_update(*others) -> remove elements found in the others"))
+
+	SetType.Dict.Set("symmetric_difference_update", MustNewMethod("symmetric_difference_update", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "symmetric_difference_update() takes exactly one argument (%d given)", len(args))
+		}
+		s := asSet(self)
+		other, err := SequenceSet(args[0])
+		if err != nil {
+			return nil, err
+		}
+		for k := range other.items {
+			if _, ok := s.items[k]; ok {
+				delete(s.items, k)
+			} else {
+				s.items[k] = SetValue{}
+			}
+		}
+		return NoneType{}, nil
+	}, 0, "symmetric_difference_update(other) -> keep elements in exactly one"))
+
+	SetType.Dict.Set("discard", MustNewMethod("discard", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "discard() takes exactly one argument (%d given)", len(args))
+		}
+		asSet(self).setDelete(args[0]) // discard does NOT raise when absent
+		return NoneType{}, nil
+	}, 0, "discard(value) -> remove value if present, without raising"))
+
+	SetType.Dict.Set("remove", MustNewMethod("remove", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "remove() takes exactly one argument (%d given)", len(args))
+		}
+		// remove DOES raise when the element is absent.
+		if !s.setDelete(args[0]) {
+			return nil, ExceptionNewf(KeyError, "%s", args[0])
+		}
+		return NoneType{}, nil
+	}, 0, "remove(value) -> remove value; raise KeyError if absent"))
+
+	SetType.Dict.Set("pop", MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		if len(s.items) == 0 {
+			return nil, ExceptionNewf(KeyError, "pop from an empty set")
+		}
+		// An ARBITRARY element, as CPython says; Go map order is as good as any.
+		for k := range s.items {
+			item, err := DictKeyDecode(k)
+			if err != nil {
+				return nil, err
+			}
+			delete(s.items, k)
+			return item, nil
+		}
+		return NoneType{}, nil
+	}, 0, "pop() -> remove and return an arbitrary element"))
+
+	SetType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
+		s := asSet(self)
+		s.items = make(map[string]SetValue)
+		return NoneType{}, nil
+	}, 0, "clear() -> remove all elements"))
+
+	SetType.Dict.Set("copy", MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+		return asSet(self).Copy(), nil
+	}, 0, "copy() -> a shallow copy"))
+
+	SetType.Dict.Set("issubset", MustNewMethod("issubset", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "issubset() takes exactly one argument (%d given)", len(args))
+		}
+		s := asSet(self)
+		other, err := SequenceSet(args[0])
+		if err != nil {
+			return nil, err
+		}
+		for k := range s.items {
+			if _, ok := other.items[k]; !ok {
+				return False, nil
+			}
+		}
+		return True, nil
+	}, 0, "issubset(other) -> True if every element is in other"))
+
+	SetType.Dict.Set("issuperset", MustNewMethod("issuperset", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "issuperset() takes exactly one argument (%d given)", len(args))
+		}
+		s := asSet(self)
+		other, err := SequenceSet(args[0])
+		if err != nil {
+			return nil, err
+		}
+		for k := range other.items {
+			if _, ok := s.items[k]; !ok {
+				return False, nil
+			}
+		}
+		return True, nil
+	}, 0, "issuperset(other) -> True if every element of other is here"))
+
+	SetType.Dict.Set("isdisjoint", MustNewMethod("isdisjoint", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "isdisjoint() takes exactly one argument (%d given)", len(args))
+		}
+		s := asSet(self)
+		other, err := SequenceSet(args[0])
+		if err != nil {
+			return nil, err
+		}
+		for k := range other.items {
+			if _, ok := s.items[k]; ok {
+				return False, nil
+			}
+		}
+		return True, nil
+	}, 0, "isdisjoint(other) -> True if the two sets share no element"))
+
+	SetType.Dict.Set("__len__", MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
+		return Int(len(asSet(self).items)), nil
+	}, 0, "len(set)"))
+
+	// The frozen set gets the non-mutating half, on FrozenSetType so the
+	// promoted Set methods do not apply.
+	for _, name := range []string{"union", "intersection", "difference",
+		"symmetric_difference", "copy", "issubset", "issuperset", "isdisjoint", "__len__"} {
+		FrozenSetType.Dict.Set(name, SetType.Dict.GetOrNil(name))
+	}
 }
