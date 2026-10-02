@@ -891,10 +891,17 @@ func (a String) M__mod__(other Object) (Object, error) {
 		// every conversion, so they are handled once here rather than per
 		// verb.  '0' pads with zeros AFTER any sign, which is what makes
 		// "%05.1f" % 3.14159 give "003.1" and not "- 03.1" for a negative.
+		//
+		// The flags must be read from the FLAG POSITION, not from anywhere in
+		// the spec: "strings.ContainsRune(spec, '0')" also matches the 0 in a
+		// width like %10.3f and in a precision like %.30f, so ordinary padding
+		// came out as "000000.060" instead of "     0.060" and "%10s" rendered
+		// "00000000ab" instead of "        ab".
 		if width := specWidth(spec); width > len([]rune(text)) {
 			padLen := width - len([]rune(text))
-			leftAlign := strings.ContainsRune(spec, '-')
-			zeroPad := strings.ContainsRune(spec, '0') && !leftAlign
+			flags := specFlags(spec)
+			leftAlign := strings.ContainsRune(flags, '-')
+			zeroPad := strings.ContainsRune(flags, '0') && !leftAlign
 			switch {
 			case leftAlign:
 				text += strings.Repeat(" ", padLen)
@@ -918,6 +925,20 @@ func (a String) M__mod__(other Object) (Object, error) {
 }
 
 // specWidth reads the width out of a conversion specifier such as "%-8.3f".
+// specFlags returns only the FLAG characters of a conversion specifier -
+// the run of "-+ #0" immediately after the '%' and before any width.  Reading
+// flags from the whole spec confuses the '0' flag with a digit of the width or
+// the precision.
+func specFlags(spec string) string {
+	// spec is like "%-+10.3f": skip the leading '%', take flags, stop at the
+	// first character that is not one.
+	start := 1
+	for start < len(spec) && strings.ContainsRune("-+ #0", rune(spec[start])) {
+		start++
+	}
+	return spec[1:start]
+}
+
 func specWidth(spec string) int {
 	digits := ""
 	for i := 1; i < len(spec)-1; i++ {
