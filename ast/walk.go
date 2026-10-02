@@ -304,6 +304,11 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		}
 		walk(node.Body)
 
+	case *NamedExpr:
+		// Target *Name
+		// Value  Expr
+		walk(node.Target)
+		walk(node.Value)
 	case *IfExp:
 		// Test   Expr
 		// Body   Expr

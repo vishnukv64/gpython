@@ -117,6 +117,10 @@ type SymTable struct {
 	TmpName int    // counter for listcomp temp vars
 	Private string // name of current class or ""
 
+	// isComprehension marks the implicit function scope a comprehension
+	// gets.  A walrus inside one binds in the enclosing scope, not here.
+	isComprehension bool
+
 	Symbols     Symbols
 	Global      *SymTable // symbol table entry for module
 	Parent      *SymTable
@@ -285,6 +289,33 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			if node.Rest != "" {
 				st.AddDef(node, node.Rest, DefLocal)
 			}
+		case *ast.NamedExpr:
+			// A walrus binds its target.  The binding belongs to the
+			// enclosing scope, not to a comprehension the expression may
+			// sit inside - that is PEP 572's rule, and it is what makes
+			// "[y := f(x) for x in xs]" leave y defined afterwards.
+			//
+			// The bind therefore goes to the nearest scope that is not a
+			// comprehension, and only there: the symbol must not also be
+			// local to the comprehension, or the comprehension would read
+			// its own unset local instead of the outer binding.  The
+			// comprehension compiles that name as a free variable, which is
+			// what the compiler already does for a name it can see in an
+			// enclosing function scope.
+			scope := st
+			for scope != nil && scope.Type == FunctionBlock && scope.isComprehension {
+				scope = scope.Parent
+			}
+			if scope == nil {
+				scope = st
+			}
+			scope.AddDef(node, node.Target.Id, DefLocal)
+			ast.Walk(node.Value, func(Ast ast.Ast) bool {
+				if n, ok := Ast.(*ast.Name); ok && n.Ctx == ast.Load {
+					st.AddDef(n, n.Id, DefUse)
+				}
+				return true
+			})
 		case *ast.Name:
 			if node.Ctx == ast.Load {
 				st.AddDef(node, node.Id, DefUse)
@@ -431,6 +462,9 @@ func (st *SymTable) parseComprehension(Ast ast.Ast, scopeName string, generators
 	// Create comprehension scope for the rest
 	stNew := newSymTableBlock(Ast, FunctionBlock, scopeName, st)
 	stNew.Generator = isGenerator
+	// A comprehension is an implicit function, but a walrus inside it binds
+	// in the scope around it rather than in the comprehension itself.
+	stNew.isComprehension = true
 	// Outermost iter is received as an argument
 	id := ast.Identifier(fmt.Sprintf(".%d", 0))
 	stNew.AddDef(Ast, id, DefParam)

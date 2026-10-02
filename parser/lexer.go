@@ -204,6 +204,7 @@ var operators = map[string]int{
 
 	// 2 Character operators
 	"!=": PLINGEQ,
+	":=": COLONEQUAL,
 	"%=": PERCEQ,
 	"&=": ANDEQ,
 	"**": STARSTAR,
@@ -661,10 +662,38 @@ func (x *yyLex) readIdentifierOrKeyword() (int, string) {
 	// match and case are SOFT keywords (PEP 634): they are only keywords at
 	// the start of a statement, so "match = 1", "x.match(y)" and
 	// "re.match(p, s)" keep working.  A hard keyword would break all three.
-	if soft, ok := softKeywords[identifier]; ok && x.atStatementStart() {
+	//
+	// Being at the start of a statement is not enough on its own, because a
+	// match statement needs a SUBJECT: "match = 1" is an assignment and
+	// "match: int" an annotated one, both legal at a statement start.  So
+	// the word is also checked against what follows it - "=", ":", an
+	// operator or the end of the line all mean the name is being used as a
+	// name, and only something that can begin an expression makes it the
+	// statement keyword.
+	if soft, ok := softKeywords[identifier]; ok && x.atStatementStart() && x.canBeginMatchSubject() {
 		return soft, identifier
 	}
 	return NAME, identifier
+}
+
+// canBeginMatchSubject reports whether the characters left on the line can
+// begin the subject of a match statement.
+//
+// Anything that can start an expression counts, including the punctuation
+// that begins a literal or a container.  What must NOT count is the
+// punctuation that turns the word into a name being assigned or annotated,
+// and the end of the line.  Only the next character is inspected: that is
+// enough to tell "match x:" from "match = 1" and from "match: int".
+func (x *yyLex) canBeginMatchSubject() bool {
+	rest := strings.TrimLeft(x.line, " 	")
+	if rest == "" {
+		return false
+	}
+	switch rest[0] {
+	case '=', ':', ')', ']', '}', ',', ';', '.', '+', '-', '*', '/', '%', '|', '&', '^', '<', '>', '!', '~':
+		return false
+	}
+	return true
 }
 
 // softKeywords maps the words that are keywords only at a statement start to
@@ -679,7 +708,11 @@ var softKeywords = map[string]int{
 // or the ':' that ends a clause header.
 func (x *yyLex) atStatementStart() bool {
 	switch x.lastToken {
-	case 0, NEWLINE, INDENT, DEDENT, ';', ':':
+	case 0, NEWLINE, INDENT, DEDENT, ';', ':', FILE_INPUT, SINGLE_INPUT, EVAL_INPUT:
+		// The three input pseudo-tokens are how a parse begins, so the very
+		// first statement of a file or an interactive line reaches here with
+		// one of them as its predecessor.  Leaving them out meant the soft
+		// keywords were not recognised at the start of a file at all.
 		return true
 	}
 	return false

@@ -1850,6 +1850,20 @@ func (c *compiler) Expr(expr ast.Expr) {
 		c.Label(elseBranch)
 		c.Expr(node.Orelse)
 		c.Label(endifBranch)
+	case *ast.NamedExpr:
+		// Target *Name
+		// Value  Expr
+		//
+		// A walrus assigns and evaluates to the assigned value, so the
+		// value is compiled once, duplicated for the store, and left on the
+		// stack as the expression's result.  The target must be given the
+		// STORE context: the grammar produces a Name in the load context,
+		// and compiling that would read the name instead of binding it.
+		c.Expr(node.Value)
+		c.Op(vm.DUP_TOP)
+		node.Target.Ctx = ast.Store
+		c.Expr(node.Target)
+		node.Target.Ctx = ast.Load
 	case *ast.Dict:
 		// Keys   []Expr
 		// Values []Expr

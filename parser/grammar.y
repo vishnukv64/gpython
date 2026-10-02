@@ -206,6 +206,7 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %type <dictexpr> dictentries
 %type <stmt> match_stmt match_case
 %type <stmts> match_cases
+%type <expr> namedexpr
 %type <expr> pattern or_pattern closed_pattern value_pattern
 %type <matchthing> sequence_patterns mapping_patterns mapping_patterns1 mapping_item
 %type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
@@ -259,6 +260,8 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %token GTGTEQ // >>=
 %token HATEQ // ^=
 %token PIPEEQ // |=
+%token COLONEQUAL // :=  (PEP 572).  Declared last of the operators so that
+                     // adding it does not renumber the tokens above.
 
 %token FALSE // False
 %token NONE // None
@@ -896,7 +899,7 @@ test_or_star_exprs:
 	}
 
 test_or_star_expr:
-	test
+	namedexpr
 	{
 		$$ = $1
 	}
@@ -1261,7 +1264,7 @@ elifs:
 		$$ = nil
 		$<lastif>$ = nil
 	}
-|	elifs ELIF test ':' suite
+|	elifs ELIF namedexpr ':' suite
 	{
 		elifs := $$
 		newif := &ast.If{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $3, Body: $5}
@@ -1508,8 +1511,29 @@ mapping_item:
 		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{key}, Patterns: []ast.Expr{$3}}
 	}
 
+// namedexpr is PEP 572's assignment expression, "x := f()".  It is a test,
+// which is both what CPython's grammar says and what makes it legal in the
+// places it is meant to be used: an if or while condition, a comprehension
+// condition, a keyword argument.  Using a bare test there is also what makes
+// an unparenthesised walrus in a call an ARGUMENT rather than a syntax error.
+namedexpr:
+	test
+	{
+		$$ = $1
+	}
+|	test COLONEQUAL test
+	{
+		// The target of a walrus must be a bare name; "a.b := 1" and
+		// "a[0] := 1" are syntax errors in CPython and here.
+		name, ok := $1.(*ast.Name)
+		if !ok {
+			yylex.(*yyLex).SyntaxError("cannot use assignment expressions with this target")
+		}
+		$$ = &ast.NamedExpr{ExprBase: ast.ExprBase{Pos: $<pos>$}, Target: name, Value: $3}
+	}
+
 if_stmt:
-	IF test ':' suite elifs optional_else
+	IF namedexpr ':' suite elifs optional_else
 	{
 		newif := &ast.If{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $2, Body: $4}
 		$$ = newif
@@ -1530,7 +1554,7 @@ if_stmt:
 	}
 
 while_stmt:
-	WHILE test ':' suite optional_else
+	WHILE namedexpr ':' suite optional_else
 	{
 		$$ = &ast.While{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $2, Body: $4, Orelse: $5}
 	}
@@ -2320,7 +2344,7 @@ arglist:
 // The reason that keywords are test nodes instead of NAME is that using NAME
 // results in an ambiguity. ast.c makes sure it's a NAME.
 argument:
-	test
+	namedexpr
 	{
 		$$ = &ast.Call{}
 		$$.Args = []ast.Expr{$1}

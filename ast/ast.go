@@ -548,6 +548,15 @@ type IfExp struct {
 	Orelse Expr
 }
 
+// NamedExpr is PEP 572's assignment expression, "x := f()".  It is an
+// expression, so it can appear where a value is wanted, and it both assigns
+// and evaluates to the assigned value.
+type NamedExpr struct {
+	ExprBase
+	Target *Name
+	Value  Expr
+}
+
 type Dict struct {
 	ExprBase
 	Keys   []Expr
