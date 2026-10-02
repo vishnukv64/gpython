@@ -100,6 +100,14 @@ type Type struct {
 	Flags    uint // Flags to define presence of optional/expanded features
 	Qualname string
 
+	// NoSubclass is set by a native type that declines to be a BASE even
+	// though its own base accepts subclassing.  NewType inherits flags from
+	// the superclass, so list and set would otherwise inherit BASETYPE from
+	// object and accept a subclass; and clearing the flag in an init() does
+	// not stick, because Ready() assigns the flags afterwards.  The base-type
+	// check reads this field, which is the one place that decides.
+	NoSubclass bool
+
 	/*
 	   Py_ssize_t tp_basicsize, tp_itemsize; // For allocation
 
@@ -1569,7 +1577,14 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if base.Flags&TPFLAGS_BASETYPE == 0 {
+	// A type may DECLINE to be a base even though its own base is one.
+	//
+	// NewType inherits flags from the superclass, so ListType inherits
+	// BASETYPE from ObjectType - and clearing it in an init() does not stick,
+	// because Ready() sets the flags on the type afterwards.  An explicit
+	// marker on the type is read here instead, which is the one place that
+	// decides.
+	if base.Flags&TPFLAGS_BASETYPE == 0 || base.NoSubclass {
 		// "type" is allowed as a base so that "metaclass=" can be spelled the
 		// Python 2 way - "class C(object, metaclass=M)" needs M to derive
 		// from type - and so that a class statement with a metaclass on a
@@ -1729,8 +1744,21 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// Allocate the type object
 	_ = nslots // FIXME
 	new_type = metatype.Alloc()
+	// A class INHERITS its base's constructor, which is what makes a subclass
+	// of a builtin behave like the builtin: without this, "class D(dict): pass;
+	// D({'a': 1})" produced an EMPTY dict, because the hardcoded ObjectNew
+	// knows nothing about dict arguments.  CPython does the same by leaving
+	// tp_new/tp_init to be inherited from tp_base.
 	new_type.New = ObjectNew   // FIXME metatype.New // FIXME?
 	new_type.Init = ObjectInit // FIXME metatype.New // FIXME?
+	if base != nil {
+		if base.New != nil {
+			new_type.New = base.New
+		}
+		if base.Init != nil {
+			new_type.Init = base.Init
+		}
+	}
 
 	// Keep name and slots alive in the extended type object
 	et := new_type

@@ -202,17 +202,24 @@ func GetItem(self Object, key Object) (Object, error) {
 	// classes do, and the parameters only matter to a type checker - so the
 	// class itself is the result.
 	if t, ok := self.(*Type); ok {
-		// "X[params]" on a class is __class_getitem__ in Python 3.7 and
-		// later.  The classes that define it accept any parameters - the
-		// abstract base classes do, and the parameters only matter to a type
-		// checker - so the class itself is the result.  Anything else falls
-		// through, so a class that defines __getitem__ (an enum class
-		// looking itself up by name) is answered by TypeCall1 below.
+		// "X[params]" on a CLASS is __class_getitem__ in Python 3.7 and later.
+		// The classes that define it accept any parameters - the abstract base
+		// classes do, and the parameters only matter to a type checker - so the
+		// class itself is the result.  Anything else falls through, so a class
+		// that defines __getitem__ (an enum class looking itself up by name) is
+		// answered by TypeCall1 below.
 		//
-		// Lookup walks the MRO; GetAttrOrNil does not, and only looking at
-		// the class's own dict made "class C(CompositeParamType[T])" fail
-		// when CompositeParamType's BASE was the thing providing the hook.
-		if t.Lookup("__class_getitem__") != nil {
+		// Lookup walks the MRO; GetAttrOrNil does not, and only looking at the
+		// class's own dict made "class C(CompositeParamType[T])" fail when
+		// CompositeParamType's BASE was the thing providing the hook.
+		//
+		// ONLY for a class, not for an instance.  An instance of a python-level
+		// class is a *Type with an EMPTY Name, and once dict is subclassable
+		// such an instance inherits dict's __class_getitem__, so
+		// "class D(dict): pass; d['a']" returned d ITSELF instead of the value
+		// - the hook fired for the instance because the check was on the Go
+		// type alone.
+		if t.Name != "" && t.Lookup("__class_getitem__") != nil {
 			return self, nil
 		}
 	}

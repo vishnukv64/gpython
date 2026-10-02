@@ -35,13 +35,155 @@ var (
 	expectingDict  = ExceptionNewf(TypeError, "a dict is required")
 )
 
+// mappingStorage reports whether an object is a mapping and, if so, its
+// storage.  It is the non-erroring counterpart of dictStorage: a caller asking
+// "is this a dict-like thing?" wants a bool, not an error.
+func mappingStorage(o Object) (StringDict, bool) {
+	switch v := o.(type) {
+	case StringDict:
+		return v, true
+	case *Type:
+		// gStringDictType rather than StringDictType: this is reached from
+		// DictNew, which StringDictType is built from, so naming the type
+		// directly is an initialisation cycle.
+		if gStringDictType != nil && v.IsSubtype(gStringDictType) {
+			return v.GetDict(), true
+		}
+	}
+	return StringDict{}, false
+}
+
+// dictStorage returns the mapping behind a dict or a dict SUBCLASS instance.
+//
+// A plain dict IS a StringDict; an instance of a python-level class is a *Type
+// whose namespace is its storage.  Both are a StringDict, so the methods below
+// share one implementation - and returning an error rather than asserting
+// means a misuse reports instead of panicking.
+func dictStorage(self Object) (StringDict, error) {
+	switch o := self.(type) {
+	case StringDict:
+		return o, nil
+	case *Type:
+		return o.GetDict(), nil
+	}
+	return StringDict{}, ExceptionNewf(TypeError, "'%s' object is not a dict", self.Type().Name)
+}
+
 func init() {
+	// The holder DictNew reads, set here where StringDictType is available.
+	gStringDictType = StringDictType
+
+	// Subclassable, as in CPython: requests derives LookupDict(dict),
+	// collections derives OrderedDict(dict) and deque-adjacent types, and
+	// ordinary code subclasses list and set.  See the note by the
+	// subscript dunders below for what a subclass must inherit.
+	StringDictType.Flags |= TPFLAGS_BASETYPE
+	// The subscript operators as METHODS, so a subclass can inherit them.
+	//
+	// dict implemented __getitem__/__setitem__/__delitem__ as methods on the
+	// Go value, which the interpreter reaches through the I__setitem__
+	// interface - fine for a plain dict, but a SUBCLASS cannot be given a Go
+	// interface, so "class D(dict): pass; d['a'] = 1" raised "'D' object does
+	// not support item assignment" once dict became subclassable.
+	//
+	// self is either a StringDict - a plain dict - or a *Type, which is how
+	// this interpreter represents an instance of a python-level class.  A
+	// *Type has its own Dict, so the same code serves both; asDictOf picks
+	// the storage and never asserts.
+	asDictOf := func(self Object) (StringDict, error) {
+		switch o := self.(type) {
+		case StringDict:
+			return o, nil
+		case *Type:
+			// An instance of a python-level class: its namespace is its
+			// storage, which is exactly a dict.
+			return o.GetDict(), nil
+		}
+		return StringDict{}, ExceptionNewf(TypeError,
+			"'%s' object is not a dict", self.Type().Name)
+	}
+	StringDictType.Dict.Set("__getitem__", MustNewMethod("__getitem__", func(self Object, args Tuple) (Object, error) {
+		var key Object
+		if err := UnpackTuple(args, StringDict{}, "__getitem__", 1, 1, &key); err != nil {
+			return nil, err
+		}
+		d, err := asDictOf(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__getitem__(key)
+	}, 0, "Return self[key]."))
+	StringDictType.Dict.Set("__setitem__", MustNewMethod("__setitem__", func(self Object, args Tuple) (Object, error) {
+		var key, value Object
+		if err := UnpackTuple(args, StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
+			return nil, err
+		}
+		d, err := asDictOf(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__setitem__(key, value)
+	}, 0, "Set self[key] to value."))
+	StringDictType.Dict.Set("__delitem__", MustNewMethod("__delitem__", func(self Object, args Tuple) (Object, error) {
+		var key Object
+		if err := UnpackTuple(args, StringDict{}, "__delitem__", 1, 1, &key); err != nil {
+			return nil, err
+		}
+		d, err := asDictOf(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__delitem__(key)
+	}, 0, "Delete self[key]."))
+	StringDictType.Dict.Set("__len__", MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
+		d, err := asDictOf(self)
+		if err != nil {
+			return Int(0), nil
+		}
+		return Int(d.Len()), nil
+	}, 0, "Return len(self)."))
+	StringDictType.Dict.Set("__contains__", MustNewMethod("__contains__", func(self Object, args Tuple) (Object, error) {
+		var key Object
+		if err := UnpackTuple(args, StringDict{}, "__contains__", 1, 1, &key); err != nil {
+			return nil, err
+		}
+		d, err := asDictOf(self)
+		if err != nil {
+			return False, nil
+		}
+		return d.M__contains__(key)
+	}, 0, "Return key in self."))
+	// repr/str as METHODS too, so an instance of a dict subclass prints as a
+	// dict rather than falling through to the generic "<D object at 0x...>".
+	StringDictType.Dict.Set("__repr__", MustNewMethod("__repr__", func(self Object, args Tuple) (Object, error) {
+		d, err := dictStorage(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__repr__()
+	}, 0, "Return repr(self)."))
+	StringDictType.Dict.Set("__str__", MustNewMethod("__str__", func(self Object, args Tuple) (Object, error) {
+		d, err := dictStorage(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__repr__()
+	}, 0, "Return str(self)."))
+
+	StringDictType.Dict.Set("__iter__", MustNewMethod("__iter__", func(self Object, args Tuple) (Object, error) {
+		d, err := asDictOf(self)
+		if err != nil {
+			return nil, err
+		}
+		return d.M__iter__()
+	}, 0, "Implement iter(self)."))
+
 	StringDictType.Dict.Set("items", MustNewMethod("items", func(self Object, args Tuple) (Object, error) {
 		err := UnpackTuple(args, NewStringDict(), "items", 0, 0)
 		if err != nil {
 			return nil, err
 		}
-		sMap := self.(StringDict)
+		sMap, _ := dictStorage(self)
 		o := make(Tuple, 0, sMap.Len())
 		var itemsErr error
 		sMap.Range(func(k string, v Object) bool {
@@ -64,7 +206,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		sMap := self.(StringDict)
+		sMap, _ := dictStorage(self)
 		o := make(Tuple, 0, sMap.Len())
 		for _, k := range sMap.Keys() {
 			key, err := dictKeyDecode(k)
@@ -81,7 +223,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		sMap := self.(StringDict)
+		sMap, _ := dictStorage(self)
 		o := make(Tuple, 0, sMap.Len())
 		for _, v := range sMap.Values() {
 			o = append(o, v)
@@ -90,7 +232,7 @@ func init() {
 	}, 0, "values() -> list of D's values, as a list"))
 
 	StringDictType.Dict.Set("get", MustNewMethod("get", func(self Object, args Tuple) (Object, error) {
-		sMap := self.(StringDict)
+		sMap, _ := dictStorage(self)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "get expected at least 1 argument, got %d", len(args))
 		}
@@ -111,7 +253,7 @@ func init() {
 	}, 0, "get(key[, default]) -> value for key if key is in the dictionary, else default (None by default)."))
 
 	StringDictType.Dict.Set("pop", MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "pop expected at least 1 argument, got %d", len(args))
 		}
@@ -142,7 +284,7 @@ func init() {
 	}, 0, "pop(key[, default]) -> value -- remove specified key and return the corresponding value."))
 
 	StringDictType.Dict.Set("popitem", MustNewMethod("popitem", func(self Object, args Tuple) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if err := methodNoArgs("dict.popitem", args); err != nil {
 			return nil, err
 		}
@@ -163,7 +305,7 @@ func init() {
 	}, 0, "popitem() -> (k, v) -- remove and return some (key, value) pair as a 2-tuple."))
 
 	StringDictType.Dict.Set("setdefault", MustNewMethod("setdefault", func(self Object, args Tuple) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "setdefault expected at least 1 argument, got %d", len(args))
 		}
@@ -186,7 +328,7 @@ func init() {
 	}, 0, "setdefault(key[, default]) -> value -- return value if key is in the dictionary, else insert and return default."))
 
 	StringDictType.Dict.Set("update", MustNewMethod("update", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if len(args) > 1 {
 			return nil, ExceptionNewf(TypeError, "update expected at most 1 argument, got %d", len(args))
 		}
@@ -206,7 +348,7 @@ func init() {
 	}, 0, "update([other]) -> None.  Update D from a dict/iterable of key/value pairs and keywords."))
 
 	StringDictType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if err := methodNoArgs("dict.clear", args); err != nil {
 			return nil, err
 		}
@@ -218,7 +360,7 @@ func init() {
 	}, 0, "clear() -> None.  Remove all items from the dictionary."))
 
 	StringDictType.Dict.Set("copy", MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
-		d := self.(StringDict)
+		d, _ := dictStorage(self)
 		if err := methodNoArgs("dict.copy", args); err != nil {
 			return nil, err
 		}
@@ -814,18 +956,29 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	out := NewStringDict()
 	if len(args) == 1 {
 		arg := args[0]
-		seq, err := SequenceList(arg)
-		if err != nil {
-			return nil, err
-		}
-		for _, i := range seq.Items {
-			switch z := i.(type) {
-			case Tuple:
-				if zStr, ok := z[0].(String); ok {
-					out.Set(string(zStr), z[1])
+		// A MAPPING first: "dict({'a': 1})" is the commonest form of all, and
+		// it was rejected with "non-tuple sequence" because only a sequence of
+		// pairs was accepted.  A mapping is copied through its keys.
+		if src, isMapping := mappingStorage(arg); isMapping {
+			for _, k := range src.Keys() {
+				if v, ok := src.Get(k); ok {
+					out.Set(k, v)
 				}
-			default:
-				return nil, ExceptionNewf(TypeError, "non-tuple sequence")
+			}
+		} else {
+			seq, err := SequenceList(arg)
+			if err != nil {
+				return nil, err
+			}
+			for _, i := range seq.Items {
+				switch z := i.(type) {
+				case Tuple:
+					if zStr, ok := z[0].(String); ok {
+						out.Set(string(zStr), z[1])
+					}
+				default:
+					return nil, ExceptionNewf(TypeError, "non-tuple sequence")
+				}
 			}
 		}
 	}
@@ -835,8 +988,37 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 			return false
 		})
 	}
+	// An instance of a dict SUBCLASS is a *Type whose namespace IS its storage,
+	// so the contents built above have to be moved onto it - otherwise
+	// "class D(dict): pass; D({'a': 1})" produced an EMPTY dict, while plain
+	// "dict({'a': 1})" worked because it returns the dict built here.
+	//
+	// The comparison goes through a holder rather than naming StringDictType
+	// directly, which would be an initialisation cycle: this function is one
+	// of the values StringDictType is built from.
+	if metatype != nil && metatype != gStringDictType {
+		inst, err := ObjectNew(metatype, args, kwargs)
+		if err != nil {
+			return nil, err
+		}
+		if t, ok := inst.(*Type); ok {
+			d := t.GetDict()
+			for _, k := range out.Keys() {
+				if v, ok := out.Get(k); ok {
+					d.Set(k, v)
+				}
+			}
+		}
+		return inst, nil
+	}
 	return out, nil
 }
+
+// gStringDictType is StringDictType, set once it exists.
+//
+// DictNew is one of the values StringDictType is built from, so it cannot name
+// StringDictType without an initialisation cycle; the holder breaks it.
+var gStringDictType *Type
 
 // Type of this StringDict object
 func (o StringDict) Type() *Type {
