@@ -67,6 +67,10 @@ func init() {
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "error", Value: py.OSError},
 		py.DictEntry{Key: "environ", Value: Environ},
+		// _Environ is the TYPE of os.environ, and code keys a dispatch table by
+		// it - rich does, with "os._Environ: lambda _object: ..." - so the name
+		// has to be reachable from the module rather than only from Go.
+		py.DictEntry{Key: "_Environ", Value: EnvironType},
 		py.DictEntry{Key: "sep", Value: osSep},
 		py.DictEntry{Key: "name", Value: osName},
 		py.DictEntry{Key: "curdir", Value: py.String(".")},

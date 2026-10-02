@@ -70,6 +70,22 @@ func (s *specialForm) M__hash__() (py.Object, error) {
 	return py.Int(int64(uintptr(unsafe.Pointer(s))) & (1<<62 - 1)), nil
 }
 
+// M__mro_entries__ is PEP 560: a class statement calls this on a base that is
+// not a class, and uses what it returns instead.
+//
+// A bare construct like "IO" or "Generic" has no runtime class beyond object,
+// so that is what it contributes - which is enough for the class statement to
+// succeed, and is what CPython does for a plain Generic.
+func (s *specialForm) M__mro_entries__(bases py.Object) (py.Object, error) {
+	origin := runtimeOrigin(s.name)
+	if ot, ok := origin.(*py.Type); ok && ot.Name == "" {
+		// An empty Name means an instance rather than a class in this
+		// interpreter's representation; a base must be a class.
+		return py.Tuple{py.ObjectType}, nil
+	}
+	return py.Tuple{origin}, nil
+}
+
 func (s *specialForm) M__getitem__(key py.Object) (py.Object, error) {
 	// A subscripted construct is still a class, because it is used as a base:
 	// "class ParamType(Generic[_T], ABC)".  Returning the form itself would
@@ -88,6 +104,27 @@ type subscribedForm struct {
 
 var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted typing construct.", nil, nil)
 
+// runtimeOrigin maps a typing construct to the CLASS it stands for at run time.
+//
+// This is what __mro_entries__ consults.  CPython's rule (PEP 560) is that a
+// base which is not a class is replaced by whatever its __mro_entries__ says,
+// and for a typing alias that is the runtime class it stands for: the bases of
+// "class NullFile(IO[str])" are IO and Generic.  Without this, every such class
+// statement failed with "bases must be types".
+func runtimeOrigin(name string) py.Object {
+	switch name {
+	case "Generic", "Protocol":
+		// Generic and Protocol have no runtime class of their own; CPython
+		// yields object for the protocol case and Generic itself otherwise.
+		return py.ObjectType
+	case "IO":
+		return py.ObjectType
+	case "List", "DefaultDict", "Deque", "KeysView", "ItemsView", "ValuesView":
+		return py.ObjectType
+	}
+	return py.ObjectType
+}
+
 // M__hash__ is identity-based, which is what makes a typing construct usable
 // as a DICT KEY.
 //
@@ -97,6 +134,15 @@ var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted ty
 // construct is a singleton, so identity is the right notion of equality and
 // h11's own comment says as much ("inherit identity-based comparison and
 // hashing from object").
+// M__mro_entries__ is PEP 560, on a SUBSCRIPTED construct: "IO[str]" used as a
+// base is replaced by the runtime class the construct stands for.  A class
+// statement calls this on any base that is not a class, and without it
+// "class NullFile(IO[str])" failed with "bases must be types" - which is how
+// rich declares its own file wrappers, and pip renders through rich.
+func (s *subscribedForm) M__mro_entries__(bases py.Object) (py.Object, error) {
+	return py.Tuple{runtimeOrigin(s.form.name)}, nil
+}
+
 func (s *subscribedForm) M__hash__() (py.Object, error) {
 	return py.Int(int64(uintptr(unsafe.Pointer(s))) & (1<<62 - 1)), nil
 }

@@ -206,6 +206,30 @@ const MISSING_doc = `Sentinel object to detect if a parameter is supplied or not
 // annotated assignment, so a class body's __annotations__ is almost never
 // populated.  When it is - a class that assigns it explicitly - that is the
 // authoritative list.  Otherwise the class's source is parsed.
+// annotationOrder returns the annotated names in DECLARATION order, read from
+// the class's source.
+//
+// It returns nil when the source cannot be read - a class built by exec, or one
+// whose file has gone - and the caller then falls back to the map's own order.
+// Returning nil rather than an error is deliberate: the field TYPES come from
+// __annotations__ and are always available, so a dataclass should still be
+// buildable when only the order has to be guessed at.
+func annotationOrder(cls *py.Type, decoFrame *py.Frame) []string {
+	src, err := classSource(cls, decoFrame)
+	if err != nil {
+		return nil
+	}
+	parsed, err := parseClassFields(src, cls.Name)
+	if err != nil || len(parsed) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(parsed))
+	for _, pf := range parsed {
+		names = append(names, pf.name)
+	}
+	return names
+}
+
 func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 	ann := cls.Dict.GetOrNil("__annotations__")
 	var names []string
@@ -215,11 +239,39 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 		if !ok {
 			return nil, py.ExceptionNewf(py.TypeError, "__annotations__ must be a dict")
 		}
-		// A dict is a Go map here, so the order it yields is not the
-		// declaration order; the source is still consulted for the order and
-		// the annotation object only supplies the types.
+		// __annotations__ is a Go map, whose iteration order is not the
+		// declaration order, so the source is consulted for the ORDER and the
+		// annotation object supplies the types.
+		//
+		// This used to SORT the names, which is not the same thing at all: a
+		// dataclass's field order decides its __init__ signature, and sorting
+		// reordered it.  "zeta, alpha, mid" became "alpha, mid, zeta", and
+		// rich's ConsoleOptions ended up with its defaulted field before a
+		// required one - so the class raised "non-default argument follows
+		// default argument" and pip could not import rich at all.
 		types = []py.Object{}
+		order := annotationOrder(cls, decoFrame)
+		if len(order) == 0 {
+			// No source to read: fall back to the map's own order, which is
+			// arbitrary but at least keeps every name.
+			order = sortedKeys(d.GetDict())
+		}
+		seen := map[string]bool{}
+		for _, k := range order {
+			if _, ok := d.GetDict().Get(k); !ok {
+				continue
+			}
+			names = append(names, k)
+			types = append(types, d.GetDict().GetOrNil(k))
+			seen[k] = true
+		}
+		// Anything the source scan missed is still a field, so it is appended
+		// rather than dropped - losing a field silently is worse than an
+		// arbitrary position for it.
 		for _, k := range sortedKeys(d.GetDict()) {
+			if seen[k] {
+				continue
+			}
 			names = append(names, k)
 			types = append(types, d.GetDict().GetOrNil(k))
 		}
@@ -417,18 +469,25 @@ func parseClassFields(src, clsName string) ([]parsedField, error) {
 	if !ok {
 		return nil, py.ExceptionNewf(py.ValueError, "dataclass %s: cannot find its class statement in its source", clsName)
 	}
-	_ = indent
 	var fields []parsedField
 	kwOnly := false
 	for _, line := range strings.Split(body, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		// Only look at statements at the outermost body indentation, so an
-		// annotation inside a nested function or class is not a field.
-		if len(leadingIndent(line)) != len(indent) && indent != leadingIndent(line) {
-			// The body indentation is the first non-blank line's; anything
-			// deeper belongs to a nested block.
+		// Only statements at the body's OWN indentation are fields.  A nested
+		// def or class is indented deeper, and its own locals, parameters and
+		// return annotation are NOT fields of this class.
+		//
+		// This check was written but its body was empty - the indent was bound
+		// to "_" - so the scan ran straight through method definitions and
+		// collected them as fields.  For rich's ConsoleOptions that appended
+		// "ConsoleOptions" (from a method's return annotation), "options", and
+		// the method's own parameters, which pushed the required fields
+		// "is_terminal" and "encoding" AFTER defaulted ones and made the whole
+		// class raise "non-default argument follows default argument".
+		if leadingIndent(line) != indent {
+			continue
 		}
 		stripped := strings.TrimSpace(line)
 		if strings.HasPrefix(stripped, "@") || strings.HasPrefix(stripped, "def ") ||

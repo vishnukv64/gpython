@@ -44,6 +44,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/fractions"
 	_ "github.com/vishnukv64/gpython/stdlib/functools"
 	_ "github.com/vishnukv64/gpython/stdlib/future"
+	_ "github.com/vishnukv64/gpython/stdlib/getpass"
 	_ "github.com/vishnukv64/gpython/stdlib/gettext"
 	_ "github.com/vishnukv64/gpython/stdlib/glob"
 	_ "github.com/vishnukv64/gpython/stdlib/hashlib"

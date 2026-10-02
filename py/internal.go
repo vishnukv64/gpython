@@ -205,9 +205,7 @@ func GetItem(self Object, key Object) (Object, error) {
 		// "X[params]" on a CLASS is __class_getitem__ in Python 3.7 and later.
 		// The classes that define it accept any parameters - the abstract base
 		// classes do, and the parameters only matter to a type checker - so the
-		// class itself is the result.  Anything else falls through, so a class
-		// that defines __getitem__ (an enum class looking itself up by name) is
-		// answered by TypeCall1 below.
+		// class itself is the result.
 		//
 		// Lookup walks the MRO; GetAttrOrNil does not, and only looking at the
 		// class's own dict made "class C(CompositeParamType[T])" fail when
@@ -219,8 +217,25 @@ func GetItem(self Object, key Object) (Object, error) {
 		// "class D(dict): pass; d['a']" returned d ITSELF instead of the value
 		// - the hook fired for the instance because the check was on the Go
 		// type alone.
-		if t.Name != "" && t.Lookup("__class_getitem__") != nil {
-			return self, nil
+		if t.Name != "" {
+			if t.Lookup("__class_getitem__") != nil {
+				return self, nil
+			}
+			// PEP 585: a BUILTIN type is subscriptable on the class itself, and
+			// the class is the result.  "deque[int]" and "defaultdict[str, int]"
+			// are written as annotation defaults and get evaluated, so they must
+			// answer "[" rather than fall through to __getitem__ and be treated
+			// as an item lookup - which panicked with "interface conversion:
+			// py.Object is *py.Type, not *collections.Deque" and took the whole
+			// process down inside rich.
+			//
+			// The test is that the implementation is a Go *Method, i.e. a
+			// builtin: a class written in Python keeps its __getitem__ as a Dict
+			// entry holding a *Function, and for that a subscript really IS an
+			// item lookup.
+			if m, isMethod := t.Lookup("__getitem__").(*Method); isMethod && m != nil {
+				return self, nil
+			}
 		}
 	}
 	if I, ok := self.(I__getitem__); ok {

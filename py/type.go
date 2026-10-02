@@ -1569,6 +1569,45 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	copy(bases, basesObj.(Tuple))
 	orig_dict := orig_dictObj.(StringDict)
 
+	// A base need not be a class: PEP 560 lets an object say what it should be
+	// REPLACED BY, through __mro_entries__.  A subscripted typing alias uses
+	// this - the bases of "class NullFile(IO[str])" are IO and Generic, not the
+	// alias - and without it every such class statement failed with "bases
+	// must be types".  rich declares exactly that shape, and pip renders
+	// through rich.
+	expanded := make(Tuple, 0, len(bases))
+	var mroErr error
+	for _, b := range bases {
+		if _, isType := b.(*Type); isType {
+			expanded = append(expanded, b)
+			continue
+		}
+		getter, err := GetAttrString(b, "__mro_entries__")
+		if err != nil {
+			// No hook: leave it alone so the existing "bases must be types"
+			// error names the real problem.
+			expanded = append(expanded, b)
+			continue
+		}
+		// The hook is called with the ORIGINAL bases tuple, as CPython does.
+		res, err := Call(getter, Tuple{bases}, NewStringDict())
+		if err != nil {
+			mroErr = err
+			break
+		}
+		t, ok := res.(Tuple)
+		if !ok {
+			mroErr = ExceptionNewf(TypeError,
+				"__mro_entries__ must return a tuple")
+			break
+		}
+		expanded = append(expanded, t...)
+	}
+	if mroErr != nil {
+		return nil, mroErr
+	}
+	bases = expanded
+
 	// Determine the proper metatype to deal with this:
 	winner, err = metatype.CalculateMetaclass(bases)
 	if err != nil {

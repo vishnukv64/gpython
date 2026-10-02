@@ -490,11 +490,6 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		return nil, py.ExceptionNewf(py.TypeError, "__build_class__: name is not a string")
 	}
 	bases := args[2:]
-	for _, b := range bases {
-		if _, ok := b.(*py.Type); !ok {
-			println("DBG bad base for class", string(name), "argc:", len(args), "value:", fmt.Sprintf("%v", b))
-		}
-	}
 
 	if !kwargs.IsNil() {
 		mkw = kwargs.Copy()               // Don't modify kwds passed in!

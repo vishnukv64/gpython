@@ -958,7 +958,16 @@ func (d *DefaultDict) missing(key py.Object) (py.Object, error) {
 
 func init() {
 	DefaultDictType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		d := self.(*DefaultDict)
+		// __getitem__ must be reached through an INSTANCE.  A defaultdict
+		// subclass defined in Python is represented as a *Type with an empty
+		// Name, and this type assertion panicked with "interface conversion:
+		// py.Object is *py.Type, not *collections.DefaultDict" - a host-process
+		// crash rather than an exception, which took pip down inside rich.
+		d, ok := self.(*DefaultDict)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError,
+				"descriptor '__getitem__' requires a 'collections.defaultdict' object but received a '%s'", self.Type().Name)
+		}
 		var key py.Object
 		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
@@ -1042,6 +1051,15 @@ func init() {
 		}
 		return py.NewListFromItems(items), nil
 	}, 0, "Return the key list."))
+
+	// "defaultdict[str, int]" is written as an ANNOTATION DEFAULT and gets
+	// evaluated, so the class has to answer "[" rather than raising.  It was
+	// missing from the builtin list in py/type.go - which cannot reach this
+	// package - so a subscript reached __getitem__ instead and panicked.  rich
+	// annotates its own helpers that way, and pip renders through rich.
+	DefaultDictType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters."))
 
 	DefaultDictType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
@@ -1721,9 +1739,11 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 			fields = append(fields, f)
 		}
 	}
-	if len(fields) == 0 {
-		return nil, py.ExceptionNewf(py.ValueError, "TypeError: namedtuple() requires at least one field name")
-	}
+	// An EMPTY field list is allowed - "namedtuple('P', [])()" is a valid
+	// zero-argument record - which CPython permits and this rejected with a
+	// ValueError whose message even named the wrong exception type.  rich
+	// builds "collections.namedtuple('_dummy_namedtuple', [])" at import to
+	// probe repr behaviour, and pip renders through rich.
 
 	// A field may not be a keyword or start with an underscore, as in CPython.
 	for _, f := range fields {
