@@ -590,8 +590,9 @@ func do_UNPACK_EX(vm *Vm, counts int32) error {
 func do_SET_ADD(vm *Vm, i int32) error {
 	w := vm.POP()
 	v := vm.PEEK(int(i))
-	v.(*py.Set).Add(w)
-	return nil
+	// Propagate an unhashable element: "{[1]}" must raise instead of
+	// silently omitting the element.
+	return v.(*py.Set).AddErr(w)
 }
 
 // Calls list.append(TOS[-i], TOS). Used to implement list
@@ -1104,7 +1105,10 @@ func do_BUILD_TUPLE(vm *Vm, count int32) error {
 
 // Works as BUILD_TUPLE, but creates a set.
 func do_BUILD_SET(vm *Vm, count int32) error {
-	set := py.NewSetFromItems(vm.frame.Stack[len(vm.frame.Stack)-int(count):])
+	set, err := py.NewSetFromItemsErr(vm.frame.Stack[len(vm.frame.Stack)-int(count):])
+	if err != nil {
+		return err
+	}
 	vm.DROPN(int(count))
 	vm.PUSH(set)
 	return nil

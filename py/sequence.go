@@ -45,17 +45,27 @@ func SequenceList(v Object) (*List, error) {
 
 // Converts a sequence object v into a Set
 func SequenceSet(v Object) (*Set, error) {
+	// The error-returning constructor: an unhashable element must raise
+	// "unhashable type: 'list'", not be quietly dropped, which is what
+	// "set([[1]])" did when the error was discarded.
 	switch x := v.(type) {
 	case Tuple:
-		return NewSetFromItems(x), nil
+		return NewSetFromItemsErr(x)
 	case *List:
-		return NewSetFromItems(x.Items), nil
+		return NewSetFromItemsErr(x.Items)
 	default:
 		s := NewSet()
+		var addErr error
 		err := Iterate(v, func(item Object) bool {
-			s.Add(item)
+			if e := s.setAdd(item); e != nil {
+				addErr = e
+				return true // stop
+			}
 			return false
 		})
+		if addErr != nil {
+			return nil, addErr
+		}
 		if err != nil {
 			return nil, err
 		}

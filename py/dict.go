@@ -583,8 +583,14 @@ func appendKey(b *[]byte, key Object) error {
 		*b = append(*b, 'I')
 		*b = append(*b, []byte((*big.Int)(k).String())...)
 	case Bool:
+		// A bool IS an int for hashing: True == 1 and hash(True) == hash(1),
+		// so "d = {True: 'a'}; d[1] = 'b'" must leave ONE entry and
+		// "{1: 'x'}.get(True)" must find it.  Encoding bool under a tag of its
+		// own made them different keys, which gave two entries and a None.
+		//
+		// It is encoded as the int it equals, so the two collapse.
 		*b = append(*b, keyTag...)
-		*b = append(*b, 'b')
+		*b = append(*b, 'i')
 		if k {
 			*b = append(*b, '1')
 		} else {
@@ -620,13 +626,13 @@ func appendKey(b *[]byte, key Object) error {
 	case *FrozenSet:
 		// Sets have no order, so sort the member encodings to give equal
 		// sets the same key.
+		// k.items is already keyed by the encoded form, so the keys ARE the
+		// encoded members; re-encoding them would double-encode.  They are
+		// sorted, because Go map iteration is random and the encoding must be
+		// stable for two equal frozensets to hash alike.
 		members := make([]string, 0, len(k.items))
 		for item := range k.items {
-			ek, err := dictKey(item)
-			if err != nil {
-				return err
-			}
-			members = append(members, ek)
+			members = append(members, item)
 		}
 		sort.Strings(members)
 		*b = append(*b, keyTag...)

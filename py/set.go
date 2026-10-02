@@ -15,7 +15,15 @@ var SetType = NewTypeX("set", "set() -> new empty set object\nset(iterable) -> n
 type SetValue struct{}
 
 type Set struct {
-	items map[Object]SetValue
+	// items is keyed by the ENCODED form of each member (see DictKey), not by
+	// the Object itself.
+	//
+	// Keying by Object used GO equality, so two objects equal in Python but
+	// distinct Go values were different members: len({Path("/a"), Path("/a")})
+	// was 2. It also PANICKED for a non-comparable Object.  The encoded key is
+	// what dict already uses, and it is what makes the Python hash/eq protocol
+	// apply - including raising for a genuinely unhashable member.
+	items map[string]SetValue
 }
 
 // Type of this Set object
@@ -26,40 +34,119 @@ func (o *Set) Type() *Type {
 // Make a new empty set
 func NewSet() *Set {
 	return &Set{
-		items: make(map[Object]SetValue),
+		items: make(map[string]SetValue),
 	}
 }
 
 // Make a new empty set with capacity for n items
 func NewSetWithCapacity(n int) *Set {
 	return &Set{
-		items: make(map[Object]SetValue, n),
+		items: make(map[string]SetValue, n),
 	}
 }
 
 // Make a new set with the items passed in
+//
+// An unhashable item is DROPPED, which is wrong but is what this signature can
+// express; use NewSetFromItemsErr where the error can be reported.  The two
+// callers that must not drop are set(iterable) and a set display, which is why
+// that variant exists.
 func NewSetFromItems(items []Object) *Set {
 	s := NewSetWithCapacity(len(items))
 	for _, item := range items {
-		s.items[item] = SetValue{}
+		_ = s.setAdd(item)
 	}
 	return s
+}
+
+// NewSetFromItemsErr builds a set, reporting an unhashable item.
+//
+// "set([[1]])" must raise "unhashable type: 'list'" rather than quietly
+// producing an empty set, which is what discarding the error did.
+func NewSetFromItemsErr(items []Object) (*Set, error) {
+	s := NewSetWithCapacity(len(items))
+	for _, item := range items {
+		if err := s.setAdd(item); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
 func init() {
 	SetType.Dict.Set("add", MustNewMethod("add", func(self Object, args Tuple) (Object, error) {
 		setSelf := self.(*Set)
 		if len(args) != 1 {
-			return nil, ExceptionNewf(TypeError, "append() takes exactly one argument (%d given)", len(args))
+			return nil, ExceptionNewf(TypeError, "add() takes exactly one argument (%d given)", len(args))
 		}
-		setSelf.Add(args[0])
+		// The erroring form: "s.add([1])" must raise "unhashable type:
+		// 'list'", not quietly do nothing.
+		if err := setSelf.AddErr(args[0]); err != nil {
+			return nil, err
+		}
 		return NoneType{}, nil
 	}, 0, "add(value)"))
 }
 
 // Add an item to the set
+// setKey encodes a member the way dict encodes a key, so that membership uses
+// the Python hash/eq protocol rather than Go equality.
+func setKey(item Object) (string, error) {
+	return DictKey(item)
+}
+
+// setAdd inserts a member, reporting an unhashable one.
+func (s *Set) setAdd(item Object) error {
+	k, err := setKey(item)
+	if err != nil {
+		return err
+	}
+	s.items[k] = SetValue{}
+	return nil
+}
+
+// setHas reports whether a member is present.
+func (s *Set) setHas(item Object) bool {
+	k, err := setKey(item)
+	if err != nil {
+		return false
+	}
+	_, ok := s.items[k]
+	return ok
+}
+
+// setDelete removes a member, reporting whether it was there.
+func (s *Set) setDelete(item Object) bool {
+	k, err := setKey(item)
+	if err != nil {
+		return false
+	}
+	if _, ok := s.items[k]; !ok {
+		return false
+	}
+	delete(s.items, k)
+	return true
+}
+
+// setItems returns the members as Objects, decoding each key.
+func (s *Set) setItems() []Object {
+	out := make([]Object, 0, len(s.items))
+	for k := range s.items {
+		if item, err := DictKeyDecode(k); err == nil {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
 func (s *Set) Add(item Object) {
-	s.items[item] = SetValue{}
+	_ = s.setAdd(item)
+}
+
+// AddErr inserts a member, reporting an unhashable one.  The VM uses this so
+// that "{[1]}" and "s.add([1])" raise rather than silently doing nothing.
+func (s *Set) AddErr(item Object) error {
+	return s.setAdd(item)
 }
 
 // SetNew
@@ -95,11 +182,7 @@ func FrozenSetNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error)
 	if err != nil {
 		return nil, err
 	}
-	items := make([]Object, 0, len(s.items))
-	for item := range s.items {
-		items = append(items, item)
-	}
-	return NewFrozenSetFromItems(items), nil
+	return NewFrozenSetFromItems(s.setItems()), nil
 }
 
 var FrozenSetType = NewTypeX("frozenset", "frozenset() -> empty frozenset object\nfrozenset(iterable) -> frozenset object\n\nBuild an immutable unordered collection of unique elements.", FrozenSetNew, nil)
@@ -147,7 +230,7 @@ func NewFrozenSetFromItems(items []Object) *FrozenSet {
 // Extend the set with items
 func (s *Set) Update(items []Object) {
 	for _, item := range items {
-		s.items[item] = SetValue{}
+		_ = s.setAdd(item)
 	}
 }
 
@@ -163,7 +246,7 @@ func (s *Set) M__repr__() (Object, error) {
 	var out bytes.Buffer
 	out.WriteRune('{')
 	spacer := false
-	for item := range s.items {
+	for _, item := range s.setItems() {
 		if spacer {
 			out.WriteString(", ")
 		}
@@ -179,10 +262,9 @@ func (s *Set) M__repr__() (Object, error) {
 }
 
 func (s *Set) M__iter__() (Object, error) {
-	items := make(Tuple, 0, len(s.items))
-	for item := range s.items {
-		items = append(items, item)
-	}
+	objs := s.setItems()
+	items := make(Tuple, 0, len(objs))
+	items = append(items, objs...)
 	return NewIterator(items), nil
 }
 
@@ -192,9 +274,9 @@ func (s *Set) M__and__(other Object) (Object, error) {
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for i := range b.items {
-		if _, ok := s.items[i]; ok {
-			ret.items[i] = SetValue{}
+	for k := range b.items {
+		if _, ok := s.items[k]; ok {
+			ret.items[k] = SetValue{}
 		}
 	}
 	return ret, nil
@@ -206,12 +288,12 @@ func (s *Set) M__or__(other Object) (Object, error) {
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for j := range s.items {
-		ret.items[j] = SetValue{}
+	for k := range s.items {
+		ret.items[k] = SetValue{}
 	}
-	for i := range b.items {
-		if _, ok := s.items[i]; !ok {
-			ret.items[i] = SetValue{}
+	for k := range b.items {
+		if _, ok := s.items[k]; !ok {
+			ret.items[k] = SetValue{}
 		}
 	}
 	return ret, nil
@@ -223,13 +305,11 @@ func (s *Set) M__sub__(other Object) (Object, error) {
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for j := range s.items {
-		ret.items[j] = SetValue{}
+	for k := range s.items {
+		ret.items[k] = SetValue{}
 	}
-	for i := range b.items {
-		if _, ok := s.items[i]; ok {
-			delete(ret.items, i)
-		}
+	for k := range b.items {
+		delete(ret.items, k)
 	}
 	return ret, nil
 }
@@ -240,15 +320,14 @@ func (s *Set) M__xor__(other Object) (Object, error) {
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for j := range s.items {
-		ret.items[j] = SetValue{}
+	for k := range s.items {
+		ret.items[k] = SetValue{}
 	}
-	for i := range b.items {
-		_, ok := s.items[i]
-		if ok {
-			delete(ret.items, i)
+	for k := range b.items {
+		if _, ok := s.items[k]; ok {
+			delete(ret.items, k)
 		} else {
-			ret.items[i] = SetValue{}
+			ret.items[k] = SetValue{}
 		}
 	}
 	return ret, nil
@@ -278,19 +357,17 @@ func (a *Set) M__eq__(other Object) (Object, error) {
 	if len(a.items) != len(b.items) {
 		return False, nil
 	}
-	// FIXME nasty O(n**2) algorithm, waiting for proper hashing!
-	for i := range a.items {
-		for j := range b.items {
-			eq, err := Eq(i, j)
-			if err != nil {
-				return nil, err
-			}
-			if eq == True {
-				goto found
-			}
+	// O(n) now, not O(n**2).
+	//
+	// This was a nested loop with a "FIXME waiting for proper hashing",
+	// calling Eq on every pair.  Members are now stored under their ENCODED
+	// form (DictKey), so two members are equal exactly when their keys are -
+	// which makes equality a direct key-set comparison, and it is the same
+	// hash/eq protocol CPython uses.
+	for k := range a.items {
+		if _, ok := b.items[k]; !ok {
+			return False, nil
 		}
-		return False, nil
-	found:
 	}
 	return True, nil
 }
