@@ -707,6 +707,30 @@ func IPow(a, b, c Object) (Object, error) {
 	return Pow(a, b, c)
 }
 
+// callPyOrdering tries a Python-level rich comparison method - __lt__ and
+// friends - on an object.
+//
+// The Go interfaces above only match methods IMPLEMENTED IN GO.  A class
+// written in Python keeps its methods as Dict entries, so "class A: def
+// __lt__(self, o)" matched none of them and "A() < A()" raised "unsupported
+// operand type(s) for <".  That is not a corner: it is every ordering
+// comparison between two Python objects, and packaging's Version - pip's own
+// dependency - sorts with it.
+//
+// "==" and "!=" happened to work through a different accident, so only the
+// four ordering operators needed this.  A method returning NotImplemented
+// means "try the other operand", so the caller falls through as before.
+func callPyOrdering(o Object, name string, arg Object) (Object, bool, error) {
+	res, found, err := o.Type().CallMethod(name, Tuple{o, arg}, NewStringDict())
+	if err != nil {
+		return nil, false, err
+	}
+	if !found || res == NotImplemented {
+		return nil, false, nil
+	}
+	return res, true, nil
+}
+
 // Gt two python objects returning a boolean result
 //
 // Will raise TypeError if Gt can't be run on this object
@@ -721,6 +745,11 @@ func Gt(a Object, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	if res, ok, err := callPyOrdering(a, "__gt__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
 	// Try using b to lt with reversed parameters
 	if B, ok := b.(I__lt__); ok {
@@ -731,6 +760,11 @@ func Gt(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__lt__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for >: '%s' and '%s'", a.Type().Name, b.Type().Name)
@@ -750,6 +784,11 @@ func Ge(a Object, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	if res, ok, err := callPyOrdering(a, "__ge__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
 	// Try using b to le with reversed parameters
 	if B, ok := b.(I__le__); ok {
@@ -760,6 +799,11 @@ func Ge(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__le__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for >=: '%s' and '%s'", a.Type().Name, b.Type().Name)
@@ -779,6 +823,11 @@ func Lt(a Object, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	if res, ok, err := callPyOrdering(a, "__lt__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
 	// Try using b to gt with reversed parameters
 	if B, ok := b.(I__gt__); ok {
@@ -789,6 +838,11 @@ func Lt(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__gt__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for <: '%s' and '%s'", a.Type().Name, b.Type().Name)
@@ -808,6 +862,11 @@ func Le(a Object, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	if res, ok, err := callPyOrdering(a, "__le__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
 	// Try using b to ge with reversed parameters
 	if B, ok := b.(I__ge__); ok {
@@ -818,6 +877,11 @@ func Le(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__ge__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for <=: '%s' and '%s'", a.Type().Name, b.Type().Name)

@@ -814,8 +814,20 @@ func appendKey(b *[]byte, key Object) error {
 // none.  A __hash__ that is None means explicitly unhashable, which is how a
 // class says "do not use me as a key" - a list is the builtin example.
 func hashOf(key Object) (string, bool) {
-	res, ok, err := TypeCall0(key, "__hash__")
-	if err != nil || !ok {
+	// hash(x) is type(x).__hash__(x), and for a CLASS that is the METATYPE's
+	// __hash__ - the identity hash on "type".  Going through the class's own
+	// __hash__ instead picked up the method meant for its INSTANCES: h11's
+	// events are frozen dataclasses, so "Request.__hash__" is the generated
+	// field hash, and calling it with the class itself reported
+	// "Request.__hash__() missing self argument" - the class could not be a
+	// dict key while every plain class could, by accident, because only a
+	// plain class lacks a __hash__ of its own to be found first.
+	target := key.Type()
+	if t, isType := key.(*Type); isType && t.ObjectType != nil {
+		target = t.ObjectType
+	}
+	res, found, err := target.CallMethod("__hash__", Tuple{key}, NewStringDict())
+	if err != nil || !found {
 		return "", false
 	}
 	if _, isNone := res.(NoneType); isNone {

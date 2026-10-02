@@ -1298,6 +1298,206 @@ float64 are represented in IEEE 754 binary64 format.`
 const math_doc = `This module is always available.  It provides access to the
 mathematical functions defined by the C standard.`
 
+func math_gcd(self py.Object, args py.Tuple) (py.Object, error) {
+	return intVariadic("gcd", args, func(a, b int64) (int64, error) {
+		for b != 0 {
+			a, b = b, a%b
+		}
+		return a, nil
+	})
+}
+
+const math_gcd_doc = `gcd(*integers) -> int
+
+Greatest common divisor of the integer arguments.`
+
+func math_lcm(self py.Object, args py.Tuple) (py.Object, error) {
+	return intVariadic("lcm", args, func(a, b int64) (int64, error) {
+		if a == 0 || b == 0 {
+			return 0, nil
+		}
+		x, y := a, b
+		for y != 0 {
+			x, y = y, x%y
+		}
+		return a / x * b, nil
+	})
+}
+
+const math_lcm_doc = `lcm(*integers) -> int
+
+Least common multiple of the integer arguments.`
+
+func math_comb(self py.Object, args py.Tuple) (py.Object, error) {
+	var nObj, kObj py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "comb", 2, 2, &nObj, &kObj); err != nil {
+		return nil, err
+	}
+	n, k, err := combArgs("comb", nObj, kObj)
+	if err != nil {
+		return nil, err
+	}
+	return pyInt(comb(n, k))
+}
+
+const math_comb_doc = `comb(n, k) -> int
+
+Number of ways to choose k items from n items without repetition and without
+order.`
+
+func math_perm(self py.Object, args py.Tuple) (py.Object, error) {
+	var nObj py.Object
+	kObj := py.Object(py.None)
+	if err := py.UnpackTuple(args, py.NewStringDict(), "perm", 1, 2, &nObj, &kObj); err != nil {
+		return nil, err
+	}
+	n, _, err := combArgs("perm", nObj, py.Int(0))
+	if err != nil {
+		return nil, err
+	}
+	k := n
+	if kObj != py.None {
+		_, k, err = combArgs("perm", nObj, kObj)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if k > n {
+		return py.Int(0), nil
+	}
+	res := int64(1)
+	for i := n - k + 1; i <= n; i++ {
+		res *= i
+	}
+	return py.Int(res), nil
+}
+
+const math_perm_doc = `perm(n, k=None) -> int
+
+Number of ways to choose k items from n items without repetition and with
+order.`
+
+func math_isqrt(self py.Object, args py.Tuple) (py.Object, error) {
+	var nObj py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "isqrt", 1, 1, &nObj); err != nil {
+		return nil, err
+	}
+	n, err := py.MakeGoInt64(nObj)
+	if err != nil {
+		return nil, err
+	}
+	if n < 0 {
+		return nil, py.ExceptionNewf(py.ValueError, "isqrt() argument must be nonnegative")
+	}
+	return py.Int(integerSqrt(n)), nil
+}
+
+const math_isqrt_doc = `isqrt(n) -> int
+
+Integer square root of a nonnegative integer n.`
+
+func math_prod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var iterable py.Object
+	start := py.Object(py.Int(1))
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:prod", []string{"iterable", "start"}, &iterable, &start); err != nil {
+		return nil, err
+	}
+	acc := start
+	it, err := py.Iter(iterable)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		item, err := py.Next(it)
+		if err == py.StopIteration {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		acc, err = py.Mul(acc, item)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return acc, nil
+}
+
+const math_prod_doc = `prod(iterable, /, *, start=1) -> number
+
+Calculate the product of all the elements in the input iterable.`
+
+// intVariadic folds a two-argument integer operation over the positional
+// arguments, which is how gcd and lcm are defined.
+func intVariadic(name string, args py.Tuple, f func(a, b int64) (int64, error)) (py.Object, error) {
+	if len(args) == 0 {
+		return py.Int(0), nil
+	}
+	acc := int64(0)
+	if name == "lcm" {
+		acc = 1
+	}
+	for _, a := range args {
+		n, err := py.MakeGoInt64(a)
+		if err != nil {
+			return nil, err
+		}
+		acc, err = f(acc, n)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return py.Int(acc), nil
+}
+
+// combArgs reads n and k, rejecting a negative k and any k not larger than n.
+func combArgs(name string, nObj, kObj py.Object) (int64, int64, error) {
+	n, err := py.MakeGoInt64(nObj)
+	if err != nil {
+		return 0, 0, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", nObj.Type().Name)
+	}
+	k, err := py.MakeGoInt64(kObj)
+	if err != nil {
+		return 0, 0, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", kObj.Type().Name)
+	}
+	if n < 0 || k < 0 {
+		return 0, 0, py.ExceptionNewf(py.ValueError, name+"() arguments must be non-negative")
+	}
+	if k > n {
+		return 0, 0, py.ExceptionNewf(py.ValueError, "%s(): k must be less than or equal to n", name)
+	}
+	return n, k, nil
+}
+
+// comb is the binomial coefficient, computed multiplicatively so that it does
+// not overflow for the modest values a pure-Python caller passes.
+func comb(n, k int64) int64 {
+	if k > n-k {
+		k = n - k
+	}
+	res := int64(1)
+	for i := int64(0); i < k; i++ {
+		res = res * (n - i) / (i + 1)
+	}
+	return res
+}
+
+// integerSqrt is the floor of the square root, by Newton's method on integers.
+func integerSqrt(n int64) int64 {
+	if n < 2 {
+		return n
+	}
+	x := n
+	y := (x + 1) / 2
+	for y < x {
+		x = y
+		y = (x + n/x) / 2
+	}
+	return x
+}
+
+func pyInt(v int64) (py.Object, error) { return py.Int(v), nil }
+
 // Initialise the module
 func init() {
 	methods := []*py.Method{
@@ -1309,6 +1509,7 @@ func init() {
 		py.MustNewMethod("atan2", math_atan2, 0, math_atan2_doc),
 		py.MustNewMethod("atanh", math_atanh, 0, math_atanh_doc),
 		py.MustNewMethod("ceil", math_ceil, 0, math_ceil_doc),
+		py.MustNewMethod("comb", math_comb, 0, math_comb_doc),
 		py.MustNewMethod("copysign", math_copysign, 0, math_copysign_doc),
 		py.MustNewMethod("cos", math_cos, 0, math_cos_doc),
 		py.MustNewMethod("cosh", math_cosh, 0, math_cosh_doc),
@@ -1324,10 +1525,13 @@ func init() {
 		py.MustNewMethod("frexp", math_frexp, 0, math_frexp_doc),
 		py.MustNewMethod("fsum", math_fsum, 0, math_fsum_doc),
 		py.MustNewMethod("gamma", math_gamma, 0, math_gamma_doc),
+		py.MustNewMethod("gcd", math_gcd, 0, math_gcd_doc),
 		py.MustNewMethod("hypot", math_hypot, 0, math_hypot_doc),
 		py.MustNewMethod("isfinite", math_isfinite, 0, math_isfinite_doc),
 		py.MustNewMethod("isinf", math_isinf, 0, math_isinf_doc),
 		py.MustNewMethod("isnan", math_isnan, 0, math_isnan_doc),
+		py.MustNewMethod("isqrt", math_isqrt, 0, math_isqrt_doc),
+		py.MustNewMethod("lcm", math_lcm, 0, math_lcm_doc),
 		py.MustNewMethod("ldexp", math_ldexp, 0, math_ldexp_doc),
 		py.MustNewMethod("lgamma", math_lgamma, 0, math_lgamma_doc),
 		py.MustNewMethod("log", math_log, 0, math_log_doc),
@@ -1336,6 +1540,8 @@ func init() {
 		py.MustNewMethod("log2", math_log2, 0, math_log2_doc),
 		py.MustNewMethod("modf", math_modf, 0, math_modf_doc),
 		py.MustNewMethod("pow", math_pow, 0, math_pow_doc),
+		py.MustNewMethod("perm", math_perm, 0, math_perm_doc),
+		py.MustNewMethod("prod", math_prod, 0, math_prod_doc),
 		py.MustNewMethod("radians", math_radians, 0, math_radians_doc),
 		py.MustNewMethod("sin", math_sin, 0, math_sin_doc),
 		py.MustNewMethod("sinh", math_sinh, 0, math_sinh_doc),

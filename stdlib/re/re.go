@@ -134,6 +134,27 @@ func purgeFn(self py.Object, args py.Tuple) (py.Object, error) { return py.None,
 // translate rewrites the Python pattern into the Go one and reports the
 // group numbering, which differs because the translation can add groups.
 func translate(pattern string, flags int) (string, map[int]string, map[string]int, int, error) {
+	// VERBOSE is not a flag Go's engine has, so it is applied here: unescaped
+	// whitespace outside a character class is dropped and an unescaped '#'
+	// starts a comment that runs to the end of the line.  This has to happen
+	// before anything else looks at the pattern.
+	if flags&FlagVERBOSE != 0 {
+		pattern = stripVerbose(pattern)
+	}
+	// A leading inline (?x) or (?ix) turns VERBOSE on for the whole pattern,
+	// so its effect has to be applied here too, not merely dropped by the
+	// group rewriting below.  Only the leading position is handled: an inline
+	// group in the middle would have to take effect from that point on, and
+	// the scan that follows is positional, so re-running it there would be a
+	// second pass over the same string.
+	pattern = applyLeadingVerbose(pattern)
+	// Possessive quantifiers (Python 3.11's "a*+") have no spelling in Go's
+	// engine.  Go's RE2 does not backtrack, so the greedy quantifier it is
+	// rewritten to accepts the same language; only a pattern that would rely
+	// on atomic-group rejection at a specific offset could differ, and there
+	// is no such construct in Python's grammar without a lookaround, which
+	// this module rejects outright.
+	pattern = stripPossessive(pattern)
 	// Backreferences and lookaround have no equivalent: say so.
 	for i := 0; i < len(pattern); i++ {
 		if pattern[i] != '\\' {
@@ -160,20 +181,32 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 	groupNum := 0
 	inClass := false
 
-	// Class translation depends on the ASCII flag.
-	digit := `\d`
-	word := `\w`
-	space := `\s`
+	// Class translation depends on the ASCII flag.  Each shorthand has a
+	// negated twin; the negated forms must be written as their own class,
+	// never by re-emitting the pattern seen so far.
+	//
+	// Each also has an "inner" spelling, used inside an enclosing character
+	// class: there the shorthand's own brackets must be dropped, or "[\d\s]"
+	// becomes the nested "[[0-9][\t\n...]]" and matches the wrong thing.
+	digit := `\p{Nd}`
+	digitInner := `\p{Nd}`
+	notDigit := `\P{Nd}`
+	word := `[\p{L}\p{N}\p{Pc}]`
+	wordInner := `\p{L}\p{N}\p{Pc}`
+	notWord := `[^\p{L}\p{N}\p{Pc}]`
+	space := `[\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}]`
+	spaceInner := `\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}`
+	notSpace := `[^\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}]`
 	if flags&FlagASCII != 0 {
 		digit = `[0-9]`
+		digitInner = `0-9`
+		notDigit = `[^0-9]`
 		word = `[0-9A-Za-z_]`
+		wordInner = `0-9A-Za-z_`
+		notWord = `[^0-9A-Za-z_]`
 		space = `[\t\n\v\f\r ]`
-	} else {
-		// Python's \d is the Unicode decimal digit class, \w is letters,
-		// digits and the connector punctuation, and \s is a fixed set.
-		digit = `\p{Nd}`
-		word = `[\p{L}\p{N}\p{Pc}]`
-		space = `[\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}]`
+		spaceInner = `\t\n\v\f\r `
+		notSpace = `[^\t\n\v\f\r ]`
 	}
 
 	for i := 0; i < len(pattern); i++ {
@@ -205,11 +238,11 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 					nnext := pattern[i+1]
 					switch nnext {
 					case 'd':
-						b.WriteString(digit)
+						b.WriteString(digitInner)
 					case 'w':
-						b.WriteString(word)
+						b.WriteString(wordInner)
 					case 's':
-						b.WriteString(space)
+						b.WriteString(spaceInner)
 					case 'D':
 						b.WriteString(`\D`)
 					case 'W':
@@ -244,24 +277,15 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 			case 'd':
 				b.WriteString(digit)
 			case 'D':
-				b.WriteString("[^" + strings.Trim(digit, "[]") + "]")
-				if strings.HasPrefix(digit, `\p`) {
-					b.Reset()
-					b.WriteString(strings.TrimSuffix(strings.TrimPrefix(pattern[:i], ""), ""))
-					// A negated Unicode class needs the explicit form.
-					b.WriteString(pattern[:i])
-					b.WriteString(`\P{Nd}`)
-				}
+				b.WriteString(notDigit)
 			case 'w':
 				b.WriteString(word)
 			case 'W':
-				b.WriteString(pattern[:i])
-				b.WriteString(`[^\p{L}\p{N}\p{Pc}]`)
+				b.WriteString(notWord)
 			case 's':
 				b.WriteString(space)
 			case 'S':
-				b.WriteString(pattern[:i])
-				b.WriteString(`[^\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}]`)
+				b.WriteString(notSpace)
 			case 'Z':
 				// Python's \Z is Go's \z.
 				b.WriteString(`\z`)
@@ -287,6 +311,43 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 					groupNames[groupNum] = name
 					nameToNum[name] = groupNum
 				}
+			} else if strings.HasPrefix(pattern[i:], "(?#") {
+				// A comment group runs to the next ')'; Go has no such form,
+				// and the content is dropped.
+				end := strings.IndexByte(pattern[i:], ')')
+				if end < 0 {
+					return "", nil, nil, 0, py.ExceptionNewf(ErrorType, "missing ), unterminated comment")
+				}
+				i += end
+				continue
+			} else if flag, ok := pythonFlagGroup(pattern[i:]); ok {
+				// (?a), (?x) and friends: forms Python accepts and Go does not.
+				// The letters are rewritten into what Go accepts and the rest of
+				// the group - the ')' of an inline form, or the ':' and body of
+				// a scoped (?:...) form - is copied unchanged.
+				//
+				//   (?a) and (?L) constrain \d \w \s to ASCII, which is what a
+				//   dropped letter means, since the ASCII classes are written
+				//   explicitly by the character-class translation.
+				//   (?x) is VERBOSE, which Go spells x.
+				//   (?u) is the default in Python 3, so it is dropped.
+				goFlagLetters := flag.goFlags()
+				if flag.scoped {
+					// A scoped group (?flags:...).  The ':' is part of the
+					// rewritten head, so the loop resumes at the first byte of
+					// the body.  An empty letter set still leaves the group
+					// itself, as a non-capturing "(?:...)".
+					b.WriteString("(?" + goFlagLetters + ":")
+					i += flag.head
+					continue
+				}
+				if goFlagLetters != "" {
+					b.WriteString("(?" + goFlagLetters + ")")
+				}
+				// With no letters left the whole group is a no-op; dropping it
+				// outright avoids the phantom capture group "()" would add.
+				i += flag.head
+				continue
 			} else if i+1 < len(pattern) && pattern[i+1] != '?' {
 				groupNum++
 			}
@@ -300,6 +361,157 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 		b.WriteByte(c)
 	}
 	return b.String(), groupNames, nameToNum, groupNum, nil
+}
+
+// applyLeadingVerbose handles a leading inline (?x) / (?ix) group: Python's
+// VERBOSE takes effect from there to the end of the pattern.
+func applyLeadingVerbose(pattern string) string {
+	flag, ok := pythonFlagGroup(pattern)
+	if !ok || flag.scoped || !strings.ContainsRune(flag.letters, 'x') {
+		return pattern
+	}
+	return pattern[:2] + pattern[2:flag.head] + stripVerbose(pattern[flag.head:])
+}
+
+// stripPossessive rewrites a Python 3.11 possessive quantifier ("x*+", "x++",
+// "x?+", "x{m,n}+") into the greedy form Go understands, by dropping the
+// trailing '+'.  Escaped characters and character classes are copied verbatim.
+func stripPossessive(pattern string) string {
+	var b strings.Builder
+	inClass := false
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		if c == '\\' && i+1 < len(pattern) {
+			b.WriteByte(c)
+			b.WriteByte(pattern[i+1])
+			i++
+			continue
+		}
+		if inClass {
+			if c == ']' {
+				inClass = false
+			}
+			b.WriteByte(c)
+			continue
+		}
+		if c == '[' {
+			inClass = true
+			b.WriteByte(c)
+			continue
+		}
+		// A '+', '*', '?' or '}' followed by '+' is a possessive quantifier.
+		if i+1 < len(pattern) && pattern[i+1] == '+' && (c == '*' || c == '+' || c == '?' || c == '}') {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// stripVerbose applies Python's VERBOSE (re.X) preprocessing: whitespace that
+// is not escaped and not inside a character class is removed, and an unescaped
+// '#' begins a comment running to the end of the line.  A backslash escapes the
+// next character, and both the escape and the escaped character are kept.
+func stripVerbose(pattern string) string {
+	var b strings.Builder
+	inClass := false
+	for i := 0; i < len(pattern); {
+		c := pattern[i]
+		if c == '\\' && i+1 < len(pattern) {
+			b.WriteByte(c)
+			b.WriteByte(pattern[i+1])
+			i += 2
+			continue
+		}
+		if inClass {
+			if c == ']' {
+				inClass = false
+			}
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		switch c {
+		case '[':
+			inClass = true
+			b.WriteByte(c)
+			i++
+		case '#':
+			for i < len(pattern) && pattern[i] != '\n' {
+				i++
+			}
+		case ' ', '\t', '\n', '\r', '\v', '\f':
+			i++
+		default:
+			b.WriteByte(c)
+			i++
+		}
+	}
+	return b.String()
+}
+
+// pythonOnlyFlag reports whether the flag letters contain one Go does not
+// accept, which is what makes a group need rewriting.
+func pythonOnlyFlag(letters string) bool {
+	for _, r := range letters {
+		switch r {
+		case 'a', 'L', 'u', 'x':
+			return true
+		}
+	}
+	return false
+}
+
+// pythonFlagGroup recognises a Python inline-flag group, "(?<letters>" or
+// "(?<letters>:", at the start of s, and returns the position just past the
+// head.  Go accepts the letters i, m, s and U; Python's a, L, u and x are not
+// Go's, so they are folded away here (a and L select ASCII \d\w\s, u is the
+// default, and x is Go's own x).
+func pythonFlagGroup(s string) (flagGroup, bool) {
+	if !strings.HasPrefix(s, "(?") {
+		return flagGroup{}, false
+	}
+	i := 2
+	var letters strings.Builder
+	for i < len(s) && s[i] >= 'a' && s[i] <= 'z' || i < len(s) && s[i] >= 'A' && s[i] <= 'Z' {
+		letters.WriteByte(s[i])
+		i++
+	}
+	if letters.Len() == 0 {
+		return flagGroup{}, false
+	}
+	scoped := i < len(s) && s[i] == ':'
+	if !scoped && (i >= len(s) || s[i] != ')') {
+		return flagGroup{}, false
+	}
+	if !pythonOnlyFlag(letters.String()) {
+		return flagGroup{}, false
+	}
+	return flagGroup{letters: letters.String(), head: i, scoped: scoped}, true
+}
+
+// flagGroup is one inline flag group: its letters, the offset of the byte after
+// them (the ')' or ':'), and whether a ':' follows.
+type flagGroup struct {
+	letters string
+	head    int
+	scoped  bool
+}
+
+// goFlags is the letters of this group that Go understands.  Go's RE2 engine
+// takes i, m, s and U; Python's VERBOSE x is NOT one of them, so it is dropped
+// here too (see the note on inline x in translate).
+func (f flagGroup) goFlags() string {
+	var out []rune
+	for _, r := range f.letters {
+		switch r {
+		case 'i', 'm', 's', 'U':
+			out = append(out, r)
+		}
+	}
+	return string(out)
 }
 
 // goFlags turns the Python flags into the Go inline ones.

@@ -601,6 +601,15 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 	if err != nil {
 		return nil, err
 	}
+	// CPython generates __hash__ when unsafe_hash is set, and ALSO when the
+	// class is frozen and compares by value - a frozen dataclass is immutable,
+	// so it is safely hashable.  Only unsafe_hash was consulted here, so EVERY
+	// frozen dataclass came out unhashable and could not key a dict; h11's
+	// events are "@dataclass(init=False, frozen=True)" and its whole state
+	// machine is keyed by them.
+	if !hashOn {
+		hashOn = eqOn && frozenOn
+	}
 
 	// "_: KW_ONLY" anywhere in the body, or kw_only=True on the decorator,
 	// makes every field keyword-only.

@@ -29,6 +29,7 @@ package typing
 
 import (
 	"strings"
+	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/abc"
@@ -51,10 +52,22 @@ type specialForm struct {
 
 var SpecialFormType = py.NewTypeX("typing._SpecialForm", "A typing construct with no run-time behaviour.", nil, nil)
 
+func init() {
+	SpecialFormType.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self.(*specialForm).M__hash__()
+	}, 0, "Return hash(self)."))
+}
+
 func (s *specialForm) Type() *py.Type { return SpecialFormType }
 
 func (s *specialForm) M__repr__() (py.Object, error) {
 	return py.String("typing." + s.name), nil
+}
+
+// M__hash__ keys a bare construct - "Dict", "List" - by identity, as a
+// singleton should be; h11 puts "Dict" and "Type" into its transition tables.
+func (s *specialForm) M__hash__() (py.Object, error) {
+	return py.Int(int64(uintptr(unsafe.Pointer(s))) & (1<<62 - 1)), nil
 }
 
 func (s *specialForm) M__getitem__(key py.Object) (py.Object, error) {
@@ -75,10 +88,27 @@ type subscribedForm struct {
 
 var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted typing construct.", nil, nil)
 
+// M__hash__ is identity-based, which is what makes a typing construct usable
+// as a DICT KEY.
+//
+// h11 builds its state-transition tables as dicts keyed by constructs -
+// "Dict[Type[Event], ...]" - and looked them up at import: every one of them
+// was unhashable, so "import h11" died on "unhashable type: 'type'".  A typing
+// construct is a singleton, so identity is the right notion of equality and
+// h11's own comment says as much ("inherit identity-based comparison and
+// hashing from object").
+func (s *subscribedForm) M__hash__() (py.Object, error) {
+	return py.Int(int64(uintptr(unsafe.Pointer(s))) & (1<<62 - 1)), nil
+}
+
 func init() {
 	// "Generic[T]" is used as a base class, so the class it produces must be
 	// one that can be derived from.
 	subscribedFormType.Flags |= py.TPFLAGS_BASETYPE
+	// And hashable, so it can key a dict - see M__hash__ above.
+	subscribedFormType.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self.(*subscribedForm).M__hash__()
+	}, 0, "Return hash(self)."))
 }
 
 func (s *subscribedForm) Type() *py.Type { return subscribedFormType }
@@ -203,9 +233,9 @@ func init() {
 		"Final", "ForwardRef", "FrozenSet", "Generator",
 		"Hashable", "IO", "ItemsView", "Iterable", "Iterator", "KeysView",
 		"List", "Literal", "LiteralString", "Mapping", "MappingView",
-		"Match", "MutableMapping", "MutableSequence", "MutableSet",
+		"Match", "Pattern", "MutableMapping", "MutableSequence", "MutableSet",
 		"NamedTuple", "Never", "NoReturn", "NotRequired", "Optional",
-		"OrderedDict", "ParamSpec", "ReadOnly", "Required",
+		"OrderedDict", "ParamSpec", "Pattern", "ReadOnly", "Required",
 		"Reversible", "Self", "Sequence", "Set", "Sized", "Text",
 		"TextIO", "Tuple", "Type", "TypeAlias", "TypeGuard", "Union",
 		"Unpack", "ValuesView", "final", "overload", "runtime_checkable",

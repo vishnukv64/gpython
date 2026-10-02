@@ -1452,6 +1452,77 @@ func init() {
 	NamedTupleType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return newIteratorFromItems(self.(*NamedTuple).values), nil
 	}, 0, "Implement iter(self)."))
+
+	// A named tuple is a tuple, so it hashes like one and compares field by
+	// field.  Without these the instance fell through to the metatype's
+	// __hash__ descriptor on ObjectType, which raises "descriptor '__hash__'
+	// requires a 'type' object": that is what made the namedtuple in
+	// packaging._manylinux (a glibc version key) unhashable, and so
+	// un-usable as a dict key or a set member.
+	NamedTupleType.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return tupleHash(self.(*NamedTuple).values)
+	}, 0, "Return hash(self)."))
+	NamedTupleType.Dict.Set("__eq__", py.MustNewMethod("__eq__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var other py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__eq__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		n := self.(*NamedTuple)
+		switch t := other.(type) {
+		case *NamedTuple:
+			return py.NewBool(sameValues(n.values, t.values)), nil
+		case py.Tuple:
+			return py.NewBool(sameValues(n.values, []py.Object(t))), nil
+		}
+		return py.NotImplemented, nil
+	}, 0, "Return self==value."))
+	NamedTupleType.Dict.Set("__ne__", py.MustNewMethod("__ne__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var other py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__ne__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		n := self.(*NamedTuple)
+		switch t := other.(type) {
+		case *NamedTuple:
+			return py.NewBool(!sameValues(n.values, t.values)), nil
+		case py.Tuple:
+			return py.NewBool(!sameValues(n.values, []py.Object(t))), nil
+		}
+		return py.NotImplemented, nil
+	}, 0, "Return self!=value."))
+	NamedTupleType.Dict.Set("count", py.MustNewMethod("count", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var value py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "count", 1, 1, &value); err != nil {
+			return nil, err
+		}
+		n := 0
+		for _, v := range self.(*NamedTuple).values {
+			eq, err := py.Eq(v, value)
+			if err != nil {
+				return nil, err
+			}
+			if ok, err := py.ObjectIsTrue(eq); err == nil && ok {
+				n++
+			}
+		}
+		return py.Int(n), nil
+	}, 0, "Return number of occurrences of value."))
+	NamedTupleType.Dict.Set("index", py.MustNewMethod("index", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var value py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "index", 1, 1, &value); err != nil {
+			return nil, err
+		}
+		for i, v := range self.(*NamedTuple).values {
+			eq, err := py.Eq(v, value)
+			if err != nil {
+				return nil, err
+			}
+			if ok, err := py.ObjectIsTrue(eq); err == nil && ok {
+				return py.Int(i), nil
+			}
+		}
+		return nil, py.ExceptionNewf(py.ValueError, "tuple.index(x): x not in tuple")
+	}, 0, "Return first index of value."))
 	NamedTupleType.Dict.Set("_fields", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			n := self.(*NamedTuple)
@@ -2126,3 +2197,82 @@ var (
 	_ py.I__contains__ = (*UserString)(nil)
 	_ py.I__add__      = (*UserString)(nil)
 )
+
+// tupleHash hashes a sequence the way Python's tuple hash does: an order
+// sensitive combination of the element hashes, so that the hash of a tuple
+// equals the hash of an equal tuple and two different orders differ.
+func tupleHash(values []py.Object) (py.Object, error) {
+	const (
+		mult = 1000003
+		mod  = uint64(1) << 61
+	)
+	var acc uint64 = 0x345678
+	length := uint64(len(values))
+	for _, v := range values {
+		h, err := objectHash(v)
+		if err != nil {
+			return nil, err
+		}
+		acc = (acc ^ uint64(h)) * mult % mod
+		length--
+	}
+	acc = (acc ^ length) % mod
+	return py.Int(int64(acc)), nil
+}
+
+// objectHash is the hash of one element, through its own __hash__ or through
+// the value types that carry none.
+func objectHash(o py.Object) (int64, error) {
+	if h, ok := o.(py.I__hash__); ok {
+		res, err := h.M__hash__()
+		if err != nil {
+			return 0, err
+		}
+		if n, err := py.MakeGoInt64(res); err == nil {
+			return n, nil
+		}
+	}
+	switch v := o.(type) {
+	case py.NoneType:
+		return 0, nil
+	case py.Bool:
+		if v {
+			return 1, nil
+		}
+		return 0, nil
+	case py.Int:
+		return int64(v), nil
+	case py.Float:
+		return int64(float64(v)), nil
+	case py.String:
+		var h uint64 = 14695981039346656037
+		for i := 0; i < len(v); i++ {
+			h ^= uint64(v[i])
+			h *= 1099511628211
+		}
+		return int64(h & (1<<63 - 1)), nil
+	}
+	// A type is hashable by identity, as in CPython.
+	if t, ok := o.(*py.Type); ok {
+		return int64(len(t.Name)), nil
+	}
+	return 0, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", o.Type().Name)
+}
+
+// sameValues compares two value sequences element by element, which is the
+// tuple comparison a named tuple inherits.
+func sameValues(a, b []py.Object) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		eq, err := py.Eq(a[i], b[i])
+		if err != nil {
+			return false
+		}
+		if ok, _ := py.ObjectIsTrue(eq); !ok {
+			return false
+		}
+	}
+	return true
+}

@@ -109,6 +109,31 @@ func init() {
 		Fget: func(self py.Object) (py.Object, error) { return self.(*EnumMember).value, nil },
 	})
 
+	// The hash/eq/index protocol has to be reachable through the type's own
+	// Dict, not merely as Go methods on *EnumMember.  GetAttrString finds a
+	// Go M__hash__ by reflection, so "hash(member)" worked, but using a member
+	// as a dict key or set element goes through Type.CallMethod, which walks
+	// the MRO Dict - and there "__hash__" was absent, so
+	// "{ControlType.BELL: 1}" raised "unhashable type: 'enum.member'".
+	// rich/control.py builds exactly such a dict.
+	EnumMemberType.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self.(*EnumMember).M__hash__()
+	}, 0, "Return the hash of a member."))
+	EnumMemberType.Dict.Set("__eq__", py.MustNewMethod("__eq__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var other py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__eq__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		return self.(*EnumMember).M__eq__(other)
+	}, 0, "Return self==value."))
+	EnumMemberType.Dict.Set("__ne__", py.MustNewMethod("__ne__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var other py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__ne__", 1, 1, &other); err != nil {
+			return nil, err
+		}
+		return self.(*EnumMember).M__ne__(other)
+	}, 0, "Return self!=value."))
+
 	py.BuildEnumClass = buildEnumClass
 
 	// An enum member is an instance of the enum class for isinstance, which

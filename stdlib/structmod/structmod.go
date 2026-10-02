@@ -463,8 +463,15 @@ func structUnpack(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	return l.unpackItems(data)
 }
 
+// structCalcsize is calcsize(fmt) -> int.  It takes only the format string, so
+// it does not go through formatAndBuffer, which requires the buffer that pack
+// and unpack take.
 func structCalcsize(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	format, _, err := formatAndBuffer(args, kwargs, "calcsize")
+	var fmtObj py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "s:calcsize", []string{"format"}, &fmtObj); err != nil {
+		return nil, err
+	}
+	format, err := py.StrAsString(fmtObj)
 	if err != nil {
 		return nil, err
 	}

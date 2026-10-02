@@ -191,7 +191,13 @@ type Type struct {
 var TypeType *Type = &Type{
 	Name: "type",
 	Doc:  "type(object) -> the object's type\ntype(name, bases, dict) -> a new type",
-	Dict: NewStringDict(),
+	// A metaclass derives from type - "class Sentinel(type)" - so type has to
+	// accept subclassing, exactly as object does.  Without the flag EVERY
+	// metaclass was refused with "type 'type' is not an acceptable base type",
+	// which is what stopped h11: its Sentinel is a metaclass and its whole
+	// state machine is keyed by instances of it.
+	Flags: TPFLAGS_BASETYPE,
+	Dict:  NewStringDict(),
 }
 
 var ObjectType = &Type{
