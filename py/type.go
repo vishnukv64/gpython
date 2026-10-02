@@ -254,32 +254,89 @@ func init() {
 	}
 
 	// Type metadata readable from Python (cls.__name__, cls.__doc__, ...)
-	TypeType.Dict["__name__"] = &Property{
-		Fget: func(self Object) (Object, error) {
-			return String(self.(*Type).Name), nil
-		},
+	//
+	// These go on ObjectType as well as TypeType because the two are both
+	// metatypes here: a type made by the NewType function is a TypeType, but
+	// one made with ObjectType.NewType - which is how most of the builtin
+	// types are declared - is an ObjectType.  Putting them only on TypeType
+	// is why "int.__name__" raised while "bool.__name__" worked.
+	//
+	// ObjectType's dict is also the dict of the "object" class, so an
+	// instance would find these through its base chain.  Each getter
+	// therefore checks that it was handed a type and raises AttributeError
+	// otherwise, which is exactly what CPython reports for "x.__name__".
+	typeMeta := func(name string, doc string, get func(t *Type) Object) {
+		d := &typeMetaGetter{name: name, get: get}
+		TypeType.Dict[name] = d
+		ObjectType.Dict[name] = d
 	}
-	TypeType.Dict["__qualname__"] = &Property{
-		Fget: func(self Object) (Object, error) {
-			return String(self.(*Type).Name), nil
-		},
-	}
-	TypeType.Dict["__doc__"] = &Property{
-		Fget: func(self Object) (Object, error) {
-			return String(self.(*Type).Doc), nil
-		},
-	}
-	TypeType.Dict["__bases__"] = &Property{
-		Fget: func(self Object) (Object, error) {
-			return self.(*Type).Bases, nil
-		},
-	}
-	TypeType.Dict["__dict__"] = &Property{
-		Fget: func(self Object) (Object, error) {
-			return self.(*Type).Dict, nil
-		},
-	}
+	typeMeta("__name__", "The name of the type.", func(t *Type) Object { return String(t.Name) })
+	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object { return String(t.Name) })
+	typeMeta("__doc__", "The documentation string of the type.", func(t *Type) Object { return String(t.Doc) })
+	typeMeta("__bases__", "The base classes of the type.", func(t *Type) Object { return t.Bases })
+	typeMeta("__dict__", "The namespace of the type.", func(t *Type) Object { return t.Dict })
+
+	// __class__ is a descriptor registered on both metatypes for the same
+	// reason as the metadata above: an instance of a builtin must be able to
+	// ask for its class, and "(5).__class__" was an AttributeError.
+	ObjectType.Dict["__class__"] = &classGetter{}
+	TypeType.Dict["__class__"] = &classGetter{}
 }
+
+// typeMetaGetter is the descriptor behind cls.__name__ and friends.
+//
+// It is deliberately NOT a property: reading a property on a class yields
+// the property object, but reading one of these yields the answer, so that
+// "object.__name__" is the string "object" and not a descriptor.
+//
+// The subject is the instance when that is a type - "int.__name__" arrives
+// as (int, type) - and otherwise the owner, which is how "object.__name__"
+// arrives, since object's attribute is found on object itself.
+type typeMetaGetter struct {
+	name string
+	get  func(t *Type) Object
+}
+
+func (d *typeMetaGetter) Type() *Type { return ObjectType }
+
+func (d *typeMetaGetter) M__get__(instance, owner Object) (Object, error) {
+	if t, ok := instance.(*Type); ok {
+		return d.get(t), nil
+	}
+	if instance == nil || instance == None {
+		if t, ok := owner.(*Type); ok {
+			return d.get(t), nil
+		}
+	}
+	// An instance of a class that inherits from object - "(5).__name__".
+	return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s'", instance.Type().Name, d.name)
+}
+
+var _ I__get__ = (*typeMetaGetter)(nil)
+
+// classGetter implements __class__.
+//
+// For an instance it is the class the instance was made from, so
+// "(5).__class__" is int.  For a type it is the metatype, so
+// "int.__class__" is type - and the lookup for a type arrives with the
+// metatype as the owner, which is what makes that answer.
+type classGetter struct{}
+
+func (d *classGetter) Type() *Type { return ObjectType }
+
+func (d *classGetter) M__get__(instance, owner Object) (Object, error) {
+	if _, ok := instance.(*Type); ok {
+		if t, ok := owner.(*Type); ok {
+			return t, nil
+		}
+	}
+	if instance == nil || instance == None {
+		return owner, nil
+	}
+	return instance.Type(), nil
+}
+
+var _ I__get__ = (*classGetter)(nil)
 
 // Make a new type from a name
 //
