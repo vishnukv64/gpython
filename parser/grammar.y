@@ -18,6 +18,35 @@ import (
 
 // NB can put code blocks in not just at the end
 
+// fstringLiteral folds a plain string literal into the text of an adjacent
+// f-string, so that "a" f"{b}" is one literal as CPython makes it.
+//
+// The value has already had its escapes processed, so it is re-encoded as
+// the f-string text that would produce it: a backslash is doubled, because
+// the compiler will decode the merged text again, and a brace is doubled,
+// because braces are special everywhere in an f-string - including in the
+// part that came from the plain literal.
+func fstringLiteral(value py.String) string {
+	s := strings.ReplaceAll(string(value), `\`, `\\`)
+	s = strings.ReplaceAll(s, "{", "{{")
+	return strings.ReplaceAll(s, "}", "}}")
+}
+
+// fstringPartText re-encodes the text of an f-string carrier for a merge.
+func fstringPartText(f *py.FString) string {
+	if f.Raw {
+		return fstringRawText(f.Text)
+	}
+	return f.Text
+}
+
+// fstringRawText re-encodes the text of a raw f-string so that it can share
+// one carrier with a literal that is not raw.  Only the backslash needs
+// doubling: the text of a raw f-string is still brace-processed.
+func fstringRawText(text string) string {
+	return strings.ReplaceAll(text, `\`, `\\`)
+}
+
 // posonlyArgs carries the positional-only parameters of a function
 // definition (PEP 570) from the posonly_prefix rule down to the
 // typedargslist rules that build the ast.Arguments.
@@ -586,22 +615,20 @@ typedargslist:
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3}
 	}
-|	'*' ',' tfpdeftests1
+|	'*' ',' tfpdeftests1 optional_comma
 	{
 		// A bare "*" separator followed by keyword-only arguments:
 		// "def f(*, a=1)".  The comma is required here, which is what keeps
-		// this from colliding with the empty-list form above.
+		// this from colliding with the empty-list form above.  The trailing
+		// comma belongs to the rule: tfpdeftests1 has no alternative ending
+		// in one, so leaving it out dropped the comma and made
+		// "def f(*, a: int,)" - how a formatted signature is written -
+		// a syntax error.
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3}
 	}
 |	'*' ',' tfpdeftests1 ',' STARSTAR tfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
-	}
-|	'*' ','
-	{
-		// A bare "*" with nothing after it: the keyword-only separator with
-		// no keyword-only arguments, which a trailing comma makes explicit.
-		$$ = &ast.Arguments{Pos: $<pos>$}
 	}
 |	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
 	{
@@ -1899,11 +1926,28 @@ strings:
 	}
 |	strings STRING
 	{
+		// Adjacent literals are one literal.  An f-string neighbour cannot
+		// simply be concatenated - it is a compile-time carrier whose text
+		// is processed later - so the pieces are folded into a single
+		// carrier, which is what "a" f"{b}" requires.  The result is always
+		// non-raw, with any raw part re-encoded, so that one Raw flag still
+		// describes the whole literal.
 		switch a := $$.(type) {
 		case py.String:
 			switch b := $2.(type) {
 			case py.String:
 				$$ = a + b
+			case *py.FString:
+				$$ = py.NewFString(fstringLiteral(a)+fstringPartText(b), false)
+			default:
+				yylex.(*yyLex).SyntaxError("cannot mix string and nonstring literals")
+			}
+		case *py.FString:
+			switch b := $2.(type) {
+			case py.String:
+				$$ = py.NewFString(fstringPartText(a)+fstringLiteral(b), false)
+			case *py.FString:
+				$$ = py.NewFString(fstringPartText(a)+fstringPartText(b), false)
 			default:
 				yylex.(*yyLex).SyntaxError("cannot mix string and nonstring literals")
 			}

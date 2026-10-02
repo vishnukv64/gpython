@@ -1318,7 +1318,14 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		return nil, err
 	}
 	if base.Flags&TPFLAGS_BASETYPE == 0 {
-		return nil, ExceptionNewf(TypeError, "type '%s' is not an acceptable base type", base.Name)
+		// "type" is allowed as a base so that "metaclass=" can be spelled the
+		// Python 2 way - "class C(object, metaclass=M)" needs M to derive
+		// from type - and so that a class statement with a metaclass on a
+		// plain type works.  Nothing here dispatches on the metaclass, so the
+		// result is an ordinary class; see the note in __build_class__.
+		if base != TypeType {
+			return nil, ExceptionNewf(TypeError, "type '%s' is not an acceptable base type", base.Name)
+		}
 	}
 
 	dict := orig_dict.Copy()

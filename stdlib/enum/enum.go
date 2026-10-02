@@ -225,14 +225,21 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 			autoValue = mustInt(value) + 1
 		}
 
+		// A duplicate value makes an alias, as Python does.  A value that
+		// cannot be keyed - a plain object() - simply has no alias to be a
+		// duplicate of, so it becomes its own member rather than raising
+		// "unhashable type": that is what "X = object()" in an enum body is
+		// for, and click's sentinel enum relies on it.
 		encoded, err := py.DictKey(value)
-		if err != nil {
-			return nil, err
-		}
-		if existing, ok := byValue[encoded]; ok {
-			// A duplicate value makes an alias, as Python does.
-			cls.Dict[key] = existing
-			continue
+		if err == nil {
+			if existing, ok := byValue[encoded]; ok {
+				cls.Dict[key] = existing
+				continue
+			}
+		} else {
+			// Key it by name instead, so two distinct objects with the same
+			// name cannot collide but the lookup below still works.
+			encoded = "\x00name\x00" + name + "." + key
 		}
 		member := &EnumMember{value: value, name: key, enum: cls, index: len(members)}
 		byValue[encoded] = member
