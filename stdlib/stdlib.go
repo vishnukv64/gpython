@@ -31,6 +31,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/colorsys"
 	_ "github.com/vishnukv64/gpython/stdlib/concurrent"
 	_ "github.com/vishnukv64/gpython/stdlib/concurrent/futures"
+	_ "github.com/vishnukv64/gpython/stdlib/configparser"
 	_ "github.com/vishnukv64/gpython/stdlib/contextlib"
 	_ "github.com/vishnukv64/gpython/stdlib/copy"
 	_ "github.com/vishnukv64/gpython/stdlib/csv"

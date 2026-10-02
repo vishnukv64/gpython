@@ -1,0 +1,10 @@
+sections: ['styles', 'sec2']
+has_section: True False
+items: [('bar', 'italic'), ('d', 'dval'), ('foo', 'bold red')]
+get: bold red
+default-inherited: dval
+colon sep: 1
+continued
+getint: 2
+proxy: bold red True
+options: ['bar', 'd', 'foo']
