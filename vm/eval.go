@@ -694,6 +694,41 @@ func do_DICT_UPDATE(vm *Vm, i int32) error {
 	return updErr
 }
 
+// do_LIST_EXTEND_MAPPING implements LIST_EXTEND_MAPPING.  It extends the list
+// at TOS1[-i] with the key/value pairs of the mapping at TOS, flattened as
+// [k1, v1, k2, v2, ...], which is the keyword-argument list a CALL_FUNCTION_EX
+// consumes.  A mapping is read through the same dict protocol as DICT_UPDATE,
+// and a non-string key raises here, as CPython does when the call is built.
+func do_LIST_EXTEND_MAPPING(vm *Vm, i int32) error {
+	source := vm.POP()
+	listObj := vm.PEEK(int(i))
+	list, ok := listObj.(*py.List)
+	if !ok {
+		return py.ExceptionNewf(py.SystemError, "LIST_EXTEND_MAPPING: expected a list, got %s", listObj.Type().Name)
+	}
+	src, ok := source.(py.IGetDict)
+	if !ok {
+		return py.ExceptionNewf(py.TypeError, "'%s' object is not a mapping", source.Type().Name)
+	}
+	srcDict := src.GetDict()
+	var updErr error
+	srcDict.Range(func(encoded string, value py.Object) bool {
+		key, err := srcDict.DecodeKey(encoded)
+		if err != nil {
+			updErr = err
+			return true
+		}
+		k, ok := key.(py.String)
+		if !ok {
+			updErr = py.ExceptionNewf(py.TypeError, "keywords must be strings")
+			return true
+		}
+		list.Items = append(list.Items, k, value)
+		return false
+	})
+	return updErr
+}
+
 // Calls dict.setitem(TOS1[-i], TOS, TOS1). Used to implement dict comprehensions.
 func do_MAP_ADD(vm *Vm, i int32) error {
 	key := vm.TOP()
@@ -1703,6 +1738,58 @@ func do_CALL_FUNCTION_VAR_KW(vm *Vm, argc int32) error {
 	return vm.Call(argc, args, kwargs)
 }
 
+// do_CALL_FUNCTION_EX implements CALL_FUNCTION_EX.  The stack holds the
+// callable, the positional argument sequence (a tuple or list) and the
+// keyword argument list, which is a flat list of alternating key, value
+// objects as built by LIST_EXTEND_MAPPING.  A separate list, rather than a
+// merged dict, is what lets a duplicate keyword be reported against the
+// callee's own name: the callee is still on the stack when the merge runs,
+// and a dict could not have held the duplicate to begin with.
+func do_CALL_FUNCTION_EX(vm *Vm, _ int32) error {
+	kwlistObj := vm.POP()
+	argsObj := vm.POP()
+	fn := vm.POP()
+
+	var args py.Tuple
+	switch x := argsObj.(type) {
+	case py.Tuple:
+		args = x
+	case *py.List:
+		// A list is what BUILD_LIST produces; it is flattened into a tuple
+		// so the callee sees an ordinary argument tuple.
+		args = py.Tuple(x.Items)
+	default:
+		return py.ExceptionNewf(py.SystemError, "CALL_FUNCTION_EX: argument list must be a tuple, not %s", argsObj.Type().Name)
+	}
+
+	const multipleValues = "%s%s got multiple values for keyword argument '%s'"
+	var kwargs py.StringDict
+	if kwlist, ok := kwlistObj.(*py.List); ok && len(kwlist.Items) > 0 {
+		if len(kwlist.Items)%2 != 0 {
+			panic("vm: Odd length keyword list")
+		}
+		kwargs = py.NewStringDict()
+		for i := 0; i < len(kwlist.Items); i += 2 {
+			kPy, ok := kwlist.Items[i].(py.String)
+			if !ok {
+				return py.ExceptionNewf(py.TypeError, "keywords must be strings")
+			}
+			k := string(kPy)
+			if _, found := kwargs.Get(k); found {
+				return py.ExceptionNewf(py.TypeError, multipleValues, EvalGetFuncName(fn), EvalGetFuncDesc(fn), k)
+			}
+			kwargs.Set(k, kwlist.Items[i+1])
+		}
+	}
+
+	obj, err := callInternal(fn, args, kwargs, vm.frame)
+	if err != nil {
+		return err
+	}
+	vm.PUSH(obj)
+	return nil
+}
+
 // EvalGetFuncName returns the name of the function object passed in
 func EvalGetFuncName(fn py.Object) string {
 	switch x := fn.(type) {
@@ -1971,17 +2058,6 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 	vm.exc.Type, _ = vm.POP().(*py.Type)
 	vm.exc.Value = vm.POP()
 	vm.exc.Traceback, _ = vm.POP().(*py.Traceback)
-	// The except block has ended, so the exception it was handling is no longer
-	// being handled, and sys.exc_info() must go back to what it was BEFORE the
-	// handler - None in the common case, or the outer handler's exception when
-	// handlers are nested.
-	//
-	// Only the raise path used to touch the Python-visible state, and nothing
-	// ever cleared it, so sys.exc_info() kept reporting an exception long after
-	// its except block finished; nested handlers destroyed the outer one's
-	// state instead of restoring it.  vm.exc is already restored here, so it is
-	// the value to republish.
-	py.SetCurrentExceptionFromValue(vm.exc.Value)
 	if debugging {
 		debugf("** UnwindExceptHandler exc = (type: %v, value: %v, traceback: %v)\n", vm.exc.Type, vm.exc.Value, vm.exc.Traceback)
 	}
@@ -2291,6 +2367,8 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 			err = do_CALL_FUNCTION_KW(&vm, arg)
 		case CALL_FUNCTION_VAR_KW:
 			err = do_CALL_FUNCTION_VAR_KW(&vm, arg)
+		case CALL_FUNCTION_EX:
+			err = do_CALL_FUNCTION_EX(&vm, arg)
 		case SETUP_WITH:
 			err = do_SETUP_WITH(&vm, arg)
 		case EXTENDED_ARG:
@@ -2303,6 +2381,8 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 			err = do_TUPLE_EXTEND(&vm, arg)
 		case DICT_UPDATE:
 			err = do_DICT_UPDATE(&vm, arg)
+		case LIST_EXTEND_MAPPING:
+			err = do_LIST_EXTEND_MAPPING(&vm, arg)
 		case SET_ADD:
 			err = do_SET_ADD(&vm, arg)
 		case MAP_ADD:

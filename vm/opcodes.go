@@ -149,6 +149,20 @@ const (
 	DICT_UPDATE OpCode = 150 // Update the dict at TOS1[-i] with TOS (PEP 448)
 
 	TUPLE_EXTEND OpCode = 151 // Extend the tuple at TOS1[-i] with TOS (PEP 448)
+
+	// CALL_FUNCTION_EX takes a callable, an argument sequence and a flat
+	// keyword list off the stack and calls it.  It is the uniform call form
+	// for PEP 448 argument unpacking, where a "*" or "**" unpack is not the
+	// last argument and so cannot use CALL_FUNCTION_VAR/KW.  The argument
+	// sequence is a tuple (or list); the keyword list is a list of alternating
+	// key, value objects so that a duplicate key can be reported with the
+	// callee's name, which a merged dict could no longer do.
+	CALL_FUNCTION_EX OpCode = 152
+
+	// LIST_EXTEND_MAPPING extends the list at TOS1[-i] with the key/value
+	// pairs of the mapping at TOS, flattened as [k1, v1, k2, v2, ...].  It
+	// builds the keyword list of a call whose argument is a "**mapping".
+	LIST_EXTEND_MAPPING OpCode = 153
 )
 
 // Rich comparison opcodes

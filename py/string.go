@@ -149,29 +149,7 @@ func init() {
 Encode the string using the codec registered for encoding.`))
 
 	StringType.Dict.Set("endswith", MustNewMethod("endswith", func(self Object, args Tuple) (Object, error) {
-		selfStr := string(self.(String))
-		suffix := []string{}
-		if len(args) > 0 {
-			if s, ok := args[0].(String); ok {
-				suffix = append(suffix, string(s))
-			} else if s, ok := args[0].(Tuple); ok {
-				for _, t := range s {
-					if v, ok := t.(String); ok {
-						suffix = append(suffix, string(v))
-					}
-				}
-			} else {
-				return nil, ExceptionNewf(TypeError, "endswith first arg must be str, unicode, or tuple, not %s", args[0].Type())
-			}
-		} else {
-			return nil, ExceptionNewf(TypeError, "endswith() takes at least 1 argument (0 given)")
-		}
-		for _, s := range suffix {
-			if strings.HasSuffix(selfStr, s) {
-				return Bool(true), nil
-			}
-		}
-		return Bool(false), nil
+		return strStartsEndsWith(self.(String), args, false)
 	}, 0, "endswith(suffix[, start[, end]]) -> bool"))
 
 	StringType.Dict.Set("count", MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
@@ -208,35 +186,7 @@ replaced.`))
 	}, 0, "split(sub) -> split string with sub."))
 
 	StringType.Dict.Set("startswith", MustNewMethod("startswith", func(self Object, args Tuple) (Object, error) {
-		selfStr := string(self.(String))
-		prefix := []string{}
-		if len(args) > 0 {
-			if s, ok := args[0].(String); ok {
-				prefix = append(prefix, string(s))
-			} else if s, ok := args[0].(Tuple); ok {
-				for _, t := range s {
-					if v, ok := t.(String); ok {
-						prefix = append(prefix, string(v))
-					}
-				}
-			} else {
-				return nil, ExceptionNewf(TypeError, "startswith first arg must be str, unicode, or tuple, not %s", args[0].Type())
-			}
-		} else {
-			return nil, ExceptionNewf(TypeError, "startswith() takes at least 1 argument (0 given)")
-		}
-		if len(args) > 1 {
-			if s, ok := args[1].(Int); ok {
-				selfStr = selfStr[s:]
-			}
-		}
-
-		for _, s := range prefix {
-			if strings.HasPrefix(selfStr, s) {
-				return Bool(true), nil
-			}
-		}
-		return Bool(false), nil
+		return strStartsEndsWith(self.(String), args, true)
 	}, 0, "startswith(prefix[, start[, end]]) -> bool"))
 
 	StringType.Dict.Set("strip", MustNewMethod("strip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
@@ -1142,6 +1092,109 @@ func (s String) M__contains__(item Object) (Object, error) {
 	return NewBool(strings.Contains(string(s), string(needle))), nil
 }
 
+// adjustIndices clamps a (start, end) pair to a string of the given length the
+// way CPython's ADJUST_INDICES does: a NEGATIVE index counts back from the end,
+// and either may land outside the string.
+//
+// Both count and find used to clamp only the upper bound, so a negative start
+// went straight into a Go slice and panicked - not raised, PANICKED, taking the
+// whole host process down with "slice bounds out of range".
+// "abc".count("b", -1) was enough to do it.
+func adjustIndices(beg, end, size int) (int, int) {
+	if beg < 0 {
+		beg += size
+		if beg < 0 {
+			beg = 0
+		}
+	}
+	if end < 0 {
+		end += size
+		if end < 0 {
+			end = 0
+		}
+	}
+	if end > size {
+		end = size
+	}
+	if beg > end {
+		// CPython treats a start past the end as an empty range, not an error.
+		beg = end
+	}
+	return beg, end
+}
+
+// strStartsEndsWith implements startswith and endswith, which differ only in
+// which end they test.
+//
+// Both arguments used to be handled badly: end was IGNORED entirely, so
+// "abc".endswith("b", 0, 2) answered about the whole string and returned False
+// where CPython says True, and a negative start went into a Go slice
+// unadjusted and PANICKED - "abc".startswith("b", -2) killed the host process.
+// The (start, end) pair now goes through the same adjustment count and find
+// use.
+func strStartsEndsWith(self String, args Tuple, atStart bool) (Object, error) {
+	name := "endswith"
+	if atStart {
+		name = "startswith"
+	}
+	if len(args) == 0 {
+		return nil, ExceptionNewf(TypeError, "%s() takes at least 1 argument (0 given)", name)
+	}
+	var prefixes []string
+	switch v := args[0].(type) {
+	case String:
+		prefixes = append(prefixes, string(v))
+	case Tuple:
+		for _, t := range v {
+			s, ok := t.(String)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "%s first arg must be str or a tuple of str, not %s", name, t.Type().Name)
+			}
+			prefixes = append(prefixes, string(s))
+		}
+	default:
+		return nil, ExceptionNewf(TypeError, "%s first arg must be str or a tuple of str, not %s", name, args[0].Type().Name)
+	}
+
+	beg, end := 0, self.len()
+	if len(args) > 1 {
+		b, ok := args[1].(Int)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "%s indices must be integers, not %s", name, args[1].Type().Name)
+		}
+		beg = int(b)
+	}
+	if len(args) > 2 {
+		e, ok := args[2].(Int)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "%s indices must be integers, not %s", name, args[2].Type().Name)
+		}
+		end = int(e)
+	}
+	// CPython checks this BEFORE clamping: a start that is not a valid index into
+	// the string fails against a prefix of any length, even the empty one.
+	// "abc".startswith("", 3) is True but "abc".startswith("", 4) is False,
+	// which no amount of clamping a window reproduces.  The check has to come
+	// BEFORE adjustIndices, which would otherwise pull beg back to the end.
+	if beg > self.len() {
+		return False, nil
+	}
+	beg, end = adjustIndices(beg, end, self.len())
+	// The comparison happens on the SLICE, which is what makes the end argument
+	// mean anything.
+	window := string(self.slice(beg, end, self.len()))
+	for _, p := range prefixes {
+		if atStart {
+			if strings.HasPrefix(window, p) {
+				return True, nil
+			}
+		} else if strings.HasSuffix(window, p) {
+			return True, nil
+		}
+	}
+	return False, nil
+}
+
 func (s String) Count(args Tuple) (Object, error) {
 	var (
 		pysub Object
@@ -1159,15 +1212,7 @@ func (s String) Count(args Tuple) (Object, error) {
 		end  = int(pyend.(Int))
 		size = s.len()
 	)
-	if beg > size {
-		beg = size
-	}
-	if end < 0 {
-		end = size
-	}
-	if end > size {
-		end = size
-	}
+	beg, end = adjustIndices(beg, end, size)
 
 	var (
 		str = string(s.slice(beg, end, s.len()))
@@ -1193,15 +1238,7 @@ func (s String) find(args Tuple) (Object, error) {
 		end  = int(pyend.(Int))
 		size = s.len()
 	)
-	if beg > size {
-		beg = size
-	}
-	if end < 0 {
-		end = size
-	}
-	if end > size {
-		end = size
-	}
+	beg, end = adjustIndices(beg, end, size)
 
 	var (
 		off = s.slice(0, beg, s.len()).len()

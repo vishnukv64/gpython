@@ -902,6 +902,19 @@ func Eq(a Object, b Object) (Object, error) {
 		}
 	}
 
+	// A class written in Python keeps its methods as Dict entries, so
+	// "class K: def __eq__(self, o)" matches none of the Go interfaces above.
+	// Without this, K(1) == K(1) was False and so was [K(1)] == [K(1)] - which
+	// is to say operator overloading of == did not work at all for a
+	// user-defined class, and every list, tuple, set and dict built on Eq
+	// inherited the lie.  Same cause as the ordering operators, which is why
+	// they were fixed together.
+	if res, ok, err := callPyOrdering(a, "__eq__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
+
 	// Try using b to eq with reversed parameters
 	if B, ok := b.(I__eq__); ok {
 		res, err := B.M__eq__(a)
@@ -911,6 +924,11 @@ func Eq(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__eq__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	if a.Type() != b.Type() {
@@ -935,6 +953,13 @@ func Ne(a Object, b Object) (Object, error) {
 		}
 	}
 
+	// As for Eq: a Python-defined __ne__ is a Dict entry, not a Go interface.
+	if res, ok, err := callPyOrdering(a, "__ne__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
+
 	// Try using b to ne with reversed parameters
 	if B, ok := b.(I__ne__); ok {
 		res, err := B.M__ne__(a)
@@ -944,6 +969,11 @@ func Ne(a Object, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	if res, ok, err := callPyOrdering(b, "__ne__", a); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	if a.Type() != b.Type() {

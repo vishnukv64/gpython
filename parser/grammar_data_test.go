@@ -141,7 +141,7 @@ var grammarTestData = []struct {
 	{"a(b,c)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[Name(id='b', ctx=Load()), Name(id='c', ctx=Load())], keywords=[], starargs=None, kwargs=None))", nil, ""},
 	{"a(b,*c)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[], starargs=Name(id='c', ctx=Load()), kwargs=None))", nil, ""},
 	{"a(*b)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[], keywords=[], starargs=Name(id='b', ctx=Load()), kwargs=None))", nil, ""},
-	{"a(*b,c)", "eval", "", py.SyntaxError, "only named arguments may follow *expression"},
+	{"a(*b,c)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[Starred(value=Name(id='b', ctx=Load()), ctx=Load()), Name(id='c', ctx=Load())], keywords=[], starargs=None, kwargs=None))", nil, ""},
 	{"a(b,*c,**d)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[], starargs=Name(id='c', ctx=Load()), kwargs=Name(id='d', ctx=Load())))", nil, ""},
 	{"a(b,**c)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[], starargs=None, kwargs=Name(id='c', ctx=Load())))", nil, ""},
 	{"a(a=b)", "eval", "Expression(body=Call(func=Name(id='a', ctx=Load()), args=[], keywords=[keyword(arg='a', value=Name(id='b', ctx=Load()))], starargs=None, kwargs=None))", nil, ""},

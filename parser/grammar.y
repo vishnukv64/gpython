@@ -161,6 +161,86 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	}
 }
 
+// argItem is one item of a call's argument list, tagged so that the list can
+// be folded back into the legacy Starargs/Kwargs shape when it fits, and kept
+// in source order when it does not.  A nil *argItem is never stored; it marks
+// the one argument for which the grammar could not build a node.
+type argItem struct {
+	expr   ast.Expr     // a positional argument; for a "*", the Starred node itself
+	kw     *ast.Keyword // a keyword argument, or the mapping of a "**"
+	star   bool         // this is a "*expr" unpacking
+	unpack bool         // this is a "**expr" unpacking
+}
+
+// finishArglist turns the in-order argument items of a call into an *ast.Call.
+//
+// The AST has two ways to spell an unpacking.  The legacy Starargs/Kwargs pair
+// holds a single "*" that ends the positional arguments and a single "**"
+// that follows every positional, which is all the older grammar could parse.
+// The in-order form puts a Starred in Args and a "**" as a Keyword with an
+// empty Arg in Keywords, which is the only shape that can express an unpack in
+// the middle, as in "f(*a, b)".  A call the older grammar accepted is folded
+// back into the legacy fields, so its AST and bytecode are unchanged; only
+// calls the older grammar rejected keep the in-order form.
+func finishArglist(items []argItem) *ast.Call {
+	lastStar, starCount := -1, 0
+	lastUnpack, unpackCount := -1, 0
+	for i, it := range items {
+		switch {
+		case it.star:
+			starCount++
+			lastStar = i
+		case it.unpack:
+			unpackCount++
+			lastUnpack = i
+		}
+	}
+
+	// The legacy fields can hold at most one "*" and at most one "**"; the
+	// "*" may not be followed by a positional argument and the "**" may not
+	// be followed by anything but ordinary keyword arguments.
+	legacy := starCount <= 1 && unpackCount <= 1
+	if legacy && starCount == 1 {
+		for _, it := range items[lastStar+1:] {
+			if !it.star && !it.unpack && it.kw == nil {
+				legacy = false
+				break
+			}
+		}
+	}
+	if legacy && unpackCount == 1 {
+		for _, it := range items[lastUnpack+1:] {
+			if it.star || it.unpack || it.kw == nil {
+				legacy = false
+				break
+			}
+		}
+	}
+
+	call := &ast.Call{}
+	for _, it := range items {
+		switch {
+		case it.star:
+			if legacy {
+				call.Starargs = it.expr.(*ast.Starred).Value
+			} else {
+				call.Args = append(call.Args, it.expr)
+			}
+		case it.unpack:
+			if legacy {
+				call.Kwargs = it.kw.Value
+			} else {
+				call.Keywords = append(call.Keywords, it.kw)
+			}
+		case it.kw != nil:
+			call.Keywords = append(call.Keywords, it.kw)
+		default:
+			call.Args = append(call.Args, it.expr)
+		}
+	}
+	return call
+}
+
 %}
 
 %union {
@@ -179,6 +259,8 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 	isExpr		bool
 	slice		ast.Slicer
 	call		*ast.Call
+	argitem		*argItem
+	argitems	[]argItem
 	level		int
 	alias		*ast.Alias
 	aliases		[]*ast.Alias
@@ -215,7 +297,9 @@ func setCtxs(yylex yyLexer, exprs []ast.Expr, ctx ast.ExprContext) {
 %type <comma> optional_comma
 %type <comprehensions> comp_for
 %type <slice> subscript subscriptlist subscripts
-%type <call> argument arguments optional_arguments arguments2 arglist optional_arglist_call optional_arglist
+%type <call> arglist optional_arglist_call optional_arglist
+%type <argitem> argument_item
+%type <argitems> argument_items
 %type <level> dot dots
 %type <str> dotted_name from_arg
 %type <identifiers> names
@@ -2295,107 +2379,63 @@ classdef:
 		}
 	}
 
-arguments:
-	argument
-	{
-		$$ = $1
-	}
-|	arguments ',' argument
-	{
-		$$.Args = append($$.Args, $3.Args...)
-		$$.Keywords = append($$.Keywords, $3.Keywords...)
-	}
-
-optional_arguments:
-	{
-		$$ = &ast.Call{}
-	}
-|	arguments ','
-	{
-		$$ = $1
-	}
-
-arguments2:
-	{
-		$$ = &ast.Call{}
-	}
-|	arguments2 ',' argument
-	{
-		$$.Args = append($$.Args, $3.Args...)
-		$$.Keywords = append($$.Keywords, $3.Keywords...)
-	}
-
 arglist:
-	arguments optional_comma
+	argument_items optional_comma
+	{
+		$$ = finishArglist($1)
+	}
+
+// A call's arguments are collected in source order so that an unpacking can
+// appear anywhere, as PEP 448 allows.  finishArglist folds the list back into
+// the legacy Starargs/Kwargs fields whenever it fits, so that every call the
+// older grammar accepted keeps its previous AST and bytecode.
+argument_items:
+	argument_item
+	{
+		if $1 == nil {
+			$$ = nil
+		} else {
+			$$ = []argItem{*$1}
+		}
+	}
+|	argument_items ',' argument_item
 	{
 		$$ = $1
-	}
-|	optional_arguments '*' test arguments2 optional_comma
-	{
-		call := $1
-		call.Starargs = $3
-		if len($4.Args) != 0 {
-			yylex.(*yyLex).SyntaxError("only named arguments may follow *expression")
+		if $3 != nil {
+			$$ = append($$, *$3)
 		}
-		call.Keywords = append(call.Keywords, $4.Keywords...)
-		$$ = call
-	}
-|	optional_arguments '*' test arguments2 ',' STARSTAR test optional_comma
-	{
-		call := $1
-		call.Starargs = $3
-		call.Kwargs = $7
-		if len($4.Args) != 0 {
-			yylex.(*yyLex).SyntaxError("only named arguments may follow *expression")
-		}
-		call.Keywords = append(call.Keywords, $4.Keywords...)
-		$$ = call
-	}
-|	optional_arguments STARSTAR test optional_comma
-	{
-		call := $1
-		call.Kwargs = $3
-		$$ = call
-	}
-|	optional_arguments STARSTAR test ',' arguments optional_comma
-	{
-		// "f(**d, k=v)" - the ** unpacking comes before keyword arguments.
-		// The AST holds one Kwargs node, and the compiler emits the keywords
-		// first and then the ** dict, which is exactly how CPython merges
-		// them (a duplicate key raises TypeError at call time).
-		call := $1
-		call.Kwargs = $3
-		if len($5.Args) != 0 {
-			yylex.(*yyLex).SyntaxError("only named arguments may follow **expression")
-		}
-		call.Keywords = append(call.Keywords, $5.Keywords...)
-		$$ = call
 	}
 
 // The reason that keywords are test nodes instead of NAME is that using NAME
 // results in an ambiguity. ast.c makes sure it's a NAME.
-argument:
+argument_item:
 	namedexpr
 	{
-		$$ = &ast.Call{}
-		$$.Args = []ast.Expr{$1}
+		$$ = &argItem{expr: $1}
 	}
-|	test comp_for
+|	'*' test
 	{
-		$$ = &ast.Call{}
-		$$.Args = []ast.Expr{
-			&ast.GeneratorExp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elt: $1, Generators: $2},
-		}
+		$$ = &argItem{expr: &ast.Starred{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $2, Ctx: ast.Load}, star: true}
+	}
+|	STARSTAR test
+	{
+		// A "**mapping" argument is a Keyword with an empty name, which is
+		// how an unpacking that need not be last is told from "name=value".
+		$$ = &argItem{kw: &ast.Keyword{Pos: $<pos>$, Value: $2}, unpack: true}
 	}
 |	test '=' test  // Really [keyword '='] test
 	{
-		$$ = &ast.Call{}
 		test := $1
 		if name, ok := test.(*ast.Name); ok {
-			$$.Keywords = []*ast.Keyword{&ast.Keyword{Pos: name.Pos, Arg: name.Id, Value: $3}}
+			$$ = &argItem{kw: &ast.Keyword{Pos: name.Pos, Arg: name.Id, Value: $3}}
 		} else {
 			yylex.(*yyLex).SyntaxError("keyword can't be an expression")
+			$$ = nil
 		}
+	}
+|	test comp_for
+	{
+		$$ = &argItem{expr: &ast.GeneratorExp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elt: $1, Generators: $2}}
 	}
 
 comp_iter:

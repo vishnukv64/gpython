@@ -87,7 +87,7 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return 2
 	case vm.UNARY_POSITIVE, vm.UNARY_NEGATIVE, vm.UNARY_NOT, vm.UNARY_INVERT:
 		return 0
-	case vm.SET_ADD, vm.LIST_APPEND, vm.LIST_EXTEND, vm.DICT_UPDATE, vm.TUPLE_EXTEND:
+	case vm.SET_ADD, vm.LIST_APPEND, vm.LIST_EXTEND, vm.DICT_UPDATE, vm.TUPLE_EXTEND, vm.LIST_EXTEND_MAPPING:
 		return -1
 	case vm.MAP_ADD:
 		return -2
@@ -202,6 +202,9 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return -nArgs(oparg) - 1
 	case vm.CALL_FUNCTION_VAR_KW:
 		return -nArgs(oparg) - 2
+	case vm.CALL_FUNCTION_EX:
+		// Pops the callable and the two argument lists, pushes the result.
+		return -2
 	case vm.MAKE_FUNCTION:
 		return -1 - nArgs(oparg) - ((int(oparg) >> 16) & 0xffff)
 	case vm.MAKE_CLOSURE:

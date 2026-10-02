@@ -1492,6 +1492,32 @@ func (c *compiler) NameOp(name string, ctx ast.ExprContext) {
 
 // Call a function which is already on the stack with n arguments already on the stack
 func (c *compiler) callHelper(n int, Args []ast.Expr, Keywords []*ast.Keyword, Starargs ast.Expr, Kwargs ast.Expr) {
+	// An unpacking that is not the last argument - a Starred in Args, or a
+	// Keyword with an empty name for a "**mapping" - cannot be expressed with
+	// CALL_FUNCTION_VAR/KW, whose shape allows only a single trailing unpack.
+	// Those calls lower to CALL_FUNCTION_EX, which takes the callable and the
+	// two fully built argument lists.  A call the older grammar accepted never
+	// has either marker, so it keeps the bytecode below unchanged.
+	ex := false
+	for _, arg := range Args {
+		if _, ok := arg.(*ast.Starred); ok {
+			ex = true
+			break
+		}
+	}
+	if !ex {
+		for _, kw := range Keywords {
+			if kw.Arg == "" {
+				ex = true
+				break
+			}
+		}
+	}
+	if ex {
+		c.callHelperEx(n, Args, Keywords)
+		return
+	}
+
 	args := len(Args) + n
 	for i := range Args {
 		c.Expr(Args[i])
@@ -1528,6 +1554,63 @@ func (c *compiler) callHelper(n int, Args []ast.Expr, Keywords []*ast.Keyword, S
 		op = vm.CALL_FUNCTION_KW
 	}
 	c.OpArg(op, uint32(args+kwargs<<8))
+}
+
+// callHelperEx lowers a call with an unpacking in a non-final position to
+// CALL_FUNCTION_EX, the uniform form that CPython itself uses for every
+// call whose arguments are unpacked.
+//
+// The n arguments already on the stack are the call's first positional
+// arguments - the class body function and name when compiling a class - so
+// BUILD_LIST consumes them into the argument list that the remaining
+// arguments then grow, in source order.  The keyword arguments become a flat
+// [k1, v1, k2, v2, ...] list, which keeps "**mapping" merged in source order
+// and lets CALL_FUNCTION_EX raise a duplicate-key TypeError naming the callee.
+func (c *compiler) callHelperEx(n int, Args []ast.Expr, Keywords []*ast.Keyword) {
+	c.OpArg(vm.BUILD_LIST, uint32(n))
+	for _, arg := range Args {
+		if star, ok := arg.(*ast.Starred); ok {
+			c.Expr(star.Value)
+			c.OpArg(vm.LIST_EXTEND, 1)
+			continue
+		}
+		c.Expr(arg)
+		c.OpArg(vm.LIST_APPEND, 1)
+	}
+
+	duplicateDetector := make(map[ast.Identifier]struct{}, len(Keywords))
+	var duplicate *ast.Keyword
+	for i := range Keywords {
+		// An unpacking is not a keyword for duplicate detection: only an
+		// explicit "name=value" can be repeated in the source.
+		if Keywords[i].Arg == "" {
+			continue
+		}
+		if _, found := duplicateDetector[Keywords[i].Arg]; found {
+			if duplicate == nil {
+				duplicate = Keywords[i]
+			}
+		} else {
+			duplicateDetector[Keywords[i].Arg] = struct{}{}
+		}
+	}
+	if duplicate != nil {
+		c.panicSyntaxErrorf(duplicate, "keyword argument repeated")
+	}
+
+	c.OpArg(vm.BUILD_LIST, 0)
+	for _, kw := range Keywords {
+		if kw.Arg == "" {
+			c.Expr(kw.Value)
+			c.OpArg(vm.LIST_EXTEND_MAPPING, 1)
+			continue
+		}
+		c.LoadConst(py.String(kw.Arg))
+		c.OpArg(vm.LIST_APPEND, 1)
+		c.Expr(kw.Value)
+		c.OpArg(vm.LIST_APPEND, 1)
+	}
+	c.OpArg(vm.CALL_FUNCTION_EX, 0)
 }
 
 /*

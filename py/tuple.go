@@ -59,6 +59,20 @@ func (t Tuple) repr(start, end string) (Object, error) {
 		}
 		out.WriteString(str)
 	}
+	// A ONE-element tuple reprs with a trailing comma - "(1,)" - because that
+	// comma is the only thing distinguishing it from a parenthesised
+	// expression, and repr is what eval() reads back.  Without it, repr((1,))
+	// was "(1)", which is not a tuple at all: it round-tripped to an int, and
+	// it was wrong in every nested position too - inside a list, as a dict key,
+	// and inside another tuple.
+	//
+	// This helper is shared with the list repr, which passes "[" and "]" and
+	// where a single element takes NO comma - "[(1,)]" is a list holding a
+	// tuple, not a one-element list.  The comma belongs to the paren form, so
+	// that is what it keys on.
+	if len(t) == 1 && start == "(" {
+		out.WriteString(",")
+	}
 	out.WriteString(end)
 	return String(out.String()), nil
 }

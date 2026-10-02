@@ -2087,6 +2087,23 @@ func ObjectNew(t *Type, args Tuple, kwargs StringDict) (Object, error) {
 
 // FIXME this should be the default?
 func (ty *Type) M__eq__(other Object) (Object, error) {
+	// An INSTANCE looks its __eq__ up through its class, so a user's method
+	// must be the one that decides.  "Name == \"\"" is how this codebase tells
+	// an instance from a class - the same test M__str__ uses a few lines down,
+	// and for the same reason.
+	//
+	// Without it this method's identity comparison swallowed the operator:
+	// "class K: def __eq__(self, o): return True" gave K() == K() False, and
+	// every list, tuple and set holding such objects inherited the lie,
+	// because Eq consulted the interface this satisfies before ever looking
+	// for a Python method.
+	if ty.Name == "" {
+		if res, found, err := ty.CallMethod("__eq__", Tuple{ty, other}, NewStringDict()); err != nil {
+			return nil, err
+		} else if found && res != NotImplemented {
+			return res, nil
+		}
+	}
 	if otherTy, ok := other.(*Type); ok && ty == otherTy {
 		return True, nil
 	}
@@ -2095,6 +2112,14 @@ func (ty *Type) M__eq__(other Object) (Object, error) {
 
 // FIXME this should be the default?
 func (ty *Type) M__ne__(other Object) (Object, error) {
+	// As for M__eq__ above.
+	if ty.Name == "" {
+		if res, found, err := ty.CallMethod("__ne__", Tuple{ty, other}, NewStringDict()); err != nil {
+			return nil, err
+		} else if found && res != NotImplemented {
+			return res, nil
+		}
+	}
 	if otherTy, ok := other.(*Type); ok && ty == otherTy {
 		return False, nil
 	}
