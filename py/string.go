@@ -236,6 +236,106 @@ replaced.`)
 	StringType.Dict["join"] = MustNewMethod("join", func(self Object, args Tuple) (Object, error) {
 		return self.(String).Join(args)
 	}, 0, "join(iterable) -> return a string which is the concatenation of the strings in iterable")
+
+	// isidentifier() says whether the string is usable as an identifier, which
+	// is what a library checks before taking a name from its caller - click
+	// does exactly that when it parses a command's declarations.
+	StringType.Dict["isidentifier"] = MustNewMethod("isidentifier", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		s := string(self.(String))
+		if s == "" {
+			return False, nil
+		}
+		for i, r := range s {
+			if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+				// A digit is allowed anywhere but the first character.
+				if i == 0 && unicode.IsDigit(r) {
+					return False, nil
+				}
+				continue
+			}
+			return False, nil
+		}
+		return True, nil
+	}, 0, `isidentifier() -> bool
+
+Return True if the string is a valid Python identifier, False otherwise.`)
+
+	// The str.is*() family.  Each answers for the WHOLE string and needs at
+	// least one character, so an empty string is False for every one of them.
+	// These are what a library reaches for when it takes a name or a token
+	// from its caller; click checks both when it parses declarations.
+	isPred := func(name string, doc string, pred func(rune) bool) {
+		StringType.Dict[name] = MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+			s := string(self.(String))
+			if s == "" {
+				return False, nil
+			}
+			for _, r := range s {
+				if !pred(r) {
+					return False, nil
+				}
+			}
+			return True, nil
+		}, 0, doc)
+	}
+	isPred("isalpha", "isalpha() -> bool\n\nReturn True if all characters are alphabetic and there is at least one.", unicode.IsLetter)
+	isPred("isdigit", "isdigit() -> bool\n\nReturn True if all characters are digits and there is at least one.", func(r rune) bool { return r >= '0' && r <= '9' })
+	isPred("isnumeric", "isnumeric() -> bool\n\nReturn True if all characters are numeric and there is at least one.", func(r rune) bool { return unicode.IsNumber(r) })
+	isPred("isdecimal", "isdecimal() -> bool\n\nReturn True if all characters are decimal digits and there is at least one.", func(r rune) bool { return unicode.IsDigit(r) })
+	isPred("isalnum", "isalnum() -> bool\n\nReturn True if all characters are alphanumeric and there is at least one.", func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsNumber(r) })
+	isPred("isspace", "isspace() -> bool\n\nReturn True if all characters are whitespace and there is at least one.", unicode.IsSpace)
+	isPred("isprintable", "isprintable() -> bool\n\nReturn True if all characters are printable and there is at least one.", func(r rune) bool { return unicode.IsPrint(r) || r == ' ' })
+	isPred("isascii", "isascii() -> bool\n\nReturn True if all characters are ASCII.", func(r rune) bool { return r < 128 })
+
+	// The case tests require at least one cased character, so "123" is neither
+	// upper nor lower - the same rule CPython applies.
+	casePred := func(name string, doc string, upper bool) {
+		StringType.Dict[name] = MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+			s := string(self.(String))
+			cased := false
+			for _, r := range s {
+				if unicode.IsUpper(r) {
+					if !upper {
+						return False, nil
+					}
+					cased = true
+				} else if unicode.IsLower(r) {
+					if upper {
+						return False, nil
+					}
+					cased = true
+				}
+			}
+			return Bool(cased), nil
+		}, 0, doc)
+	}
+	casePred("isupper", "isupper() -> bool\n\nReturn True if all cased characters are uppercase and there is at least one.", true)
+	casePred("islower", "islower() -> bool\n\nReturn True if all cased characters are lowercase and there is at least one.", false)
+
+	// istitle() wants each run of letters to start uppercase and every other
+	// letter lowercase, with at least one cased character overall.
+	StringType.Dict["istitle"] = MustNewMethod("istitle", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		s := string(self.(String))
+		cased := false
+		prevCased := false
+		for _, r := range s {
+			switch {
+			case unicode.IsUpper(r):
+				if prevCased {
+					return False, nil
+				}
+				cased, prevCased = true, true
+			case unicode.IsLower(r):
+				if !prevCased {
+					return False, nil
+				}
+				cased, prevCased = true, true
+			default:
+				prevCased = false
+			}
+		}
+		return Bool(cased), nil
+	}, 0, "istitle() -> bool\n\nReturn True if the string is titlecased and there is at least one cased character.")
 }
 
 // Type of this object

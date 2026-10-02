@@ -80,7 +80,11 @@ func init() {
 		"Ellipsis": py.Ellipsis,
 		"False":    py.False,
 		"True":     py.True,
-		"bool":     py.BoolType,
+		// __debug__ is False under -O and True otherwise; there is no -O here,
+		// so it is always True.  It is a real builtin, not a compiler flag, so
+		// that "assert" and ordinary code can read it.
+		"__debug__": py.True,
+		"bool":      py.BoolType,
 		// "memoryview":     py.MemoryViewType,
 		// "bytearray":      py.ByteArrayType,
 		"bytes":       py.BytesType,

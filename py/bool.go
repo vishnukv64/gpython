@@ -115,4 +115,23 @@ func init() {
 	// bool is a subclass of int in Python: issubclass(bool, int) is True and
 	// True == 1, so bool must sit under int in the MRO.
 	BoolType.Base = IntType
+
+	// bool(x) asks its argument for the truth, the same rule "if x" uses.
+	// Without this the type had no constructor at all and "bool(x)" failed
+	// with "cannot create 'bool' instances".  There are only ever two bool
+	// objects, so NewBool always returns one of them.
+	BoolType.New = func(t *Type, args Tuple, kwargs StringDict) (Object, error) {
+		var x Object = False
+		if len(args) > 0 {
+			x = args[0]
+		}
+		if len(args) > 1 {
+			return nil, ExceptionNewf(TypeError, "bool expected at most 1 argument, got %d", len(args))
+		}
+		b, err := MakeBool(x)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
+	}
 }
