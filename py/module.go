@@ -37,12 +37,16 @@ type ModuleInfo struct {
 // By convention, .Code is executed when a module instance is initialized. If nil,
 // then .CodeBuf or .CodeSrc will be auto-compiled to set .Code.
 type ModuleImpl struct {
-	Info            ModuleInfo
-	Methods         []*Method     // Module-bound global method functions
-	Globals         StringDict    // Module-bound global variables
-	CodeSrc         string        // Module code body (source code to be compiled)
-	CodeBuf         []byte        // Module code body (serialized py.Code object)
-	Code            *Code         // Module code body
+	Info    ModuleInfo
+	Methods []*Method  // Module-bound global method functions
+	Globals StringDict // Module-bound global variables
+	CodeSrc string     // Module code body (source code to be compiled)
+	CodeBuf []byte     // Module code body (serialized py.Code object)
+	Code    *Code      // Module code body
+	// PreSetGlobals, when set, is given the module's globals BEFORE the body
+	// runs, so a module can be given __spec__ (or anything else) in time for
+	// its first statement to use it.
+	PreSetGlobals   func(StringDict)
 	OnContextClosed func(*Module) // Callback for when a py.Context is closing to release resources
 }
 
@@ -217,6 +221,10 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 	if len(impl.Info.FileDesc) > 0 {
 		m.Globals.Set("__file__", String(impl.Info.FileDesc))
 	}
+	if impl.PreSetGlobals != nil {
+		impl.PreSetGlobals(m.Globals)
+	}
+
 	// Register the module
 	store.modules[name] = m
 

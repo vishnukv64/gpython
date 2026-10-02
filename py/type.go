@@ -420,6 +420,12 @@ func NewType(Name string, Doc string) *Type {
 		Name:       Name,
 		Doc:        Doc,
 		Dict:       NewStringDict(),
+		// A type created this way models a PYTHON-level class, and in CPython
+		// a python-level class accepts subclasses.  Without the flag,
+		// "class MyLogger(logging.Logger)" raised "type 'logging.Logger' is
+		// not an acceptable base type" - which is how pip._internal failed to
+		// import, since it derives a Logger to add its own levels.
+		Flags: TPFLAGS_BASETYPE,
 	}
 	TypeDelayReady(t)
 	return t

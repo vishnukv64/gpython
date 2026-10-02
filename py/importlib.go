@@ -135,6 +135,11 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 	// file-loaded module, and code reads it - importlib.resources uses it to
 	// find a package's data files.
 	mod.Globals.Set("__file__", String(path))
+	// __spec__ describes how the module was found.  CPython sets it on every
+	// imported module and code reads it: pip's __main__.py tests
+	// "__spec__.parent == ''" on its first statement, and without the
+	// attribute "python -m pip" died with "name '__spec__' is not defined".
+	mod.Globals.Set("__spec__", NewModuleSpec(name, String(path), isPkg))
 	if isPkg {
 		mod.Globals.Set("__path__", NewListFromItems([]Object{String(filepath.Dir(path))}))
 	}

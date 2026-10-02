@@ -139,7 +139,9 @@ func runModule(args []string) error {
 	}
 
 	if !isPkg {
-		_, err = py.RunFile(ctx, path, py.CompileOpts{}, "__main__")
+		// RunFileAs, so __main__ gets a __spec__ naming the module - pip's
+		// __main__.py reads it on its first statement.
+		_, err = py.RunFileAs(ctx, path, py.CompileOpts{}, "__main__")
 		return err
 	}
 
@@ -153,7 +155,9 @@ func runModule(args []string) error {
 	if err != nil {
 		return py.ExceptionNewf(py.ImportError, "No module named %q", mainName)
 	}
-	_, err = py.RunFile(ctx, mainPath, py.CompileOpts{}, "__main__")
+	// The spec names the PACKAGE, not __main__, which is what CPython does and
+	// what pip tests for.
+	_, err = py.RunFileAs(ctx, mainPath, py.CompileOpts{}, name)
 	return err
 }
 

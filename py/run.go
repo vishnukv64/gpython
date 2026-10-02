@@ -134,6 +134,22 @@ func RunFile(ctx Context, pathname string, opts CompileOpts, inModule interface{
 	return RunCode(ctx, out.Code, out.FileDesc, inModule)
 }
 
+// RunFileAs runs a file as a module of the given name, giving it __spec__ the
+// way an import would.
+//
+// "python -m pkg" executes pkg/__main__.py as __main__, and CPython gives that
+// module a spec naming the PACKAGE - which is how pip's __main__.py decides
+// whether it is running from a wheel.  RunFile alone leaves __spec__ unset.
+func RunFileAs(ctx Context, pathname string, opts CompileOpts, moduleName string) (*Module, error) {
+	mod, err := RunFile(ctx, pathname, opts, moduleName)
+	if err != nil {
+		return nil, err
+	}
+	mod.Globals.Set("__spec__", NewModuleSpec(moduleName, String(pathname), false))
+	mod.Globals.Set("__file__", String(pathname))
+	return mod, nil
+}
+
 // RunSrc compiles the given python buffer and executes it within the given module and returns the Module to indicate success.
 //
 // See RunCode() for description of inModule.
@@ -185,6 +201,12 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 				FileDesc: codeDesc,
 			},
 			Code: code,
+			// __spec__ has to be in place BEFORE the body runs: pip's
+			// __main__.py tests it on its first statement, so setting it
+			// afterwards is too late.
+			PreSetGlobals: func(g StringDict) {
+				g.Set("__spec__", NewModuleSpec(moduleName, String(codeDesc), false))
+			},
 		}
 		module, err = ctx.ModuleInit(&moduleImpl)
 	}

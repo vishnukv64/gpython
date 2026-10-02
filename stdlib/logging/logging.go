@@ -172,6 +172,25 @@ func (l *Logger) M__repr__() (py.Object, error) {
 	return py.String(fmt.Sprintf("<Logger %s (%s)>", l.name, effectiveLevelName(l.level))), nil
 }
 
+func addLevelName(self py.Object, args py.Tuple) (py.Object, error) {
+	var level, name py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "addLevelName", 2, 2, &level, &name); err != nil {
+		return nil, err
+	}
+	n, err := py.MakeGoInt(level)
+	if err != nil {
+		return nil, err
+	}
+	s, err := py.StrAsString(name)
+	if err != nil {
+		return nil, err
+	}
+	// A user level is recorded in the same map getLevelName reads, which is
+	// what pip does to name its own levels.
+	levelNames[n] = s
+	return py.None, nil
+}
+
 func effectiveLevelName(level int) string {
 	if name, ok := levelNames[level]; ok {
 		return name
@@ -186,7 +205,41 @@ var (
 	gLoggers = map[string]*Logger{}
 )
 
+// gLoggerClass is the class getLogger instantiates, settable through
+// setLoggerClass.
+//
+// pip._internal.utils._log calls logging.setLoggerClass with its own Logger
+// subclass, and without the function the import died at
+// "'module' has no attribute 'setLoggerClass'".
+var gLoggerClass *py.Type
+
 func newLogger(name string, level int) *Logger {
+	return &Logger{name: name, level: level, propagate: true}
+}
+
+// newLoggerOf builds a logger, honouring a class installed by
+// setLoggerClass.  A user subclass gets its own type; otherwise the builtin
+// Logger is used.
+func newLoggerOf(name string, level int) *Logger {
+	if gLoggerClass != nil && gLoggerClass != LoggerType {
+		// Build an instance of the user's class, then carry the name and
+		// level onto it.  The class is a *Type standing in for the instance,
+		// which is how this interpreter represents a python-level instance.
+		inst, err := py.Call(gLoggerClass, py.Tuple{py.String(name)}, py.NewStringDict())
+		if err == nil {
+			if t, ok := inst.(*py.Type); ok {
+				if l, ok := t.Dict.Get("_gpython_logger"); ok {
+					if lg, ok := l.(*Logger); ok {
+						lg.level = level
+						return lg
+					}
+				}
+				lg := &Logger{name: name, level: level, propagate: true}
+				t.Dict.Set("_gpython_logger", lg)
+				return lg
+			}
+		}
+	}
 	return &Logger{name: name, level: level, propagate: true}
 }
 
@@ -1015,6 +1068,13 @@ func init() {
 		},
 		Methods: []*py.Method{
 			py.MustNewMethod("getLogger", getLogger, 0, getLogger_doc),
+			py.MustNewMethod("setLoggerClass", setLoggerClass, 0, `setLoggerClass(klass)
+
+Set the class to be used when instantiating a logger.  The class should
+define __init__ such that it requires only a name argument.`),
+			py.MustNewMethod("getLoggerClass", getLoggerClass, 0, "Return the class to be used when instantiating a logger."),
+			py.MustNewMethod("addLevelName", addLevelName, 0, "Associate levelName with level."),
+			py.MustNewMethod("getLevelName", getLevelName, 0, "Return the textual or numeric representation of logging level 'level'."),
 			py.MustNewMethod("basicConfig", basicConfig, 0, basicConfig_doc),
 			py.MustNewMethod("debug", moduleLevel("debug", DEBUG), 0, "Log 'msg % args' with severity 'DEBUG'."),
 			py.MustNewMethod("info", moduleLevel("info", INFO), 0, "Log 'msg % args' with severity 'INFO'."),
@@ -1106,4 +1166,29 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+const setLoggerClass_doc = `setLoggerClass(klass)
+
+Set the class to be used when instantiating a logger.  The class should
+define __init__ such that it requires only a name argument.`
+
+func setLoggerClass(self py.Object, args py.Tuple) (py.Object, error) {
+	var klass py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "setLoggerClass", 1, 1, &klass); err != nil {
+		return nil, err
+	}
+	t, ok := klass.(*py.Type)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "setLoggerClass() argument must be a class")
+	}
+	gLoggerClass = t
+	return py.None, nil
+}
+
+func getLoggerClass(self py.Object, args py.Tuple) (py.Object, error) {
+	if gLoggerClass != nil {
+		return gLoggerClass, nil
+	}
+	return LoggerType, nil
 }
