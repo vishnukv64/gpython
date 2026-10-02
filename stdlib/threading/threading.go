@@ -177,11 +177,21 @@ func init() {
 	}, 0, "Set the thread-local attribute.")
 
 	lockMethods := func(t *py.Type, isReentrant bool) {
-		t.Dict["acquire"] = py.MustNewMethod("acquire", func(self py.Object, args py.Tuple) (py.Object, error) {
+		t.Dict["acquire"] = py.MustNewMethod("acquire", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 			blocking := py.Object(py.True)
 			timeout := py.Object(py.None)
+			// acquire is normally called as acquire(False) or
+			// acquire(blocking=False), and taking no keyword arguments made
+			// the second a TypeError - the standard non-blocking idiom.
+			// UnpackTuple rejects keywords outright, so they are read here.
 			if err := py.UnpackTuple(args, nil, "acquire", 0, 2, &blocking, &timeout); err != nil {
 				return nil, err
+			}
+			if v, ok := kwargs["blocking"]; ok {
+				blocking = v
+			}
+			if v, ok := kwargs["timeout"]; ok {
+				timeout = v
 			}
 			switch v := self.(type) {
 			case *Lock:
