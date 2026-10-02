@@ -15,6 +15,7 @@ package pprint
 import (
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -248,7 +249,8 @@ func (p *printer) safeRepr(object py.Object, context map[uintptr]bool, maxlevels
 // recursive is CPython's _recursion marker for a container already being
 // rendered.
 func recursion(object py.Object) string {
-	return "<Recursion on " + object.Type().Name + ">"
+	// CPython includes the identity: "<Recursion on list with id=4426631808>".
+	return "<Recursion on " + object.Type().Name + " with id=" + strconv.FormatUint(uint64(objID(object)), 10) + ">"
 }
 
 // objID is a stable identity for cycle detection.
@@ -391,7 +393,10 @@ func (p *printer) formatObject(object py.Object, b *strings.Builder, indent, all
 		p.readable = false
 		return nil
 	}
-	rep, readable, recursive, err := p.safeRepr(object, map[uintptr]bool{}, p.depthOrZero(level), level)
+	// The context is threaded through, not replaced with a fresh map: the
+	// one-line rendering has to know which containers are already on the
+	// stack or it recurses forever on a self-referential one.
+	rep, readable, recursive, err := p.safeRepr(object, context, p.depthOrZero(level), level)
 	if err != nil {
 		return err
 	}
@@ -408,6 +413,15 @@ func (p *printer) formatObject(object py.Object, b *strings.Builder, indent, all
 		return nil
 	}
 	// The one-line form does not fit: dispatch on the type.
+	//
+	// The object is marked in context for the duration of the dispatch, which
+	// is what CPython's _format does.  Checking context[objid] without ever
+	// SETTING it meant a self-referential container that does not fit on one
+	// line recursed into itself forever: "pformat(r, width=20)" on "r = [];
+	// r.append(r)" never returned, with no output and no exception.
+	context[objid] = true
+	defer delete(context, objid)
+
 	switch obj := object.(type) {
 	case *py.List:
 		b.WriteByte('[')
