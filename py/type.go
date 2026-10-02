@@ -470,6 +470,26 @@ func (metatype *Type) CalculateMetaclass(bases Tuple) (*Type, error) {
 			winner = tmptype
 			continue
 		}
+		// A base whose metatype is NOT a metaclass imposes no constraint.
+		//
+		// This interpreter does not model metaclasses faithfully: a builtin
+		// type's metatype is ObjectType, and a NewType subclass carries its
+		// BASE as its metatype, so Exception's is BaseException.  Neither is a
+		// subtype of type, so treating them as competing metaclasses rejected
+		// every ordinary class statement that inherited a builtin - "class
+		// MyErr(Exception): pass" failed with "metaclass conflict: the
+		// metaclass of a derived class must be a (non-strict) subclass of the
+		// metaclasses of all its bases".
+		//
+		// A type with no real metaclass is just a class; only a genuine
+		// metaclass (a subtype of type) can win or conflict.
+		if !tmptype.IsSubtype(TypeType) {
+			continue
+		}
+		if !winner.IsSubtype(TypeType) {
+			winner = tmptype
+			continue
+		}
 		// else:
 		return nil, ExceptionNewf(TypeError, "metaclass conflict: the metaclass of a derived class must be a (non-strict) subclass of the metaclasses of all its bases")
 	}
@@ -1279,6 +1299,24 @@ func (t *Type) Ready() error {
 	// Inherit special flags from dominant base
 	if t.Base != nil {
 		t.inherit_special(t.Base)
+	}
+
+	// A class that inherits from an exception is itself an exception, and the
+	// except clause and raise both check exactly this flag.
+	//
+	// inherit_special above does the CPython job for a NewType subclass of an
+	// exception, but a class built by a "class MyErr(Exception)" statement has
+	// object as its dominant base, so it never saw the exception flag: raise
+	// said "exceptions must derive from BaseException" and isinstance said
+	// False.  Walking the declared bases covers that case, and runs here where
+	// BaseException is certain to exist.
+	if t.Flags&TPFLAGS_BASE_EXC_SUBCLASS == 0 {
+		for _, b := range t.Bases {
+			if bt, ok := b.(*Type); ok && bt.IsSubtype(BaseException) {
+				t.Flags |= TPFLAGS_BASE_EXC_SUBCLASS
+				break
+			}
+		}
 	}
 
 	// Initialize tp_dict properly

@@ -367,6 +367,12 @@ func (r *RLock) release() (py.Object, error) {
 func (l *Local) M__getattribute__(name string) (py.Object, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	// __dict__ is the thread's namespace itself, not a missing attribute.
+	// Intercepting everything made it an AttributeError, and click reads
+	// "_local.__dict__.setdefault(...)" while pushing its context.
+	if name == "__dict__" {
+		return l.data, nil
+	}
 	if v, ok := l.data.Get(name); ok {
 		return v, nil
 	}

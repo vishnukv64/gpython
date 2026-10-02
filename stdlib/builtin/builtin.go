@@ -470,6 +470,9 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	var mkw, ns py.StringDict
 	var meta, winner *py.Type
 	var isclass bool
+	// explicitMeta records whether the class statement named a metaclass.
+	// Resolution of a more derived metaclass only makes sense then.
+	var explicitMeta bool
 	var err error
 
 	if len(args) < 2 {
@@ -492,6 +495,7 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		mkw = kwargs.Copy()               // Don't modify kwds passed in!
 		meta := mkw.GetOrNil("metaclass") // _PyDict_GetItemId(mkw, &PyId_metaclass)
 		if meta != nil {
+			explicitMeta = true
 			mkw.Del("metaclass")
 			// metaclass is explicitly given, check if it's indeed a class
 			_, isclass = meta.(*py.Type)
@@ -503,7 +507,22 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 			meta = py.TypeType
 		} else {
 			// else get the type of the first base
+			//
+			// That metatype is only the metaclass when it can actually BUILD a
+			// class.  In this interpreter a builtin's metatype is ObjectType,
+			// and a NewType subclass such as Exception carries its BASE as its
+			// metatype, so neither is a metaclass: asking one to construct gave
+			// an INSTANCE where a class was meant, and
+			// "class MyErr(Exception): pass" produced something MyErr() could
+			// not call ("object() takes no parameters") and issubclass()
+			// rejected with "arg 1 must be a class".
+			//
+			// A metaclass is a subtype of type; anything else means no
+			// metaclass was really specified, and type is the default.
 			meta = bases[0].Type()
+			if meta == nil || !meta.IsSubtype(py.TypeType) {
+				meta = py.TypeType
+			}
 		}
 		isclass = true // meta is really a class
 	}
@@ -511,12 +530,22 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	if isclass {
 		// meta is really a class, so check for a more derived
 		// metaclass, or possible metaclass conflicts:
-		winner, err = meta.CalculateMetaclass(bases)
-		if err != nil {
-			return nil, err
-		}
-		if winner != meta {
-			meta = winner
+		//
+		// Only when a metaclass was actually ASKED for.  With none, meta is
+		// TypeType or the first base's metatype, and CalculateMetaclass would
+		// re-derive the latter from each base's Type() and report a conflict -
+		// which is what stopped "class MyErr(Exception)" with "the metaclass
+		// of a derived class must be a (non-strict) subclass of the
+		// metaclasses of all its bases".  There are no real metaclasses here,
+		// so a class statement with no metaclass= is simply built by type.
+		if !explicitMeta {
+			winner, err = meta.CalculateMetaclass(bases)
+			if err != nil {
+				return nil, err
+			}
+			if winner != meta {
+				meta = winner
+			}
 		}
 	}
 	// else: meta is not a class, so we cannot do the metaclass
@@ -1063,10 +1092,16 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 		}
 		return false, nil
 	default:
-		if classOrTuple.Type().ObjectType != py.TypeType {
+		// arg 2 must be a CLASS.  Testing the metatype was a proxy for that, and
+		// it is the wrong test: a builtin type's metatype is ObjectType whatever
+		// the type is, and a list INSTANCE has ListType whose metatype is now
+		// also TypeType, so "isinstance(1, [1, 2])" passed the guard and then
+		// panicked on the assertion below it.  Asking whether the argument
+		// really is a type is both simpler and exactly what CPython requires.
+		class, ok := classOrTuple.(*py.Type)
+		if !ok {
 			return false, py.ExceptionNewf(py.TypeError, "isinstance() arg 2 must be a type or tuple of types")
 		}
-		class := classOrTuple.(*py.Type)
 
 		// Walk the base chain: isinstance must accept a subclass, which is
 		// what makes the abstract base classes usable as isinstance targets.

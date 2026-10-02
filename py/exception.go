@@ -229,9 +229,25 @@ func MakeException(r interface{}) *Exception {
 	case *Type:
 		if x.Flags&TPFLAGS_BASE_EXC_SUBCLASS != 0 {
 			return exceptionNew(x, nil)
-		} else {
-			return ExceptionNewf(TypeError, "exceptions must derive from BaseException")
 		}
+		// An INSTANCE of a python class is represented as a *Type with an
+		// empty Name, so "raise MyErr('x')" arrives here rather than as an
+		// *Exception.  Its class is the one that must derive from
+		// BaseException, and it already holds the arguments.
+		if x.Name == "" {
+			if cls := x.Type(); cls != nil && cls.Flags&TPFLAGS_BASE_EXC_SUBCLASS != 0 {
+				// Carry the arguments the instance was built with, so
+				// str(e) and e.args behave as they do for a builtin.
+				args := Tuple{}
+				if v, ok := x.Dict.Get("args"); ok {
+					if t, ok := v.(Tuple); ok {
+						args = t
+					}
+				}
+				return exceptionNew(cls, args)
+			}
+		}
+		return ExceptionNewf(TypeError, "exceptions must derive from BaseException")
 	case error:
 		return exceptionNew(SystemError, Tuple{String(x.Error())})
 	case string:
