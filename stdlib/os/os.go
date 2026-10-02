@@ -63,35 +63,35 @@ func init() {
 		py.MustNewMethod("system", system, 0, "Run shell commands, prints stdout directly to default"),
 		py.MustNewMethod("unsetenv", unsetenv, 0, "Unset (delete) the environment variable named key."),
 	}
-	globals := py.StringDict{
-		"error":   py.OSError,
-		"environ": Environ,
-		"sep":     osSep,
-		"name":    osName,
-		"curdir":  py.String("."),
-		"pardir":  py.String(".."),
-		"extsep":  py.String("."),
-		"altsep":  osAltsep,
-		"pathsep": osPathsep,
-		"linesep": osLinesep,
-		"defpath": osDefpath,
-		"devnull": osDevnull,
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "error", Value: py.OSError},
+		py.DictEntry{Key: "environ", Value: Environ},
+		py.DictEntry{Key: "sep", Value: osSep},
+		py.DictEntry{Key: "name", Value: osName},
+		py.DictEntry{Key: "curdir", Value: py.String(".")},
+		py.DictEntry{Key: "pardir", Value: py.String("..")},
+		py.DictEntry{Key: "extsep", Value: py.String(".")},
+		py.DictEntry{Key: "altsep", Value: osAltsep},
+		py.DictEntry{Key: "pathsep", Value: osPathsep},
+		py.DictEntry{Key: "linesep", Value: osLinesep},
+		py.DictEntry{Key: "defpath", Value: osDefpath},
+		py.DictEntry{Key: "devnull", Value: osDevnull},
+	)
 	// os.path is the posixpath module object, so os.path.join and friends
 	// reach the functions registered there, and "os.path is posixpath" holds.
-	globals["path"] = PathModule()
+	globals.Set("path", PathModule())
 	// The separator constants, which code joins paths with.
-	globals["pathsep"] = osPathsep
-	globals["linesep"] = osLinesep
-	globals["altsep"] = osAltsep
+	globals.Set("pathsep", osPathsep)
+	globals.Set("linesep", osLinesep)
+	globals.Set("altsep", osAltsep)
 	// os.PathLike: the protocol a path-like object implements.  It needs to
 	// be a class, since "os.PathLike[str]" appears in annotations and real
 	// code tests for it, and it must accept a subscription.
 	pathLikeType := py.NewType("os.PathLike", "Abstract base class for objects representing a file system path.")
-	pathLikeType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	pathLikeType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters.")
-	globals["PathLike"] = pathLikeType
+	}, 0, "Return the class, ignoring the subscription parameters."))
+	globals.Set("PathLike", pathLikeType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

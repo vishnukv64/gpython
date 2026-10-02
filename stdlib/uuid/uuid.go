@@ -49,13 +49,13 @@ func uuidNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 	version := py.Object(py.None)
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|OOO", []string{"hex", "bytes", "version"}, &hexArg, &bytesArg, &version); err != nil {
 		// The int form is also accepted: UUID(int=...).
-		if v, ok := kwargs["int"]; ok {
+		if v, ok := kwargs.Get("int"); ok {
 			intArg = v
 		} else {
 			return nil, err
 		}
 	}
-	if v, ok := kwargs["int"]; ok {
+	if v, ok := kwargs.Get("int"); ok {
 		intArg = v
 	}
 
@@ -132,18 +132,18 @@ func bytesToInt(b [16]byte) int64 {
 }
 
 func init() {
-	UUIDType.Dict["hex"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	UUIDType.Dict.Set("hex", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String(hex.EncodeToString(self.(*UUID).bytes[:])), nil
-	}}
-	UUIDType.Dict["int"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("int", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(bytesToInt(self.(*UUID).bytes)), nil
-	}}
-	UUIDType.Dict["bytes"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("bytes", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		out := make([]byte, 16)
 		copy(out, self.(*UUID).bytes[:])
 		return py.Bytes(out), nil
-	}}
-	UUIDType.Dict["bytes_le"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("bytes_le", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		u := self.(*UUID)
 		out := make([]byte, 16)
 		// The first three fields are little-endian, the rest are as they are.
@@ -152,11 +152,11 @@ func init() {
 		copy(out[6:8], reverse(u.bytes[6:8]))
 		copy(out[8:], u.bytes[8:])
 		return py.Bytes(out), nil
-	}}
-	UUIDType.Dict["version"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("version", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*UUID).bytes[6] >> 4), nil
-	}}
-	UUIDType.Dict["variant"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("variant", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		// The variant is in the most significant bits of byte 8.
 		b := self.(*UUID).bytes[8]
 		var v int
@@ -171,11 +171,11 @@ func init() {
 			v = RESERVED_FUTURE
 		}
 		return py.Int(v), nil
-	}}
-	UUIDType.Dict["urn"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("urn", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String("urn:uuid:" + self.(*UUID).String()), nil
-	}}
-	UUIDType.Dict["time"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("time", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		u := self.(*UUID)
 		if u.bytes[6]>>4 != 1 {
 			return py.None, nil
@@ -189,29 +189,29 @@ func init() {
 		version := int64(u.bytes[6] >> 4)
 		_ = version
 		return py.Int(t), nil
-	}}
-	UUIDType.Dict["__str__"] = py.MustNewMethod("__str__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}})
+	UUIDType.Dict.Set("__str__", py.MustNewMethod("__str__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.String(self.(*UUID).String()), nil
-	}, 0, "Return str(self).")
-	UUIDType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return str(self)."))
+	UUIDType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.String("UUID('" + self.(*UUID).String() + "')"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
-	globals := py.StringDict{
-		"UUID":               UUIDType,
-		"uuid1":              py.MustNewMethod("uuid1", uuid1, 0, "Generate a UUID from a host ID, sequence number, and the current time."),
-		"uuid3":              py.MustNewMethod("uuid3", uuid3, 0, "Generate a UUID from the MD5 hash of a namespace UUID and a name."),
-		"uuid4":              py.MustNewMethod("uuid4", uuid4, 0, "Generate a random UUID."),
-		"uuid5":              py.MustNewMethod("uuid5", uuid5, 0, "Generate a UUID from the SHA-1 hash of a namespace UUID and a name."),
-		"NAMESPACE_DNS":      &UUID{bytes: namespaceDNS},
-		"NAMESPACE_URL":      &UUID{bytes: namespaceURL},
-		"NAMESPACE_OID":      &UUID{bytes: namespaceOID},
-		"NAMESPACE_X500":     &UUID{bytes: namespaceX500},
-		"RESERVED_NCS":       py.Int(RESERVED_NCS),
-		"RFC_4122":           py.Int(RFC_4122),
-		"RESERVED_MICROSOFT": py.Int(RESERVED_MICROSOFT),
-		"RESERVED_FUTURE":    py.Int(RESERVED_FUTURE),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "UUID", Value: UUIDType},
+		py.DictEntry{Key: "uuid1", Value: py.MustNewMethod("uuid1", uuid1, 0, "Generate a UUID from a host ID, sequence number, and the current time.")},
+		py.DictEntry{Key: "uuid3", Value: py.MustNewMethod("uuid3", uuid3, 0, "Generate a UUID from the MD5 hash of a namespace UUID and a name.")},
+		py.DictEntry{Key: "uuid4", Value: py.MustNewMethod("uuid4", uuid4, 0, "Generate a random UUID.")},
+		py.DictEntry{Key: "uuid5", Value: py.MustNewMethod("uuid5", uuid5, 0, "Generate a UUID from the SHA-1 hash of a namespace UUID and a name.")},
+		py.DictEntry{Key: "NAMESPACE_DNS", Value: &UUID{bytes: namespaceDNS}},
+		py.DictEntry{Key: "NAMESPACE_URL", Value: &UUID{bytes: namespaceURL}},
+		py.DictEntry{Key: "NAMESPACE_OID", Value: &UUID{bytes: namespaceOID}},
+		py.DictEntry{Key: "NAMESPACE_X500", Value: &UUID{bytes: namespaceX500}},
+		py.DictEntry{Key: "RESERVED_NCS", Value: py.Int(RESERVED_NCS)},
+		py.DictEntry{Key: "RFC_4122", Value: py.Int(RFC_4122)},
+		py.DictEntry{Key: "RESERVED_MICROSOFT", Value: py.Int(RESERVED_MICROSOFT)},
+		py.DictEntry{Key: "RESERVED_FUTURE", Value: py.Int(RESERVED_FUTURE)},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

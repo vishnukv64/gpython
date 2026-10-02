@@ -86,38 +86,38 @@ var MatchType = py.NewTypeX("re.Match", "The result of a successful match.", nil
 func (m *Match) Type() *py.Type { return MatchType }
 
 func init() {
-	globals := py.StringDict{
-		"error":        ErrorType,
-		"PatternError": ErrorType,
-		"compile":      py.MustNewMethod("compile", compileFn, 0, "Compile a regular expression pattern, returning a Pattern object."),
-		"match":        py.MustNewMethod("match", matchFn, 0, "Try to apply the pattern at the start of the string."),
-		"search":       py.MustNewMethod("search", searchFn, 0, "Scan through a string, looking for a match."),
-		"fullmatch":    py.MustNewMethod("fullmatch", fullMatchFn, 0, "Try to apply the pattern to all of the string."),
-		"findall":      py.MustNewMethod("findall", findAllFn, 0, "Return a list of all non-overlapping matches."),
-		"finditer":     py.MustNewMethod("finditer", findIterFn, 0, "Return an iterator over all non-overlapping matches."),
-		"split":        py.MustNewMethod("split", splitFn, 0, "Split the source string by the occurrences of the pattern."),
-		"sub":          py.MustNewMethod("sub", subFn, 0, "Return the string with the matches replaced."),
-		"subn":         py.MustNewMethod("subn", subNFn, 0, "Return (new_string, number_of_subs)."),
-		"escape":       py.MustNewMethod("escape", escapeFn, 0, "Escape special characters in a string."),
-		"purge":        py.MustNewMethod("purge", purgeFn, 0, "Clear the regular expression cache."),
-		"Pattern":      PatternType,
-		"Match":        MatchType,
-		"ASCII":        py.Int(FlagASCII),
-		"IGNORECASE":   py.Int(FlagIGNORECASE),
-		"I":            py.Int(FlagIGNORECASE),
-		"LOCALE":       py.Int(FlagLOCALE),
-		"L":            py.Int(FlagLOCALE),
-		"MULTILINE":    py.Int(FlagMULTILINE),
-		"M":            py.Int(FlagMULTILINE),
-		"DOTALL":       py.Int(FlagDOTALL),
-		"S":            py.Int(FlagDOTALL),
-		"UNICODE":      py.Int(FlagUNICODE),
-		"U":            py.Int(FlagUNICODE),
-		"VERBOSE":      py.Int(FlagVERBOSE),
-		"X":            py.Int(FlagVERBOSE),
-		"DEBUG":        py.Int(FlagDEBUG),
-		"NOFLAG":       py.Int(0),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "error", Value: ErrorType},
+		py.DictEntry{Key: "PatternError", Value: ErrorType},
+		py.DictEntry{Key: "compile", Value: py.MustNewMethod("compile", compileFn, 0, "Compile a regular expression pattern, returning a Pattern object.")},
+		py.DictEntry{Key: "match", Value: py.MustNewMethod("match", matchFn, 0, "Try to apply the pattern at the start of the string.")},
+		py.DictEntry{Key: "search", Value: py.MustNewMethod("search", searchFn, 0, "Scan through a string, looking for a match.")},
+		py.DictEntry{Key: "fullmatch", Value: py.MustNewMethod("fullmatch", fullMatchFn, 0, "Try to apply the pattern to all of the string.")},
+		py.DictEntry{Key: "findall", Value: py.MustNewMethod("findall", findAllFn, 0, "Return a list of all non-overlapping matches.")},
+		py.DictEntry{Key: "finditer", Value: py.MustNewMethod("finditer", findIterFn, 0, "Return an iterator over all non-overlapping matches.")},
+		py.DictEntry{Key: "split", Value: py.MustNewMethod("split", splitFn, 0, "Split the source string by the occurrences of the pattern.")},
+		py.DictEntry{Key: "sub", Value: py.MustNewMethod("sub", subFn, 0, "Return the string with the matches replaced.")},
+		py.DictEntry{Key: "subn", Value: py.MustNewMethod("subn", subNFn, 0, "Return (new_string, number_of_subs).")},
+		py.DictEntry{Key: "escape", Value: py.MustNewMethod("escape", escapeFn, 0, "Escape special characters in a string.")},
+		py.DictEntry{Key: "purge", Value: py.MustNewMethod("purge", purgeFn, 0, "Clear the regular expression cache.")},
+		py.DictEntry{Key: "Pattern", Value: PatternType},
+		py.DictEntry{Key: "Match", Value: MatchType},
+		py.DictEntry{Key: "ASCII", Value: py.Int(FlagASCII)},
+		py.DictEntry{Key: "IGNORECASE", Value: py.Int(FlagIGNORECASE)},
+		py.DictEntry{Key: "I", Value: py.Int(FlagIGNORECASE)},
+		py.DictEntry{Key: "LOCALE", Value: py.Int(FlagLOCALE)},
+		py.DictEntry{Key: "L", Value: py.Int(FlagLOCALE)},
+		py.DictEntry{Key: "MULTILINE", Value: py.Int(FlagMULTILINE)},
+		py.DictEntry{Key: "M", Value: py.Int(FlagMULTILINE)},
+		py.DictEntry{Key: "DOTALL", Value: py.Int(FlagDOTALL)},
+		py.DictEntry{Key: "S", Value: py.Int(FlagDOTALL)},
+		py.DictEntry{Key: "UNICODE", Value: py.Int(FlagUNICODE)},
+		py.DictEntry{Key: "U", Value: py.Int(FlagUNICODE)},
+		py.DictEntry{Key: "VERBOSE", Value: py.Int(FlagVERBOSE)},
+		py.DictEntry{Key: "X", Value: py.Int(FlagVERBOSE)},
+		py.DictEntry{Key: "DEBUG", Value: py.Int(FlagDEBUG)},
+		py.DictEntry{Key: "NOFLAG", Value: py.Int(0)},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -363,27 +363,27 @@ func (m *Match) groupText(i int) py.Object {
 }
 
 func init() {
-	PatternType.Dict["pattern"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	PatternType.Dict.Set("pattern", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String(self.(*Pattern).source), nil
-	}}
-	PatternType.Dict["flags"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	PatternType.Dict.Set("flags", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*Pattern).flags), nil
-	}}
-	PatternType.Dict["groups"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	PatternType.Dict.Set("groups", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*Pattern).ngroups), nil
-	}}
-	PatternType.Dict["groupindex"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	PatternType.Dict.Set("groupindex", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		d := py.NewStringDict()
 		for num, name := range self.(*Pattern).groupNames {
-			d[name] = py.Int(num)
+			d.Set(name, py.Int(num))
 		}
 		return d, nil
-	}}
-	PatternType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}})
+	PatternType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*Pattern)
 		quoted, _ := py.ReprAsString(py.String(p.source))
 		return py.String("re.compile(" + quoted + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
 	patternMethod := func(name string, find func(*Pattern, string, int) *Match) *py.Method {
 		return py.MustNewMethod(name, func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -400,20 +400,20 @@ func init() {
 			return m, nil
 		}, 0, name)
 	}
-	PatternType.Dict["match"] = patternMethod("match", matchAt)
-	PatternType.Dict["search"] = patternMethod("search", searchIn)
-	PatternType.Dict["fullmatch"] = patternMethod("fullmatch", fullMatchAt)
+	PatternType.Dict.Set("match", patternMethod("match", matchAt))
+	PatternType.Dict.Set("search", patternMethod("search", searchIn))
+	PatternType.Dict.Set("fullmatch", patternMethod("fullmatch", fullMatchAt))
 
-	PatternType.Dict["findall"] = py.MustNewMethod("findall", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	PatternType.Dict.Set("findall", py.MustNewMethod("findall", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
 		text, _, _, err := patternArgs("findall", args, kwargs)
 		if err != nil {
 			return nil, err
 		}
 		return p.findAll(text)
-	}, 0, "Return a list of all non-overlapping matches.")
+	}, 0, "Return a list of all non-overlapping matches."))
 
-	PatternType.Dict["finditer"] = py.MustNewMethod("finditer", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	PatternType.Dict.Set("finditer", py.MustNewMethod("finditer", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
 		text, _, _, err := patternArgs("finditer", args, kwargs)
 		if err != nil {
@@ -424,16 +424,16 @@ func init() {
 			return nil, err
 		}
 		return py.NewIterator(items), nil
-	}, 0, "Return an iterator over all non-overlapping matches.")
+	}, 0, "Return an iterator over all non-overlapping matches."))
 
-	PatternType.Dict["split"] = py.MustNewMethod("split", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	PatternType.Dict.Set("split", py.MustNewMethod("split", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
 		text, _, _, err := patternArgs("split", args, kwargs)
 		if err != nil {
 			return nil, err
 		}
 		maxsplit := 0
-		if v, ok := kwargs["maxsplit"]; ok {
+		if v, ok := kwargs.Get("maxsplit"); ok {
 			n, err := py.IndexInt(v)
 			if err != nil {
 				return nil, err
@@ -441,18 +441,18 @@ func init() {
 			maxsplit = n
 		}
 		return p.split(text, maxsplit)
-	}, 0, "Split the source string by the occurrences of the pattern.")
+	}, 0, "Split the source string by the occurrences of the pattern."))
 
-	PatternType.Dict["sub"] = py.MustNewMethod("sub", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	PatternType.Dict.Set("sub", py.MustNewMethod("sub", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		res, err := subWith(self.(*Pattern), args, kwargs, false)
 		return res, err
-	}, 0, "Return the string with the matches replaced.")
-	PatternType.Dict["subn"] = py.MustNewMethod("subn", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	}, 0, "Return the string with the matches replaced."))
+	PatternType.Dict.Set("subn", py.MustNewMethod("subn", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		return subWith(self.(*Pattern), args, kwargs, true)
-	}, 0, "Return (new_string, number_of_subs).")
+	}, 0, "Return (new_string, number_of_subs)."))
 
 	// The Match object.
-	MatchType.Dict["group"] = py.MustNewMethod("group", func(self py.Object, args py.Tuple) (py.Object, error) {
+	MatchType.Dict.Set("group", py.MustNewMethod("group", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		if len(args) == 0 {
 			return m.groupText(0), nil
@@ -473,9 +473,9 @@ func init() {
 			out[i] = m.groupText(idx)
 		}
 		return out, nil
-	}, 0, "Return one or more subgroups of the match.")
+	}, 0, "Return one or more subgroups of the match."))
 
-	MatchType.Dict["groups"] = py.MustNewMethod("groups", func(self py.Object, args py.Tuple) (py.Object, error) {
+	MatchType.Dict.Set("groups", py.MustNewMethod("groups", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		def := py.Object(py.None)
 		if len(args) > 0 {
@@ -490,9 +490,9 @@ func init() {
 			out[g-1] = v
 		}
 		return out, nil
-	}, 0, "Return a tuple of all the subgroups.")
+	}, 0, "Return a tuple of all the subgroups."))
 
-	MatchType.Dict["groupdict"] = py.MustNewMethod("groupdict", func(self py.Object, args py.Tuple) (py.Object, error) {
+	MatchType.Dict.Set("groupdict", py.MustNewMethod("groupdict", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		def := py.Object(py.None)
 		if len(args) > 0 {
@@ -504,12 +504,12 @@ func init() {
 			if v == py.None {
 				v = def
 			}
-			out[name] = v
+			out.Set(name, v)
 		}
 		return out, nil
-	}, 0, "Return a dict of the named subgroups.")
+	}, 0, "Return a dict of the named subgroups."))
 
-	MatchType.Dict["start"] = py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
+	MatchType.Dict.Set("start", py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		g := 0
 		if len(args) > 0 {
@@ -520,8 +520,8 @@ func init() {
 			g = idx
 		}
 		return py.Int(m.locs[2*g]), nil
-	}, 0, "Return the start position of the match.")
-	MatchType.Dict["end"] = py.MustNewMethod("end", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the start position of the match."))
+	MatchType.Dict.Set("end", py.MustNewMethod("end", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		g := 0
 		if len(args) > 0 {
@@ -532,8 +532,8 @@ func init() {
 			g = idx
 		}
 		return py.Int(m.locs[2*g+1]), nil
-	}, 0, "Return the end position of the match.")
-	MatchType.Dict["span"] = py.MustNewMethod("span", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the end position of the match."))
+	MatchType.Dict.Set("span", py.MustNewMethod("span", func(self py.Object, args py.Tuple) (py.Object, error) {
 		m := self.(*Match)
 		g := 0
 		if len(args) > 0 {
@@ -544,21 +544,21 @@ func init() {
 			g = idx
 		}
 		return py.Tuple{py.Int(m.locs[2*g]), py.Int(m.locs[2*g+1])}, nil
-	}, 0, "Return the (start, end) positions of the match.")
+	}, 0, "Return the (start, end) positions of the match."))
 
-	MatchType.Dict["string"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	MatchType.Dict.Set("string", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String(self.(*Match).text), nil
-	}}
-	MatchType.Dict["re"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	MatchType.Dict.Set("re", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*Match).pattern, nil
-	}}
-	MatchType.Dict["pos"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	MatchType.Dict.Set("pos", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(0), nil
-	}}
-	MatchType.Dict["endpos"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	MatchType.Dict.Set("endpos", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(len([]rune(self.(*Match).text))), nil
-	}}
-	MatchType.Dict["lastindex"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	MatchType.Dict.Set("lastindex", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		m := self.(*Match)
 		last := -1
 		for g := 1; g <= m.pattern.ngroups; g++ {
@@ -574,8 +574,8 @@ func init() {
 			return py.None, nil
 		}
 		return py.Int(last), nil
-	}}
-	MatchType.Dict["lastgroup"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	MatchType.Dict.Set("lastgroup", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		m := self.(*Match)
 		last := -1
 		for g := 1; g <= m.pattern.ngroups; g++ {
@@ -587,7 +587,7 @@ func init() {
 			return py.String(name), nil
 		}
 		return py.None, nil
-	}}
+	}})
 }
 
 // matchAt anchors the pattern at the start.
@@ -857,7 +857,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 	default:
 		return nil, py.ExceptionNewf(py.TypeError, "expected string or bytes-like object")
 	}
-	if v, ok := kwargs["string"]; ok {
+	if v, ok := kwargs.Get("string"); ok {
 		s, err := py.StrAsString(v)
 		if err != nil {
 			return nil, err
@@ -865,7 +865,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 		text = s
 	}
 	count := 0
-	if v, ok := kwargs["count"]; ok {
+	if v, ok := kwargs.Get("count"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -903,7 +903,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 			b.WriteString(expanded)
 		default:
 			// A callable replacement receives the match.
-			value, err := py.Call(repl, py.Tuple{m}, nil)
+			value, err := py.Call(repl, py.Tuple{m}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -952,21 +952,21 @@ func patternArgs(name string, args py.Tuple, kwargs py.StringDict) (string, int,
 		}
 		endpos = n
 	}
-	if v, ok := kwargs["string"]; ok {
+	if v, ok := kwargs.Get("string"); ok {
 		s, err := py.StrAsString(v)
 		if err != nil {
 			return "", 0, 0, err
 		}
 		text = s
 	}
-	if v, ok := kwargs["pos"]; ok {
+	if v, ok := kwargs.Get("pos"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return "", 0, 0, err
 		}
 		pos = n
 	}
-	if v, ok := kwargs["endpos"]; ok {
+	if v, ok := kwargs.Get("endpos"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return "", 0, 0, err
@@ -993,7 +993,7 @@ func compileFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 		}
 		flags = n
 	}
-	if v, ok := kwargs["flags"]; ok {
+	if v, ok := kwargs.Get("flags"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -1031,7 +1031,7 @@ func commonArgs(name string, args py.Tuple, kwargs py.StringDict) (*Pattern, py.
 	// for index: 'str'".
 	if name == "sub" || name == "subn" || name == "split" {
 		flags := 0
-		if v, ok := kwargs["flags"]; ok {
+		if v, ok := kwargs.Get("flags"); ok {
 			n, err := py.IndexInt(v)
 			if err != nil {
 				return nil, nil, err
@@ -1052,7 +1052,7 @@ func commonArgs(name string, args py.Tuple, kwargs py.StringDict) (*Pattern, py.
 		}
 		flags = n
 	}
-	if v, ok := kwargs["flags"]; ok {
+	if v, ok := kwargs.Get("flags"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, nil, err
@@ -1152,7 +1152,7 @@ func splitFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		return nil, err
 	}
 	maxsplit := 0
-	if v, ok := kwargs["maxsplit"]; ok {
+	if v, ok := kwargs.Get("maxsplit"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -1202,7 +1202,7 @@ func textOf(rest py.Tuple) (string, error) {
 // escapeFn quotes the characters that would otherwise be special.
 func escapeFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var value py.Object
-	if err := py.UnpackTuple(args, nil, "escape", 1, 1, &value); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "escape", 1, 1, &value); err != nil {
 		return nil, err
 	}
 	text, err := py.StrAsString(value)

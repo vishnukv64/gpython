@@ -60,7 +60,7 @@ var autoType = py.NewTypeX("enum.auto", "Instances are replaced with an appropri
 func (a *autoFunc) Type() *py.Type { return autoType }
 
 func (a *autoFunc) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if len(args) != 0 || len(kwargs) != 0 {
+	if len(args) != 0 || kwargs.Len() != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "auto() takes no arguments")
 	}
 	return &autoFunc{}, nil
@@ -102,12 +102,12 @@ func init() {
 
 	// The members are attributes of the enum class, and the class itself
 	// carries the usual introspection names.
-	EnumMemberType.Dict["name"] = &py.Property{
+	EnumMemberType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*EnumMember).name), nil },
-	}
-	EnumMemberType.Dict["value"] = &py.Property{
+	})
+	EnumMemberType.Dict.Set("value", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*EnumMember).value, nil },
-	}
+	})
 
 	py.BuildEnumClass = buildEnumClass
 
@@ -120,20 +120,20 @@ func init() {
 		return false
 	})
 
-	globals := py.StringDict{
-		"Enum":             EnumType,
-		"IntEnum":          IntEnumType,
-		"Flag":             FlagType,
-		"IntFlag":          IntFlagType,
-		"EnumMeta":         EnumMetaType,
-		"auto":             &autoFunc{},
-		"unique":           py.MustNewMethod("unique", enumUnique, 0, "Class decorator that ensures at most one name per value."),
-		"verify":           py.MustNewMethod("verify", enumVerify, 0, "Class decorator that checks the given constraints."),
-		"member":           py.MustNewMethod("member", enumMemberPassthrough, 0, "Mark an attribute as a member."),
-		"nonmember":        py.MustNewMethod("nonmember", enumMemberPassthrough, 0, "Mark an attribute as not a member."),
-		"global_enum":      py.MustNewMethod("global_enum", enumMemberPassthrough, 0, "Export the members to the module namespace."),
-		"show_flag_values": py.MustNewMethod("show_flag_values", enumMemberPassthrough, 0, "Return a list of all power-of-two integers."),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "Enum", Value: EnumType},
+		py.DictEntry{Key: "IntEnum", Value: IntEnumType},
+		py.DictEntry{Key: "Flag", Value: FlagType},
+		py.DictEntry{Key: "IntFlag", Value: IntFlagType},
+		py.DictEntry{Key: "EnumMeta", Value: EnumMetaType},
+		py.DictEntry{Key: "auto", Value: &autoFunc{}},
+		py.DictEntry{Key: "unique", Value: py.MustNewMethod("unique", enumUnique, 0, "Class decorator that ensures at most one name per value.")},
+		py.DictEntry{Key: "verify", Value: py.MustNewMethod("verify", enumVerify, 0, "Class decorator that checks the given constraints.")},
+		py.DictEntry{Key: "member", Value: py.MustNewMethod("member", enumMemberPassthrough, 0, "Mark an attribute as a member.")},
+		py.DictEntry{Key: "nonmember", Value: py.MustNewMethod("nonmember", enumMemberPassthrough, 0, "Mark an attribute as not a member.")},
+		py.DictEntry{Key: "global_enum", Value: py.MustNewMethod("global_enum", enumMemberPassthrough, 0, "Export the members to the module namespace.")},
+		py.DictEntry{Key: "show_flag_values", Value: py.MustNewMethod("show_flag_values", enumMemberPassthrough, 0, "Return a list of all power-of-two integers.")},
+	)
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
 			Name: "enum",
@@ -181,10 +181,10 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		if key == "_ignore_" || key == "_order_" {
 			return true
 		}
-		if _, ok := ns[key].(*py.Function); ok {
+		if _, ok := ns.GetOrNil(key).(*py.Function); ok {
 			return true
 		}
-		switch ns[key].(type) {
+		switch ns.GetOrNil(key).(type) {
 		case *py.Property, *py.StaticMethod, *py.ClassMethod:
 			return true
 		}
@@ -203,9 +203,9 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 	// the insertion-ordered string dict used for a class body; failing that,
 	// sorted order is deterministic and at least stable.
 	for _, key := range orderedNames(ns) {
-		value := ns[key]
+		value := ns.GetOrNil(key)
 		if isMeta(key) {
-			cls.Dict[key] = value
+			cls.Dict.Set(key, value)
 			continue
 		}
 		if isAuto(value) {
@@ -233,7 +233,7 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		encoded, err := py.DictKey(value)
 		if err == nil {
 			if existing, ok := byValue[encoded]; ok {
-				cls.Dict[key] = existing
+				cls.Dict.Set(key, existing)
 				continue
 			}
 		} else {
@@ -245,7 +245,7 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		byValue[encoded] = member
 		members = append(members, member)
 		memberNames = append(memberNames, key)
-		cls.Dict[key] = member
+		cls.Dict.Set(key, member)
 	}
 
 	// The members cannot be stored in the class Dict: that holds py.Object
@@ -285,8 +285,8 @@ func mustInt(value py.Object) int64 {
 // member order is the sorted order of the names - deterministic, and enough
 // for the names Python code compares against.
 func orderedNames(ns py.StringDict) []string {
-	names := make([]string, 0, len(ns))
-	for key := range ns {
+	names := make([]string, 0, ns.Len())
+	for _, key := range ns.Keys() {
 		names = append(names, key)
 	}
 	// Sort with dunders and private names first, then the members, so the
@@ -313,7 +313,7 @@ func sortStrings(items []string) {
 // class's own Dict: that path binds correctly, unlike a method reached
 // through a member instance.
 func installClassMethods(cls *py.Type) {
-	cls.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	cls.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		t := self.(*py.Type)
 		d := dataOf(t)
 		if d == nil {
@@ -324,18 +324,18 @@ func installClassMethods(cls *py.Type) {
 			items[i] = m
 		}
 		return py.NewIterator(items), nil
-	}, 0, "Iterate over the members, in definition order.")
+	}, 0, "Iterate over the members, in definition order."))
 
-	cls.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	cls.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if d := dataOf(self.(*py.Type)); d != nil {
 			return py.Int(len(d.members)), nil
 		}
 		return py.Int(0), nil
-	}, 0, "Number of members.")
+	}, 0, "Number of members."))
 
-	cls.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	cls.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		m, ok := item.(*EnumMember)
@@ -343,16 +343,16 @@ func installClassMethods(cls *py.Type) {
 			return py.True, nil
 		}
 		return py.False, nil
-	}, 0, "Whether the value is a member of this enum.")
+	}, 0, "Whether the value is a member of this enum."))
 
-	cls.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	cls.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		t := self.(*py.Type)
 		if name, ok := key.(py.String); ok {
-			if m, ok := t.Dict[string(name)].(*EnumMember); ok {
+			if m, ok := t.Dict.GetOrNil(string(name)).(*EnumMember); ok {
 				return m, nil
 			}
 			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
@@ -367,16 +367,16 @@ func installClassMethods(cls *py.Type) {
 			}
 		}
 		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
-	}, 0, "Look a member up by name or by value.")
+	}, 0, "Look a member up by name or by value."))
 
-	cls.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	cls.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.String("<enum '" + self.(*py.Type).Name + "'>"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
 	// The class is called to look a member up by value: Color(1).
 	cls.New = func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		var value py.Object
-		if err := py.UnpackTuple(args, nil, "Enum", 1, 1, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "Enum", 1, 1, &value); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(value)

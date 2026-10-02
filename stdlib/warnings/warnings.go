@@ -212,7 +212,7 @@ func warn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	if frame != nil {
 		filename = frame.Code.Filename
 		lineno = int(frame.Code.Addr2Line(frame.Lasti))
-		if name, ok := frame.Globals["__name__"].(py.String); ok {
+		if name, ok := frame.Globals.GetOrNil("__name__").(py.String); ok {
 			moduleName = string(name)
 		}
 	}
@@ -349,12 +349,12 @@ func showWarning(mod *py.Module, text string, cat *py.Type, filename string, lin
 	}
 	fn := py.Object(nil)
 	if mod != nil {
-		fn = mod.Globals["showwarning"]
+		fn = mod.Globals.GetOrNil("showwarning")
 	}
 	if fn == nil || fn == py.None {
 		fn = py.MustNewMethod("showwarning", defaultShowWarning, 0, showwarning_doc)
 	}
-	_, err := py.Call(fn, py.Tuple{py.String(text), cat, py.String(filename), py.Int(lineno)}, nil)
+	_, err := py.Call(fn, py.Tuple{py.String(text), cat, py.String(filename), py.Int(lineno)}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -393,12 +393,12 @@ func writeWarning(mod *py.Module, message, category, filename, lineno, fileObj, 
 	// library may have replaced.
 	formatFn := py.Object(nil)
 	if mod != nil {
-		formatFn = mod.Globals["formatwarning"]
+		formatFn = mod.Globals.GetOrNil("formatwarning")
 	}
 	if formatFn == nil || formatFn == py.None {
 		formatFn = py.MustNewMethod("formatwarning", formatwarning, 0, formatwarning_doc)
 	}
-	s, err := py.Call(formatFn, py.Tuple{message, category, filename, lineno, lineObj}, nil)
+	s, err := py.Call(formatFn, py.Tuple{message, category, filename, lineno, lineObj}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func writeWarning(mod *py.Module, message, category, filename, lineno, fileObj, 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := py.Call(write, py.Tuple{py.String(text)}, nil); err != nil {
+	if _, err := py.Call(write, py.Tuple{py.String(text)}, py.StringDict{}); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -425,13 +425,13 @@ func writeWarning(mod *py.Module, message, category, filename, lineno, fileObj, 
 func stderrOf(mod *py.Module) py.Object {
 	if mod != nil && mod.Context != nil {
 		if sys, err := mod.Context.GetModule("sys"); err == nil {
-			if s, ok := sys.Globals["stderr"]; ok {
+			if s, ok := sys.Globals.Get("stderr"); ok {
 				return s
 			}
 		}
 	}
 	if sys := py.GetModuleImplOrNil("sys"); sys != nil {
-		return sys.Globals["stderr"]
+		return sys.Globals.GetOrNil("stderr")
 	}
 	return py.None
 }
@@ -558,7 +558,7 @@ filterwarnings(), including that of the -W command line options and calls to
 simplefilter().`
 
 func resetwarnings(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := checkArgs(args, nil, "resetwarnings", 0, 0); err != nil {
+	if err := checkArgs(args, py.StringDict{}, "resetwarnings", 0, 0); err != nil {
 		return nil, err
 	}
 	gFilters = nil
@@ -639,8 +639,8 @@ func (c *catchWarnings) save() error {
 	c.saved = append([]*warnFilter(nil), gFilters...)
 	c.savedList = append([]py.Object(nil), gFiltersList.Items...)
 	if c.mod != nil {
-		c.show = c.mod.Globals["showwarning"]
-		c.format = c.mod.Globals["formatwarning"]
+		c.show = c.mod.Globals.GetOrNil("showwarning")
+		c.format = c.mod.Globals.GetOrNil("formatwarning")
 	}
 	return nil
 }
@@ -673,10 +673,10 @@ func catchWarningsExit(self py.Object, args py.Tuple) (py.Object, error) {
 	gFiltersList.Items = append([]py.Object(nil), c.savedList...)
 	if c.mod != nil {
 		if c.show != nil {
-			c.mod.Globals["showwarning"] = c.show
+			c.mod.Globals.Set("showwarning", c.show)
 		}
 		if c.format != nil {
-			c.mod.Globals["formatwarning"] = c.format
+			c.mod.Globals.Set("formatwarning", c.format)
 		}
 	}
 	return py.False, nil
@@ -688,25 +688,25 @@ func catchWarningsExit(self py.Object, args py.Tuple) (py.Object, error) {
 var gRecorders []*py.List
 
 func init() {
-	catchWarningsType.Dict["__enter__"] = py.MustNewMethod("__enter__", catchWarningsEnter, 0, enter_doc)
-	catchWarningsType.Dict["__exit__"] = py.MustNewMethod("__exit__", catchWarningsExit, 0, exit_doc)
+	catchWarningsType.Dict.Set("__enter__", py.MustNewMethod("__enter__", catchWarningsEnter, 0, enter_doc))
+	catchWarningsType.Dict.Set("__exit__", py.MustNewMethod("__exit__", catchWarningsExit, 0, exit_doc))
 
-	WarningMessageType.Dict["message"] = &py.Property{
+	WarningMessageType.Dict.Set("message", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*WarningMessage).Message, nil },
 		Doc:  "the message text",
-	}
-	WarningMessageType.Dict["category"] = &py.Property{
+	})
+	WarningMessageType.Dict.Set("category", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*WarningMessage).Category, nil },
 		Doc:  "the warning category",
-	}
-	WarningMessageType.Dict["filename"] = &py.Property{
+	})
+	WarningMessageType.Dict.Set("filename", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*WarningMessage).Filename), nil },
 		Doc:  "the file the warning came from",
-	}
-	WarningMessageType.Dict["lineno"] = &py.Property{
+	})
+	WarningMessageType.Dict.Set("lineno", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*WarningMessage).Lineno), nil },
 		Doc:  "the line the warning came from",
-	}
+	})
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -723,27 +723,27 @@ func init() {
 			py.MustNewMethod("resetwarnings", resetwarnings, 0, resetwarnings_doc),
 			py.MustNewMethod("catch_warnings", catch_warnings, 0, catch_warnings_doc),
 		},
-		Globals: py.StringDict{
-			"filters":        gFiltersList,
-			"defaultaction":  py.String("default"),
-			"onceregistry":   gOnceregistry,
-			"WarningMessage": WarningMessageType,
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "filters", Value: gFiltersList},
+			py.DictEntry{Key: "defaultaction", Value: py.String("default")},
+			py.DictEntry{Key: "onceregistry", Value: gOnceregistry},
+			py.DictEntry{Key: "WarningMessage", Value: WarningMessageType},
 			// The filter machinery needs the same hook objects Python code
 			// can replace, so the module and the package agree on them.
-			"showwarning":               py.MustNewMethod("showwarning", showwarning, 0, showwarning_doc),
-			"formatwarning":             py.MustNewMethod("formatwarning", formatwarning, 0, formatwarning_doc),
-			"Warning":                   py.Warning,
-			"UserWarning":               py.UserWarning,
-			"DeprecationWarning":        py.DeprecationWarning,
-			"PendingDeprecationWarning": py.PendingDeprecationWarning,
-			"SyntaxWarning":             py.SyntaxWarning,
-			"RuntimeWarning":            py.RuntimeWarning,
-			"FutureWarning":             py.FutureWarning,
-			"ImportWarning":             py.ImportWarning,
-			"BytesWarning":              py.BytesWarning,
-			"UnicodeWarning":            py.UnicodeWarning,
-			"ResourceWarning":           py.ResourceWarning,
-		},
+			py.DictEntry{Key: "showwarning", Value: py.MustNewMethod("showwarning", showwarning, 0, showwarning_doc)},
+			py.DictEntry{Key: "formatwarning", Value: py.MustNewMethod("formatwarning", formatwarning, 0, formatwarning_doc)},
+			py.DictEntry{Key: "Warning", Value: py.Warning},
+			py.DictEntry{Key: "UserWarning", Value: py.UserWarning},
+			py.DictEntry{Key: "DeprecationWarning", Value: py.DeprecationWarning},
+			py.DictEntry{Key: "PendingDeprecationWarning", Value: py.PendingDeprecationWarning},
+			py.DictEntry{Key: "SyntaxWarning", Value: py.SyntaxWarning},
+			py.DictEntry{Key: "RuntimeWarning", Value: py.RuntimeWarning},
+			py.DictEntry{Key: "FutureWarning", Value: py.FutureWarning},
+			py.DictEntry{Key: "ImportWarning", Value: py.ImportWarning},
+			py.DictEntry{Key: "BytesWarning", Value: py.BytesWarning},
+			py.DictEntry{Key: "UnicodeWarning", Value: py.UnicodeWarning},
+			py.DictEntry{Key: "ResourceWarning", Value: py.ResourceWarning},
+		),
 	})
 }
 
@@ -755,7 +755,7 @@ var _ = fmt.Sprintf
 // them into named variables.  min may be negative, meaning "no lower
 // bound".
 func checkArgs(args py.Tuple, kwargs py.StringDict, name string, min, max int) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", name)
 	}
 	n := len(args)

@@ -422,8 +422,8 @@ func TestLex(t *testing.T) {
 			lineno := -1
 			offset := -1
 			if exc, ok := err.(*py.Exception); ok {
-				lineno = int(exc.Dict["lineno"].(py.Int))
-				offset = int(exc.Dict["offset"].(py.Int))
+				lineno = int(exc.Dict.GetOrNil("lineno").(py.Int))
+				offset = int(exc.Dict.GetOrNil("offset").(py.Int))
 				errString = fmt.Sprintf("%s %d:%d", exc.Args.(py.Tuple)[0], lineno, offset)
 			} else {
 				panic("bad exception")

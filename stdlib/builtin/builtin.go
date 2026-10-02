@@ -76,109 +76,110 @@ func init() {
 		py.MustNewMethod("sum", builtin_sum, 0, sum_doc),
 		py.MustNewMethod("vars", py.InternalMethodVars, 0, vars_doc),
 	}
-	globals := py.StringDict{
-		"None":     py.None,
-		"Ellipsis": py.Ellipsis,
-		"False":    py.False,
-		"True":     py.True,
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "None", Value: py.None},
+		py.DictEntry{Key: "Ellipsis", Value: py.Ellipsis},
+		py.DictEntry{Key: "False", Value: py.False},
+		py.DictEntry{Key: "True", Value: py.True},
 		// __debug__ is False under -O and True otherwise; there is no -O here,
 		// so it is always True.  It is a real builtin, not a compiler flag, so
 		// that "assert" and ordinary code can read it.
-		"__debug__": py.True,
-		"bool":      py.BoolType,
+		py.DictEntry{Key: "__debug__", Value: py.True},
+		py.DictEntry{Key: "bool", Value: py.BoolType},
 		// "memoryview":     py.MemoryViewType,
 		// "bytearray":      py.ByteArrayType,
-		"bytes":       py.BytesType,
-		"classmethod": py.ClassMethodType,
-		"complex":     py.ComplexType,
-		"dict":        py.StringDictType, // FIXME
-		"enumerate":   py.EnumerateType,
-		"filter":      py.FilterType,
-		"float":       py.FloatType,
-		"frozenset":   py.FrozenSetType,
-		"property":    py.PropertyType,
-		"int":         py.IntType, // FIXME LongType?
-		"list":        py.ListType,
-		"map":         py.MapType,
-		"object":      py.ObjectType,
-		"range":       py.RangeType,
+		py.DictEntry{Key: "bytes", Value: py.BytesType},
+		py.DictEntry{Key: "classmethod", Value: py.ClassMethodType},
+		py.DictEntry{Key: "complex", Value: py.ComplexType},
+		py.DictEntry{Key: "dict", Value: py.StringDictType},
+		// FIXME
+		py.DictEntry{Key: "enumerate", Value: py.EnumerateType},
+		py.DictEntry{Key: "filter", Value: py.FilterType},
+		py.DictEntry{Key: "float", Value: py.FloatType},
+		py.DictEntry{Key: "frozenset", Value: py.FrozenSetType},
+		py.DictEntry{Key: "property", Value: py.PropertyType},
+		py.DictEntry{Key: "int", Value: py.IntType},
+		// FIXME LongType?
+		py.DictEntry{Key: "list", Value: py.ListType},
+		py.DictEntry{Key: "map", Value: py.MapType},
+		py.DictEntry{Key: "object", Value: py.ObjectType},
+		py.DictEntry{Key: "range", Value: py.RangeType},
 		// "reversed":       py.ReversedType,
-		"set":          py.SetType,
-		"slice":        py.SliceType,
-		"staticmethod": py.StaticMethodType,
-		"str":          py.StringType,
-		"super":        py.SuperType,
-		"tuple":        py.TupleType,
-		"type":         py.TypeType,
-		"zip":          py.ZipType,
-
+		py.DictEntry{Key: "set", Value: py.SetType},
+		py.DictEntry{Key: "slice", Value: py.SliceType},
+		py.DictEntry{Key: "staticmethod", Value: py.StaticMethodType},
+		py.DictEntry{Key: "str", Value: py.StringType},
+		py.DictEntry{Key: "super", Value: py.SuperType},
+		py.DictEntry{Key: "tuple", Value: py.TupleType},
+		py.DictEntry{Key: "type", Value: py.TypeType},
+		py.DictEntry{Key: "zip", Value: py.ZipType},
 		// Exceptions
-		"ArithmeticError":           py.ArithmeticError,
-		"AssertionError":            py.AssertionError,
-		"AttributeError":            py.AttributeError,
-		"BaseException":             py.BaseException,
-		"BlockingIOError":           py.BlockingIOError,
-		"BrokenPipeError":           py.BrokenPipeError,
-		"BufferError":               py.BufferError,
-		"BytesWarning":              py.BytesWarning,
-		"ChildProcessError":         py.ChildProcessError,
-		"ConnectionAbortedError":    py.ConnectionAbortedError,
-		"ConnectionError":           py.ConnectionError,
-		"ConnectionRefusedError":    py.ConnectionRefusedError,
-		"ConnectionResetError":      py.ConnectionResetError,
-		"DeprecationWarning":        py.DeprecationWarning,
-		"EOFError":                  py.EOFError,
-		"EnvironmentError":          py.OSError,
-		"Exception":                 py.ExceptionType,
-		"FileExistsError":           py.FileExistsError,
-		"FileNotFoundError":         py.FileNotFoundError,
-		"FloatingPointError":        py.FloatingPointError,
-		"FutureWarning":             py.FutureWarning,
-		"GeneratorExit":             py.GeneratorExit,
-		"IOError":                   py.OSError,
-		"ImportError":               py.ImportError,
-		"ModuleNotFoundError":       py.ModuleNotFoundError,
-		"ImportWarning":             py.ImportWarning,
-		"IndentationError":          py.IndentationError,
-		"IndexError":                py.IndexError,
-		"InterruptedError":          py.InterruptedError,
-		"IsADirectoryError":         py.IsADirectoryError,
-		"KeyError":                  py.KeyError,
-		"KeyboardInterrupt":         py.KeyboardInterrupt,
-		"LookupError":               py.LookupError,
-		"MemoryError":               py.MemoryError,
-		"NameError":                 py.NameError,
-		"NotADirectoryError":        py.NotADirectoryError,
-		"NotImplemented":            py.NotImplemented,
-		"NotImplementedError":       py.NotImplementedError,
-		"OSError":                   py.OSError,
-		"OverflowError":             py.OverflowError,
-		"PendingDeprecationWarning": py.PendingDeprecationWarning,
-		"PermissionError":           py.PermissionError,
-		"ProcessLookupError":        py.ProcessLookupError,
-		"ReferenceError":            py.ReferenceError,
-		"ResourceWarning":           py.ResourceWarning,
-		"RuntimeError":              py.RuntimeError,
-		"RuntimeWarning":            py.RuntimeWarning,
-		"StopIteration":             py.StopIteration,
-		"SyntaxError":               py.SyntaxError,
-		"SyntaxWarning":             py.SyntaxWarning,
-		"SystemError":               py.SystemError,
-		"SystemExit":                py.SystemExit,
-		"TabError":                  py.TabError,
-		"TimeoutError":              py.TimeoutError,
-		"TypeError":                 py.TypeError,
-		"UnboundLocalError":         py.UnboundLocalError,
-		"UnicodeDecodeError":        py.UnicodeDecodeError,
-		"UnicodeEncodeError":        py.UnicodeEncodeError,
-		"UnicodeError":              py.UnicodeError,
-		"UnicodeTranslateError":     py.UnicodeTranslateError,
-		"UnicodeWarning":            py.UnicodeWarning,
-		"UserWarning":               py.UserWarning,
-		"ValueError":                py.ValueError,
-		"Warning":                   py.Warning,
-		"ZeroDivisionError":         py.ZeroDivisionError,
-	}
+		py.DictEntry{Key: "ArithmeticError", Value: py.ArithmeticError},
+		py.DictEntry{Key: "AssertionError", Value: py.AssertionError},
+		py.DictEntry{Key: "AttributeError", Value: py.AttributeError},
+		py.DictEntry{Key: "BaseException", Value: py.BaseException},
+		py.DictEntry{Key: "BlockingIOError", Value: py.BlockingIOError},
+		py.DictEntry{Key: "BrokenPipeError", Value: py.BrokenPipeError},
+		py.DictEntry{Key: "BufferError", Value: py.BufferError},
+		py.DictEntry{Key: "BytesWarning", Value: py.BytesWarning},
+		py.DictEntry{Key: "ChildProcessError", Value: py.ChildProcessError},
+		py.DictEntry{Key: "ConnectionAbortedError", Value: py.ConnectionAbortedError},
+		py.DictEntry{Key: "ConnectionError", Value: py.ConnectionError},
+		py.DictEntry{Key: "ConnectionRefusedError", Value: py.ConnectionRefusedError},
+		py.DictEntry{Key: "ConnectionResetError", Value: py.ConnectionResetError},
+		py.DictEntry{Key: "DeprecationWarning", Value: py.DeprecationWarning},
+		py.DictEntry{Key: "EOFError", Value: py.EOFError},
+		py.DictEntry{Key: "EnvironmentError", Value: py.OSError},
+		py.DictEntry{Key: "Exception", Value: py.ExceptionType},
+		py.DictEntry{Key: "FileExistsError", Value: py.FileExistsError},
+		py.DictEntry{Key: "FileNotFoundError", Value: py.FileNotFoundError},
+		py.DictEntry{Key: "FloatingPointError", Value: py.FloatingPointError},
+		py.DictEntry{Key: "FutureWarning", Value: py.FutureWarning},
+		py.DictEntry{Key: "GeneratorExit", Value: py.GeneratorExit},
+		py.DictEntry{Key: "IOError", Value: py.OSError},
+		py.DictEntry{Key: "ImportError", Value: py.ImportError},
+		py.DictEntry{Key: "ModuleNotFoundError", Value: py.ModuleNotFoundError},
+		py.DictEntry{Key: "ImportWarning", Value: py.ImportWarning},
+		py.DictEntry{Key: "IndentationError", Value: py.IndentationError},
+		py.DictEntry{Key: "IndexError", Value: py.IndexError},
+		py.DictEntry{Key: "InterruptedError", Value: py.InterruptedError},
+		py.DictEntry{Key: "IsADirectoryError", Value: py.IsADirectoryError},
+		py.DictEntry{Key: "KeyError", Value: py.KeyError},
+		py.DictEntry{Key: "KeyboardInterrupt", Value: py.KeyboardInterrupt},
+		py.DictEntry{Key: "LookupError", Value: py.LookupError},
+		py.DictEntry{Key: "MemoryError", Value: py.MemoryError},
+		py.DictEntry{Key: "NameError", Value: py.NameError},
+		py.DictEntry{Key: "NotADirectoryError", Value: py.NotADirectoryError},
+		py.DictEntry{Key: "NotImplemented", Value: py.NotImplemented},
+		py.DictEntry{Key: "NotImplementedError", Value: py.NotImplementedError},
+		py.DictEntry{Key: "OSError", Value: py.OSError},
+		py.DictEntry{Key: "OverflowError", Value: py.OverflowError},
+		py.DictEntry{Key: "PendingDeprecationWarning", Value: py.PendingDeprecationWarning},
+		py.DictEntry{Key: "PermissionError", Value: py.PermissionError},
+		py.DictEntry{Key: "ProcessLookupError", Value: py.ProcessLookupError},
+		py.DictEntry{Key: "ReferenceError", Value: py.ReferenceError},
+		py.DictEntry{Key: "ResourceWarning", Value: py.ResourceWarning},
+		py.DictEntry{Key: "RuntimeError", Value: py.RuntimeError},
+		py.DictEntry{Key: "RuntimeWarning", Value: py.RuntimeWarning},
+		py.DictEntry{Key: "StopIteration", Value: py.StopIteration},
+		py.DictEntry{Key: "SyntaxError", Value: py.SyntaxError},
+		py.DictEntry{Key: "SyntaxWarning", Value: py.SyntaxWarning},
+		py.DictEntry{Key: "SystemError", Value: py.SystemError},
+		py.DictEntry{Key: "SystemExit", Value: py.SystemExit},
+		py.DictEntry{Key: "TabError", Value: py.TabError},
+		py.DictEntry{Key: "TimeoutError", Value: py.TimeoutError},
+		py.DictEntry{Key: "TypeError", Value: py.TypeError},
+		py.DictEntry{Key: "UnboundLocalError", Value: py.UnboundLocalError},
+		py.DictEntry{Key: "UnicodeDecodeError", Value: py.UnicodeDecodeError},
+		py.DictEntry{Key: "UnicodeEncodeError", Value: py.UnicodeEncodeError},
+		py.DictEntry{Key: "UnicodeError", Value: py.UnicodeError},
+		py.DictEntry{Key: "UnicodeTranslateError", Value: py.UnicodeTranslateError},
+		py.DictEntry{Key: "UnicodeWarning", Value: py.UnicodeWarning},
+		py.DictEntry{Key: "UserWarning", Value: py.UserWarning},
+		py.DictEntry{Key: "ValueError", Value: py.ValueError},
+		py.DictEntry{Key: "Warning", Value: py.Warning},
+		py.DictEntry{Key: "ZeroDivisionError", Value: py.ZeroDivisionError},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -252,7 +253,7 @@ func builtin_print(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	if err != nil {
 		return nil, err
 	}
-	stdout := sysModule.Globals["stdout"]
+	stdout := sysModule.Globals.GetOrNil("stdout")
 	kwlist := []string{"sep", "end", "file", "flush"}
 	err = py.ParseTupleAndKeywords(nil, kwargs, "|ssOO:print", kwlist, &sepObj, &endObj, &stdout, &flush)
 	if err != nil {
@@ -272,20 +273,20 @@ func builtin_print(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 			return nil, err
 		}
 
-		_, err = py.Call(write, py.Tuple{v}, nil)
+		_, err = py.Call(write, py.Tuple{v}, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
 
 		if i != len(args)-1 {
-			_, err = py.Call(write, py.Tuple{sep}, nil)
+			_, err = py.Call(write, py.Tuple{sep}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	_, err = py.Call(write, py.Tuple{end}, nil)
+	_, err = py.Call(write, py.Tuple{end}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +294,7 @@ func builtin_print(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	if shouldFlush, _ := py.MakeBool(flush); shouldFlush == py.True {
 		fflush, err := py.GetAttrString(stdout, "flush")
 		if err == nil {
-			return py.Call(fflush, nil, nil)
+			return py.Call(fflush, nil, py.StringDict{})
 		}
 	}
 
@@ -317,7 +318,7 @@ equivalent to (x**y) % z, but may be more efficient (e.g. for ints).`
 func builtin_pow(self py.Object, args py.Tuple) (py.Object, error) {
 	var v, w, z py.Object
 	z = py.None
-	err := py.UnpackTuple(args, nil, "pow", 2, 3, &v, &w, &z)
+	err := py.UnpackTuple(args, py.StringDict{}, "pow", 2, 3, &v, &w, &z)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +447,7 @@ func builtin_round(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	var ndigits py.Object = py.None
 	// var kwlist = []string{"number", "ndigits"}
 	// FIXME py.ParseTupleAndKeywords(args, kwargs, "O|O:round", kwlist, &number, &ndigits)
-	err := py.UnpackTuple(args, nil, "round", 1, 2, &number, &ndigits)
+	err := py.UnpackTuple(args, py.StringDict{}, "round", 1, 2, &number, &ndigits)
 	if err != nil {
 		return nil, err
 	}
@@ -487,11 +488,11 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	}
 	bases := args[2:]
 
-	if kwargs != nil {
-		mkw = kwargs.Copy()      // Don't modify kwds passed in!
-		meta := mkw["metaclass"] // _PyDict_GetItemId(mkw, &PyId_metaclass)
+	if !kwargs.IsNil() {
+		mkw = kwargs.Copy()               // Don't modify kwds passed in!
+		meta := mkw.GetOrNil("metaclass") // _PyDict_GetItemId(mkw, &PyId_metaclass)
 		if meta != nil {
-			delete(mkw, "metaclass")
+			mkw.Del("metaclass")
 			// metaclass is explicitly given, check if it's indeed a class
 			_, isclass = meta.(*py.Type)
 		}
@@ -520,7 +521,7 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	}
 	// else: meta is not a class, so we cannot do the metaclass
 	// calculation, so we will use the explicitly given object as it is
-	prep = meta.Type().Dict["___prepare__"] // FIXME should be using _PyObject_GetAttr
+	prep = meta.Type().Dict.GetOrNil("___prepare__") // FIXME should be using _PyObject_GetAttr
 	if prep == nil {
 		ns = py.NewStringDict()
 	} else {
@@ -565,9 +566,9 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	// statement fail with "type() takes 1 or 3 arguments", so a keyword that
 	// is not "metaclass" is dropped.  It carries no run-time meaning to a
 	// type checker's target anyway.
-	for k := range mkw {
+	for _, k := range mkw.Keys() {
 		if k != "metaclass" {
-			delete(mkw, k)
+			mkw.Del(k)
 		}
 	}
 
@@ -593,7 +594,7 @@ is exhausted, it is returned instead of raising StopIteration.`
 func builtin_next(self py.Object, args py.Tuple) (res py.Object, err error) {
 	var it, def py.Object
 
-	err = py.UnpackTuple(args, nil, "next", 1, 2, &it, &def)
+	err = py.UnpackTuple(args, py.StringDict{}, "next", 1, 2, &it, &def)
 	if err != nil {
 		return nil, err
 	}
@@ -778,7 +779,7 @@ func builtin_getattr(self py.Object, args py.Tuple) (py.Object, error) {
 	var v, result, dflt py.Object
 	var name py.Object
 
-	err := py.UnpackTuple(args, nil, "getattr", 2, 3, &v, &name, &dflt)
+	err := py.UnpackTuple(args, py.StringDict{}, "getattr", 2, 3, &v, &name, &dflt)
 	if err != nil {
 		return nil, err
 	}
@@ -801,7 +802,7 @@ Return whether the object has an attribute with the given name.
 func builtin_hasattr(self py.Object, args py.Tuple) (py.Object, error) {
 	var v py.Object
 	var name py.Object
-	err := py.UnpackTuple(args, nil, "hasattr", 2, 2, &v, &name)
+	err := py.UnpackTuple(args, py.StringDict{}, "hasattr", 2, 2, &v, &name)
 	if err != nil {
 		return nil, err
 	}
@@ -819,7 +820,7 @@ func builtin_setattr(self py.Object, args py.Tuple) (py.Object, error) {
 	var name py.Object
 	var value py.Object
 
-	err := py.UnpackTuple(args, nil, "setattr", 3, 3, &v, &name, &value)
+	err := py.UnpackTuple(args, py.StringDict{}, "setattr", 3, 3, &v, &name, &value)
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +850,7 @@ func builtin_delattr(self py.Object, args py.Tuple) (py.Object, error) {
 	var v py.Object
 	var name py.Object
 
-	err := py.UnpackTuple(args, nil, "delattr", 2, 2, &v, &name)
+	err := py.UnpackTuple(args, py.StringDict{}, "delattr", 2, 2, &v, &name)
 	if err != nil {
 		return nil, err
 	}
@@ -961,7 +962,7 @@ Return the tuple ((x-x%y)/y, x%y).  Invariant: div*y + mod == x.`
 
 func builtin_divmod(self py.Object, args py.Tuple) (py.Object, error) {
 	var x, y py.Object
-	err := py.UnpackTuple(args, nil, "divmod", 2, 2, &x, &y)
+	err := py.UnpackTuple(args, py.StringDict{}, "divmod", 2, 2, &x, &y)
 	if err != nil {
 		return nil, err
 	}
@@ -1090,7 +1091,7 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 func builtin_isinstance(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
 	var classOrTuple py.Object
-	err := py.UnpackTuple(args, nil, "isinstance", 2, 2, &obj, &classOrTuple)
+	err := py.UnpackTuple(args, py.StringDict{}, "isinstance", 2, 2, &obj, &classOrTuple)
 	if err != nil {
 		return nil, err
 	}
@@ -1188,7 +1189,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 	if positional > 1 {
 		values = args
 	} else {
-		err := py.UnpackTuple(args, nil, name, 1, 1, &values)
+		err := py.UnpackTuple(args, py.StringDict{}, name, 1, 1, &values)
 		if err != nil {
 			return nil, err
 		}
@@ -1210,7 +1211,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 	if defaultValue != nil {
 		maxItem = defaultValue
 		if keyFunc != nil {
-			maxVal, err = py.Call(kf, py.Tuple{defaultValue}, nil)
+			maxVal, err = py.Call(kf, py.Tuple{defaultValue}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -1233,7 +1234,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 		}
 		if maxVal == nil {
 			if keyFunc != nil {
-				maxVal, err = py.Call(kf, py.Tuple{item}, nil)
+				maxVal, err = py.Call(kf, py.Tuple{item}, py.StringDict{})
 				if err != nil {
 					return nil, err
 				}
@@ -1244,7 +1245,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 		} else {
 			var compareVal py.Object
 			if keyFunc != nil {
-				compareVal, err = py.Call(kf, py.Tuple{item}, nil)
+				compareVal, err = py.Call(kf, py.Tuple{item}, py.StringDict{})
 				if err != nil {
 					return nil, err
 				}
@@ -1301,7 +1302,7 @@ If the user hits EOF (*nix: Ctrl-D, Windows: Ctrl-Z+Return), raise EOFError.`
 func builtin_input(self py.Object, args py.Tuple) (py.Object, error) {
 	var prompt py.Object = py.None
 
-	err := py.UnpackTuple(args, nil, "input", 0, 1, &prompt)
+	err := py.UnpackTuple(args, py.StringDict{}, "input", 0, 1, &prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -1331,22 +1332,22 @@ func builtin_input(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, err
 	}
 
-	stdin := sysModule.Globals["stdin"]
-	stdout := sysModule.Globals["stdout"]
+	stdin := sysModule.Globals.GetOrNil("stdin")
+	stdout := sysModule.Globals.GetOrNil("stdout")
 
 	if prompt != py.None {
 		write, err := py.GetAttrString(stdout, "write")
 		if err != nil {
 			return nil, err
 		}
-		_, err = py.Call(write, py.Tuple{prompt}, nil)
+		_, err = py.Call(write, py.Tuple{prompt}, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
 
 		flush, err := py.GetAttrString(stdout, "flush")
 		if err == nil {
-			py.Call(flush, nil, nil)
+			py.Call(flush, nil, py.StringDict{})
 		}
 	}
 
@@ -1354,7 +1355,7 @@ func builtin_input(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := py.Call(readline, nil, nil)
+	result, err := py.Call(readline, nil, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -1387,11 +1388,11 @@ func builtin_quit(self py.Object, args py.Tuple) (py.Object, error) {
 
 func builtinExit(name string, args py.Tuple) (py.Object, error) {
 	var exitCode py.Object
-	err := py.UnpackTuple(args, nil, name, 0, 1, &exitCode)
+	err := py.UnpackTuple(args, py.StringDict{}, name, 0, 1, &exitCode)
 	if err != nil {
 		return nil, err
 	}
-	exc, err := py.ExceptionNew(py.SystemExit, args, nil)
+	exc, err := py.ExceptionNew(py.SystemExit, args, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -1423,7 +1424,7 @@ reject non-numeric types.
 func builtin_sum(self py.Object, args py.Tuple) (py.Object, error) {
 	var seq py.Object
 	var start py.Object
-	err := py.UnpackTuple(args, nil, "sum", 1, 2, &seq, &start)
+	err := py.UnpackTuple(args, py.StringDict{}, "sum", 1, 2, &seq, &start)
 	if err != nil {
 		return nil, err
 	}
@@ -1469,7 +1470,7 @@ reverse flag can be set to request the result in descending order.`
 func builtin_sorted(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	const funcName = "sorted"
 	var iterable py.Object
-	err := py.UnpackTuple(args, nil, funcName, 1, 1, &iterable)
+	err := py.UnpackTuple(args, py.StringDict{}, funcName, 1, 1, &iterable)
 	if err != nil {
 		return nil, err
 	}

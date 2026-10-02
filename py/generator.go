@@ -25,15 +25,15 @@ var GeneratorType = NewType("generator", "generator object")
 
 func init() {
 	// FIXME would like to do this with introspection
-	GeneratorType.Dict["send"] = MustNewMethod("send", func(self Object, value Object) (Object, error) {
+	GeneratorType.Dict.Set("send", MustNewMethod("send", func(self Object, value Object) (Object, error) {
 		return self.(*Generator).Send(value)
-	}, 0, "send(arg) -> send 'arg' into generator,\nreturn next yielded value or raise StopIteration.")
-	GeneratorType.Dict["throw"] = MustNewMethod("throw", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	}, 0, "send(arg) -> send 'arg' into generator,\nreturn next yielded value or raise StopIteration."))
+	GeneratorType.Dict.Set("throw", MustNewMethod("throw", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(*Generator).Throw(args, kwargs)
-	}, 0, "throw(typ[,val[,tb]]) -> raise exception in generator,\nreturn next yielded value or raise StopIteration.")
-	GeneratorType.Dict["close"] = MustNewMethod("close", func(self Object) (Object, error) {
+	}, 0, "throw(typ[,val[,tb]]) -> raise exception in generator,\nreturn next yielded value or raise StopIteration."))
+	GeneratorType.Dict.Set("close", MustNewMethod("close", func(self Object) (Object, error) {
 		return self.(*Generator).Close()
-	}, 0, "close() -> raise GeneratorExit inside generator.")
+	}, 0, "close() -> raise GeneratorExit inside generator."))
 }
 
 // Type of this object
@@ -145,7 +145,7 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 		case *Exception:
 			exc = v
 		case *Type:
-			newExc, err := ExceptionNew(v, Tuple{}, nil)
+			newExc, err := ExceptionNew(v, Tuple{}, NewStringDict())
 			if err != nil {
 				return nil, err
 			}
@@ -167,7 +167,7 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 		if instance, ok := args[1].(*Exception); ok {
 			exc = instance
 		} else {
-			newExc, err := ExceptionNew(typ, args[1:], nil)
+			newExc, err := ExceptionNew(typ, args[1:], NewStringDict())
 			if err != nil {
 				return nil, err
 			}
@@ -204,7 +204,7 @@ func (it *Generator) throwIntoCaller(args Tuple) (Object, error) {
 	case *Exception:
 		return nil, v
 	case *Type:
-		newExc, err := ExceptionNew(v, Tuple{}, nil)
+		newExc, err := ExceptionNew(v, Tuple{}, NewStringDict())
 		if err != nil {
 			return nil, err
 		}

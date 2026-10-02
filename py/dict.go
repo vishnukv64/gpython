@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"math"
 	"math/big"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,31 +36,37 @@ var (
 )
 
 func init() {
-	StringDictType.Dict["items"] = MustNewMethod("items", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, nil, "items", 0, 0)
+	StringDictType.Dict.Set("items", MustNewMethod("items", func(self Object, args Tuple) (Object, error) {
+		err := UnpackTuple(args, NewStringDict(), "items", 0, 0)
 		if err != nil {
 			return nil, err
 		}
 		sMap := self.(StringDict)
-		o := make(Tuple, 0, len(sMap))
-		for k, v := range sMap {
+		o := make(Tuple, 0, sMap.Len())
+		var itemsErr error
+		sMap.Range(func(k string, v Object) bool {
 			key, err := dictKeyDecode(k)
 			if err != nil {
-				return nil, err
+				itemsErr = err
+				return true
 			}
 			o = append(o, Tuple{key, v})
+			return false
+		})
+		if itemsErr != nil {
+			return nil, itemsErr
 		}
 		return NewIterator(o), nil
-	}, 0, "items() -> list of D's (key, value) pairs, as 2-tuples")
+	}, 0, "items() -> list of D's (key, value) pairs, as 2-tuples"))
 
-	StringDictType.Dict["keys"] = MustNewMethod("keys", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, nil, "keys", 0, 0)
+	StringDictType.Dict.Set("keys", MustNewMethod("keys", func(self Object, args Tuple) (Object, error) {
+		err := UnpackTuple(args, NewStringDict(), "keys", 0, 0)
 		if err != nil {
 			return nil, err
 		}
 		sMap := self.(StringDict)
-		o := make(Tuple, 0, len(sMap))
-		for k := range sMap {
+		o := make(Tuple, 0, sMap.Len())
+		for _, k := range sMap.Keys() {
 			key, err := dictKeyDecode(k)
 			if err != nil {
 				return nil, err
@@ -67,22 +74,22 @@ func init() {
 			o = append(o, key)
 		}
 		return NewIterator(o), nil
-	}, 0, "keys() -> list of D's keys, as a list")
+	}, 0, "keys() -> list of D's keys, as a list"))
 
-	StringDictType.Dict["values"] = MustNewMethod("values", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, nil, "values", 0, 0)
+	StringDictType.Dict.Set("values", MustNewMethod("values", func(self Object, args Tuple) (Object, error) {
+		err := UnpackTuple(args, NewStringDict(), "values", 0, 0)
 		if err != nil {
 			return nil, err
 		}
 		sMap := self.(StringDict)
-		o := make(Tuple, 0, len(sMap))
-		for _, v := range sMap {
+		o := make(Tuple, 0, sMap.Len())
+		for _, v := range sMap.Values() {
 			o = append(o, v)
 		}
 		return NewIterator(o), nil
-	}, 0, "values() -> list of D's values, as a list")
+	}, 0, "values() -> list of D's values, as a list"))
 
-	StringDictType.Dict["get"] = MustNewMethod("get", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("get", MustNewMethod("get", func(self Object, args Tuple) (Object, error) {
 		sMap := self.(StringDict)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "get expected at least 1 argument, got %d", len(args))
@@ -94,16 +101,16 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := sMap[encoded]; ok {
+		if res, ok := sMap.Get(encoded); ok {
 			return res, nil
 		}
 		if len(args) == 2 {
 			return args[1], nil
 		}
 		return None, nil
-	}, 0, "get(key[, default]) -> value for key if key is in the dictionary, else default (None by default).")
+	}, 0, "get(key[, default]) -> value for key if key is in the dictionary, else default (None by default)."))
 
-	StringDictType.Dict["pop"] = MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("pop", MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
 		d := self.(StringDict)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "pop expected at least 1 argument, got %d", len(args))
@@ -114,7 +121,7 @@ func init() {
 		// CPython answers an empty dict before it ever hashes the key, so
 		// the default is returned (and an unhashable key is not complained
 		// about) when there is nothing to pop.
-		if len(d) == 0 {
+		if d.Len() == 0 {
 			if len(args) == 2 {
 				return args[1], nil
 			}
@@ -124,37 +131,38 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := d[encoded]; ok {
-			delete(d, encoded)
+		if res, ok := d.Get(encoded); ok {
+			d.Del(encoded)
 			return res, nil
 		}
 		if len(args) == 2 {
 			return args[1], nil
 		}
 		return nil, ExceptionNewf(KeyError, "%v", args[0])
-	}, 0, "pop(key[, default]) -> value -- remove specified key and return the corresponding value.")
+	}, 0, "pop(key[, default]) -> value -- remove specified key and return the corresponding value."))
 
-	StringDictType.Dict["popitem"] = MustNewMethod("popitem", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("popitem", MustNewMethod("popitem", func(self Object, args Tuple) (Object, error) {
 		d := self.(StringDict)
 		if err := methodNoArgs("dict.popitem", args); err != nil {
 			return nil, err
 		}
-		// NOTE: StringDict is a Go map, which has no insertion order, so this
-		// returns an arbitrary pair rather than CPython's most recently
-		// added one.  Draining a dict is unaffected; the order of the pairs
-		// is not reproducible.
-		for k, v := range d {
-			key, err := dictKeyDecode(k)
-			if err != nil {
-				return nil, err
-			}
-			delete(d, k)
-			return Tuple{key, v}, nil
+		// dict.popitem() removes and returns the most recently inserted pair,
+		// which is the LAST one in insertion order.
+		keys := d.Keys()
+		if len(keys) == 0 {
+			return nil, ExceptionNewf(KeyError, "%v", "popitem(): dictionary is empty")
 		}
-		return nil, ExceptionNewf(KeyError, "%v", "popitem(): dictionary is empty")
-	}, 0, "popitem() -> (k, v) -- remove and return some (key, value) pair as a 2-tuple.")
+		k := keys[len(keys)-1]
+		v, _ := d.Get(k)
+		d.Del(k)
+		key, err := dictKeyDecode(k)
+		if err != nil {
+			return nil, err
+		}
+		return Tuple{key, v}, nil
+	}, 0, "popitem() -> (k, v) -- remove and return some (key, value) pair as a 2-tuple."))
 
-	StringDictType.Dict["setdefault"] = MustNewMethod("setdefault", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("setdefault", MustNewMethod("setdefault", func(self Object, args Tuple) (Object, error) {
 		d := self.(StringDict)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "setdefault expected at least 1 argument, got %d", len(args))
@@ -166,18 +174,18 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := d[encoded]; ok {
+		if res, ok := d.Get(encoded); ok {
 			return res, nil
 		}
 		var deflt Object = None
 		if len(args) == 2 {
 			deflt = args[1]
 		}
-		d[encoded] = deflt
+		d.Set(encoded, deflt)
 		return deflt, nil
-	}, 0, "setdefault(key[, default]) -> value -- return value if key is in the dictionary, else insert and return default.")
+	}, 0, "setdefault(key[, default]) -> value -- return value if key is in the dictionary, else insert and return default."))
 
-	StringDictType.Dict["update"] = MustNewMethod("update", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringDictType.Dict.Set("update", MustNewMethod("update", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		d := self.(StringDict)
 		if len(args) > 1 {
 			return nil, ExceptionNewf(TypeError, "update expected at most 1 argument, got %d", len(args))
@@ -190,39 +198,39 @@ func init() {
 		// Keyword arguments are name=value pairs; the names are Python
 		// identifiers, so they are stored verbatim, exactly as dict()
 		// stores its own keyword arguments.
-		for k, v := range kwargs {
-			d[k] = v
-		}
+		kwargs.Range(func(k string, v Object) bool {
+			d.Set(k, v)
+			return false
+		})
 		return None, nil
-	}, 0, "update([other]) -> None.  Update D from a dict/iterable of key/value pairs and keywords.")
+	}, 0, "update([other]) -> None.  Update D from a dict/iterable of key/value pairs and keywords."))
 
-	StringDictType.Dict["clear"] = MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
 		d := self.(StringDict)
 		if err := methodNoArgs("dict.clear", args); err != nil {
 			return nil, err
 		}
-		// The map is shared with the caller, so its entries have to be
-		// removed rather than the map being replaced.
-		for k := range d {
-			delete(d, k)
-		}
+		// The entries are removed in place rather than the dict being replaced,
+		// because a StringDict is copied by value and every copy shares this
+		// same storage.
+		d.Clear()
 		return None, nil
-	}, 0, "clear() -> None.  Remove all items from the dictionary.")
+	}, 0, "clear() -> None.  Remove all items from the dictionary."))
 
-	StringDictType.Dict["copy"] = MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("copy", MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
 		d := self.(StringDict)
 		if err := methodNoArgs("dict.copy", args); err != nil {
 			return nil, err
 		}
 		return d.Copy(), nil
-	}, 0, "copy() -> a shallow copy of the dictionary.")
+	}, 0, "copy() -> a shallow copy of the dictionary."))
 
 	// dict.fromkeys is a class method in CPython: it is looked up on the
 	// type (dict.fromkeys) as well as on an instance ({}.fromkeys).  In both
 	// forms the arguments arrive unshifted - self is the dict for the bound
 	// form and the module for the unbound one - so unlike the other methods
 	// this one ignores self entirely.
-	StringDictType.Dict["fromkeys"] = MustNewMethod("fromkeys", func(self Object, args Tuple) (Object, error) {
+	StringDictType.Dict.Set("fromkeys", MustNewMethod("fromkeys", func(self Object, args Tuple) (Object, error) {
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "fromkeys expected at least 1 argument, got %d", len(args))
 		}
@@ -241,7 +249,7 @@ func init() {
 				loopErr = err
 				return true
 			}
-			out[encoded] = value
+			out.Set(encoded, value)
 			return false
 		})
 		if err != nil {
@@ -251,7 +259,7 @@ func init() {
 			return nil, loopErr
 		}
 		return out, nil
-	}, 0, "fromkeys(iterable, value=None, /) -> New dict with keys from iterable and values equal to value.")
+	}, 0, "fromkeys(iterable, value=None, /) -> New dict with keys from iterable and values equal to value."))
 }
 
 // dictUpdateFrom implements the body shared by dict.update() and
@@ -261,13 +269,15 @@ func init() {
 // CPython tells the two forms apart - or an iterable of key/value pairs.
 func dictUpdateFrom(d StringDict, other Object) error {
 	if src, ok := other.(StringDict); ok {
-		for k, v := range src {
-			d[k] = v
-		}
+		// Range snapshots the keys, so "d.update(d)" is safe.
+		src.Range(func(k string, v Object) bool {
+			d.Set(k, v)
+			return false
+		})
 		return nil
 	}
 	if keysFn, err := GetAttrString(other, "keys"); err == nil {
-		keys, err := Call(keysFn, nil, nil)
+		keys, err := Call(keysFn, nil, NewStringDict())
 		if err != nil {
 			return err
 		}
@@ -283,7 +293,7 @@ func dictUpdateFrom(d StringDict, other Object) error {
 				loopErr = err
 				return true
 			}
-			d[encoded] = value
+			d.Set(encoded, value)
 			return false
 		})
 		if err == nil {
@@ -312,7 +322,7 @@ func dictUpdateFrom(d StringDict, other Object) error {
 			loopErr = err
 			return true
 		}
-		d[encoded] = pair[1]
+		d.Set(encoded, pair[1])
 		index++
 		return false
 	})
@@ -324,8 +334,182 @@ func dictUpdateFrom(d StringDict, other Object) error {
 
 // String to object dictionary
 //
-// Used for variables etc where the keys can only be strings
-type StringDict map[string]Object
+// Used for variables etc where the keys can only be strings.
+//
+// Python has guaranteed that a dict keeps its insertion order since 3.7, so a
+// Go map - whose iteration order is randomised - is not enough on its own.
+// The entries are therefore kept twice: in the map, for lookup, and in a list
+// of their encoded keys in the order they were first inserted.
+//
+// The order list is shared through a pointer because a StringDict is copied
+// by value everywhere (Go maps are references, so the map itself needs no such
+// care): every copy has to see the one order, including appends made through
+// a copy.  A StringDict built by NewStringDict always has both fields set; the
+// zero value reads as an empty dict, as the bare nil map did.
+type StringDict struct {
+	m     map[string]Object
+	order *[]string
+}
+
+// Ptr returns a value identifying this dict's storage, so that tooling such as
+// pprint can tell one dict from another.  reflect.Value.Pointer cannot be
+// called on a struct, which is what a StringDict now is - it could only be
+// called on the map before.
+func (d StringDict) Ptr() uintptr {
+	return reflect.ValueOf(d.m).Pointer()
+}
+
+// Get returns the value stored under an encoded key and whether it is present.
+func (d StringDict) Get(key string) (Object, bool) {
+	v, ok := d.m[key]
+	return v, ok
+}
+
+// GetOrNil returns the value stored under an encoded key, or Go nil when the
+// key is absent.  It is the exact equivalent of a Go map read d[key] on the
+// old map-typed StringDict, for the few places that relied on that - notably
+// comparing the result against nil to test for a key's presence.
+func (d StringDict) GetOrNil(key string) Object {
+	return d.m[key]
+}
+
+// IsNil reports whether the dict has never been given storage, which is what
+// a nil map used to mean: NewStringDict always allocates, so only the zero
+// value or an explicit NewStringDict() is nil here.  Several places used
+// "dict == nil" to mean "not set up yet", and this is its replacement.
+func (d StringDict) IsNil() bool {
+	return d.m == nil
+}
+
+// Set stores value under an encoded key, keeping the position of a key that is
+// already present.  A key that was deleted and is set again moves to the end,
+// which is what CPython does.
+//
+// It has a pointer receiver so that the zero StringDict - whose map is nil -
+// allocates its storage on first write instead of the write being lost.  A
+// dict built by NewStringDict already has both fields set, so the common path
+// only writes the shared map.
+func (d *StringDict) Set(key string, value Object) {
+	if d.m == nil {
+		d.m = make(map[string]Object)
+	}
+	if d.order == nil {
+		d.order = new([]string)
+	}
+	if _, ok := d.m[key]; !ok {
+		*d.order = append(*d.order, key)
+	}
+	d.m[key] = value
+}
+
+// Del removes an encoded key, reporting whether it was present.
+func (d *StringDict) Del(key string) bool {
+	if _, ok := d.m[key]; !ok {
+		return false
+	}
+	delete(d.m, key)
+	keys := *d.order
+	for i, k := range keys {
+		if k == key {
+			*d.order = append(keys[:i], keys[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
+// Has reports whether an encoded key is present.
+func (d StringDict) Has(key string) bool {
+	_, ok := d.m[key]
+	return ok
+}
+
+// Len returns the number of entries.
+func (d StringDict) Len() int {
+	return len(d.m)
+}
+
+// Keys returns the encoded keys in insertion order.
+func (d StringDict) Keys() []string {
+	if d.order == nil {
+		return nil
+	}
+	out := make([]string, len(*d.order))
+	copy(out, *d.order)
+	return out
+}
+
+// Values returns the values in insertion order.
+func (d StringDict) Values() []Object {
+	if d.order == nil {
+		return nil
+	}
+	order := *d.order
+	out := make([]Object, len(order))
+	for i, k := range order {
+		out[i] = d.m[k]
+	}
+	return out
+}
+
+// Items returns the entries in insertion order as a slice, so callers can
+// write an ordinary range loop - with continue, return and goto - instead of a
+// Range callback.
+func (d StringDict) Items() []DictEntry {
+	if d.order == nil {
+		return nil
+	}
+	out := make([]DictEntry, 0, len(*d.order))
+	for _, k := range *d.order {
+		out = append(out, DictEntry{Key: k, Value: d.m[k]})
+	}
+	return out
+}
+
+// Range calls fn for each entry in insertion order, stopping early when fn
+// returns true.  The keys are snapshotted first, so fn may delete entries.
+func (d StringDict) Range(fn func(key string, value Object) bool) {
+	for _, k := range d.Keys() {
+		v, ok := d.m[k]
+		if !ok {
+			continue // deleted by fn
+		}
+		if fn(k, v) {
+			return
+		}
+	}
+}
+
+// Clear removes every entry, keeping the dict object itself in place.
+func (d *StringDict) Clear() {
+	if d.m == nil {
+		return
+	}
+	for k := range d.m {
+		delete(d.m, k)
+	}
+	*d.order = (*d.order)[:0]
+}
+
+// DictEntry is one key/value pair for NewStringDictFrom.
+type DictEntry struct {
+	Key   string
+	Value Object
+}
+
+// NewStringDictFrom builds a StringDict from the listed pairs, in the order
+// they are given.  The keys are already-encoded dict keys, which for the
+// module globals and method tables that use this builder are plain strings.
+// It exists because a composite literal cannot reach the unexported order
+// field, so a literal such as a Go map literal with two entries - whose order
+// the map does not preserve - has no ordered composite equivalent.
+func NewStringDictFrom(entries ...DictEntry) StringDict {
+	d := NewStringDictSized(len(entries))
+	for _, e := range entries {
+		d.Set(e.Key, e.Value)
+	}
+	return d
+}
 
 // Python dicts accept any hashable key, but the storage here is keyed by
 // string.  Keys are therefore encoded into a reversible string form.  A
@@ -568,17 +752,18 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 			switch z := i.(type) {
 			case Tuple:
 				if zStr, ok := z[0].(String); ok {
-					out[string(zStr)] = z[1]
+					out.Set(string(zStr), z[1])
 				}
 			default:
 				return nil, ExceptionNewf(TypeError, "non-tuple sequence")
 			}
 		}
 	}
-	if len(kwargs) > 0 {
-		for k, v := range kwargs {
-			out[k] = v
-		}
+	if kwargs.Len() > 0 {
+		kwargs.Range(func(k string, v Object) bool {
+			out.Set(k, v)
+			return false
+		})
 	}
 	return out, nil
 }
@@ -590,19 +775,19 @@ func (o StringDict) Type() *Type {
 
 // Make a new dictionary
 func NewStringDict() StringDict {
-	return make(StringDict)
+	return StringDict{m: make(map[string]Object), order: new([]string)}
 }
 
 // Make a new dictionary with reservation for n entries
 func NewStringDictSized(n int) StringDict {
-	return make(StringDict, n)
+	return StringDict{m: make(map[string]Object, n), order: new([]string)}
 }
 
 // Checks that obj is exactly a dictionary and returns an error if not
 func DictCheckExact(obj Object) (StringDict, error) {
 	dict, ok := obj.(StringDict)
 	if !ok {
-		return nil, expectingDict
+		return NewStringDict(), expectingDict
 	}
 	return dict, nil
 }
@@ -615,10 +800,11 @@ func DictCheck(obj Object) (StringDict, error) {
 
 // Copy a dictionary
 func (d StringDict) Copy() StringDict {
-	e := make(StringDict, len(d))
-	for k, v := range d {
-		e[k] = v
-	}
+	e := NewStringDictSized(d.Len())
+	d.Range(func(k string, v Object) bool {
+		e.Set(k, v)
+		return false
+	})
 	return e
 }
 
@@ -627,33 +813,42 @@ func (a StringDict) M__str__() (Object, error) {
 }
 
 func (a StringDict) M__len__() (Object, error) {
-	return Int(len(a)), nil
+	return Int(a.Len()), nil
 }
 
 func (a StringDict) M__repr__() (Object, error) {
 	var out bytes.Buffer
 	out.WriteRune('{')
 	spacer := false
-	for key, value := range a {
+	var reprErr error
+	a.Range(func(key string, value Object) bool {
+
 		if spacer {
 			out.WriteString(", ")
 		}
-		key, err := dictKeyDecode(key)
+		k, err := dictKeyDecode(key)
 		if err != nil {
-			return nil, err
+			reprErr = err
+			return true
 		}
-		keyStr, err := ReprAsString(key)
+		keyStr, err := ReprAsString(k)
 		if err != nil {
-			return nil, err
+			reprErr = err
+			return true
 		}
 		valueStr, err := ReprAsString(value)
 		if err != nil {
-			return nil, err
+			reprErr = err
+			return true
 		}
 		out.WriteString(keyStr)
 		out.WriteString(": ")
 		out.WriteString(valueStr)
 		spacer = true
+		return false
+	})
+	if reprErr != nil {
+		return nil, reprErr
 	}
 	out.WriteRune('}')
 	return String(out.String()), nil
@@ -661,8 +856,8 @@ func (a StringDict) M__repr__() (Object, error) {
 
 // Returns a list of keys from the dict
 func (d StringDict) M__iter__() (Object, error) {
-	o := make(Tuple, 0, len(d))
-	for k := range d {
+	o := make(Tuple, 0, d.Len())
+	for _, k := range d.Keys() {
 		key, err := dictKeyDecode(k)
 		if err != nil {
 			return nil, err
@@ -675,7 +870,7 @@ func (d StringDict) M__iter__() (Object, error) {
 func (d StringDict) M__getitem__(key Object) (Object, error) {
 	encoded, err := dictKey(key)
 	if err == nil {
-		if res, ok := d[encoded]; ok {
+		if res, ok := d.Get(encoded); ok {
 			return res, nil
 		}
 	}
@@ -687,10 +882,10 @@ func (d StringDict) M__delitem__(key Object) (Object, error) {
 	if err != nil {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
-	if _, ok := d[encoded]; !ok {
+	if _, ok := d.Get(encoded); !ok {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
-	delete(d, encoded)
+	d.Del(encoded)
 	return None, nil
 }
 
@@ -699,7 +894,7 @@ func (d StringDict) M__setitem__(key, value Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	d[encoded] = value
+	d.Set(encoded, value)
 	return None, nil
 }
 
@@ -708,21 +903,34 @@ func (a StringDict) M__eq__(other Object) (Object, error) {
 	if !ok {
 		return NotImplemented, nil
 	}
-	if len(a) != len(b) {
+	if a.Len() != b.Len() {
 		return False, nil
 	}
-	for k, av := range a {
-		bv, ok := b[k]
+	var eqErr error
+	same := true
+	a.Range(func(k string, av Object) bool {
+
+		bv, ok := b.Get(k)
 		if !ok {
-			return False, nil
+			same = false
+			return true
 		}
 		res, err := Eq(av, bv)
 		if err != nil {
-			return nil, err
+			eqErr = err
+			return true
 		}
 		if res == False {
-			return False, nil
+			same = false
+			return true
 		}
+		return false
+	})
+	if eqErr != nil {
+		return nil, eqErr
+	}
+	if !same {
+		return False, nil
 	}
 	return True, nil
 }
@@ -751,9 +959,10 @@ func (a StringDict) M__or__(other Object) (Object, error) {
 		return NotImplemented, nil
 	}
 	out := a.Copy()
-	for k, v := range b {
-		out[k] = v
-	}
+	b.Range(func(k string, v Object) bool {
+		out.Set(k, v)
+		return false
+	})
 	return out, nil
 }
 
@@ -772,7 +981,7 @@ func (a StringDict) M__contains__(other Object) (Object, error) {
 	if err != nil {
 		return False, nil
 	}
-	if _, ok := a[encoded]; ok {
+	if _, ok := a.Get(encoded); ok {
 		return True, nil
 	}
 	return False, nil
@@ -783,5 +992,5 @@ func (d StringDict) GetDict() StringDict {
 }
 
 var _ IGetDict = (*StringDict)(nil)
-var _ I__or__ = StringDict(nil)
-var _ I__ior__ = StringDict(nil)
+var _ I__or__ = NewStringDict()
+var _ I__ior__ = NewStringDict()

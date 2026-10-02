@@ -20,17 +20,17 @@ func init() {
 		Methods: []*py.Method{
 			py.MustNewMethod("capwords", capwords, 0, capwords_doc),
 		},
-		Globals: py.StringDict{
-			"whitespace":      whitespace,
-			"ascii_lowercase": ascii_lowercase,
-			"ascii_uppercase": ascii_uppercase,
-			"ascii_letters":   ascii_letters,
-			"digits":          digits,
-			"hexdigits":       hexdigits,
-			"octdigits":       octdigits,
-			"punctuation":     punctuation,
-			"printable":       printable,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "whitespace", Value: whitespace},
+			py.DictEntry{Key: "ascii_lowercase", Value: ascii_lowercase},
+			py.DictEntry{Key: "ascii_uppercase", Value: ascii_uppercase},
+			py.DictEntry{Key: "ascii_letters", Value: ascii_letters},
+			py.DictEntry{Key: "digits", Value: digits},
+			py.DictEntry{Key: "hexdigits", Value: hexdigits},
+			py.DictEntry{Key: "octdigits", Value: octdigits},
+			py.DictEntry{Key: "punctuation", Value: punctuation},
+			py.DictEntry{Key: "printable", Value: printable},
+		),
 	})
 }
 
@@ -81,7 +81,7 @@ func capwords(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 
 	pystr = py.String(strings.ToLower(string(pystr.(py.String))))
-	pyvs, err := pystr.(py.String).Split(py.Tuple{pysep}, nil)
+	pyvs, err := pystr.(py.String).Split(py.Tuple{pysep}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}

@@ -177,24 +177,24 @@ func (a *Slice) M__ne__(other Object) (Object, error) {
 }
 
 func init() {
-	SliceType.Dict["start"] = &Property{
+	SliceType.Dict.Set("start", &Property{
 		Fget: func(self Object) (Object, error) {
 			selfSlice := self.(*Slice)
 			return selfSlice.Start, nil
 		},
-	}
-	SliceType.Dict["stop"] = &Property{
+	})
+	SliceType.Dict.Set("stop", &Property{
 		Fget: func(self Object) (Object, error) {
 			selfSlice := self.(*Slice)
 			return selfSlice.Stop, nil
 		},
-	}
-	SliceType.Dict["step"] = &Property{
+	})
+	SliceType.Dict.Set("step", &Property{
 		Fget: func(self Object) (Object, error) {
 			selfSlice := self.(*Slice)
 			return selfSlice.Step, nil
 		},
-	}
+	})
 }
 
 // Check interface is satisfied

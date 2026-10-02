@@ -74,29 +74,29 @@ func decoderFor(name string) py.Object {
 }
 
 func init() {
-	globals := py.StringDict{
-		"LookupError":           LookupErrorType,
-		"CodecInfo":             CodecInfoType,
-		"lookup":                py.MustNewMethod("lookup", lookup, 0, "Look up a codec by name."),
-		"encode":                py.MustNewMethod("encode", moduleEncode, 0, "Encode an object with the given codec."),
-		"decode":                py.MustNewMethod("decode", moduleDecode, 0, "Decode an object with the given codec."),
-		"register":              py.MustNewMethod("register", registerNoop, 0, "Register a codec search function (not supported)."),
-		"getencoder":            py.MustNewMethod("getencoder", getEncoder, 0, "Look up the encoder for an encoding."),
-		"getdecoder":            py.MustNewMethod("getdecoder", getDecoder, 0, "Look up the decoder for an encoding."),
-		"getincrementalencoder": py.MustNewMethod("getincrementalencoder", getEncoder, 0, "Look up the incremental encoder."),
-		"getincrementaldecoder": py.MustNewMethod("getincrementaldecoder", getDecoder, 0, "Look up the incremental decoder."),
-		"BOM":                   py.Bytes{0xef, 0xbb, 0xbf},
-		"BOM_UTF8":              py.Bytes{0xef, 0xbb, 0xbf},
-		"BOM_UTF16":             py.Bytes{0xff, 0xfe},
-		"BOM_UTF16_LE":          py.Bytes{0xff, 0xfe},
-		"BOM_UTF16_BE":          py.Bytes{0xfe, 0xff},
-		"BOM_UTF32":             py.Bytes{0xff, 0xfe, 0x00, 0x00},
-		"BOM_UTF32_LE":          py.Bytes{0xff, 0xfe, 0x00, 0x00},
-		"BOM_UTF32_BE":          py.Bytes{0x00, 0x00, 0xfe, 0xff},
-		"BOM_LE":                py.Bytes{0xff, 0xfe},
-		"BOM_BE":                py.Bytes{0xfe, 0xff},
-	}
-	globals["__doc__"] = py.String(module_doc)
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "LookupError", Value: LookupErrorType},
+		py.DictEntry{Key: "CodecInfo", Value: CodecInfoType},
+		py.DictEntry{Key: "lookup", Value: py.MustNewMethod("lookup", lookup, 0, "Look up a codec by name.")},
+		py.DictEntry{Key: "encode", Value: py.MustNewMethod("encode", moduleEncode, 0, "Encode an object with the given codec.")},
+		py.DictEntry{Key: "decode", Value: py.MustNewMethod("decode", moduleDecode, 0, "Decode an object with the given codec.")},
+		py.DictEntry{Key: "register", Value: py.MustNewMethod("register", registerNoop, 0, "Register a codec search function (not supported).")},
+		py.DictEntry{Key: "getencoder", Value: py.MustNewMethod("getencoder", getEncoder, 0, "Look up the encoder for an encoding.")},
+		py.DictEntry{Key: "getdecoder", Value: py.MustNewMethod("getdecoder", getDecoder, 0, "Look up the decoder for an encoding.")},
+		py.DictEntry{Key: "getincrementalencoder", Value: py.MustNewMethod("getincrementalencoder", getEncoder, 0, "Look up the incremental encoder.")},
+		py.DictEntry{Key: "getincrementaldecoder", Value: py.MustNewMethod("getincrementaldecoder", getDecoder, 0, "Look up the incremental decoder.")},
+		py.DictEntry{Key: "BOM", Value: py.Bytes{0xef, 0xbb, 0xbf}},
+		py.DictEntry{Key: "BOM_UTF8", Value: py.Bytes{0xef, 0xbb, 0xbf}},
+		py.DictEntry{Key: "BOM_UTF16", Value: py.Bytes{0xff, 0xfe}},
+		py.DictEntry{Key: "BOM_UTF16_LE", Value: py.Bytes{0xff, 0xfe}},
+		py.DictEntry{Key: "BOM_UTF16_BE", Value: py.Bytes{0xfe, 0xff}},
+		py.DictEntry{Key: "BOM_UTF32", Value: py.Bytes{0xff, 0xfe, 0x00, 0x00}},
+		py.DictEntry{Key: "BOM_UTF32_LE", Value: py.Bytes{0xff, 0xfe, 0x00, 0x00}},
+		py.DictEntry{Key: "BOM_UTF32_BE", Value: py.Bytes{0x00, 0x00, 0xfe, 0xff}},
+		py.DictEntry{Key: "BOM_LE", Value: py.Bytes{0xff, 0xfe}},
+		py.DictEntry{Key: "BOM_BE", Value: py.Bytes{0xfe, 0xff}},
+	)
+	globals.Set("__doc__", py.String(module_doc))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -110,7 +110,7 @@ func init() {
 // lookup returns the CodecInfo for a name, as CPython's four-element tuple.
 func lookup(self py.Object, args py.Tuple) (py.Object, error) {
 	var name py.Object
-	if err := py.UnpackTuple(args, nil, "lookup", 1, 1, &name); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "lookup", 1, 1, &name); err != nil {
 		return nil, err
 	}
 	text, err := py.StrAsString(name)
@@ -304,41 +304,41 @@ func decodeWith(name string, args py.Tuple) (py.Object, error) {
 func registerNoop(self py.Object, args py.Tuple) (py.Object, error) { return py.None, nil }
 
 func init() {
-	CodecInfoType.Dict["name"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	CodecInfoType.Dict.Set("name", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String(self.(*CodecInfo).name), nil
-	}}
-	CodecInfoType.Dict["encode"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("encode", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CodecInfo).encoder, nil
-	}}
-	CodecInfoType.Dict["decode"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("decode", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CodecInfo).decoder, nil
-	}}
-	CodecInfoType.Dict["incrementalencoder"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("incrementalencoder", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CodecInfo).incrementalEncoder, nil
-	}}
-	CodecInfoType.Dict["incrementaldecoder"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("incrementaldecoder", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CodecInfo).incrementalDecoder, nil
-	}}
-	CodecInfoType.Dict["streamreader"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("streamreader", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.None, nil
-	}}
-	CodecInfoType.Dict["streamwriter"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CodecInfoType.Dict.Set("streamwriter", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.None, nil
-	}}
+	}})
 
 	// The four-element tuple form: lookup() returns a CodecInfo, which is
 	// also unpackable into (encode, decode, streamreader, streamwriter) as
 	// CPython's result is.
-	CodecInfoType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CodecInfoType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*CodecInfo)
 		return py.NewIterator(py.Tuple{c.encoder, c.decoder, py.None, py.None}), nil
-	}, 0, "Iterate over the codec functions.")
-	CodecInfoType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Iterate over the codec functions."))
+	CodecInfoType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(4), nil
-	}, 0, "Number of codec functions.")
-	CodecInfoType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Number of codec functions."))
+	CodecInfoType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		n, err := py.IndexInt(key)
@@ -354,7 +354,7 @@ func init() {
 			return nil, py.ExceptionNewf(py.IndexError, "tuple index out of range")
 		}
 		return items[n], nil
-	}, 0, "The codec function at the given index.")
+	}, 0, "The codec function at the given index."))
 }
 
 // ---------------------------------------------------------------------------

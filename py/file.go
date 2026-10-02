@@ -18,33 +18,33 @@ var FileType = NewType("file", `represents an open file`)
 var errClosed = ExceptionNewf(ValueError, "I/O operation on closed file.")
 
 func init() {
-	FileType.Dict["write"] = MustNewMethod("write", func(self Object, value Object) (Object, error) {
+	FileType.Dict.Set("write", MustNewMethod("write", func(self Object, value Object) (Object, error) {
 		return self.(*File).Write(value)
-	}, 0, "write(arg) -> writes the contents of arg to the file, returning the number of characters written.")
+	}, 0, "write(arg) -> writes the contents of arg to the file, returning the number of characters written."))
 
-	FileType.Dict["read"] = MustNewMethod("read", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	FileType.Dict.Set("read", MustNewMethod("read", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(*File).Read(args, kwargs)
-	}, 0, "read([size]) -> read at most size bytes, returned as a string.\n\nIf the size argument is negative or omitted, read until EOF is reached.\nNotice that when in non-blocking mode, less data than what was requested\nmay be returned, even if no size parameter was given.")
-	FileType.Dict["close"] = MustNewMethod("close", func(self Object) (Object, error) {
+	}, 0, "read([size]) -> read at most size bytes, returned as a string.\n\nIf the size argument is negative or omitted, read until EOF is reached.\nNotice that when in non-blocking mode, less data than what was requested\nmay be returned, even if no size parameter was given."))
+	FileType.Dict.Set("close", MustNewMethod("close", func(self Object) (Object, error) {
 		return self.(*File).Close()
-	}, 0, "close() -> None or (perhaps) an integer.  Close the file.\n\nSets data attribute .closed to True.  A closed file cannot be used for\nfurther I/O operations.  close() may be called more than once without\nerror.  Some kinds of file objects (for example, opened by popen())\nmay return an exit status upon closing.")
-	FileType.Dict["flush"] = MustNewMethod("flush", func(self Object) (Object, error) {
+	}, 0, "close() -> None or (perhaps) an integer.  Close the file.\n\nSets data attribute .closed to True.  A closed file cannot be used for\nfurther I/O operations.  close() may be called more than once without\nerror.  Some kinds of file objects (for example, opened by popen())\nmay return an exit status upon closing."))
+	FileType.Dict.Set("flush", MustNewMethod("flush", func(self Object) (Object, error) {
 		return self.(*File).Flush()
-	}, 0, "flush() -> Flush the write buffers of the stream if applicable. This does nothing for read-only and non-blocking streams.")
-	FileType.Dict["readline"] = MustNewMethod("readline", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	}, 0, "flush() -> Flush the write buffers of the stream if applicable. This does nothing for read-only and non-blocking streams."))
+	FileType.Dict.Set("readline", MustNewMethod("readline", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(*File).ReadLine(args, kwargs)
-	}, 0, "readline(size=-1, /) -> Read and return one line from the stream. If size is specified, at most size bytes will be read.\n\nThe line terminator is always b'\\n' for binary files; for text files, the newline argument to open can be used to select the line terminator(s) recognized.")
+	}, 0, "readline(size=-1, /) -> Read and return one line from the stream. If size is specified, at most size bytes will be read.\n\nThe line terminator is always b'\\n' for binary files; for text files, the newline argument to open can be used to select the line terminator(s) recognized."))
 
 	// A file is its own iterator over its lines.  "for line in open(path)" is
 	// the ordinary way to read a file, and it raised "'file' object is not
 	// iterable".  __next__ is the same readline that returns StopIteration at
 	// the end instead of the empty string.
-	FileType.Dict["__iter__"] = MustNewMethod("__iter__", func(self Object, args Tuple) (Object, error) {
+	FileType.Dict.Set("__iter__", MustNewMethod("__iter__", func(self Object, args Tuple) (Object, error) {
 		return self, nil
-	}, 0, "__iter__() -> self, so a file can be iterated for its lines.")
-	FileType.Dict["__next__"] = MustNewMethod("__next__", func(self Object, args Tuple) (Object, error) {
+	}, 0, "__iter__() -> self, so a file can be iterated for its lines."))
+	FileType.Dict.Set("__next__", MustNewMethod("__next__", func(self Object, args Tuple) (Object, error) {
 		f := self.(*File)
-		line, err := f.ReadLine(nil, nil)
+		line, err := f.ReadLine(nil, StringDict{})
 		if err != nil {
 			return nil, err
 		}
@@ -55,13 +55,13 @@ func init() {
 			return nil, StopIteration
 		}
 		return line, nil
-	}, 0, "__next__() -> the next line, or StopIteration at the end.")
+	}, 0, "__next__() -> the next line, or StopIteration at the end."))
 
-	FileType.Dict["readlines"] = MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	FileType.Dict.Set("readlines", MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		f := self.(*File)
 		lines := &List{}
 		for {
-			line, err := f.ReadLine(nil, nil)
+			line, err := f.ReadLine(nil, StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -74,7 +74,7 @@ func init() {
 			lines.Append(line)
 		}
 		return lines, nil
-	}, 0, "readlines(hint=-1, /) -> Return a list of lines from the stream.")
+	}, 0, "readlines(hint=-1, /) -> Return a list of lines from the stream."))
 }
 
 type FileMode int

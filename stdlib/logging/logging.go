@@ -161,11 +161,11 @@ func (l *Logger) Type() *py.Type { return LoggerType }
 // reads logger.name to label its own output - and it was reachable only from
 // __repr__ before.
 func init() {
-	LoggerType.Dict["name"] = &py.Property{
+	LoggerType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.String(self.(*Logger).name), nil
 		},
-	}
+	})
 }
 
 func (l *Logger) M__repr__() (py.Object, error) {
@@ -696,14 +696,14 @@ func streamEmit(h *Handler, record *LogRecord) error {
 	if err != nil {
 		return err
 	}
-	if _, err := py.Call(write, py.Tuple{py.String(text + "\n")}, nil); err != nil {
+	if _, err := py.Call(write, py.Tuple{py.String(text + "\n")}, py.StringDict{}); err != nil {
 		return err
 	}
 	flush, err := py.GetAttrString(h.stream, "flush")
 	if err != nil {
 		return nil // A stream without flush is not an error.
 	}
-	if _, err := py.Call(flush, nil, nil); err != nil {
+	if _, err := py.Call(flush, nil, py.StringDict{}); err != nil {
 		return err
 	}
 	return nil
@@ -760,18 +760,18 @@ func fileHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	}
 	open := py.Object(nil)
 	if impl := py.GetModuleImplOrNil("io"); impl != nil {
-		open = impl.Globals["open"]
+		open = impl.Globals.GetOrNil("open")
 	}
 	if open == nil {
 		builtins := py.GetModuleImplOrNil("builtins")
 		if builtins != nil {
-			open = builtins.Globals["open"]
+			open = builtins.Globals.GetOrNil("open")
 		}
 	}
 	if open == nil {
 		return nil, py.ExceptionNewf(py.RuntimeError, "cannot open file handler stream: no io.open")
 	}
-	stream, err := py.Call(open, py.Tuple{filename, mode}, nil)
+	stream, err := py.Call(open, py.Tuple{filename, mode}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -782,7 +782,7 @@ func fileHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 // the module registered with the interpreter.
 func stderrStream() py.Object {
 	if impl := py.GetModuleImplOrNil("sys"); impl != nil {
-		if s, ok := impl.Globals["stderr"]; ok {
+		if s, ok := impl.Globals.Get("stderr"); ok {
 			return s
 		}
 	}
@@ -867,12 +867,12 @@ func basicConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	case filename != nil && filename != py.None:
 		open := py.Object(nil)
 		if impl := py.GetModuleImplOrNil("io"); impl != nil {
-			open = impl.Globals["open"]
+			open = impl.Globals.GetOrNil("open")
 		}
 		if open == nil {
 			return nil, py.ExceptionNewf(py.RuntimeError, "basicConfig(filename=...) needs io.open")
 		}
-		f, err := py.Call(open, py.Tuple{filename, filemode}, nil)
+		f, err := py.Call(open, py.Tuple{filename, filemode}, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
@@ -936,40 +936,40 @@ func getLevelName(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 }
 
 func init() {
-	LoggerType.Dict["debug"] = py.MustNewMethod("debug", loggerDebug, 0, "Log 'msg % args' with severity 'DEBUG'.")
-	LoggerType.Dict["info"] = py.MustNewMethod("info", loggerInfo, 0, "Log 'msg % args' with severity 'INFO'.")
-	LoggerType.Dict["warning"] = py.MustNewMethod("warning", loggerWarning, 0, "Log 'msg % args' with severity 'WARNING'.")
-	LoggerType.Dict["warn"] = py.MustNewMethod("warn", loggerWarning, 0, "Log 'msg % args' with severity 'WARNING'.")
-	LoggerType.Dict["error"] = py.MustNewMethod("error", loggerError, 0, "Log 'msg % args' with severity 'ERROR'.")
-	LoggerType.Dict["critical"] = py.MustNewMethod("critical", loggerCritical, 0, "Log 'msg % args' with severity 'CRITICAL'.")
-	LoggerType.Dict["fatal"] = py.MustNewMethod("fatal", loggerCritical, 0, "Log 'msg % args' with severity 'CRITICAL'.")
-	LoggerType.Dict["exception"] = py.MustNewMethod("exception", loggerException, 0, loggerException_doc)
-	LoggerType.Dict["log"] = py.MustNewMethod("log", loggerLogMethod, 0, loggerLog_doc)
-	LoggerType.Dict["isEnabledFor"] = py.MustNewMethod("isEnabledFor", loggerIsEnabledFor, 0, loggerIsEnabledFor_doc)
-	LoggerType.Dict["setLevel"] = py.MustNewMethod("setLevel", loggerSetLevel, 0, loggerSetLevel_doc)
-	LoggerType.Dict["getEffectiveLevel"] = py.MustNewMethod("getEffectiveLevel", loggerGetEffectiveLevel, 0, loggerGetEffectiveLevel_doc)
-	LoggerType.Dict["addHandler"] = py.MustNewMethod("addHandler", loggerAddHandler, 0, loggerAddHandler_doc)
-	LoggerType.Dict["removeHandler"] = py.MustNewMethod("removeHandler", loggerRemoveHandler, 0, loggerRemoveHandler_doc)
+	LoggerType.Dict.Set("debug", py.MustNewMethod("debug", loggerDebug, 0, "Log 'msg % args' with severity 'DEBUG'."))
+	LoggerType.Dict.Set("info", py.MustNewMethod("info", loggerInfo, 0, "Log 'msg % args' with severity 'INFO'."))
+	LoggerType.Dict.Set("warning", py.MustNewMethod("warning", loggerWarning, 0, "Log 'msg % args' with severity 'WARNING'."))
+	LoggerType.Dict.Set("warn", py.MustNewMethod("warn", loggerWarning, 0, "Log 'msg % args' with severity 'WARNING'."))
+	LoggerType.Dict.Set("error", py.MustNewMethod("error", loggerError, 0, "Log 'msg % args' with severity 'ERROR'."))
+	LoggerType.Dict.Set("critical", py.MustNewMethod("critical", loggerCritical, 0, "Log 'msg % args' with severity 'CRITICAL'."))
+	LoggerType.Dict.Set("fatal", py.MustNewMethod("fatal", loggerCritical, 0, "Log 'msg % args' with severity 'CRITICAL'."))
+	LoggerType.Dict.Set("exception", py.MustNewMethod("exception", loggerException, 0, loggerException_doc))
+	LoggerType.Dict.Set("log", py.MustNewMethod("log", loggerLogMethod, 0, loggerLog_doc))
+	LoggerType.Dict.Set("isEnabledFor", py.MustNewMethod("isEnabledFor", loggerIsEnabledFor, 0, loggerIsEnabledFor_doc))
+	LoggerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", loggerSetLevel, 0, loggerSetLevel_doc))
+	LoggerType.Dict.Set("getEffectiveLevel", py.MustNewMethod("getEffectiveLevel", loggerGetEffectiveLevel, 0, loggerGetEffectiveLevel_doc))
+	LoggerType.Dict.Set("addHandler", py.MustNewMethod("addHandler", loggerAddHandler, 0, loggerAddHandler_doc))
+	LoggerType.Dict.Set("removeHandler", py.MustNewMethod("removeHandler", loggerRemoveHandler, 0, loggerRemoveHandler_doc))
 
-	HandlerType.Dict["setLevel"] = py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc)
-	HandlerType.Dict["setFormatter"] = py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc)
-	HandlerType.Dict["emit"] = py.MustNewMethod("emit", handlerEmit, 0, emit_doc)
-	HandlerType.Dict["level"] = &py.Property{
+	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
+	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
+	HandlerType.Dict.Set("emit", py.MustNewMethod("emit", handlerEmit, 0, emit_doc))
+	HandlerType.Dict.Set("level", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*Handler).level), nil },
 		Doc:  "the handler's level",
-	}
+	})
 	// The stream an output handler writes to, as a read-only attribute.
 	streamProp := &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*Handler).stream, nil },
 		Doc:  "the stream this handler writes to",
 	}
-	HandlerType.Dict["stream"] = streamProp
-	HandlerType.Dict["name"] = &py.Property{
+	HandlerType.Dict.Set("stream", streamProp)
+	HandlerType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(""), nil },
 		Doc:  "the handler's name, if any",
-	}
+	})
 
-	LoggerType.Dict["level"] = &py.Property{
+	LoggerType.Dict.Set("level", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*Logger).level), nil },
 		Fset: func(self, value py.Object) error {
 			n, err := py.IndexInt(value)
@@ -980,12 +980,12 @@ func init() {
 			return nil
 		},
 		Doc: "the logger's level",
-	}
-	LoggerType.Dict["disabled"] = &py.Property{
+	})
+	LoggerType.Dict.Set("disabled", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.False, nil },
 		Doc:  "whether this logger is disabled; never in this implementation",
-	}
-	LoggerType.Dict["propagate"] = &py.Property{
+	})
+	LoggerType.Dict.Set("propagate", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Bool(self.(*Logger).propagate), nil },
 		Fset: func(self, value py.Object) error {
 			b, err := py.ObjectIsTrue(value)
@@ -996,8 +996,8 @@ func init() {
 			return nil
 		},
 		Doc: "whether records propagate to ancestor loggers",
-	}
-	LoggerType.Dict["handlers"] = &py.Property{
+	})
+	LoggerType.Dict.Set("handlers", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			l := py.NewList()
 			for _, h := range self.(*Logger).handlers {
@@ -1006,7 +1006,7 @@ func init() {
 			return l, nil
 		},
 		Doc: "the handlers of this logger",
-	}
+	})
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -1028,27 +1028,27 @@ func init() {
 			py.MustNewMethod("getLevelName", getLevelName, 0, getLevelName_doc),
 			py.MustNewMethod("disable", disable, 0, disable_doc),
 		},
-		Globals: py.StringDict{
-			"DEBUG":           py.Int(DEBUG),
-			"INFO":            py.Int(INFO),
-			"WARNING":         py.Int(WARNING),
-			"WARN":            py.Int(WARNING),
-			"ERROR":           py.Int(ERROR),
-			"CRITICAL":        py.Int(CRITICAL),
-			"FATAL":           py.Int(CRITICAL),
-			"NOTSET":          py.Int(NOTSET),
-			"Logger":          LoggerType,
-			"LogRecord":       LogRecordType,
-			"Handler":         HandlerType,
-			"StreamHandler":   StreamHandlerType,
-			"FileHandler":     FileHandlerType,
-			"NullHandler":     NullHandlerType,
-			"Formatter":       FormatterType,
-			"root":            gRoot,
-			"BASIC_FORMAT":    py.String("%(levelname)s:%(name)s:%(message)s"),
-			"raiseExceptions": py.True,
-			"lastResort":      py.None,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "DEBUG", Value: py.Int(DEBUG)},
+			py.DictEntry{Key: "INFO", Value: py.Int(INFO)},
+			py.DictEntry{Key: "WARNING", Value: py.Int(WARNING)},
+			py.DictEntry{Key: "WARN", Value: py.Int(WARNING)},
+			py.DictEntry{Key: "ERROR", Value: py.Int(ERROR)},
+			py.DictEntry{Key: "CRITICAL", Value: py.Int(CRITICAL)},
+			py.DictEntry{Key: "FATAL", Value: py.Int(CRITICAL)},
+			py.DictEntry{Key: "NOTSET", Value: py.Int(NOTSET)},
+			py.DictEntry{Key: "Logger", Value: LoggerType},
+			py.DictEntry{Key: "LogRecord", Value: LogRecordType},
+			py.DictEntry{Key: "Handler", Value: HandlerType},
+			py.DictEntry{Key: "StreamHandler", Value: StreamHandlerType},
+			py.DictEntry{Key: "FileHandler", Value: FileHandlerType},
+			py.DictEntry{Key: "NullHandler", Value: NullHandlerType},
+			py.DictEntry{Key: "Formatter", Value: FormatterType},
+			py.DictEntry{Key: "root", Value: gRoot},
+			py.DictEntry{Key: "BASIC_FORMAT", Value: py.String("%(levelname)s:%(name)s:%(message)s")},
+			py.DictEntry{Key: "raiseExceptions", Value: py.True},
+			py.DictEntry{Key: "lastResort", Value: py.None},
+		),
 	})
 }
 
@@ -1085,7 +1085,7 @@ func moduleLevelLog(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 // them into named variables.  min may be negative, meaning "no lower
 // bound".
 func checkArgs(args py.Tuple, kwargs py.StringDict, name string, min, max int) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", name)
 	}
 	n := len(args)

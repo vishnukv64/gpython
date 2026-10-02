@@ -150,7 +150,7 @@ func (o *Module) Type() *Type {
 }
 
 func (m *Module) M__repr__() (Object, error) {
-	name, ok := m.Globals["__name__"].(String)
+	name, ok := m.Globals.GetOrNil("__name__").(String)
 	if !ok {
 		name = "???"
 	}
@@ -193,14 +193,14 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 		methodInst := new(Method)
 		*methodInst = *method
 		methodInst.Module = m
-		m.Globals[method.Name] = methodInst
+		m.Globals.Set(method.Name, methodInst)
 	}
 	// Set some module globals
-	m.Globals["__name__"] = String(name)
-	m.Globals["__doc__"] = String(impl.Info.Doc)
-	m.Globals["__package__"] = None
+	m.Globals.Set("__name__", String(name))
+	m.Globals.Set("__doc__", String(impl.Info.Doc))
+	m.Globals.Set("__package__", None)
 	if len(impl.Info.FileDesc) > 0 {
-		m.Globals["__file__"] = String(impl.Info.FileDesc)
+		m.Globals.Set("__file__", String(impl.Info.FileDesc))
 	}
 	// Register the module
 	store.modules[name] = m

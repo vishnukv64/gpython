@@ -1014,7 +1014,7 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods: methods,
-		Globals: py.StringDict{},
+		Globals: py.NewStringDict(),
 	})
 }
 

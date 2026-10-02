@@ -203,7 +203,7 @@ func math_1_to_int(arg py.Object, fn func(float64) float64, can_overflow bool) (
 func math_2(args py.Tuple, fn func(float64, float64) float64, fnname string) (py.Object, error) {
 	var ox, oy py.Object
 	var x, y, r float64
-	err := py.UnpackTuple(args, nil, fnname, 2, 2, &ox, &oy)
+	err := py.UnpackTuple(args, py.StringDict{}, fnname, 2, 2, &ox, &oy)
 	if err != nil {
 		return nil, err
 	}
@@ -872,7 +872,7 @@ func math_ldexp(self py.Object, args py.Tuple) (py.Object, error) {
 	var xObj py.Object
 	var expObj py.Object
 	var exp int
-	err := py.UnpackTuple(args, nil, "ldexp", 2, 2, &xObj, &expObj)
+	err := py.UnpackTuple(args, py.StringDict{}, "ldexp", 2, 2, &xObj, &expObj)
 	if err != nil {
 		return nil, err
 	}
@@ -990,7 +990,7 @@ func math_log(self py.Object, args py.Tuple) (py.Object, error) {
 	var arg py.Object
 	var base py.Object = py.Float(math.E)
 
-	err := py.UnpackTuple(args, nil, "log", 1, 2, &arg, &base)
+	err := py.UnpackTuple(args, py.StringDict{}, "log", 1, 2, &arg, &base)
 	if err != nil {
 		return nil, err
 	}
@@ -1030,7 +1030,7 @@ Return the base 10 logarithm of x.`
 func math_fmod(self py.Object, args py.Tuple) (py.Object, error) {
 	var ox, oy py.Object
 	var r, x, y float64
-	err := py.UnpackTuple(args, nil, "fmod", 2, 2, &ox, &oy)
+	err := py.UnpackTuple(args, py.StringDict{}, "fmod", 2, 2, &ox, &oy)
 	if err != nil {
 		return nil, err
 	}
@@ -1062,7 +1062,7 @@ Return fmod(x, y), according to platform C.  x % y may differ.`
 func math_hypot(self py.Object, args py.Tuple) (py.Object, error) {
 	var ox, oy py.Object
 	var r, x, y float64
-	err := py.UnpackTuple(args, nil, "hypot", 2, 2, &ox, &oy)
+	err := py.UnpackTuple(args, py.StringDict{}, "hypot", 2, 2, &ox, &oy)
 	if err != nil {
 		return nil, err
 	}
@@ -1108,7 +1108,7 @@ func math_pow(self py.Object, args py.Tuple) (py.Object, error) {
 	var ox, oy py.Object
 	var r, x, y float64
 
-	err := py.UnpackTuple(args, nil, "pow", 2, 2, &ox, &oy)
+	err := py.UnpackTuple(args, py.StringDict{}, "pow", 2, 2, &ox, &oy)
 	if err != nil {
 		return nil, err
 	}
@@ -1353,9 +1353,9 @@ func init() {
 			Flags: py.ShareModule,
 		},
 		Methods: methods,
-		Globals: py.StringDict{
-			"pi": py.Float(math.Pi),
-			"e":  py.Float(math.E),
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "pi", Value: py.Float(math.Pi)},
+			py.DictEntry{Key: "e", Value: py.Float(math.E)},
+		),
 	})
 }

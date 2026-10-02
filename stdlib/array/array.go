@@ -72,31 +72,31 @@ func init() {
 				"except that the type of objects stored in them is constrained.\n",
 		},
 		Methods: []*py.Method{},
-		Globals: py.StringDict{
-			"typecodes": typecodes,
-			"array":     ArrayType,
-			"ArrayType": ArrayType,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "typecodes", Value: typecodes},
+			py.DictEntry{Key: "array", Value: ArrayType},
+			py.DictEntry{Key: "ArrayType", Value: ArrayType},
+		),
 	})
 
-	ArrayType.Dict["itemsize"] = &py.Property{
+	ArrayType.Dict.Set("itemsize", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			arr := self.(*array)
 			return py.Int(arr.esize), nil
 		},
 		Doc: "the size, in bytes, of one array item",
-	}
+	})
 
-	ArrayType.Dict["typecode"] = &py.Property{
+	ArrayType.Dict.Set("typecode", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			arr := self.(*array)
 			return py.String(arr.descr), nil
 		},
 		Doc: "the typecode character used to create the array",
-	}
+	})
 
-	ArrayType.Dict["append"] = py.MustNewMethod("append", array_append, 0, array_append_doc)
-	ArrayType.Dict["extend"] = py.MustNewMethod("extend", array_extend, 0, array_extend_doc)
+	ArrayType.Dict.Set("append", py.MustNewMethod("append", array_append, 0, array_append_doc))
+	ArrayType.Dict.Set("extend", py.MustNewMethod("extend", array_extend, 0, array_extend_doc))
 }
 
 const array_doc = `array(typecode [, initializer]) -> array
@@ -168,7 +168,7 @@ func array_new(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, py.ExceptionNewf(py.TypeError, "array() takes at most 2 arguments (%d given)", n)
 	}
 
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "array.array() takes no keyword arguments")
 	}
 

@@ -19,16 +19,16 @@ type List struct {
 
 func init() {
 	// FIXME: all methods should be callable using list.method([], *args, **kwargs) or [].method(*args, **kwargs)
-	ListType.Dict["append"] = MustNewMethod("append", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("append", MustNewMethod("append", func(self Object, args Tuple) (Object, error) {
 		listSelf := self.(*List)
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "append() takes exactly one argument (%d given)", len(args))
 		}
 		listSelf.Items = append(listSelf.Items, args[0])
 		return NoneType{}, nil
-	}, 0, "append(item)")
+	}, 0, "append(item)"))
 
-	ListType.Dict["extend"] = MustNewMethod("extend", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("extend", MustNewMethod("extend", func(self Object, args Tuple) (Object, error) {
 		listSelf := self.(*List)
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "append() takes exactly one argument (%d given)", len(args))
@@ -37,15 +37,15 @@ func init() {
 			listSelf.Items = append(listSelf.Items, oList.Items...)
 		}
 		return NoneType{}, nil
-	}, 0, "extend([item])")
+	}, 0, "extend([item])"))
 
-	ListType.Dict["sort"] = MustNewMethod("sort", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	ListType.Dict.Set("sort", MustNewMethod("sort", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		const funcName = "sort"
 		l, isList := self.(*List)
 		if !isList {
 			// method called using `list.sort([], **kwargs)`
 			var o Object
-			err := UnpackTuple(args, nil, funcName, 1, 1, &o)
+			err := UnpackTuple(args, NewStringDict(), funcName, 1, 1, &o)
 			if err != nil {
 				return nil, err
 			}
@@ -56,7 +56,7 @@ func init() {
 			}
 		} else {
 			// method called using `[].sort(**kargs)`
-			err := UnpackTuple(args, nil, funcName, 0, 0)
+			err := UnpackTuple(args, NewStringDict(), funcName, 0, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -66,9 +66,9 @@ func init() {
 			return nil, err
 		}
 		return NoneType{}, nil
-	}, 0, "sort(key=None, reverse=False)")
+	}, 0, "sort(key=None, reverse=False)"))
 
-	ListType.Dict["pop"] = MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("pop", MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if len(args) > 1 {
 			return nil, ExceptionNewf(TypeError, "pop expected at most 1 argument, got %d", len(args))
@@ -96,9 +96,9 @@ func init() {
 		item := l.Items[i]
 		l.DelItem(i)
 		return item, nil
-	}, 0, "pop([index]) -> item -- remove and return item at index (default last).")
+	}, 0, "pop([index]) -> item -- remove and return item at index (default last)."))
 
-	ListType.Dict["remove"] = MustNewMethod("remove", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("remove", MustNewMethod("remove", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "list.remove() takes exactly one argument (%d given)", len(args))
@@ -114,9 +114,9 @@ func init() {
 			}
 		}
 		return nil, ExceptionNewf(ValueError, "list.remove(x): x not in list")
-	}, 0, "remove(value) -- remove first occurrence of value.")
+	}, 0, "remove(value) -- remove first occurrence of value."))
 
-	ListType.Dict["insert"] = MustNewMethod("insert", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("insert", MustNewMethod("insert", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if len(args) != 2 {
 			return nil, ExceptionNewf(TypeError, "insert expected 2 arguments, got %d", len(args))
@@ -140,9 +140,9 @@ func init() {
 		copy(l.Items[i+1:], l.Items[i:])
 		l.Items[i] = args[1]
 		return None, nil
-	}, 0, "insert(index, object) -- insert object before index.")
+	}, 0, "insert(index, object) -- insert object before index."))
 
-	ListType.Dict["index"] = MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("index", MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if len(args) < 1 {
 			return nil, ExceptionNewf(TypeError, "index expected at least 1 argument, got %d", len(args))
@@ -176,9 +176,9 @@ func init() {
 			}
 		}
 		return nil, ExceptionNewf(ValueError, "list.index(x): x not in list")
-	}, 0, "index(value, [start, [stop]]) -> integer -- return first index of value.")
+	}, 0, "index(value, [start, [stop]]) -> integer -- return first index of value."))
 
-	ListType.Dict["count"] = MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("count", MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "list.count() takes exactly one argument (%d given)", len(args))
@@ -194,9 +194,9 @@ func init() {
 			}
 		}
 		return Int(count), nil
-	}, 0, "count(value) -> integer -- return number of occurrences of value.")
+	}, 0, "count(value) -> integer -- return number of occurrences of value."))
 
-	ListType.Dict["reverse"] = MustNewMethod("reverse", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("reverse", MustNewMethod("reverse", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if err := methodNoArgs("list.reverse", args); err != nil {
 			return nil, err
@@ -205,24 +205,24 @@ func init() {
 			l.Items[i], l.Items[j] = l.Items[j], l.Items[i]
 		}
 		return None, nil
-	}, 0, "reverse() -- reverse *IN PLACE*.")
+	}, 0, "reverse() -- reverse *IN PLACE*."))
 
-	ListType.Dict["clear"] = MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if err := methodNoArgs("list.clear", args); err != nil {
 			return nil, err
 		}
 		l.Items = nil
 		return None, nil
-	}, 0, "clear() -- remove all items from list.")
+	}, 0, "clear() -- remove all items from list."))
 
-	ListType.Dict["copy"] = MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+	ListType.Dict.Set("copy", MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
 		l := self.(*List)
 		if err := methodNoArgs("list.copy", args); err != nil {
 			return nil, err
 		}
 		return l.Copy(), nil
-	}, 0, "copy() -> a shallow copy of the list.")
+	}, 0, "copy() -> a shallow copy of the list."))
 
 }
 
@@ -656,14 +656,14 @@ func (s ptrSortable) Less(i, j int) bool {
 	}
 
 	if s.s.keyFunc != None {
-		itemI, err = Call(s.s.keyFunc, Tuple{itemI}, nil)
+		itemI, err = Call(s.s.keyFunc, Tuple{itemI}, NewStringDict())
 		if err != nil {
 			if s.s.firstErr == nil {
 				s.s.firstErr = err
 			}
 			return false
 		}
-		itemJ, err = Call(s.s.keyFunc, Tuple{itemJ}, nil)
+		itemJ, err = Call(s.s.keyFunc, Tuple{itemJ}, NewStringDict())
 		if err != nil {
 			if s.s.firstErr == nil {
 				s.s.firstErr = err

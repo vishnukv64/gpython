@@ -48,7 +48,7 @@ func subscriptable(t *py.Type) {
 		// is returned, which is all that evaluating an annotation needs.
 		return self, nil
 	}
-	t.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", getitem, 0, "Return the class, ignoring the subscription parameters.")
+	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", getitem, 0, "Return the class, ignoring the subscription parameters."))
 }
 
 // has reports whether the object satisfies the named protocol.
@@ -232,9 +232,9 @@ func init() {
 		return false
 	})
 
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 	for name, t := range all {
-		globals[name] = t
+		globals.Set(name, t)
 	}
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

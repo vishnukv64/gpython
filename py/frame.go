@@ -116,13 +116,13 @@ func NewFrame(ctx Context, globals, locals StringDict, code *Code, closure Tuple
 func (f *Frame) LookupGlobal(name string) (obj Object, ok bool) {
 	// Lookup in globals
 	// fmt.Printf("globals = %v\n", f.Globals)
-	if obj, ok = f.Globals[name]; ok {
+	if obj, ok = f.Globals.Get(name); ok {
 		return
 	}
 
 	// Lookup in builtins
 	// fmt.Printf("builtins = %v\n", Builtins.Globals)
-	if obj, ok = f.Builtins[name]; ok {
+	if obj, ok = f.Builtins.Get(name); ok {
 		return
 	}
 
@@ -137,7 +137,7 @@ func (f *Frame) LookupGlobal(name string) (obj Object, ok bool) {
 func (f *Frame) Lookup(name string) (obj Object, ok bool) {
 	// Lookup in locals
 	// fmt.Printf("locals = %v\n", f.Locals)
-	if obj, ok = f.Locals[name]; ok {
+	if obj, ok = f.Locals.Get(name); ok {
 		return
 	}
 
@@ -189,9 +189,9 @@ func map_to_dict(mapping []string, nmap int, dict StringDict, values []Object, d
 			value = cell.Get()
 		}
 		if value == nil {
-			delete(dict, key)
+			dict.Del(key)
 		} else {
-			dict[key] = value
+			dict.Set(key, value)
 		}
 	}
 }
@@ -220,7 +220,7 @@ Copy values from the "locals" dict into the fast locals.
 func dict_to_map(mapping []string, nmap int, dict StringDict, values []Object, deref bool, clear bool) {
 	for j := nmap - 1; j >= 0; j-- {
 		key := mapping[j]
-		value := dict[key]
+		value := dict.GetOrNil(key)
 		/* We only care about nils if clear is true. */
 		if value == nil {
 			if !clear {
@@ -244,7 +244,7 @@ func dict_to_map(mapping []string, nmap int, dict StringDict, values []Object, d
 // Merge fast locals into frame Locals
 func (f *Frame) FastToLocals() {
 	locals := f.Locals
-	if locals == nil {
+	if locals.IsNil() {
 		locals = NewStringDict()
 		f.Locals = locals
 	}
@@ -282,7 +282,7 @@ func (f *Frame) LocalsToFast(clear bool) {
 	locals := f.Locals
 	co := f.Code
 	mapping := co.Varnames
-	if locals == nil {
+	if locals.IsNil() {
 		return
 	}
 	fast := f.Localsplus
@@ -308,7 +308,7 @@ func (f *Frame) LocalsToFast(clear bool) {
 // that Python code uses to walk out to a caller - which is what
 // inspect.currentframe().f_back.f_globals needs.
 func init() {
-	FrameType.Dict["f_back"] = &Property{
+	FrameType.Dict.Set("f_back", &Property{
 		Fget: func(self Object) (Object, error) {
 			f := self.(*Frame)
 			if f.Back == nil {
@@ -317,14 +317,14 @@ func init() {
 			return f.Back, nil
 		},
 		Doc: "previous frame, or None if this is the outermost",
-	}
-	FrameType.Dict["f_globals"] = &Property{
+	})
+	FrameType.Dict.Set("f_globals", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Frame).Globals, nil
 		},
 		Doc: "global namespace as seen by this frame",
-	}
-	FrameType.Dict["f_locals"] = &Property{
+	})
+	FrameType.Dict.Set("f_locals", &Property{
 		Fget: func(self Object) (Object, error) {
 			f := self.(*Frame)
 			// A running frame keeps its locals in slots, so they have to be
@@ -333,20 +333,20 @@ func init() {
 			return f.Locals, nil
 		},
 		Doc: "local namespace as seen by this frame",
-	}
-	FrameType.Dict["f_code"] = &Property{
+	})
+	FrameType.Dict.Set("f_code", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Frame).Code, nil
 		},
 		Doc: "code object being executed in this frame",
-	}
-	FrameType.Dict["f_builtins"] = &Property{
+	})
+	FrameType.Dict.Set("f_builtins", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Frame).Builtins, nil
 		},
 		Doc: "builtins namespace seen by this frame",
-	}
-	FrameType.Dict["f_lasti"] = &Property{
+	})
+	FrameType.Dict.Set("f_lasti", &Property{
 		Fget: func(self Object) (Object, error) {
 			// The instruction pointer is not tracked here, so there is no
 			// honest value to give; -1 is what CPython reports for a frame
@@ -354,11 +354,11 @@ func init() {
 			return Int(-1), nil
 		},
 		Doc: "index of last attempted instruction, or -1",
-	}
-	FrameType.Dict["f_lineno"] = &Property{
+	})
+	FrameType.Dict.Set("f_lineno", &Property{
 		Fget: func(self Object) (Object, error) {
 			return Int(self.(*Frame).Code.Firstlineno), nil
 		},
 		Doc: "current line number, from the code object's first line",
-	}
+	})
 }

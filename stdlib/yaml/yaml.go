@@ -56,27 +56,27 @@ func newDocument(text string) *document {
 }
 
 func init() {
-	globals := py.StringDict{
-		"safe_load":       py.MustNewMethod("safe_load", safeLoad, 0, "Parse the first YAML document in a stream and produce the corresponding Python object."),
-		"safe_load_all":   py.MustNewMethod("safe_load_all", safeLoadAll, 0, "Parse all YAML documents in a stream."),
-		"load":            py.MustNewMethod("load", load, 0, "Parse the first YAML document in a stream and produce the corresponding Python object."),
-		"load_all":        py.MustNewMethod("load_all", safeLoadAll, 0, "Parse all YAML documents in a stream."),
-		"safe_dump":       py.MustNewMethod("safe_dump", safeDump, 0, "Serialize a Python object into a YAML stream."),
-		"dump":            py.MustNewMethod("dump", dump, 0, "Serialize a Python object into a YAML stream."),
-		"safe_dump_all":   py.MustNewMethod("safe_dump_all", safeDumpAll, 0, "Serialize a sequence of Python objects into a YAML stream."),
-		"dump_all":        py.MustNewMethod("dump_all", safeDumpAll, 0, "Serialize a sequence of Python objects into a YAML stream."),
-		"add_constructor": py.MustNewMethod("add_constructor", noop, 0, "Register a constructor (not supported)."),
-		"add_representer": py.MustNewMethod("add_representer", noop, 0, "Register a representer (not supported)."),
-		"YAMLError":       YAMLErrorType,
-		"MarkedYAMLError": MarkedYAMLErrorType,
-		"SafeLoader":      SafeLoaderType,
-		"Loader":          SafeLoaderType,
-		"FullLoader":      SafeLoaderType,
-		"UnsafeLoader":    SafeLoaderType,
-		"BaseLoader":      SafeLoaderType,
-		"SafeDumper":      SafeDumperType,
-		"Dumper":          SafeDumperType,
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "safe_load", Value: py.MustNewMethod("safe_load", safeLoad, 0, "Parse the first YAML document in a stream and produce the corresponding Python object.")},
+		py.DictEntry{Key: "safe_load_all", Value: py.MustNewMethod("safe_load_all", safeLoadAll, 0, "Parse all YAML documents in a stream.")},
+		py.DictEntry{Key: "load", Value: py.MustNewMethod("load", load, 0, "Parse the first YAML document in a stream and produce the corresponding Python object.")},
+		py.DictEntry{Key: "load_all", Value: py.MustNewMethod("load_all", safeLoadAll, 0, "Parse all YAML documents in a stream.")},
+		py.DictEntry{Key: "safe_dump", Value: py.MustNewMethod("safe_dump", safeDump, 0, "Serialize a Python object into a YAML stream.")},
+		py.DictEntry{Key: "dump", Value: py.MustNewMethod("dump", dump, 0, "Serialize a Python object into a YAML stream.")},
+		py.DictEntry{Key: "safe_dump_all", Value: py.MustNewMethod("safe_dump_all", safeDumpAll, 0, "Serialize a sequence of Python objects into a YAML stream.")},
+		py.DictEntry{Key: "dump_all", Value: py.MustNewMethod("dump_all", safeDumpAll, 0, "Serialize a sequence of Python objects into a YAML stream.")},
+		py.DictEntry{Key: "add_constructor", Value: py.MustNewMethod("add_constructor", noop, 0, "Register a constructor (not supported).")},
+		py.DictEntry{Key: "add_representer", Value: py.MustNewMethod("add_representer", noop, 0, "Register a representer (not supported).")},
+		py.DictEntry{Key: "YAMLError", Value: YAMLErrorType},
+		py.DictEntry{Key: "MarkedYAMLError", Value: MarkedYAMLErrorType},
+		py.DictEntry{Key: "SafeLoader", Value: SafeLoaderType},
+		py.DictEntry{Key: "Loader", Value: SafeLoaderType},
+		py.DictEntry{Key: "FullLoader", Value: SafeLoaderType},
+		py.DictEntry{Key: "UnsafeLoader", Value: SafeLoaderType},
+		py.DictEntry{Key: "BaseLoader", Value: SafeLoaderType},
+		py.DictEntry{Key: "SafeDumper", Value: SafeDumperType},
+		py.DictEntry{Key: "Dumper", Value: SafeDumperType},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -115,7 +115,7 @@ func readText(arg py.Object) (string, error) {
 	if err != nil {
 		return "", py.ExceptionNewf(py.TypeError, "a string or a stream is required, not %s", arg.Type().Name)
 	}
-	res, err := py.Call(read, py.Tuple{}, nil)
+	res, err := py.Call(read, py.Tuple{}, py.StringDict{})
 	if err != nil {
 		return "", err
 	}
@@ -856,7 +856,7 @@ func safeDump(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	for _, a := range args[1:] {
 		if _, err := py.GetAttrString(a, "write"); err == nil {
 			write, _ := py.GetAttrString(a, "write")
-			if _, err := py.Call(write, py.Tuple{py.String(text)}, nil); err != nil {
+			if _, err := py.Call(write, py.Tuple{py.String(text)}, py.StringDict{}); err != nil {
 				return nil, err
 			}
 			return py.None, nil
@@ -890,7 +890,7 @@ func safeDumpAll(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	}
 	for _, a := range args[1:] {
 		if write, err := py.GetAttrString(a, "write"); err == nil {
-			if _, err := py.Call(write, py.Tuple{py.String(b.String())}, nil); err != nil {
+			if _, err := py.Call(write, py.Tuple{py.String(b.String())}, py.StringDict{}); err != nil {
 				return nil, err
 			}
 			return py.None, nil
@@ -951,7 +951,7 @@ func emitTo(b *strings.Builder, obj py.Object, indent int) error {
 			b.WriteString("- ")
 			// A mapping item starts on the "-" line, which is how PyYAML
 			// writes a list of mappings and what makes it readable.
-			if d, ok := item.(py.IGetDict); ok && len(d.GetDict()) > 0 {
+			if d, ok := item.(py.IGetDict); ok && d.GetDict().Len() > 0 {
 				if err := emitMappingEntries(b, d.GetDict(), indent+2, true); err != nil {
 					return err
 				}
@@ -987,14 +987,14 @@ func emitTo(b *strings.Builder, obj py.Object, indent int) error {
 // first key continues a "- " that has already been written rather than
 // starting a new line.
 func emitMappingEntries(b *strings.Builder, m py.StringDict, indent int, afterDash bool) error {
-	if len(m) == 0 {
+	if m.Len() == 0 {
 		b.WriteString("{}\n")
 		return nil
 	}
 	// Keys go out in sorted order, which is what PyYAML does with sort_keys
 	// defaulting to True, and makes the output stable.
-	keys := make([]string, 0, len(m))
-	for encoded := range m {
+	keys := make([]string, 0, m.Len())
+	for _, encoded := range m.Keys() {
 		keys = append(keys, encoded)
 	}
 	sort.Strings(keys)
@@ -1012,7 +1012,7 @@ func emitMappingEntries(b *strings.Builder, m py.StringDict, indent int, afterDa
 		}
 		b.WriteString(keyText)
 		b.WriteString(":")
-		value := m[encoded]
+		value := m.GetOrNil(encoded)
 		if isBlockValue(value) {
 			b.WriteString("\n")
 			if err := emitTo(b, value, indent+2); err != nil {
@@ -1032,7 +1032,7 @@ func emitMappingEntries(b *strings.Builder, m py.StringDict, indent int, afterDa
 // isBlockValue reports whether a value should be written on its own lines.
 func isBlockValue(obj py.Object) bool {
 	if d, ok := obj.(py.IGetDict); ok {
-		return len(d.GetDict()) > 0
+		return d.GetDict().Len() > 0
 	}
 	if items, ok := sequenceOf(obj); ok {
 		return len(items) > 0

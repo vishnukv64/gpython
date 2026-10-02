@@ -157,7 +157,7 @@ func (m *Method) Call(self Object, args Tuple) (Object, error) {
 
 // Call the method with the given arguments
 func (m *Method) CallWithKeywords(self Object, args Tuple, kwargs StringDict) (Object, error) {
-	if len(kwargs) == 0 {
+	if kwargs.Len() == 0 {
 		return m.Call(self, args)
 	}
 	switch f := m.method.(type) {
@@ -212,7 +212,7 @@ func newBoundMethod(name string, fn interface{}) (Object, error) {
 	case func(Object, Object) (Object, error):
 		m.method = func(_ Object, args Tuple) (Object, error) {
 			var a, b Object
-			err := UnpackTuple(args, nil, name, 2, 2, &a, &b)
+			err := UnpackTuple(args, NewStringDict(), name, 2, 2, &a, &b)
 			if err != nil {
 				return nil, err
 			}
@@ -222,7 +222,7 @@ func newBoundMethod(name string, fn interface{}) (Object, error) {
 	case func(Object, Object, Object) (Object, error):
 		m.method = func(_ Object, args Tuple) (Object, error) {
 			var a, b, c Object
-			err := UnpackTuple(args, nil, name, 3, 3, &a, &b, &c)
+			err := UnpackTuple(args, NewStringDict(), name, 3, 3, &a, &b, &c)
 			if err != nil {
 				return nil, err
 			}
@@ -237,7 +237,7 @@ func newBoundMethod(name string, fn interface{}) (Object, error) {
 // Call a method
 func (m *Method) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	self := Object(m.Module)
-	if kwargs != nil {
+	if !kwargs.IsNil() {
 		return m.CallWithKeywords(self, args, kwargs)
 	}
 	return m.Call(self, args)

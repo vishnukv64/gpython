@@ -74,7 +74,7 @@ func TracebackDump(err interface{}) {
 
 // Properties
 func init() {
-	TracebackType.Dict["__tb_next__"] = &Property{
+	TracebackType.Dict.Set("__tb_next__", &Property{
 		Fget: func(self Object) (Object, error) {
 			next := self.(*Traceback).Next
 			if next == nil {
@@ -82,22 +82,22 @@ func init() {
 			}
 			return next, nil
 		},
-	}
-	TracebackType.Dict["__tb_frame__"] = &Property{
+	})
+	TracebackType.Dict.Set("__tb_frame__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Traceback).Frame, nil
 		},
-	}
-	TracebackType.Dict["__tb_lasti__"] = &Property{
+	})
+	TracebackType.Dict.Set("__tb_lasti__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return Int(self.(*Traceback).Lasti), nil
 		},
-	}
-	TracebackType.Dict["__tb_lineno__"] = &Property{
+	})
+	TracebackType.Dict.Set("__tb_lineno__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return Int(self.(*Traceback).Lineno), nil
 		},
-	}
+	})
 }
 
 // Make sure it satisfies the interface

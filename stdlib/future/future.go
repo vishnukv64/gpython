@@ -109,7 +109,7 @@ func featureNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 func (f *feature) Type() *py.Type { return featureType }
 
 func init() {
-	featureType.Dict["optional"] = &py.Property{
+	featureType.Dict.Set("optional", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			f := self.(*feature)
 			if f.optional == nil {
@@ -117,8 +117,8 @@ func init() {
 			}
 			return f.optional, nil
 		},
-	}
-	featureType.Dict["mandatory"] = &py.Property{
+	})
+	featureType.Dict.Set("mandatory", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			f := self.(*feature)
 			if f.mandatory == nil {
@@ -126,7 +126,7 @@ func init() {
 			}
 			return f.mandatory, nil
 		},
-	}
+	})
 
 	// The release at which each feature became available, following CPython.
 	// Features introduced before this interpreter's version get 2.1/2.2 etc.
@@ -143,14 +143,14 @@ func init() {
 		"annotations":      newRelease(3, 7, 0, "beta", 1),
 	}
 
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 	names := make([]py.Object, 0, len(releases))
 	for _, name := range featureNames {
 		r := releases[name]
-		globals[name] = &feature{optional: r, mandatory: r}
+		globals.Set(name, &feature{optional: r, mandatory: r})
 		names = append(names, py.String(name))
 	}
-	globals["all_feature_names"] = py.NewListFromItems(names)
+	globals.Set("all_feature_names", py.NewListFromItems(names))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

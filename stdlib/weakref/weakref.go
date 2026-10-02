@@ -62,7 +62,7 @@ func (r *Ref) clear() error {
 	r.callback = nil
 	r.mu.Unlock()
 	if had != nil && cb != nil && cb != py.None {
-		_, err := py.Call(cb, py.Tuple{r}, nil)
+		_, err := py.Call(cb, py.Tuple{r}, py.StringDict{})
 		return err
 	}
 	return nil
@@ -76,14 +76,15 @@ func refNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	if len(args) >= 2 {
 		r.callback = args[1]
 	}
-	for k, v := range kwargs {
+	kwargs.Range(func(k string, v py.Object) bool {
 		switch k {
 		case "callback":
 			r.callback = v
 		case "object":
 			r.referent = v
 		}
-	}
+		return false
+	})
 	return r, nil
 }
 
@@ -155,27 +156,27 @@ func proxyNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 }
 
 func init() {
-	globals := py.StringDict{
-		"ref":                 RefType,
-		"proxy":               ProxyType,
-		"ProxyType":           ProxyType,
-		"CallableProxyType":   ProxyType,
-		"ReferenceType":       RefType,
-		"WeakMethod":          RefType,
-		"WeakValueDictionary": WeakValueDictionaryType,
-		"WeakKeyDictionary":   WeakKeyDictionaryType,
-		"WeakSet":             WeakSetType,
-		"getweakrefcount": py.MustNewMethod("getweakrefcount", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "ref", Value: RefType},
+		py.DictEntry{Key: "proxy", Value: ProxyType},
+		py.DictEntry{Key: "ProxyType", Value: ProxyType},
+		py.DictEntry{Key: "CallableProxyType", Value: ProxyType},
+		py.DictEntry{Key: "ReferenceType", Value: RefType},
+		py.DictEntry{Key: "WeakMethod", Value: RefType},
+		py.DictEntry{Key: "WeakValueDictionary", Value: WeakValueDictionaryType},
+		py.DictEntry{Key: "WeakKeyDictionary", Value: WeakKeyDictionaryType},
+		py.DictEntry{Key: "WeakSet", Value: WeakSetType},
+		py.DictEntry{Key: "getweakrefcount", Value: py.MustNewMethod("getweakrefcount", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.Int(0), nil
-		}, 0, "Return the number of weak references to the object."),
-		"getweakrefs": py.MustNewMethod("getweakrefs", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the number of weak references to the object.")},
+		py.DictEntry{Key: "getweakrefs", Value: py.MustNewMethod("getweakrefs", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.NewListFromItems(nil), nil
-		}, 0, "Return a list of all weak references to the object."),
-	}
+		}, 0, "Return a list of all weak references to the object.")},
+	)
 
-	RefType.Dict["__call__"] = py.MustNewMethod("__call__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	RefType.Dict.Set("__call__", py.MustNewMethod("__call__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*Ref).get(), nil
-	}, 0, "Return the referent, or None if it has gone.")
+	}, 0, "Return the referent, or None if it has gone."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -195,25 +196,28 @@ var WeakValueDictionaryType = py.NewTypeX("weakref.WeakValueDictionary", "A mapp
 	d := &WeakValueDictionary{items: py.NewStringDict()}
 	if len(args) > 0 {
 		if src, ok := args[0].(py.IGetDict); ok {
-			for k, v := range src.GetDict() {
-				d.items[k] = v
+			for _, __e := range src.GetDict().Items() {
+				k := __e.Key
+				v := __e.Value
+				d.items.Set(k, v)
 			}
 		}
 	}
-	for k, v := range kwargs {
-		d.items[k] = v
-	}
+	kwargs.Range(func(k string, v py.Object) bool {
+		d.items.Set(k, v)
+		return false
+	})
 	return d, nil
 }, nil)
 
 func (d *WeakValueDictionary) Type() *py.Type { return WeakValueDictionaryType }
 
-func (d *WeakValueDictionary) M__len__() (py.Object, error) { return py.Int(len(d.items)), nil }
+func (d *WeakValueDictionary) M__len__() (py.Object, error) { return py.Int(d.items.Len()), nil }
 
 func (d *WeakValueDictionary) M__getitem__(key py.Object) (py.Object, error) {
 	encoded, err := py.DictKey(key)
 	if err == nil {
-		if v, ok := d.items[encoded]; ok {
+		if v, ok := d.items.Get(encoded); ok {
 			// A stored ref is followed to its referent.
 			if r, ok := v.(*Ref); ok {
 				return r.get(), nil
@@ -229,7 +233,7 @@ func (d *WeakValueDictionary) M__setitem__(key, value py.Object) (py.Object, err
 	if err != nil {
 		return nil, err
 	}
-	d.items[encoded] = value
+	d.items.Set(encoded, value)
 	return py.None, nil
 }
 
@@ -238,7 +242,7 @@ func (d *WeakValueDictionary) M__contains__(item py.Object) (py.Object, error) {
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := d.items[encoded]; ok {
+	if _, ok := d.items.Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -246,7 +250,7 @@ func (d *WeakValueDictionary) M__contains__(item py.Object) (py.Object, error) {
 
 func (d *WeakValueDictionary) M__iter__() (py.Object, error) {
 	out := []py.Object{}
-	for encoded := range d.items {
+	for _, encoded := range d.items.Keys() {
 		key, err := py.DictKeyDecode(encoded)
 		if err != nil {
 			continue
@@ -263,20 +267,21 @@ type WeakKeyDictionary struct {
 
 var WeakKeyDictionaryType = py.NewTypeX("weakref.WeakKeyDictionary", "A mapping that holds weak references to its keys.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	d := &WeakKeyDictionary{items: py.NewStringDict()}
-	for k, v := range kwargs {
-		d.items[k] = v
-	}
+	kwargs.Range(func(k string, v py.Object) bool {
+		d.items.Set(k, v)
+		return false
+	})
 	return d, nil
 }, nil)
 
 func (d *WeakKeyDictionary) Type() *py.Type { return WeakKeyDictionaryType }
 
-func (d *WeakKeyDictionary) M__len__() (py.Object, error) { return py.Int(len(d.items)), nil }
+func (d *WeakKeyDictionary) M__len__() (py.Object, error) { return py.Int(d.items.Len()), nil }
 
 func (d *WeakKeyDictionary) M__getitem__(key py.Object) (py.Object, error) {
 	encoded, err := py.DictKey(key)
 	if err == nil {
-		if v, ok := d.items[encoded]; ok {
+		if v, ok := d.items.Get(encoded); ok {
 			return v, nil
 		}
 	}
@@ -288,7 +293,7 @@ func (d *WeakKeyDictionary) M__setitem__(key, value py.Object) (py.Object, error
 	if err != nil {
 		return nil, err
 	}
-	d.items[encoded] = value
+	d.items.Set(encoded, value)
 	return py.None, nil
 }
 
@@ -297,7 +302,7 @@ func (d *WeakKeyDictionary) M__contains__(item py.Object) (py.Object, error) {
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := d.items[encoded]; ok {
+	if _, ok := d.items.Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -316,7 +321,7 @@ var WeakSetType = py.NewTypeX("weakref.WeakSet", "A set that holds weak referenc
 			for _, item := range items.Items {
 				encoded, kerr := py.DictKey(item)
 				if kerr == nil {
-					s.items[encoded] = py.True
+					s.items.Set(encoded, py.True)
 				}
 			}
 		}
@@ -326,14 +331,14 @@ var WeakSetType = py.NewTypeX("weakref.WeakSet", "A set that holds weak referenc
 
 func (s *WeakSet) Type() *py.Type { return WeakSetType }
 
-func (s *WeakSet) M__len__() (py.Object, error) { return py.Int(len(s.items)), nil }
+func (s *WeakSet) M__len__() (py.Object, error) { return py.Int(s.items.Len()), nil }
 
 func (s *WeakSet) M__contains__(item py.Object) (py.Object, error) {
 	encoded, err := py.DictKey(item)
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := s.items[encoded]; ok {
+	if _, ok := s.items.Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -342,7 +347,7 @@ func (s *WeakSet) M__contains__(item py.Object) (py.Object, error) {
 func init() {
 	addFn := func(self py.Object, args py.Tuple) (py.Object, error) {
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "add", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "add", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(item)
@@ -351,32 +356,32 @@ func init() {
 		}
 		switch v := self.(type) {
 		case *WeakSet:
-			v.items[encoded] = py.True
+			v.items.Set(encoded, py.True)
 		case *WeakValueDictionary:
 			// add() on a WeakValueDictionary is a setitem with the value.
 			if len(args) >= 2 {
-				v.items[encoded] = args[1]
+				v.items.Set(encoded, args[1])
 			}
 		}
 		return py.None, nil
 	}
-	WeakSetType.Dict["add"] = py.MustNewMethod("add", addFn, 0, "Add an item.")
-	WeakSetType.Dict["discard"] = py.MustNewMethod("discard", func(self py.Object, args py.Tuple) (py.Object, error) {
+	WeakSetType.Dict.Set("add", py.MustNewMethod("add", addFn, 0, "Add an item."))
+	WeakSetType.Dict.Set("discard", py.MustNewMethod("discard", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "discard", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "discard", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(item)
 		if err != nil {
 			return nil, err
 		}
-		delete(self.(*WeakSet).items, encoded)
+		self.(*WeakSet).items.Del(encoded)
 		return py.None, nil
-	}, 0, "Discard an item.")
-	WeakValueDictionaryType.Dict["keys"] = py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Discard an item."))
+	WeakValueDictionaryType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*WeakValueDictionary)
 		out := []py.Object{}
-		for encoded := range d.items {
+		for _, encoded := range d.items.Keys() {
 			key, err := py.DictKeyDecode(encoded)
 			if err != nil {
 				continue
@@ -384,29 +389,30 @@ func init() {
 			out = append(out, key)
 		}
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the key list.")
-	WeakValueDictionaryType.Dict["values"] = py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the key list."))
+	WeakValueDictionaryType.Dict.Set("values", py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*WeakValueDictionary)
 		out := []py.Object{}
-		for _, v := range d.items {
+		d.items.Range(func(_ string, v py.Object) bool {
 			if r, ok := v.(*Ref); ok {
 				out = append(out, r.get())
-				continue
+				return false
 			}
 			out = append(out, v)
-		}
+			return false
+		})
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the value list.")
-	WeakValueDictionaryType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the value list."))
+	WeakValueDictionaryType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*WeakValueDictionary)
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err == nil {
-			if v, ok := d.items[encoded]; ok {
+			if v, ok := d.items.Get(encoded); ok {
 				if r, ok := v.(*Ref); ok {
 					return r.get(), nil
 				}
@@ -414,7 +420,7 @@ func init() {
 			}
 		}
 		return def, nil
-	}, 0, "Return the value for key, or the default.")
+	}, 0, "Return the value for key, or the default."))
 }
 
 // Interfaces the VM reaches directly.

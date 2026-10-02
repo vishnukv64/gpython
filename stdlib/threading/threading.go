@@ -90,7 +90,10 @@ type Thread struct {
 
 var ThreadType = py.NewTypeX("threading.Thread", "A thread of control.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	t := &Thread{args: py.Tuple{}, kwargs: py.NewStringDict(), name: "Thread-1"}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "target":
 			t.target = v
@@ -125,17 +128,17 @@ func init() {
 
 	// local: attributes live in the holder's own dict, which is what
 	// __dict__ exposes.
-	LocalType.Dict["__dict__"] = &py.Property{
+	LocalType.Dict.Set("__dict__", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			l := self.(*Local)
 			l.mu.Lock()
 			defer l.mu.Unlock()
 			return l.data, nil
 		},
-	}
-	LocalType.Dict["__getattribute__"] = py.MustNewMethod("__getattribute__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	})
+	LocalType.Dict.Set("__getattribute__", py.MustNewMethod("__getattribute__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var name py.Object
-		if err := py.UnpackTuple(args, nil, "__getattribute__", 1, 1, &name); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getattribute__", 1, 1, &name); err != nil {
 			return nil, err
 		}
 		text, err := py.StrAsString(name)
@@ -152,14 +155,14 @@ func init() {
 		}
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		if v, ok := l.data[text]; ok {
+		if v, ok := l.data.Get(text); ok {
 			return v, nil
 		}
 		return nil, py.ExceptionNewf(py.AttributeError, "'threading.local' object has no attribute '%s'", text)
-	}, 0, "Return the thread-local attribute.")
-	LocalType.Dict["__setattr__"] = py.MustNewMethod("__setattr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the thread-local attribute."))
+	LocalType.Dict.Set("__setattr__", py.MustNewMethod("__setattr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var name, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setattr__", 2, 2, &name, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setattr__", 2, 2, &name, &value); err != nil {
 			return nil, err
 		}
 		text, err := py.StrAsString(name)
@@ -172,25 +175,25 @@ func init() {
 		}
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		l.data[text] = value
+		l.data.Set(text, value)
 		return py.None, nil
-	}, 0, "Set the thread-local attribute.")
+	}, 0, "Set the thread-local attribute."))
 
 	lockMethods := func(t *py.Type, isReentrant bool) {
-		t.Dict["acquire"] = py.MustNewMethod("acquire", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		t.Dict.Set("acquire", py.MustNewMethod("acquire", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 			blocking := py.Object(py.True)
 			timeout := py.Object(py.None)
 			// acquire is normally called as acquire(False) or
 			// acquire(blocking=False), and taking no keyword arguments made
 			// the second a TypeError - the standard non-blocking idiom.
 			// UnpackTuple rejects keywords outright, so they are read here.
-			if err := py.UnpackTuple(args, nil, "acquire", 0, 2, &blocking, &timeout); err != nil {
+			if err := py.UnpackTuple(args, py.StringDict{}, "acquire", 0, 2, &blocking, &timeout); err != nil {
 				return nil, err
 			}
-			if v, ok := kwargs["blocking"]; ok {
+			if v, ok := kwargs.Get("blocking"); ok {
 				blocking = v
 			}
-			if v, ok := kwargs["timeout"]; ok {
+			if v, ok := kwargs.Get("timeout"); ok {
 				timeout = v
 			}
 			switch v := self.(type) {
@@ -209,8 +212,8 @@ func init() {
 				return v.acquire(), nil
 			}
 			return py.None, nil
-		}, 0, "Acquire the lock.")
-		t.Dict["release"] = py.MustNewMethod("release", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Acquire the lock."))
+		t.Dict.Set("release", py.MustNewMethod("release", func(self py.Object, args py.Tuple) (py.Object, error) {
 			switch v := self.(type) {
 			case *Lock:
 				v.mu.Unlock()
@@ -219,8 +222,8 @@ func init() {
 				return v.release()
 			}
 			return py.None, nil
-		}, 0, "Release the lock.")
-		t.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Release the lock."))
+		t.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 			switch v := self.(type) {
 			case *Lock:
 				v.mu.Lock()
@@ -229,8 +232,8 @@ func init() {
 				v.acquire()
 			}
 			return self, nil
-		}, 0, "Acquire the lock and return it.")
-		t.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Acquire the lock and return it."))
+		t.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 			switch v := self.(type) {
 			case *Lock:
 				v.mu.Unlock()
@@ -239,86 +242,86 @@ func init() {
 				return v.release()
 			}
 			return py.False, nil
-		}, 0, "Release the lock.")
+		}, 0, "Release the lock."))
 		if isReentrant {
-			t.Dict["_is_owned"] = py.MustNewMethod("_is_owned", func(self py.Object, args py.Tuple) (py.Object, error) {
+			t.Dict.Set("_is_owned", py.MustNewMethod("_is_owned", func(self py.Object, args py.Tuple) (py.Object, error) {
 				return py.NewBool(self.(*RLock).depth > 0), nil
-			}, 0, "Return whether this thread holds the lock.")
+			}, 0, "Return whether this thread holds the lock."))
 		}
 	}
 	lockMethods(LockType, false)
 	lockMethods(RLockType, true)
 
-	LockType.Dict["locked"] = py.MustNewMethod("locked", func(self py.Object, args py.Tuple) (py.Object, error) {
+	LockType.Dict.Set("locked", py.MustNewMethod("locked", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewBool(self.(*Lock).locked), nil
-	}, 0, "Return whether the lock is held.")
+	}, 0, "Return whether the lock is held."))
 
-	ThreadType.Dict["start"] = py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ThreadType.Dict.Set("start", py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, py.ExceptionNewf(py.RuntimeError, "this interpreter does not create Python threads, so Thread.start() cannot run the target")
-	}, 0, "Start the thread (not supported).")
+	}, 0, "Start the thread (not supported)."))
 
-	ThreadType.Dict["run"] = py.MustNewMethod("run", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ThreadType.Dict.Set("run", py.MustNewMethod("run", func(self py.Object, args py.Tuple) (py.Object, error) {
 		t := self.(*Thread)
 		if t.target == nil || t.target == py.None {
 			return py.None, nil
 		}
 		_, err := py.Call(t.target, t.args, t.kwargs)
 		return py.None, err
-	}, 0, "Run the target in the current thread.")
+	}, 0, "Run the target in the current thread."))
 
-	ThreadType.Dict["join"] = py.MustNewMethod("join", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ThreadType.Dict.Set("join", py.MustNewMethod("join", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.None, nil
-	}, 0, "Wait for the thread to finish.")
+	}, 0, "Wait for the thread to finish."))
 
-	ThreadType.Dict["is_alive"] = py.MustNewMethod("is_alive", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ThreadType.Dict.Set("is_alive", py.MustNewMethod("is_alive", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Return whether the thread is alive.")
+	}, 0, "Return whether the thread is alive."))
 
-	ThreadType.Dict["name"] = &py.Property{
+	ThreadType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*Thread).name), nil },
-	}
-	ThreadType.Dict["daemon"] = &py.Property{
+	})
+	ThreadType.Dict.Set("daemon", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.NewBool(self.(*Thread).daemon), nil },
-	}
+	})
 
 	// The main thread is the only one there is.
 	mainThread := &Thread{name: "MainThread"}
 
-	globals := py.StringDict{
-		"local":       LocalType,
-		"Lock":        LockType,
-		"RLock":       RLockType,
-		"Thread":      ThreadType,
-		"ThreadError": py.ExceptionType.NewType("threading.ThreadError", "Raised for threading errors.", nil, nil),
-		"Event":       LockType,
-		"Semaphore":   LockType,
-		"Barrier":     LockType,
-		"get_ident": py.MustNewMethod("get_ident", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "local", Value: LocalType},
+		py.DictEntry{Key: "Lock", Value: LockType},
+		py.DictEntry{Key: "RLock", Value: RLockType},
+		py.DictEntry{Key: "Thread", Value: ThreadType},
+		py.DictEntry{Key: "ThreadError", Value: py.ExceptionType.NewType("threading.ThreadError", "Raised for threading errors.", nil, nil)},
+		py.DictEntry{Key: "Event", Value: LockType},
+		py.DictEntry{Key: "Semaphore", Value: LockType},
+		py.DictEntry{Key: "Barrier", Value: LockType},
+		py.DictEntry{Key: "get_ident", Value: py.MustNewMethod("get_ident", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.Int(1), nil
-		}, 0, "Return the identifier of the current thread."),
-		"current_thread": py.MustNewMethod("current_thread", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the identifier of the current thread.")},
+		py.DictEntry{Key: "current_thread", Value: py.MustNewMethod("current_thread", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return mainThread, nil
-		}, 0, "Return the current Thread object."),
-		"main_thread": py.MustNewMethod("main_thread", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the current Thread object.")},
+		py.DictEntry{Key: "main_thread", Value: py.MustNewMethod("main_thread", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return mainThread, nil
-		}, 0, "Return the main Thread object."),
-		"active_count": py.MustNewMethod("active_count", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the main Thread object.")},
+		py.DictEntry{Key: "active_count", Value: py.MustNewMethod("active_count", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.Int(1), nil
-		}, 0, "Return the number of Thread objects currently alive."),
-		"enumerate": py.MustNewMethod("enumerate", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the number of Thread objects currently alive.")},
+		py.DictEntry{Key: "enumerate", Value: py.MustNewMethod("enumerate", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.NewListFromItems([]py.Object{mainThread}), nil
-		}, 0, "Return a list of all Thread objects currently alive."),
-		"stack_size": py.MustNewMethod("stack_size", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return a list of all Thread objects currently alive.")},
+		py.DictEntry{Key: "stack_size", Value: py.MustNewMethod("stack_size", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.Int(0), nil
-		}, 0, "Return the thread stack size."),
-		"settrace": py.MustNewMethod("settrace", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the thread stack size.")},
+		py.DictEntry{Key: "settrace", Value: py.MustNewMethod("settrace", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.None, nil
-		}, 0, "Set a trace function (no-op)."),
-		"setprofile": py.MustNewMethod("setprofile", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Set a trace function (no-op).")},
+		py.DictEntry{Key: "setprofile", Value: py.MustNewMethod("setprofile", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.None, nil
-		}, 0, "Set a profile function (no-op)."),
-		"TIMEOUT_MAX": py.Float(1e9),
-	}
+		}, 0, "Set a profile function (no-op).")},
+		py.DictEntry{Key: "TIMEOUT_MAX", Value: py.Float(1e9)},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -364,7 +367,7 @@ func (r *RLock) release() (py.Object, error) {
 func (l *Local) M__getattribute__(name string) (py.Object, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if v, ok := l.data[name]; ok {
+	if v, ok := l.data.Get(name); ok {
 		return v, nil
 	}
 	return nil, py.ExceptionNewf(py.AttributeError, "'threading.local' object has no attribute '%s'", name)
@@ -376,7 +379,7 @@ func (l *Local) M__getattribute__(name string) (py.Object, error) {
 func (l *Local) M__setattr__(name string, value py.Object) (py.Object, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.data[name] = value
+	l.data.Set(name, value)
 	return py.None, nil
 }
 

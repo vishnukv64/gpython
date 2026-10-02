@@ -67,7 +67,10 @@ func timeDeltaNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Ob
 	var (
 		days, seconds, microseconds, milliseconds, minutes, hours, weeks int
 	)
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -135,7 +138,10 @@ func dateTimeNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obj
 		}
 		*fields[i] = n
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		if k == "tzinfo" {
 			d.TZInfo = v
 			continue
@@ -161,7 +167,7 @@ func dateTimeNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obj
 	}
 	if len(args) < 3 {
 		for _, name := range names[:3] {
-			if _, ok := kwargs[name]; !ok {
+			if _, ok := kwargs.Get(name); !ok {
 				return nil, py.ExceptionNewf(py.TypeError, "function missing required argument '%s' (pos 1)", name)
 			}
 		}
@@ -234,13 +240,13 @@ func (d *DateTime) isoformat(sep string) string {
 
 func init() {
 	// timedelta
-	TimeDeltaType.Dict["days"] = intProp(func(self py.Object) int { return self.(*TimeDelta).Days })
-	TimeDeltaType.Dict["seconds"] = intProp(func(self py.Object) int { return self.(*TimeDelta).Seconds })
-	TimeDeltaType.Dict["microseconds"] = intProp(func(self py.Object) int { return self.(*TimeDelta).Microseconds })
-	TimeDeltaType.Dict["total_seconds"] = py.MustNewMethod("total_seconds", func(self py.Object, args py.Tuple) (py.Object, error) {
+	TimeDeltaType.Dict.Set("days", intProp(func(self py.Object) int { return self.(*TimeDelta).Days }))
+	TimeDeltaType.Dict.Set("seconds", intProp(func(self py.Object) int { return self.(*TimeDelta).Seconds }))
+	TimeDeltaType.Dict.Set("microseconds", intProp(func(self py.Object) int { return self.(*TimeDelta).Microseconds }))
+	TimeDeltaType.Dict.Set("total_seconds", py.MustNewMethod("total_seconds", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*TimeDelta)
 		return py.Float(float64(d.totalMicros()) / 1e6), nil
-	}, 0, "Total duration in seconds.")
+	}, 0, "Total duration in seconds."))
 
 	// datetime
 	for name, get := range map[string]func(*DateTime) int{
@@ -253,16 +259,16 @@ func init() {
 		"microsecond": func(d *DateTime) int { return d.Micro },
 	} {
 		getter := get
-		DateTimeType.Dict[name] = intProp(func(self py.Object) int { return getter(self.(*DateTime)) })
+		DateTimeType.Dict.Set(name, intProp(func(self py.Object) int { return getter(self.(*DateTime)) }))
 	}
-	DateTimeType.Dict["tzinfo"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	DateTimeType.Dict.Set("tzinfo", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		if self.(*DateTime).TZInfo == nil {
 			return py.None, nil
 		}
 		return self.(*DateTime).TZInfo, nil
-	}}
+	}})
 
-	DateTimeType.Dict["isoformat"] = py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateTimeType.Dict.Set("isoformat", py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
 		sep := "T"
 		if len(args) > 0 {
 			if s, ok := args[0].(py.String); ok {
@@ -270,19 +276,22 @@ func init() {
 			}
 		}
 		return py.String(self.(*DateTime).isoformat(sep)), nil
-	}, 0, "Return the date and time as a string in ISO 8601 format.")
+	}, 0, "Return the date and time as a string in ISO 8601 format."))
 
-	DateTimeType.Dict["date"] = py.MustNewMethod("date", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateTimeType.Dict.Set("date", py.MustNewMethod("date", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DateTime)
 		return &Date{Year: d.Year, Month: d.Month, Day: d.Day}, nil
-	}, 0, "Return the date part.")
-	DateTimeType.Dict["time"] = py.MustNewMethod("time", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the date part."))
+	DateTimeType.Dict.Set("time", py.MustNewMethod("time", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DateTime)
 		return &Clock{Hour: d.Hour, Minute: d.Minute, Second: d.Second, Micro: d.Micro}, nil
-	}, 0, "Return the time part.")
-	DateTimeType.Dict["replace"] = py.MustNewMethod("replace", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	}, 0, "Return the time part."))
+	DateTimeType.Dict.Set("replace", py.MustNewMethod("replace", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		d := *self.(*DateTime)
-		for k, v := range kwargs {
+		for _, __e := range kwargs.Items() {
+			k := __e.Key
+			v := __e.Value
+
 			n, err := py.IndexInt(v)
 			if err != nil {
 				if k == "tzinfo" {
@@ -314,10 +323,10 @@ func init() {
 			return nil, err
 		}
 		return &d, nil
-	}, 0, "Return a datetime with the given fields replaced.")
-	DateTimeType.Dict["strftime"] = py.MustNewMethod("strftime", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return a datetime with the given fields replaced."))
+	DateTimeType.Dict.Set("strftime", py.MustNewMethod("strftime", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var format py.Object
-		if err := py.UnpackTuple(args, nil, "strftime", 1, 1, &format); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "strftime", 1, 1, &format); err != nil {
 			return nil, err
 		}
 		text, err := py.StrAsString(format)
@@ -325,24 +334,24 @@ func init() {
 			return nil, err
 		}
 		return py.String(strftime(self.(*DateTime), text)), nil
-	}, 0, "Format the datetime according to the given format string.")
-	DateTimeType.Dict["weekday"] = py.MustNewMethod("weekday", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Format the datetime according to the given format string."))
+	DateTimeType.Dict.Set("weekday", py.MustNewMethod("weekday", func(self py.Object, args py.Tuple) (py.Object, error) {
 		// Monday is 0, as in CPython.
 		w := self.(*DateTime).toTime().Weekday()
 		return py.Int(int(w)), nil
-	}, 0, "Return the day of the week, where Monday is 0.")
-	DateTimeType.Dict["isoweekday"] = py.MustNewMethod("isoweekday", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the day of the week, where Monday is 0."))
+	DateTimeType.Dict.Set("isoweekday", py.MustNewMethod("isoweekday", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(int(self.(*DateTime).toTime().Weekday()) + 1), nil
-	}, 0, "Return the day of the week, where Monday is 1.")
+	}, 0, "Return the day of the week, where Monday is 1."))
 
-	DateTimeType.Dict["now"] = py.MustNewMethod("now", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateTimeType.Dict.Set("now", py.MustNewMethod("now", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return fromTime(time.Now()), nil
-	}, 0, "Return the current local date and time.")
-	DateTimeType.Dict["utcnow"] = DateTimeType.Dict["now"]
-	DateTimeType.Dict["today"] = DateTimeType.Dict["now"]
-	DateTimeType.Dict["fromtimestamp"] = py.MustNewMethod("fromtimestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the current local date and time."))
+	DateTimeType.Dict.Set("utcnow", DateTimeType.Dict.GetOrNil("now"))
+	DateTimeType.Dict.Set("today", DateTimeType.Dict.GetOrNil("now"))
+	DateTimeType.Dict.Set("fromtimestamp", py.MustNewMethod("fromtimestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var ts py.Object
-		if err := py.UnpackTuple(args, nil, "fromtimestamp", 1, 1, &ts); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "fromtimestamp", 1, 1, &ts); err != nil {
 			return nil, err
 		}
 		f, err := py.FloatAsFloat64(ts)
@@ -352,16 +361,16 @@ func init() {
 		sec := int64(f)
 		nsec := int64((f - float64(sec)) * 1e9)
 		return fromTime(time.Unix(sec, nsec).UTC()), nil
-	}, 0, "Return the local date and time corresponding to a POSIX timestamp.")
+	}, 0, "Return the local date and time corresponding to a POSIX timestamp."))
 
-	DateTimeType.Dict["timestamp"] = py.MustNewMethod("timestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateTimeType.Dict.Set("timestamp", py.MustNewMethod("timestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DateTime)
 		return py.Float(float64(d.toTime().Unix()) + float64(d.Micro)/1e6), nil
-	}, 0, "Return the POSIX timestamp.")
+	}, 0, "Return the POSIX timestamp."))
 
 	// The class-level strptime and the constructors.
-	DateTimeType.Dict["strptime"] = py.MustNewMethod("strptime", strptime, 0, "Parse a string into a datetime, according to a format string.")
-	DateTimeType.Dict["combine"] = py.MustNewMethod("combine", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateTimeType.Dict.Set("strptime", py.MustNewMethod("strptime", strptime, 0, "Parse a string into a datetime, according to a format string."))
+	DateTimeType.Dict.Set("combine", py.MustNewMethod("combine", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if len(args) < 2 {
 			return nil, py.ExceptionNewf(py.TypeError, "combine() needs a date and a time")
 		}
@@ -372,18 +381,18 @@ func init() {
 		}
 		return &DateTime{Year: date.Year, Month: date.Month, Day: date.Day,
 			Hour: clock.Hour, Minute: clock.Minute, Second: clock.Second, Micro: clock.Micro}, nil
-	}, 0, "Combine a date and a time into a datetime.")
+	}, 0, "Combine a date and a time into a datetime."))
 
-	globals := py.StringDict{
-		"datetime":  DateTimeType,
-		"date":      DateType,
-		"time":      ClockType,
-		"timedelta": TimeDeltaType,
-		"timezone":  TimezoneType,
-		"tzinfo":    TimezoneType,
-		"MINYEAR":   py.Int(1),
-		"MAXYEAR":   py.Int(9999),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "datetime", Value: DateTimeType},
+		py.DictEntry{Key: "date", Value: DateType},
+		py.DictEntry{Key: "time", Value: ClockType},
+		py.DictEntry{Key: "timedelta", Value: TimeDeltaType},
+		py.DictEntry{Key: "timezone", Value: TimezoneType},
+		py.DictEntry{Key: "tzinfo", Value: TimezoneType},
+		py.DictEntry{Key: "MINYEAR", Value: py.Int(1)},
+		py.DictEntry{Key: "MAXYEAR", Value: py.Int(9999)},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -719,7 +728,10 @@ func dateNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 		}
 		*fields[i] = n
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		for i, name := range names {
 			if k == name {
 				n, err := py.IndexInt(v)
@@ -769,7 +781,10 @@ func clockNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 		}
 		*fields[i] = n
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		for i, name := range names {
 			if k == name {
 				n, err := py.IndexInt(v)
@@ -811,36 +826,36 @@ func timezoneNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obj
 }
 
 func init() {
-	DateType.Dict["year"] = intProp(func(self py.Object) int { return self.(*Date).Year })
-	DateType.Dict["month"] = intProp(func(self py.Object) int { return self.(*Date).Month })
-	DateType.Dict["day"] = intProp(func(self py.Object) int { return self.(*Date).Day })
-	DateType.Dict["isoformat"] = py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DateType.Dict.Set("year", intProp(func(self py.Object) int { return self.(*Date).Year }))
+	DateType.Dict.Set("month", intProp(func(self py.Object) int { return self.(*Date).Month }))
+	DateType.Dict.Set("day", intProp(func(self py.Object) int { return self.(*Date).Day }))
+	DateType.Dict.Set("isoformat", py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Date)
 		return py.String(fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)), nil
-	}, 0, "ISO 8601 form.")
-	DateType.Dict["today"] = py.MustNewMethod("today", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "ISO 8601 form."))
+	DateType.Dict.Set("today", py.MustNewMethod("today", func(self py.Object, args py.Tuple) (py.Object, error) {
 		now := time.Now()
 		return &Date{Year: now.Year(), Month: int(now.Month()), Day: now.Day()}, nil
-	}, 0, "The current local date.")
-	DateType.Dict["weekday"] = py.MustNewMethod("weekday", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "The current local date."))
+	DateType.Dict.Set("weekday", py.MustNewMethod("weekday", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Date)
 		return py.Int(int(time.Date(d.Year, time.Month(d.Month), d.Day, 0, 0, 0, 0, time.UTC).Weekday())), nil
-	}, 0, "Day of the week, Monday is 0.")
+	}, 0, "Day of the week, Monday is 0."))
 
-	ClockType.Dict["hour"] = intProp(func(self py.Object) int { return self.(*Clock).Hour })
-	ClockType.Dict["minute"] = intProp(func(self py.Object) int { return self.(*Clock).Minute })
-	ClockType.Dict["second"] = intProp(func(self py.Object) int { return self.(*Clock).Second })
-	ClockType.Dict["microsecond"] = intProp(func(self py.Object) int { return self.(*Clock).Micro })
-	ClockType.Dict["isoformat"] = py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ClockType.Dict.Set("hour", intProp(func(self py.Object) int { return self.(*Clock).Hour }))
+	ClockType.Dict.Set("minute", intProp(func(self py.Object) int { return self.(*Clock).Minute }))
+	ClockType.Dict.Set("second", intProp(func(self py.Object) int { return self.(*Clock).Second }))
+	ClockType.Dict.Set("microsecond", intProp(func(self py.Object) int { return self.(*Clock).Micro }))
+	ClockType.Dict.Set("isoformat", py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Clock)
 		out := fmt.Sprintf("%02d:%02d:%02d", c.Hour, c.Minute, c.Second)
 		if c.Micro != 0 {
 			out += fmt.Sprintf(".%06d", c.Micro)
 		}
 		return py.String(out), nil
-	}, 0, "ISO 8601 form.")
+	}, 0, "ISO 8601 form."))
 
-	TimezoneType.Dict["utc"] = &Timezone{}
+	TimezoneType.Dict.Set("utc", &Timezone{})
 }
 
 // ---------------------------------------------------------------------------

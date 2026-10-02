@@ -25,7 +25,7 @@ func (cit *CallIterator) M__iter__() (Object, error) {
 
 // Get next one from the iteration
 func (cit *CallIterator) M__next__() (Object, error) {
-	value, err := Call(cit.callable, nil, nil)
+	value, err := Call(cit.callable, nil, NewStringDict())
 
 	if err != nil {
 		return nil, err

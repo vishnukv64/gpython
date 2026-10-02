@@ -30,9 +30,10 @@ var SimpleNamespaceType = py.NewTypeX("types.SimpleNamespace", "A simple attribu
 		return nil, py.ExceptionNewf(py.TypeError, "SimpleNamespace() takes no positional arguments")
 	}
 	ns := &SimpleNamespace{Dict: py.NewStringDict()}
-	for k, v := range kwargs {
-		ns.Dict[k] = v
-	}
+	kwargs.Range(func(k string, v py.Object) bool {
+		ns.Dict.Set(k, v)
+		return false
+	})
 	return ns, nil
 }, nil)
 
@@ -43,11 +44,11 @@ func (n *SimpleNamespace) GetDict() py.StringDict { return n.Dict }
 func init() {
 	SimpleNamespaceType.Flags |= py.TPFLAGS_BASETYPE
 
-	SimpleNamespaceType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object) (py.Object, error) {
+	SimpleNamespaceType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object) (py.Object, error) {
 		n := self.(*SimpleNamespace)
 		out := "namespace("
 		first := true
-		for k, v := range n.Dict {
+		n.Dict.Range(func(k string, v py.Object) bool {
 			if !first {
 				out += ", "
 			}
@@ -57,36 +58,34 @@ func init() {
 				s = "?"
 			}
 			out += k + "=" + s
-		}
+			return false
+		})
 		return py.String(out + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
-	globals := py.StringDict{
-		"SimpleNamespace": SimpleNamespaceType,
-
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "SimpleNamespace", Value: SimpleNamespaceType},
 		// The type names, bound to the interpreter's real types so that an
 		// isinstance test against them means what it says.
-		"FunctionType":        py.FunctionType,
-		"LambdaType":          py.FunctionType,
-		"BuiltinFunctionType": py.MethodType,
-		"BuiltinMethodType":   py.MethodType,
-		"MethodType":          py.MethodType,
-		"GeneratorType":       py.GeneratorType,
-		"CodeType":            py.CodeType,
-		"FrameType":           py.FrameType,
-		"TracebackType":       py.TracebackType,
-		"ModuleType":          py.ModuleType,
-		"CellType":            py.CellType,
-		"MappingProxyType":    py.StringDictType,
-		"NoneType":            py.NoneType.Type(py.None),
-
-		"ModuleSpec": py.NewType("types.ModuleSpec", "The specification for a module, used for loading."),
-
+		py.DictEntry{Key: "FunctionType", Value: py.FunctionType},
+		py.DictEntry{Key: "LambdaType", Value: py.FunctionType},
+		py.DictEntry{Key: "BuiltinFunctionType", Value: py.MethodType},
+		py.DictEntry{Key: "BuiltinMethodType", Value: py.MethodType},
+		py.DictEntry{Key: "MethodType", Value: py.MethodType},
+		py.DictEntry{Key: "GeneratorType", Value: py.GeneratorType},
+		py.DictEntry{Key: "CodeType", Value: py.CodeType},
+		py.DictEntry{Key: "FrameType", Value: py.FrameType},
+		py.DictEntry{Key: "TracebackType", Value: py.TracebackType},
+		py.DictEntry{Key: "ModuleType", Value: py.ModuleType},
+		py.DictEntry{Key: "CellType", Value: py.CellType},
+		py.DictEntry{Key: "MappingProxyType", Value: py.StringDictType},
+		py.DictEntry{Key: "NoneType", Value: py.NoneType.Type(py.None)},
+		py.DictEntry{Key: "ModuleSpec", Value: py.NewType("types.ModuleSpec", "The specification for a module, used for loading.")},
 		// The dynamic-class helpers.  They build a class from a dict, which
 		// is what the module's names are for.
-		"new_class":     py.MustNewMethod("new_class", newClass, 0, "Create a class object dynamically using the appropriate metaclass."),
-		"prepare_class": py.MustNewMethod("prepare_class", prepareClass, 0, "Call the __prepare__ method of the appropriate metaclass."),
-	}
+		py.DictEntry{Key: "new_class", Value: py.MustNewMethod("new_class", newClass, 0, "Create a class object dynamically using the appropriate metaclass.")},
+		py.DictEntry{Key: "prepare_class", Value: py.MustNewMethod("prepare_class", prepareClass, 0, "Call the __prepare__ method of the appropriate metaclass.")},
+	)
 
 	// The class-building module, for the metaclass lookup.
 	py.RegisterModule(&py.ModuleImpl{
@@ -106,11 +105,11 @@ func newClass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	var name py.Object
 	bases := py.Object(py.Tuple{py.ObjectType})
 	ns := py.Object(py.NewStringDict())
-	if err := py.UnpackTuple(args, nil, "new_class", 1, 3, &name, &bases, &ns); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "new_class", 1, 3, &name, &bases, &ns); err != nil {
 		return nil, err
 	}
 	// type(name, bases, namespace) is the constructor's own form.
-	return py.Call(py.TypeType, py.Tuple{name, bases, ns}, nil)
+	return py.Call(py.TypeType, py.Tuple{name, bases, ns}, py.StringDict{})
 }
 
 // prepareClass returns a namespace for the class to be built in.  The

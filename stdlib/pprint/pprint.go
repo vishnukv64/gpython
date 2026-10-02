@@ -65,21 +65,21 @@ func newPrinter(kwargs py.StringDict) (*printer, error) {
 		sortDicts: true,
 		readable:  true,
 	}
-	if v, ok := kwargs["indent"]; ok {
+	if v, ok := kwargs.Get("indent"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
 		}
 		p.indent = n
 	}
-	if v, ok := kwargs["width"]; ok {
+	if v, ok := kwargs.Get("width"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
 		}
 		p.width = n
 	}
-	if v, ok := kwargs["depth"]; ok && v != py.None {
+	if v, ok := kwargs.Get("depth"); ok && v != py.None {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -87,21 +87,21 @@ func newPrinter(kwargs py.StringDict) (*printer, error) {
 		p.depth = n
 		p.hasDepth = true
 	}
-	if v, ok := kwargs["compact"]; ok {
+	if v, ok := kwargs.Get("compact"); ok {
 		b, err := py.ObjectIsTrue(v)
 		if err != nil {
 			return nil, err
 		}
 		p.compact = b
 	}
-	if v, ok := kwargs["sort_dicts"]; ok {
+	if v, ok := kwargs.Get("sort_dicts"); ok {
 		b, err := py.ObjectIsTrue(v)
 		if err != nil {
 			return nil, err
 		}
 		p.sortDicts = b
 	}
-	if v, ok := kwargs["underscore_numbers"]; ok {
+	if v, ok := kwargs.Get("underscore_numbers"); ok {
 		b, err := py.ObjectIsTrue(v)
 		if err != nil {
 			return nil, err
@@ -204,7 +204,7 @@ func (p *printer) safeRepr(object py.Object, context map[uintptr]bool, maxlevels
 		delete(context, objid)
 		return strings.Replace(format, "%s", strings.Join(components, ", "), 1), readable, recursive, nil
 	case py.StringDict:
-		if len(obj) == 0 {
+		if obj.Len() == 0 {
 			return "{}", true, false, nil
 		}
 		objid := objID(obj)
@@ -272,10 +272,10 @@ func objID(object py.Object) uintptr {
 		}
 		return reflect.ValueOf(v).Pointer()
 	case py.StringDict:
-		if len(v) == 0 {
+		if v.Len() == 0 {
 			return 2
 		}
-		return reflect.ValueOf(v).Pointer()
+		return v.Ptr()
 	}
 	return 0
 }
@@ -346,8 +346,11 @@ type kv struct {
 // built by a script is already in map order, which is not insertion order; the
 // sort below is therefore also what makes the default output deterministic.
 func (p *printer) dictEntries(d py.StringDict) []kv {
-	pairs := make([]kv, 0, len(d))
-	for k, v := range d {
+	pairs := make([]kv, 0, d.Len())
+	for _, __e := range d.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		key, err := py.DictKeyDecode(k)
 		if err != nil {
 			continue
@@ -446,7 +449,7 @@ func (p *printer) formatObject(object py.Object, b *strings.Builder, indent, all
 		if p.indent > 1 {
 			b.WriteString(strings.Repeat(" ", p.indent-1))
 		}
-		if len(obj) > 0 {
+		if obj.Len() > 0 {
 			if err := p.formatDictItems(p.dictEntries(obj), b, indent, allowance+1, context, level); err != nil {
 				return err
 			}
@@ -587,7 +590,7 @@ func stdoutObject(self py.Object) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	stdout, ok := sysModule.Globals["stdout"]
+	stdout, ok := sysModule.Globals.Get("stdout")
 	if !ok {
 		return nil, py.ExceptionNewf(py.RuntimeError, "sys.stdout is not available")
 	}
@@ -600,13 +603,13 @@ func writeTo(stream py.Object, s string) error {
 	if err != nil {
 		return err
 	}
-	_, err = py.Call(write, py.Tuple{py.String(s)}, nil)
+	_, err = py.Call(write, py.Tuple{py.String(s)}, py.StringDict{})
 	return err
 }
 
 func pformatFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var object py.Object
-	if err := py.UnpackTuple(args, nil, "pformat", 1, 1, &object); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "pformat", 1, 1, &object); err != nil {
 		return nil, err
 	}
 	p, err := newPrinter(kwargs)
@@ -631,8 +634,11 @@ func pprintFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if len(args) == 2 {
 		stream = args[1]
 	}
-	opts := py.StringDict{}
-	for k, v := range kwargs {
+	opts := py.NewStringDict()
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		if k == "stream" {
 			if len(args) == 2 {
 				return nil, py.ExceptionNewf(py.TypeError, "pprint() got multiple values for argument 'stream'")
@@ -640,7 +646,7 @@ func pprintFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 			stream = v
 			continue
 		}
-		opts[k] = v
+		opts.Set(k, v)
 	}
 	p, err := newPrinter(opts)
 	if err != nil {
@@ -663,12 +669,13 @@ func pprintFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 
 // ppFn is pp(), which is pprint() with sort_dicts defaulting to False.
 func ppFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if _, ok := kwargs["sort_dicts"]; !ok {
-		kw := py.StringDict{}
-		for k, v := range kwargs {
-			kw[k] = v
-		}
-		kw["sort_dicts"] = py.Bool(false)
+	if _, ok := kwargs.Get("sort_dicts"); !ok {
+		kw := py.NewStringDict()
+		kwargs.Range(func(k string, v py.Object) bool {
+			kw.Set(k, v)
+			return false
+		})
+		kw.Set("sort_dicts", py.Bool(false))
 		kwargs = kw
 	}
 	return pprintFn(self, args, kwargs)
@@ -677,10 +684,10 @@ func ppFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 // isReadableFn and isRecursiveFn expose CPython's isreadable/isrecursive.
 func isReadableFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var object py.Object
-	if err := py.UnpackTuple(args, nil, "isreadable", 1, 1, &object); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "isreadable", 1, 1, &object); err != nil {
 		return nil, err
 	}
-	p, err := newPrinter(py.StringDict{})
+	p, err := newPrinter(py.NewStringDict())
 	if err != nil {
 		return nil, err
 	}
@@ -692,10 +699,10 @@ func isReadableFn(self py.Object, args py.Tuple) (py.Object, error) {
 
 func isRecursiveFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var object py.Object
-	if err := py.UnpackTuple(args, nil, "isrecursive", 1, 1, &object); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "isrecursive", 1, 1, &object); err != nil {
 		return nil, err
 	}
-	p, err := newPrinter(py.StringDict{})
+	p, err := newPrinter(py.NewStringDict())
 	if err != nil {
 		return nil, err
 	}
@@ -726,14 +733,15 @@ func (pp *PrettyPrinter) Type() *py.Type { return prettyPrinterType }
 func prettyPrinterNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	// indent, width, depth and stream are positional-or-keyword; the rest are
 	// keyword-only.
-	opts := py.StringDict{}
-	for k, v := range kwargs {
-		opts[k] = v
-	}
+	opts := py.NewStringDict()
+	kwargs.Range(func(k string, v py.Object) bool {
+		opts.Set(k, v)
+		return false
+	})
 	var stream py.Object = py.None
-	if v, ok := opts["stream"]; ok {
+	if v, ok := opts.Get("stream"); ok {
 		stream = v
-		delete(opts, "stream")
+		opts.Del("stream")
 	}
 	if len(args) > 4 {
 		return nil, py.ExceptionNewf(py.TypeError, "PrettyPrinter() takes at most 4 positional arguments (%d given)", len(args))
@@ -744,7 +752,7 @@ func prettyPrinterNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (p
 			stream = a
 			continue
 		}
-		opts[names[i]] = a
+		opts.Set(names[i], a)
 	}
 	p, err := newPrinter(opts)
 	if err != nil {
@@ -792,7 +800,7 @@ func (pp *PrettyPrinter) formatAndWrite(self py.Object, object py.Object, newlin
 func moduleFromMethod(self py.Object) (py.Object, error) {
 	d := self.Type().Dict
 	for _, name := range []string{"pprint", "pformat"} {
-		if m, ok := d[name].(*py.Method); ok && m.Module != nil {
+		if m, ok := d.GetOrNil(name).(*py.Method); ok && m.Module != nil {
 			return m.Module, nil
 		}
 	}
@@ -800,22 +808,22 @@ func moduleFromMethod(self py.Object) (py.Object, error) {
 }
 
 func init() {
-	prettyPrinterType.Dict["pprint"] = py.MustNewMethod("pprint", func(self py.Object, args py.Tuple) (py.Object, error) {
+	prettyPrinterType.Dict.Set("pprint", py.MustNewMethod("pprint", func(self py.Object, args py.Tuple) (py.Object, error) {
 		pp := self.(*PrettyPrinter)
 		var object py.Object
-		if err := py.UnpackTuple(args, nil, "pprint", 1, 1, &object); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "pprint", 1, 1, &object); err != nil {
 			return nil, err
 		}
 		if err := pp.formatAndWrite(self, object, true); err != nil {
 			return nil, err
 		}
 		return py.None, nil
-	}, 0, "Pretty-print a Python object to the configured stream.")
+	}, 0, "Pretty-print a Python object to the configured stream."))
 
-	prettyPrinterType.Dict["pformat"] = py.MustNewMethod("pformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+	prettyPrinterType.Dict.Set("pformat", py.MustNewMethod("pformat", func(self py.Object, args py.Tuple) (py.Object, error) {
 		pp := self.(*PrettyPrinter)
 		var object py.Object
-		if err := py.UnpackTuple(args, nil, "pformat", 1, 1, &object); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "pformat", 1, 1, &object); err != nil {
 			return nil, err
 		}
 		s, err := pp.p.pformat(object)
@@ -823,31 +831,31 @@ func init() {
 			return nil, err
 		}
 		return py.String(s), nil
-	}, 0, "Format a Python object into a pretty-printed representation.")
+	}, 0, "Format a Python object into a pretty-printed representation."))
 
-	prettyPrinterType.Dict["isreadable"] = py.MustNewMethod("isreadable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	prettyPrinterType.Dict.Set("isreadable", py.MustNewMethod("isreadable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		pp := self.(*PrettyPrinter)
 		var object py.Object
-		if err := py.UnpackTuple(args, nil, "isreadable", 1, 1, &object); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "isreadable", 1, 1, &object); err != nil {
 			return nil, err
 		}
 		if _, err := pp.p.pformat(object); err != nil {
 			return nil, err
 		}
 		return py.NewBool(pp.p.readable && !pp.p.recursive), nil
-	}, 0, "Return True if the object is readable by eval().")
+	}, 0, "Return True if the object is readable by eval()."))
 
-	prettyPrinterType.Dict["isrecursive"] = py.MustNewMethod("isrecursive", func(self py.Object, args py.Tuple) (py.Object, error) {
+	prettyPrinterType.Dict.Set("isrecursive", py.MustNewMethod("isrecursive", func(self py.Object, args py.Tuple) (py.Object, error) {
 		pp := self.(*PrettyPrinter)
 		var object py.Object
-		if err := py.UnpackTuple(args, nil, "isrecursive", 1, 1, &object); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "isrecursive", 1, 1, &object); err != nil {
 			return nil, err
 		}
 		if _, err := pp.p.pformat(object); err != nil {
 			return nil, err
 		}
 		return py.NewBool(pp.p.recursive), nil
-	}, 0, "Return True if the object requires a recursive representation.")
+	}, 0, "Return True if the object requires a recursive representation."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -861,8 +869,8 @@ func init() {
 			py.MustNewMethod("isreadable", isReadableFn, 0, "Determine if saferepr(object) is readable by eval()."),
 			py.MustNewMethod("isrecursive", isRecursiveFn, 0, "Determine if object requires a recursive representation."),
 		},
-		Globals: py.StringDict{
-			"PrettyPrinter": prettyPrinterType,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "PrettyPrinter", Value: prettyPrinterType},
+		),
 	})
 }

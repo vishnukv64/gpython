@@ -35,7 +35,7 @@ func (p *frameProbe) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, 
 	// Walk out to the caller the way inspect.currentframe().f_back does.
 	if f != nil && f.Back != nil {
 		p.globals = append(p.globals, f.Back.Globals)
-		if name, ok := f.Back.Globals["__name__"]; ok {
+		if name, ok := f.Back.Globals.Get("__name__"); ok {
 			if s, ok := name.(py.String); ok {
 				p.names = append(p.names, string(s))
 			}
@@ -55,8 +55,8 @@ func runProgram(t *testing.T, src string) (*frameProbe, py.Context, error) {
 	}
 	globals := py.NewStringDict()
 	probe := &frameProbe{ctx: ctx}
-	globals["probe"] = probe
-	globals["__name__"] = py.String("probe_module")
+	globals.Set("probe", probe)
+	globals.Set("__name__", py.String("probe_module"))
 	if _, err := ctx.RunCode(code, globals, globals, nil); err != nil {
 		return probe, ctx, err
 	}

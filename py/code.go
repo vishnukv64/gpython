@@ -290,21 +290,21 @@ func init() {
 		}}
 	}
 
-	CodeType.Dict["co_name"] = strAttr(func(c *Code) string { return c.Name })
-	CodeType.Dict["co_filename"] = strAttr(func(c *Code) string { return c.Filename })
-	CodeType.Dict["co_qualname"] = strAttr(func(c *Code) string { return c.Name })
-	CodeType.Dict["co_argcount"] = intAttr(func(c *Code) int32 { return c.Argcount })
-	CodeType.Dict["co_posonlyargcount"] = intAttr(func(c *Code) int32 { return c.Posonlyargcount })
-	CodeType.Dict["co_kwonlyargcount"] = intAttr(func(c *Code) int32 { return c.Kwonlyargcount })
-	CodeType.Dict["co_nlocals"] = intAttr(func(c *Code) int32 { return c.Nlocals })
-	CodeType.Dict["co_stacksize"] = intAttr(func(c *Code) int32 { return c.Stacksize })
-	CodeType.Dict["co_flags"] = intAttr(func(c *Code) int32 { return c.Flags })
-	CodeType.Dict["co_firstlineno"] = intAttr(func(c *Code) int32 { return c.Firstlineno })
-	CodeType.Dict["co_varnames"] = strTuple(func(c *Code) []string { return c.Varnames })
-	CodeType.Dict["co_names"] = strTuple(func(c *Code) []string { return c.Names })
-	CodeType.Dict["co_freevars"] = strTuple(func(c *Code) []string { return c.Freevars })
-	CodeType.Dict["co_cellvars"] = strTuple(func(c *Code) []string { return c.Cellvars })
-	CodeType.Dict["co_consts"] = &Property{Fget: func(self Object) (Object, error) {
+	CodeType.Dict.Set("co_name", strAttr(func(c *Code) string { return c.Name }))
+	CodeType.Dict.Set("co_filename", strAttr(func(c *Code) string { return c.Filename }))
+	CodeType.Dict.Set("co_qualname", strAttr(func(c *Code) string { return c.Name }))
+	CodeType.Dict.Set("co_argcount", intAttr(func(c *Code) int32 { return c.Argcount }))
+	CodeType.Dict.Set("co_posonlyargcount", intAttr(func(c *Code) int32 { return c.Posonlyargcount }))
+	CodeType.Dict.Set("co_kwonlyargcount", intAttr(func(c *Code) int32 { return c.Kwonlyargcount }))
+	CodeType.Dict.Set("co_nlocals", intAttr(func(c *Code) int32 { return c.Nlocals }))
+	CodeType.Dict.Set("co_stacksize", intAttr(func(c *Code) int32 { return c.Stacksize }))
+	CodeType.Dict.Set("co_flags", intAttr(func(c *Code) int32 { return c.Flags }))
+	CodeType.Dict.Set("co_firstlineno", intAttr(func(c *Code) int32 { return c.Firstlineno }))
+	CodeType.Dict.Set("co_varnames", strTuple(func(c *Code) []string { return c.Varnames }))
+	CodeType.Dict.Set("co_names", strTuple(func(c *Code) []string { return c.Names }))
+	CodeType.Dict.Set("co_freevars", strTuple(func(c *Code) []string { return c.Freevars }))
+	CodeType.Dict.Set("co_cellvars", strTuple(func(c *Code) []string { return c.Cellvars }))
+	CodeType.Dict.Set("co_consts", &Property{Fget: func(self Object) (Object, error) {
 		return self.(*Code).Consts, nil
-	}}
+	}})
 }

@@ -158,7 +158,7 @@ func envKeys() py.Tuple {
 var environMethods = []*py.Method{
 	py.MustNewMethod("get", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		var key, def py.Object = nil, py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		k, err := envKey(key)
@@ -195,7 +195,7 @@ Return the value for key if key is in the environment, else default.`),
 	}, 0, "items() -> a list of (name, value) pairs."),
 	py.MustNewMethod("setdefault", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key, def py.Object = nil, py.None
-		if err := py.UnpackTuple(args, nil, "setdefault", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "setdefault", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		k, err := envKey(key)
@@ -216,7 +216,7 @@ Return the value for key if key is in the environment, else default.`),
 	}, 0, "setdefault(key[, default]) -> set and return the value if absent."),
 	py.MustNewMethod("pop", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		var key, def py.Object = nil, nil
-		if err := py.UnpackTuple(args, nil, "pop", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		k, err := envKey(key)
@@ -262,7 +262,7 @@ Return the value for key if key is in the environment, else default.`),
 
 func init() {
 	for _, m := range environMethods {
-		EnvironType.Dict[m.Name] = m
+		EnvironType.Dict.Set(m.Name, m)
 	}
 }
 

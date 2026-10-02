@@ -416,14 +416,14 @@ func ParseTupleAndKeywords(args Tuple, kwargs StringDict, format string, kwlist 
 	}
 	var opsBuf [16]formatOp
 	min, name, kwOnly_i, ops := parseFormat(format, opsBuf[:0])
-	err := checkNumberOfArgs(name, len(args)+len(kwargs), len(results), min, len(ops))
+	err := checkNumberOfArgs(name, len(args)+kwargs.Len(), len(results), min, len(ops))
 	if err != nil {
 		return err
 	}
 
 	// Check all the kwargs are in kwlist
 	// O(N^2) Slow but kwlist is usually short
-	for kwargName := range kwargs {
+	for _, kwargName := range kwargs.Keys() {
 		for _, kw := range kwlist {
 			if kw == kwargName {
 				goto found
@@ -442,7 +442,7 @@ func ParseTupleAndKeywords(args Tuple, kwargs StringDict, format string, kwlist 
 		)
 		if i < len(kwlist) {
 			kw = kwlist[i]
-			arg = kwargs[kw]
+			arg = kwargs.GetOrNil(kw)
 		}
 
 		// Consume ordered args first -- they should not require keyword only or also be specified via keyword
@@ -565,7 +565,7 @@ func ParseTupleAndKeywords(args Tuple, kwargs StringDict, format string, kwlist 
 
 // Parse tuple only
 func ParseTuple(args Tuple, format string, results ...*Object) error {
-	return ParseTupleAndKeywords(args, nil, format, nil, results...)
+	return ParseTupleAndKeywords(args, NewStringDict(), format, nil, results...)
 }
 
 type formatOp struct {
@@ -633,7 +633,7 @@ func checkNumberOfArgs(name string, nargs, nresults, min, max int) error {
 //
 // Up to the caller to set default values
 func UnpackTuple(args Tuple, kwargs StringDict, name string, min int, max int, results ...*Object) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return ExceptionNewf(TypeError, "%s() does not take keyword arguments", name)
 	}
 

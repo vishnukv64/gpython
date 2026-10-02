@@ -103,7 +103,7 @@ func builtin_hash(self, obj py.Object) (py.Object, error) {
 	if err != nil {
 		return nil, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", obj.Type().Name)
 	}
-	return py.Call(h, py.Tuple{}, nil)
+	return py.Call(h, py.Tuple{}, py.StringDict{})
 }
 
 const issubclass_doc = `Return whether class is a derived class of another class or of any of
@@ -111,7 +111,7 @@ the classes in the classinfo tuple.`
 
 func builtin_issubclass(self py.Object, args py.Tuple) (py.Object, error) {
 	var cls, classinfo py.Object
-	if err := py.UnpackTuple(args, nil, "issubclass", 2, 2, &cls, &classinfo); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "issubclass", 2, 2, &cls, &classinfo); err != nil {
 		return nil, err
 	}
 
@@ -158,8 +158,8 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	if len(args) == 0 {
 		f.FastToLocals()
-		names := make([]string, 0, len(f.Locals))
-		for name := range f.Locals {
+		names := make([]string, 0, f.Locals.Len())
+		for _, name := range f.Locals.Keys() {
 			names = append(names, name)
 		}
 		sort.Strings(names)
@@ -171,18 +171,18 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	// Attributes supplied by the type and everything it inherits.
 	for t := obj.Type(); t != nil; t = t.Base {
-		for name := range t.Dict {
+		for _, name := range t.Dict.Keys() {
 			seen[name] = true
 		}
 	}
 	// Attributes carried by the object itself.
 	if d, ok := obj.(py.IGetDict); ok {
-		for name := range d.GetDict() {
+		for _, name := range d.GetDict().Keys() {
 			seen[name] = true
 		}
 	}
 	if m, ok := obj.(*py.Module); ok {
-		for name := range m.Globals {
+		for _, name := range m.Globals.Keys() {
 			seen[name] = true
 		}
 	}
@@ -210,7 +210,7 @@ Return value.__format__(format_spec).`
 func builtin_format(self py.Object, args py.Tuple) (py.Object, error) {
 	var value py.Object
 	spec := py.Object(py.String(""))
-	if err := py.UnpackTuple(args, nil, "format", 1, 2, &value, &spec); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "format", 1, 2, &value, &spec); err != nil {
 		return nil, err
 	}
 

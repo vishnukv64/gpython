@@ -207,7 +207,7 @@ const MISSING_doc = `Sentinel object to detect if a parameter is supplied or not
 // populated.  When it is - a class that assigns it explicitly - that is the
 // authoritative list.  Otherwise the class's source is parsed.
 func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
-	ann := cls.Dict["__annotations__"]
+	ann := cls.Dict.GetOrNil("__annotations__")
 	var names []string
 	var types []py.Object
 	if ann != nil {
@@ -221,7 +221,7 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 		types = []py.Object{}
 		for _, k := range sortedKeys(d.GetDict()) {
 			names = append(names, k)
-			types = append(types, d.GetDict()[k])
+			types = append(types, d.GetDict().GetOrNil(k))
 		}
 	}
 	// kwOnlyFromSource records, per name, whether the source showed a
@@ -253,7 +253,7 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 		if kwOnlyFromSource[name] {
 			kwOnlySeen = true
 		}
-		if value, ok := cls.Dict[name]; ok {
+		if value, ok := cls.Dict.Get(name); ok {
 			if _, isKwOnly := value.(kwOnlyType); isKwOnly {
 				kwOnlySeen = true
 				continue
@@ -307,8 +307,8 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 }
 
 func sortedKeys(d py.StringDict) []string {
-	keys := make([]string, 0, len(d))
-	for k := range d {
+	keys := make([]string, 0, d.Len())
+	for _, k := range d.Keys() {
 		keys = append(keys, k)
 	}
 	// There is no declaration order to recover from a map, so the names are
@@ -628,47 +628,47 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 	}
 
 	if initOn {
-		hasInit := cls.Dict["__init__"] != nil
+		hasInit := cls.Dict.GetOrNil("__init__") != nil
 		if !hasInit {
-			cls.Dict["__init__"] = py.MustNewMethod("__init__", makeInit(cls, fields, frozenOn), 0,
-				"Generated __init__ for a dataclass.")
+			cls.Dict.Set("__init__", py.MustNewMethod("__init__", makeInit(cls, fields, frozenOn), 0,
+				"Generated __init__ for a dataclass."))
 		}
 	}
-	if reprOn && cls.Dict["__repr__"] == nil {
-		cls.Dict["__repr__"] = py.MustNewMethod("__repr__", makeRepr(cls, fields), 0,
-			"Generated __repr__ for a dataclass.")
+	if reprOn && cls.Dict.GetOrNil("__repr__") == nil {
+		cls.Dict.Set("__repr__", py.MustNewMethod("__repr__", makeRepr(cls, fields), 0,
+			"Generated __repr__ for a dataclass."))
 	}
-	if eqOn && cls.Dict["__eq__"] == nil {
-		cls.Dict["__eq__"] = py.MustNewMethod("__eq__", makeEq(cls, fields), 0,
-			"Generated __eq__ for a dataclass.")
+	if eqOn && cls.Dict.GetOrNil("__eq__") == nil {
+		cls.Dict.Set("__eq__", py.MustNewMethod("__eq__", makeEq(cls, fields), 0,
+			"Generated __eq__ for a dataclass."))
 	}
 	if orderOn {
-		cls.Dict["__lt__"] = py.MustNewMethod("__lt__", makeOrder(cls, fields, "<", false), 0, "Generated __lt__.")
-		cls.Dict["__le__"] = py.MustNewMethod("__le__", makeOrder(cls, fields, "<", true), 0, "Generated __le__.")
-		cls.Dict["__gt__"] = py.MustNewMethod("__gt__", makeOrder(cls, fields, ">", false), 0, "Generated __gt__.")
-		cls.Dict["__ge__"] = py.MustNewMethod("__ge__", makeOrder(cls, fields, ">", true), 0, "Generated __ge__.")
+		cls.Dict.Set("__lt__", py.MustNewMethod("__lt__", makeOrder(cls, fields, "<", false), 0, "Generated __lt__."))
+		cls.Dict.Set("__le__", py.MustNewMethod("__le__", makeOrder(cls, fields, "<", true), 0, "Generated __le__."))
+		cls.Dict.Set("__gt__", py.MustNewMethod("__gt__", makeOrder(cls, fields, ">", false), 0, "Generated __gt__."))
+		cls.Dict.Set("__ge__", py.MustNewMethod("__ge__", makeOrder(cls, fields, ">", true), 0, "Generated __ge__."))
 	}
 	if hashOn {
-		cls.Dict["__hash__"] = py.MustNewMethod("__hash__", makeHash(cls, fields), 0, "Generated __hash__.")
-	} else if eqOn && cls.Dict["__hash__"] == nil {
+		cls.Dict.Set("__hash__", py.MustNewMethod("__hash__", makeHash(cls, fields), 0, "Generated __hash__."))
+	} else if eqOn && cls.Dict.GetOrNil("__hash__") == nil {
 		// Defining __eq__ without __hash__ makes the class unhashable, as
 		// CPython does.
-		cls.Dict["__hash__"] = py.None
+		cls.Dict.Set("__hash__", py.None)
 	}
 	if frozenOn {
-		cls.Dict["__setattr__"] = py.MustNewMethod("__setattr__", frozenSetattr, 0,
-			"Raise FrozenInstanceError on assignment to a frozen dataclass.")
-		cls.Dict["__delattr__"] = py.MustNewMethod("__delattr__", frozenDelattr, 0,
-			"Raise FrozenInstanceError on deletion from a frozen dataclass.")
+		cls.Dict.Set("__setattr__", py.MustNewMethod("__setattr__", frozenSetattr, 0,
+			"Raise FrozenInstanceError on assignment to a frozen dataclass."))
+		cls.Dict.Set("__delattr__", py.MustNewMethod("__delattr__", frozenDelattr, 0,
+			"Raise FrozenInstanceError on deletion from a frozen dataclass."))
 	}
 
 	// The field table is kept on the class so that fields() and friends can
 	// read it back.  The order lives in a separate list because this
 	// interpreter's dict is a Go map, which does not preserve insertion
 	// order.
-	cls.Dict["__dataclass_fields__"] = fieldsDict(fields)
-	cls.Dict["__dataclass_field_order__"] = fieldOrder(fields)
-	cls.Dict["__dataclass_params__"] = py.NewStringDict()
+	cls.Dict.Set("__dataclass_fields__", fieldsDict(fields))
+	cls.Dict.Set("__dataclass_field_order__", fieldOrder(fields))
+	cls.Dict.Set("__dataclass_params__", py.NewStringDict())
 	return cls, nil
 }
 
@@ -677,7 +677,7 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 func fieldsDict(fields []*fieldType) py.StringDict {
 	d := py.NewStringDict()
 	for _, f := range fields {
-		d[f.name] = f
+		d.Set(f.name, f)
 	}
 	return d
 }
@@ -772,7 +772,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 			} else {
 				value = missing
 			}
-			if v, ok := kwargs[f.name]; ok {
+			if v, ok := kwargs.Get(f.name); ok {
 				if value != missing {
 					return nil, py.ExceptionNewf(py.TypeError,
 						"%s.__init__() got multiple values for argument %q", cls.Name, f.name)
@@ -782,7 +782,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 			}
 			if value == missing {
 				if f.defaultFactory != missing {
-					v, err := py.Call(f.defaultFactory, nil, nil)
+					v, err := py.Call(f.defaultFactory, nil, py.StringDict{})
 					if err != nil {
 						return nil, err
 					}
@@ -805,7 +805,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 		for _, f := range positional {
 			known[f.name] = true
 		}
-		for k := range kwargs {
+		for _, k := range kwargs.Keys() {
 			if !known[k] {
 				return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() got an unexpected keyword argument %q", cls.Name, k)
 			}
@@ -813,8 +813,8 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 
 		// __post_init__ runs last, and is how a dataclass computes derived
 		// attributes.
-		if cls.Dict["__post_init__"] != nil {
-			if _, err := py.Call(bound(cls, self, "__post_init__"), nil, nil); err != nil {
+		if cls.Dict.GetOrNil("__post_init__") != nil {
+			if _, err := py.Call(bound(cls, self, "__post_init__"), nil, py.StringDict{}); err != nil {
 				return nil, err
 			}
 		}
@@ -1063,10 +1063,10 @@ func fields(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 // itself a *py.Type whose Dict holds its attributes.
 func setFieldValue(self py.Object, name string, value py.Object) error {
 	if inst, ok := self.(*py.Type); ok {
-		if inst.Dict == nil {
+		if inst.Dict.IsNil() {
 			inst.Dict = py.NewStringDict()
 		}
-		inst.Dict[name] = value
+		inst.Dict.Set(name, value)
 		return nil
 	}
 	_, err := py.SetAttrString(self, name, value)
@@ -1106,7 +1106,7 @@ func classFields(obj py.Object) ([]*fieldType, error) {
 			if err != nil {
 				return nil, err
 			}
-			f, ok := dict[name].(*fieldType)
+			f, ok := dict.GetOrNil(name).(*fieldType)
 			if !ok {
 				continue
 			}
@@ -1115,7 +1115,7 @@ func classFields(obj py.Object) ([]*fieldType, error) {
 		return fs, nil
 	}
 	var fs []*fieldType
-	for _, v := range dict {
+	for _, v := range dict.Values() {
 		f, ok := v.(*fieldType)
 		if !ok {
 			continue
@@ -1129,11 +1129,11 @@ func classFields(obj py.Object) ([]*fieldType, error) {
 // fields, or nil when there is none.
 func dataclassFieldOrder(obj py.Object) *py.List {
 	if t, ok := obj.(*py.Type); ok {
-		if l, ok := t.Dict["__dataclass_field_order__"].(*py.List); ok {
+		if l, ok := t.Dict.GetOrNil("__dataclass_field_order__").(*py.List); ok {
 			return l
 		}
 	}
-	if l, ok := obj.Type().Dict["__dataclass_field_order__"].(*py.List); ok {
+	if l, ok := obj.Type().Dict.GetOrNil("__dataclass_field_order__").(*py.List); ok {
 		return l
 	}
 	return nil
@@ -1186,10 +1186,10 @@ func asdictImpl(obj, factory py.Object, depth int) (py.Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[f.name] = v
+		out.Set(f.name, v)
 	}
 	if factory != nil && factory != py.None {
-		return py.Call(factory, py.Tuple{out}, nil)
+		return py.Call(factory, py.Tuple{out}, py.StringDict{})
 	}
 	return out, nil
 }
@@ -1222,16 +1222,19 @@ func asdictValue(v, factory py.Object, depth int) (py.Object, error) {
 	}
 	if d, ok := v.(py.StringDict); ok {
 		out := py.NewStringDict()
-		for k, item := range d {
+		for _, __e := range d.Items() {
+			k := __e.Key
+			item := __e.Value
+
 			conv, err := asdictValue(item, factory, depth+1)
 			if err != nil {
 				return nil, err
 			}
-			out[k] = conv
+			out.Set(k, conv)
 		}
 		return out, nil
 	}
-	if _, ok := v.Type().Dict["__dataclass_fields__"]; ok {
+	if _, ok := v.Type().Dict.Get("__dataclass_fields__"); ok {
 		return asdictImpl(v, factory, depth+1)
 	}
 	return v, nil
@@ -1256,7 +1259,7 @@ func astuple(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		return nil, err
 	}
 	if factory != nil && factory != py.None {
-		return py.Call(factory, py.Tuple{out}, nil)
+		return py.Call(factory, py.Tuple{out}, py.StringDict{})
 	}
 	return out, nil
 }
@@ -1309,16 +1312,19 @@ func astupleValue(v py.Object, depth int) (py.Object, error) {
 	}
 	if d, ok := v.(py.StringDict); ok {
 		out := py.NewStringDict()
-		for k, item := range d {
+		for _, __e := range d.Items() {
+			k := __e.Key
+			item := __e.Value
+
 			conv, err := astupleValue(item, depth+1)
 			if err != nil {
 				return nil, err
 			}
-			out[k] = conv
+			out.Set(k, conv)
 		}
 		return out, nil
 	}
-	if _, ok := v.Type().Dict["__dataclass_fields__"]; ok {
+	if _, ok := v.Type().Dict.Get("__dataclass_fields__"); ok {
 		return astupleImpl(v, depth+1)
 	}
 	return v, nil
@@ -1343,7 +1349,7 @@ func replace(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		if !f.init {
 			continue
 		}
-		if v, ok := kwargs[f.name]; ok {
+		if v, ok := kwargs.Get(f.name); ok {
 			positional = append(positional, v)
 			continue
 		}
@@ -1353,7 +1359,7 @@ func replace(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		}
 		positional = append(positional, v)
 	}
-	for k := range kwargs {
+	for _, k := range kwargs.Keys() {
 		known := false
 		for _, f := range fs {
 			if f.name == k {
@@ -1365,7 +1371,7 @@ func replace(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 			return nil, py.ExceptionNewf(py.TypeError, "replace() got an unexpected keyword argument %q", k)
 		}
 	}
-	return py.Call(cls, py.Tuple(positional), nil)
+	return py.Call(cls, py.Tuple(positional), py.StringDict{})
 }
 
 const make_dataclass_doc = `make_dataclass(cls_name, fields, *, bases=(), namespace=None,
@@ -1411,8 +1417,10 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	namespace := py.NewStringDict()
 	if ns != nil && ns != py.None {
 		if d, ok := ns.(py.IGetDict); ok {
-			for k, v := range d.GetDict() {
-				namespace[k] = v
+			for _, __e := range d.GetDict().Items() {
+				k := __e.Key
+				v := __e.Value
+				namespace.Set(k, v)
 			}
 		}
 	}
@@ -1446,7 +1454,7 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 			}
 			fname = name
 			if len(v) >= 3 {
-				namespace[fname] = v[2]
+				namespace.Set(fname, v[2])
 			}
 		default:
 			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
@@ -1516,9 +1524,9 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 		default:
 			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
 		}
-		ann[fname] = typ
+		ann.Set(fname, typ)
 	}
-	cls.Dict["__annotations__"] = ann
+	cls.Dict.Set("__annotations__", ann)
 	return applyDataclass(cls, opts, nil)
 }
 
@@ -1528,7 +1536,7 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 func createType(name string, bases []py.Object, namespace py.StringDict) (*py.Type, error) {
 	baseTuple := make(py.Tuple, 0, len(bases))
 	baseTuple = append(baseTuple, bases...)
-	res, err := py.Call(py.TypeType, py.Tuple{py.String(name), baseTuple, namespace}, nil)
+	res, err := py.Call(py.TypeType, py.Tuple{py.String(name), baseTuple, namespace}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -1556,22 +1564,22 @@ func hashTuple(t py.Tuple) (py.Object, error) {
 	if builtins == nil {
 		return nil, py.ExceptionNewf(py.RuntimeError, "dataclasses: builtins is not loaded")
 	}
-	fn := builtins.Globals["hash"]
+	fn := builtins.Globals.GetOrNil("hash")
 	if fn == nil {
 		return nil, py.ExceptionNewf(py.RuntimeError, "dataclasses: builtins.hash is not available")
 	}
-	return py.Call(fn, py.Tuple{t}, nil)
+	return py.Call(fn, py.Tuple{t}, py.StringDict{})
 }
 
 // dataclassFields finds the __dataclass_fields__ table of a class or
 // instance, or nil when the object is not a dataclass.
 func dataclassFields(obj py.Object) py.Object {
 	if t, ok := obj.(*py.Type); ok {
-		if d, ok := t.Dict["__dataclass_fields__"]; ok {
+		if d, ok := t.Dict.Get("__dataclass_fields__"); ok {
 			return d
 		}
 	}
-	if d, ok := obj.Type().Dict["__dataclass_fields__"]; ok {
+	if d, ok := obj.Type().Dict.Get("__dataclass_fields__"); ok {
 		return d
 	}
 	return nil
@@ -1579,7 +1587,7 @@ func dataclassFields(obj py.Object) py.Object {
 
 // oneArg validates a method that takes exactly one argument and returns it.
 func oneArg(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error) {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", name)
 	}
 	if len(args) != 1 {
@@ -1591,7 +1599,7 @@ func oneArg(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error)
 // bound looks up a name on a class and binds it to an instance, which is
 // what calling a method on the instance does.
 func bound(cls *py.Type, self py.Object, name string) py.Object {
-	m := cls.Dict[name]
+	m := cls.Dict.GetOrNil(name)
 	if m == nil {
 		return py.None
 	}
@@ -1641,56 +1649,56 @@ func reprOrEmpty(o py.Object) string {
 }
 
 func init() {
-	MissingType.Dict["__bool__"] = py.MustNewMethod("__bool__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	MissingType.Dict.Set("__bool__", py.MustNewMethod("__bool__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "MISSING is false.")
+	}, 0, "MISSING is false."))
 
-	FieldType.Dict["name"] = &py.Property{
+	FieldType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*fieldType).name), nil },
 		Doc:  "name of the field",
-	}
-	FieldType.Dict["type"] = &py.Property{
+	})
+	FieldType.Dict.Set("type", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).typ, nil },
 		Doc:  "type of the field",
-	}
-	FieldType.Dict["default"] = &py.Property{
+	})
+	FieldType.Dict.Set("default", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).defaultVal, nil },
 		Doc:  "default value of the field",
-	}
-	FieldType.Dict["default_factory"] = &py.Property{
+	})
+	FieldType.Dict.Set("default_factory", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).defaultFactory, nil },
 		Doc:  "default factory of the field",
-	}
-	FieldType.Dict["init"] = &py.Property{
+	})
+	FieldType.Dict.Set("init", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.Bool(self.(*fieldType).init), nil
 		},
 		Doc: "whether the field takes part in __init__",
-	}
-	FieldType.Dict["repr"] = &py.Property{
+	})
+	FieldType.Dict.Set("repr", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.Bool(self.(*fieldType).repr), nil
 		},
 		Doc: "whether the field takes part in __repr__",
-	}
-	FieldType.Dict["compare"] = &py.Property{
+	})
+	FieldType.Dict.Set("compare", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.Bool(self.(*fieldType).compare), nil
 		},
 		Doc: "whether the field takes part in comparisons",
-	}
-	FieldType.Dict["hash"] = &py.Property{
+	})
+	FieldType.Dict.Set("hash", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).hash, nil },
 		Doc:  "whether the field takes part in __hash__",
-	}
-	FieldType.Dict["metadata"] = &py.Property{
+	})
+	FieldType.Dict.Set("metadata", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).metadata, nil },
 		Doc:  "the field's metadata mapping",
-	}
-	FieldType.Dict["kw_only"] = &py.Property{
+	})
+	FieldType.Dict.Set("kw_only", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*fieldType).kwOnly, nil },
 		Doc:  "whether the field is keyword-only",
-	}
+	})
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -1707,13 +1715,13 @@ func init() {
 			py.MustNewMethod("replace", replace, 0, replace_doc),
 			py.MustNewMethod("make_dataclass", make_dataclass, 0, make_dataclass_doc),
 		},
-		Globals: py.StringDict{
-			"MISSING":             missing,
-			"KW_ONLY":             kwOnly,
-			"Field":               FieldType,
-			"FrozenInstanceError": FrozenInstanceError,
-			"__doc__":             py.String(dataclasses_doc),
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "MISSING", Value: missing},
+			py.DictEntry{Key: "KW_ONLY", Value: kwOnly},
+			py.DictEntry{Key: "Field", Value: FieldType},
+			py.DictEntry{Key: "FrozenInstanceError", Value: FrozenInstanceError},
+			py.DictEntry{Key: "__doc__", Value: py.String(dataclasses_doc)},
+		),
 	})
 }
 

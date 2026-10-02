@@ -131,7 +131,7 @@ func applyKey(key, item py.Object) (py.Object, error) {
 	if key == nil || key == py.None {
 		return item, nil
 	}
-	return py.Call(key, py.Tuple{item}, nil)
+	return py.Call(key, py.Tuple{item}, py.StringDict{})
 }
 
 func bisect_right(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -241,7 +241,7 @@ func insortImpl(name string, args py.Tuple, kwargs py.StringDict, fn func(py.Obj
 	// "a[i:i] = [x]" is used instead; both are the documented behaviour.
 	insert, err := py.GetAttrString(seq, "insert")
 	if err == nil {
-		if _, err := py.Call(insert, py.Tuple{py.Int(i), x}, nil); err != nil {
+		if _, err := py.Call(insert, py.Tuple{py.Int(i), x}, py.StringDict{}); err != nil {
 			return nil, err
 		}
 		return py.None, nil

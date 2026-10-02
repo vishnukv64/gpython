@@ -462,7 +462,7 @@ func do_PRINT_EXPR(vm *Vm, arg int32) error {
 	// After printing, also assign to '_'
 	// Before, set '_' to None to avoid recursion
 	value := vm.POP()
-	vm.frame.Globals["_"] = py.None
+	vm.frame.Globals.Set("_", py.None)
 	if value != py.None {
 		repr, err := py.Repr(value)
 		if err != nil {
@@ -470,7 +470,7 @@ func do_PRINT_EXPR(vm *Vm, arg int32) error {
 		}
 		PrintExpr(fmt.Sprint(repr))
 	}
-	vm.frame.Globals["_"] = value
+	vm.frame.Globals.Set("_", value)
 	return nil
 }
 
@@ -649,16 +649,20 @@ func do_DICT_UPDATE(vm *Vm, i int32) error {
 	if !ok {
 		return py.ExceptionNewf(py.TypeError, "'%s' object is not a mapping", source.Type().Name)
 	}
-	for encoded, value := range src.GetDict() {
+	var updErr error
+	src.GetDict().Range(func(encoded string, value py.Object) bool {
 		key, err := py.DictKeyDecode(encoded)
 		if err != nil {
-			return err
+			updErr = err
+			return true
 		}
 		if _, err := dict.M__setitem__(key, value); err != nil {
-			return err
+			updErr = err
+			return true
 		}
-	}
-	return nil
+		return false
+	})
+	return updErr
 }
 
 // Calls dict.setitem(TOS1[-i], TOS, TOS1). Used to implement dict comprehensions.
@@ -730,7 +734,7 @@ func do_IMPORT_STAR(vm *Vm, arg int32) error {
 	vm.frame.FastToLocals()
 	from := vm.POP()
 	module := from.(*py.Module)
-	if all, ok := module.Globals["__all__"]; ok {
+	if all, ok := module.Globals.Get("__all__"); ok {
 		var loopErr error
 		iterErr := py.Iterate(all, func(item py.Object) bool {
 			name, err := py.AttributeName(item)
@@ -738,11 +742,12 @@ func do_IMPORT_STAR(vm *Vm, arg int32) error {
 				loopErr = err
 				return true
 			}
-			vm.frame.Locals[name], err = py.GetAttrString(module, name)
+			value, err := py.GetAttrString(module, name)
 			if err != nil {
 				loopErr = err
 				return true
 			}
+			vm.frame.Locals.Set(name, value)
 			return false
 		})
 		if iterErr != nil {
@@ -752,11 +757,12 @@ func do_IMPORT_STAR(vm *Vm, arg int32) error {
 			return loopErr
 		}
 	} else {
-		for name, value := range module.Globals {
+		module.Globals.Range(func(name string, value py.Object) bool {
 			if !strings.HasPrefix(name, "_") {
-				vm.frame.Locals[name] = value
+				vm.frame.Locals.Set(name, value)
 			}
-		}
+			return false
+		})
 	}
 	vm.frame.LocalsToFast(false)
 	return nil
@@ -848,7 +854,7 @@ func do_END_FINALLY(vm *Vm, arg int32) error {
 // Loads the __build_class__ helper function to the stack which
 // creates a new class object.
 func do_LOAD_BUILD_CLASS(vm *Vm, arg int32) error {
-	vm.PUSH(vm.context.Store().Builtins.Globals["__build_class__"])
+	vm.PUSH(vm.context.Store().Builtins.Globals.GetOrNil("__build_class__"))
 	return nil
 }
 
@@ -873,7 +879,7 @@ func do_SETUP_WITH(vm *Vm, delta int32) error {
 	if err != nil {
 		return err
 	}
-	res, err := py.Call(enter, nil, nil) // FIXME method for this?
+	res, err := py.Call(enter, nil, py.StringDict{}) // FIXME method for this?
 	if err != nil {
 		return err
 	}
@@ -946,7 +952,7 @@ func do_WITH_CLEANUP(vm *Vm, arg int32) error {
 		block.Level--
 	}
 	/* XXX Not the fastest way to call it... */
-	res, err := py.Call(exit_func, []py.Object{exc, val, tb}, nil)
+	res, err := py.Call(exit_func, []py.Object{exc, val, tb}, py.StringDict{})
 	if err != nil {
 		return err
 	}
@@ -971,7 +977,7 @@ func do_STORE_NAME(vm *Vm, namei int32) error {
 	if debugging {
 		debugf("STORE_NAME %v\n", vm.frame.Code.Names[namei])
 	}
-	vm.frame.Locals[vm.frame.Code.Names[namei]] = vm.POP()
+	vm.frame.Locals.Set(vm.frame.Code.Names[namei], vm.POP())
 	return nil
 }
 
@@ -979,10 +985,10 @@ func do_STORE_NAME(vm *Vm, namei int32) error {
 // attribute of the code object.
 func do_DELETE_NAME(vm *Vm, namei int32) error {
 	name := vm.frame.Code.Names[namei]
-	if _, ok := vm.frame.Locals[name]; !ok {
+	if _, ok := vm.frame.Locals.Get(name); !ok {
 		return py.ExceptionNewf(py.NameError, nameErrorMsg, name)
 	} else {
-		delete(vm.frame.Locals, name)
+		vm.frame.Locals.Del(name)
 	}
 	return nil
 }
@@ -1025,17 +1031,17 @@ func do_DELETE_ATTR(vm *Vm, namei int32) error {
 
 // Works as STORE_NAME, but stores the name as a global.
 func do_STORE_GLOBAL(vm *Vm, namei int32) error {
-	vm.frame.Globals[vm.frame.Code.Names[namei]] = vm.POP()
+	vm.frame.Globals.Set(vm.frame.Code.Names[namei], vm.POP())
 	return nil
 }
 
 // Works as DELETE_NAME, but deletes a global name.
 func do_DELETE_GLOBAL(vm *Vm, namei int32) error {
 	name := vm.frame.Code.Names[namei]
-	if _, ok := vm.frame.Globals[name]; !ok {
+	if _, ok := vm.frame.Globals.Get(name); !ok {
 		return py.ExceptionNewf(py.NameError, nameErrorMsg, name)
 	} else {
-		delete(vm.frame.Globals, name)
+		vm.frame.Globals.Del(name)
 	}
 	return nil
 }
@@ -1162,14 +1168,14 @@ func do_COMPARE_OP(vm *Vm, opname int32) error {
 // STORE_FAST instruction modifies the namespace.
 func do_IMPORT_NAME(vm *Vm, namei int32) error {
 	name := py.String(vm.frame.Code.Names[namei])
-	__import__, ok := vm.frame.Builtins["__import__"]
+	__import__, ok := vm.frame.Builtins.Get("__import__")
 	if !ok {
 		return py.ExceptionNewf(py.ImportError, "__import__ not found")
 	}
 	v := vm.POP()
 	u := vm.TOP()
 	var locals py.Object = py.None
-	if vm.frame.Locals != nil {
+	if !vm.frame.Locals.IsNil() {
 		locals = vm.frame.Locals
 	}
 	var args py.Tuple
@@ -1178,7 +1184,7 @@ func do_IMPORT_NAME(vm *Vm, namei int32) error {
 	} else {
 		args = py.Tuple{name, vm.frame.Globals, locals, v}
 	}
-	x, err := callInternal(__import__, args, nil, vm.frame)
+	x, err := callInternal(__import__, args, py.StringDict{}, vm.frame)
 	if err != nil {
 		return err
 	}
@@ -1418,7 +1424,7 @@ func do_LOAD_CLASSDEREF(vm *Vm, i int32) error {
 	name, _ := _var_name(vm, i)
 
 	// Lookup in locals
-	if obj, ok := vm.frame.Locals[name]; ok {
+	if obj, ok := vm.frame.Locals.Get(name); ok {
 		vm.PUSH(obj)
 	}
 	// If that failed look at the cell
@@ -1560,7 +1566,7 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) error {
 				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: annotation name must be a string")
 			}
 			value := vm.POP()
-			anns[string(name)] = value
+			anns.Set(string(name), value)
 		}
 		function.Annotations = anns
 	}
@@ -1574,7 +1580,7 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) error {
 			if !ok {
 				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: keyword argument name must be a string")
 			}
-			defs[string(keyStr)] = v
+			defs.Set(string(keyStr), v)
 		}
 		function.KwDefaults = defs
 	}
@@ -1711,7 +1717,7 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 			f.FastToLocals()
 			return builtinExec(f.Context, args, kwargs, f.Locals, f.Globals, f.Builtins)
 		case py.InternalMethodVars:
-			if len(kwargs) > 0 {
+			if kwargs.Len() > 0 {
 				return nil, py.ExceptionNewf(py.TypeError, "vars() takes no keyword arguments")
 			}
 			switch len(args) {
@@ -1774,8 +1780,8 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	if len(args) == 0 {
 		f.FastToLocals()
-		names := make([]string, 0, len(f.Locals))
-		for name := range f.Locals {
+		names := make([]string, 0, f.Locals.Len())
+		for _, name := range f.Locals.Keys() {
 			names = append(names, name)
 		}
 		sort.Strings(names)
@@ -1787,18 +1793,18 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	// Attributes supplied by the type and everything it inherits.
 	for t := obj.Type(); t != nil; t = t.Base {
-		for name := range t.Dict {
+		for _, name := range t.Dict.Keys() {
 			seen[name] = true
 		}
 	}
 	// Attributes carried by the object itself.
 	if d, ok := obj.(py.IGetDict); ok {
-		for name := range d.GetDict() {
+		for _, name := range d.GetDict().Keys() {
 			seen[name] = true
 		}
 	}
 	if m, ok := obj.(*py.Module); ok {
-		for name := range m.Globals {
+		for _, name := range m.Globals.Keys() {
 			seen[name] = true
 		}
 	}
@@ -1859,16 +1865,16 @@ func (vm *Vm) Call(argc int32, starArgs py.Object, starKwargs py.Object) error {
 			}
 			k := string(kPy)
 			v := kwargsTuple[i+1]
-			if _, ok := kwargs[k]; ok {
+			if _, ok := kwargs.Get(k); ok {
 				return py.ExceptionNewf(py.TypeError, multipleValues, EvalGetFuncName(fn), EvalGetFuncDesc(fn), k)
 			}
-			kwargs[k] = v
+			kwargs.Set(k, v)
 		}
 	}
 
 	// Update with starKwargs if any
 	if starKwargs != nil {
-		if kwargs == nil {
+		if kwargs.IsNil() {
 			kwargs = py.NewStringDict()
 		}
 		// FIXME should be some sort of dictionary iterator...
@@ -1876,11 +1882,14 @@ func (vm *Vm) Call(argc int32, starArgs py.Object, starKwargs py.Object) error {
 		if !ok {
 			return py.ExceptionNewf(py.SystemError, "FIXME can't use %T as **kwargs", starKwargs)
 		}
-		for k, v := range starKwargsDict {
-			if _, ok := kwargs[k]; ok {
+		for _, __e := range starKwargsDict.Items() {
+			k := __e.Key
+			v := __e.Value
+
+			if _, ok := kwargs.Get(k); ok {
 				return py.ExceptionNewf(py.TypeError, multipleValues, EvalGetFuncName(fn), EvalGetFuncDesc(fn), k)
 			}
-			kwargs[k] = v
+			kwargs.Set(k, v)
 		}
 	}
 
@@ -2293,7 +2302,7 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 	n := len(args)
 	var kwdict py.StringDict
 
-	if globals == nil {
+	if globals.IsNil() {
 		return nil, py.ExceptionNewf(py.SystemError, "PyEval_EvalCodeEx: nil globals")
 	}
 
@@ -2327,7 +2336,10 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 			u[i-n] = args[i]
 		}
 	}
-	for keyword, value := range kws {
+	for _, __e := range kws.Items() {
+		keyword := __e.Key
+		value := __e.Value
+
 		j := 0
 		// Positional-only arguments are matched by position and must not be
 		// passed by keyword (PEP 570): skip them when looking for a name.
@@ -2339,10 +2351,10 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 				goto kw_found
 			}
 		}
-		if j >= total_args && kwdict == nil {
+		if j >= total_args && kwdict.IsNil() {
 			return nil, py.ExceptionNewf(py.TypeError, "%s() got an unexpected keyword argument '%s'", co.Name, keyword)
 		}
-		kwdict[keyword] = value
+		kwdict.Set(keyword, value)
 		continue
 	kw_found:
 		if fastlocals[j] != nil {
@@ -2381,8 +2393,8 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 				continue
 			}
 			name := co.Varnames[i]
-			if kwdefs != nil {
-				if def, ok := kwdefs[name]; ok {
+			if !kwdefs.IsNil() {
+				if def, ok := kwdefs.Get(name); ok {
 					fastlocals[i] = def
 					continue
 				}

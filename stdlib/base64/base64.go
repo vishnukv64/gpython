@@ -19,8 +19,8 @@ import (
 	"encoding/base64"
 	"strings"
 
-	stdbinascii "github.com/vishnukv64/gpython/stdlib/binascii"
 	"github.com/vishnukv64/gpython/py"
+	stdbinascii "github.com/vishnukv64/gpython/stdlib/binascii"
 )
 
 const module_doc = `Base16, Base32, Base64 (RFC 3548), Base85 and Ascii85 data encodings`
@@ -905,6 +905,6 @@ func init() {
 			py.MustNewMethod("b85encode", b85encode, 0, "Encode bytes-like object b in base85 format and return a bytes object."),
 			py.MustNewMethod("b85decode", b85decode, 0, "Decode the base85-encoded bytes-like object or ASCII string b."),
 		},
-		Globals: py.StringDict{},
+		Globals: py.NewStringDict(),
 	})
 }

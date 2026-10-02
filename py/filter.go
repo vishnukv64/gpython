@@ -52,7 +52,7 @@ func (f *Filter) M__next__() (Object, error) {
 			ok, err = ObjectIsTrue(item)
 		} else {
 			var good Object
-			good, err = Call(f.fun, Tuple{item}, nil)
+			good, err = Call(f.fun, Tuple{item}, NewStringDict())
 			if err != nil {
 				return nil, err
 			}

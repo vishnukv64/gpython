@@ -178,7 +178,7 @@ func (n *newType) Type() *py.Type { return newTypeType }
 
 func (n *newType) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var value py.Object
-	if err := py.UnpackTuple(args, nil, n.name, 1, 1, &value); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, n.name, 1, 1, &value); err != nil {
 		return nil, err
 	}
 	return value, nil
@@ -191,7 +191,7 @@ func (n *newType) M__repr__() (py.Object, error) {
 var _ py.I__call__ = (*newType)(nil)
 
 func init() {
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 
 	// Names that exist only for a type checker.  They are subscriptable and
 	// say so in their repr.
@@ -214,52 +214,52 @@ func init() {
 		"Buffer", "LiteralString", "Self", "Never", "NoReturn", "AnyStr",
 		"TypeVarTuple", "TypeAliasType", "Generic", "Protocol",
 	} {
-		globals[name] = form(name)
+		globals.Set(name, form(name))
 	}
 
 	// The containers that collections.abc actually implements are aliases of
 	// it, so isinstance answers correctly rather than always being False.
-	globals["Iterable"] = abc.IterableType
-	globals["Iterator"] = abc.IteratorType
-	globals["Sized"] = abc.SizedType
-	globals["Container"] = abc.ContainerType
-	globals["Hashable"] = abc.HashableType
-	globals["Callable"] = abc.CallableType
-	globals["Collection"] = abc.CollectionType
-	globals["Sequence"] = abc.SequenceType
-	globals["MutableSequence"] = abc.MutableSequenceType
-	globals["AbstractSet"] = abc.SetType
-	globals["MutableSet"] = abc.MutableSetType
-	globals["Mapping"] = abc.MappingType
-	globals["MutableMapping"] = abc.MutableMappingType
-	globals["Reversible"] = abc.ReversibleType
-	globals["Coroutine"] = abc.CoroutineType
-	globals["Awaitable"] = abc.AwaitableType
-	globals["AsyncIterable"] = abc.AsyncIterableType
-	globals["AsyncIterator"] = abc.AsyncIteratorType
-	globals["Generator"] = abc.GeneratorType
+	globals.Set("Iterable", abc.IterableType)
+	globals.Set("Iterator", abc.IteratorType)
+	globals.Set("Sized", abc.SizedType)
+	globals.Set("Container", abc.ContainerType)
+	globals.Set("Hashable", abc.HashableType)
+	globals.Set("Callable", abc.CallableType)
+	globals.Set("Collection", abc.CollectionType)
+	globals.Set("Sequence", abc.SequenceType)
+	globals.Set("MutableSequence", abc.MutableSequenceType)
+	globals.Set("AbstractSet", abc.SetType)
+	globals.Set("MutableSet", abc.MutableSetType)
+	globals.Set("Mapping", abc.MappingType)
+	globals.Set("MutableMapping", abc.MutableMappingType)
+	globals.Set("Reversible", abc.ReversibleType)
+	globals.Set("Coroutine", abc.CoroutineType)
+	globals.Set("Awaitable", abc.AwaitableType)
+	globals.Set("AsyncIterable", abc.AsyncIterableType)
+	globals.Set("AsyncIterator", abc.AsyncIteratorType)
+	globals.Set("Generator", abc.GeneratorType)
 
 	// TYPE_CHECKING is False, as it is at run time in CPython, so the blocks
 	// that guard imports for type checkers do not execute.
-	globals["TYPE_CHECKING"] = py.False
+	globals.Set("TYPE_CHECKING", py.False)
 
 	// Names with real behaviour.
-	globals["cast"] = py.MustNewMethod("cast", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("cast", py.MustNewMethod("cast", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var typ, value py.Object
-		if err := py.UnpackTuple(args, nil, "cast", 2, 2, &typ, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "cast", 2, 2, &typ, &value); err != nil {
 			return nil, err
 		}
 		return value, nil
-	}, 0, "Cast a value to a type.  At run time this returns the value unchanged.")
+	}, 0, "Cast a value to a type.  At run time this returns the value unchanged."))
 
-	globals["overload"] = py.MustNewMethod("overload", passthrough, 0, "Decorator for overloaded functions: returns the function itself.")
-	globals["final"] = py.MustNewMethod("final", passthrough, 0, "Decorator to indicate a final method: returns the function itself.")
-	globals["no_type_check"] = py.MustNewMethod("no_type_check", passthrough, 0, "Decorator to indicate no type checking: returns the object.")
-	globals["runtime_checkable"] = py.MustNewMethod("runtime_checkable", passthrough, 0, "Mark a protocol as runtime checkable: returns the class.")
+	globals.Set("overload", py.MustNewMethod("overload", passthrough, 0, "Decorator for overloaded functions: returns the function itself."))
+	globals.Set("final", py.MustNewMethod("final", passthrough, 0, "Decorator to indicate a final method: returns the function itself."))
+	globals.Set("no_type_check", py.MustNewMethod("no_type_check", passthrough, 0, "Decorator to indicate no type checking: returns the object."))
+	globals.Set("runtime_checkable", py.MustNewMethod("runtime_checkable", passthrough, 0, "Mark a protocol as runtime checkable: returns the class."))
 
-	globals["TypeVar"] = py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)")
-	globals["NewType"] = py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument.")
-	globals["NamedTuple"] = py.MustNewMethod("NamedTuple", namedTupleNew, 0, "Typed version of collections.namedtuple.")
+	globals.Set("TypeVar", py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)"))
+	globals.Set("NewType", py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument."))
+	globals.Set("NamedTuple", py.MustNewMethod("NamedTuple", namedTupleNew, 0, "Typed version of collections.namedtuple."))
 	// Generic and Protocol are used as bases, so they are real classes with
 	// a class-getitem, rather than inert forms.
 	// TypedDict is a class base for a dict-shaped record, and is also called
@@ -267,9 +267,9 @@ func init() {
 	// class itself, since the fields carry no run-time meaning here.
 	typedDictType := py.NewType("typing.TypedDict", "A dictionary with a fixed set of keys.")
 	typedDictType.Flags |= py.TPFLAGS_BASETYPE
-	typedDictType.Dict["__call__"] = py.MustNewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	typedDictType.Dict.Set("__call__", py.MustNewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the class, ignoring the field specification.")
+	}, 0, "Return the class, ignoring the field specification."))
 	// "class X(t.TypedDict, total=False)" is a base with keywords.  There is
 	// no __init_subclass__ here, so the keywords are accepted and ignored
 	// through the type's own constructor.
@@ -287,77 +287,77 @@ func init() {
 
 	genericType := py.NewType("typing.Generic", "Abstract base class for generic types.")
 	genericType.Flags |= py.TPFLAGS_BASETYPE
-	genericType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	genericType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters.")
-	globals["Generic"] = genericType
-	globals["TypedDict"] = typedDictType
+	}, 0, "Return the class, ignoring the subscription parameters."))
+	globals.Set("Generic", genericType)
+	globals.Set("TypedDict", typedDictType)
 
 	// ParamSpec and Concatenate are used in signatures: P = ParamSpec("P"),
 	// then Callable[Concatenate[T, P], R].  They need to be callable and
 	// subscriptable, which the inert forms already are.
-	globals["ParamSpec"] = py.MustNewMethod("ParamSpec", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("ParamSpec", py.MustNewMethod("ParamSpec", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return form("ParamSpec"), nil
-	}, 0, "Return a parameter specification, subscriptable by a type checker only.")
-	globals["TypeVarTuple"] = py.MustNewMethod("TypeVarTuple", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return a parameter specification, subscriptable by a type checker only."))
+	globals.Set("TypeVarTuple", py.MustNewMethod("TypeVarTuple", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return form("TypeVarTuple"), nil
-	}, 0, "Return a variadic type variable.")
-	globals["TypeAliasType"] = py.MustNewMethod("TypeAliasType", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	}, 0, "Return a variadic type variable."))
+	globals.Set("TypeAliasType", py.MustNewMethod("TypeAliasType", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		if len(args) > 1 {
 			return args[1], nil
 		}
 		return form("TypeAliasType"), nil
-	}, 0, "Create a type alias.")
-	globals["get_protocol_members"] = py.MustNewMethod("get_protocol_members", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Create a type alias."))
+	globals.Set("get_protocol_members", py.MustNewMethod("get_protocol_members", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewListFromItems(nil), nil
-	}, 0, "Return the members of a protocol.")
-	globals["is_protocol"] = py.MustNewMethod("is_protocol", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the members of a protocol."))
+	globals.Set("is_protocol", py.MustNewMethod("is_protocol", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Return whether the class is a protocol.")
-	globals["assert_type"] = py.MustNewMethod("assert_type", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return whether the class is a protocol."))
+	globals.Set("assert_type", py.MustNewMethod("assert_type", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if len(args) == 0 {
 			return py.None, nil
 		}
 		return args[0], nil
-	}, 0, "Return the value, for a type checker to assert on.")
-	globals["assert_never"] = py.MustNewMethod("assert_never", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the value, for a type checker to assert on."))
+	globals.Set("assert_never", py.MustNewMethod("assert_never", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.None, nil
-	}, 0, "Mark unreachable code.")
-	globals["reveal_type"] = py.MustNewMethod("reveal_type", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Mark unreachable code."))
+	globals.Set("reveal_type", py.MustNewMethod("reveal_type", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if len(args) == 0 {
 			return py.None, nil
 		}
 		return args[0], nil
-	}, 0, "Reveal the type of an expression.")
-	globals["dataclass_transform"] = py.MustNewMethod("dataclass_transform", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	}, 0, "Reveal the type of an expression."))
+	globals.Set("dataclass_transform", py.MustNewMethod("dataclass_transform", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		// Used as a decorator, with or without arguments.
 		if len(args) == 1 {
 			return args[0], nil
 		}
 		return &passthroughDecorator{}, nil
-	}, 0, "Mark a class or function as a dataclass-like transform.")
-	globals["override"] = py.MustNewMethod("override", passthrough, 0, "Mark a method as overriding its base.")
-	globals["deprecated"] = py.MustNewMethod("deprecated", passthrough, 0, "Mark a function as deprecated.")
-	globals["get_overloads"] = py.MustNewMethod("get_overloads", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Mark a class or function as a dataclass-like transform."))
+	globals.Set("override", py.MustNewMethod("override", passthrough, 0, "Mark a method as overriding its base."))
+	globals.Set("deprecated", py.MustNewMethod("deprecated", passthrough, 0, "Mark a function as deprecated."))
+	globals.Set("get_overloads", py.MustNewMethod("get_overloads", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewListFromItems(nil), nil
-	}, 0, "Return the overloads of a function.")
+	}, 0, "Return the overloads of a function."))
 
 	protocolType := py.NewType("typing.Protocol", "Base class for protocol classes.")
 	protocolType.Flags |= py.TPFLAGS_BASETYPE
-	protocolType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	protocolType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters.")
-	globals["Protocol"] = protocolType
+	}, 0, "Return the class, ignoring the subscription parameters."))
+	globals.Set("Protocol", protocolType)
 
-	globals["get_type_hints"] = py.MustNewMethod("get_type_hints", getTypeHints, 0, "Return the annotations of an object.")
-	globals["get_args"] = py.MustNewMethod("get_args", getArgs, 0, "Return the arguments of a subscripted type, as far as they are kept.")
-	globals["get_origin"] = py.MustNewMethod("get_origin", getArgs, 0, "Return the unsubscripted type.")
+	globals.Set("get_type_hints", py.MustNewMethod("get_type_hints", getTypeHints, 0, "Return the annotations of an object."))
+	globals.Set("get_args", py.MustNewMethod("get_args", getArgs, 0, "Return the arguments of a subscripted type, as far as they are kept."))
+	globals.Set("get_origin", py.MustNewMethod("get_origin", getArgs, 0, "Return the unsubscripted type."))
 
 	// The module also re-exports the collections types it names.
-	globals["Deque"] = collections.DequeType
-	globals["OrderedDict"] = collections.OrderedDictType
-	globals["DefaultDict"] = collections.DefaultDictType
-	globals["Counter"] = collections.CounterType
+	globals.Set("Deque", collections.DequeType)
+	globals.Set("OrderedDict", collections.OrderedDictType)
+	globals.Set("DefaultDict", collections.DefaultDictType)
+	globals.Set("Counter", collections.CounterType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -370,7 +370,7 @@ func init() {
 
 func passthrough(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
-	if err := py.UnpackTuple(args, nil, "typing", 1, 1, &obj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "typing", 1, 1, &obj); err != nil {
 		return nil, err
 	}
 	return obj, nil
@@ -390,13 +390,13 @@ func typeVarNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 	if len(args) > 1 {
 		tv.constraints = append(tv.constraints, args[1:]...)
 	}
-	if bound, ok := kwargs["bound"]; ok {
+	if bound, ok := kwargs.Get("bound"); ok {
 		tv.bound = bound
 	}
-	if cov, ok := kwargs["covariant"]; ok && cov == py.True {
+	if cov, ok := kwargs.Get("covariant"); ok && cov == py.True {
 		tv.covariant = true2()
 	}
-	if contra, ok := kwargs["contravariant"]; ok && contra == py.True {
+	if contra, ok := kwargs.Get("contravariant"); ok && contra == py.True {
 		tv.contravariant = true2()
 	}
 	return tv, nil
@@ -406,7 +406,7 @@ func true2() bool { return true }
 
 func newTypeNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var name, tp py.Object
-	if err := py.UnpackTuple(args, nil, "NewType", 2, 2, &name, &tp); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "NewType", 2, 2, &name, &tp); err != nil {
 		return nil, err
 	}
 	text, err := py.StrAsString(name)
@@ -443,7 +443,7 @@ Return the annotations of an object.`
 
 func getTypeHints(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
-	if err := py.UnpackTuple(args, nil, "get_type_hints", 1, 1, &obj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "get_type_hints", 1, 1, &obj); err != nil {
 		return nil, err
 	}
 	anns, err := py.GetAttrString(obj, "__annotations__")
@@ -462,7 +462,7 @@ empty tuple is returned rather than a guess.`
 
 func getArgs(self py.Object, args py.Tuple) (py.Object, error) {
 	var tp py.Object
-	if err := py.UnpackTuple(args, nil, "get_args", 1, 1, &tp); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "get_args", 1, 1, &tp); err != nil {
 		return nil, err
 	}
 	if _, ok := tp.(*specialForm); ok {
@@ -496,17 +496,17 @@ var _ py.I__call__ = (*passthroughDecorator)(nil)
 func init() {
 	unionType := py.NewType("typing.UnionType", "The result of X | Y.")
 	unionType.Flags |= py.TPFLAGS_BASETYPE
-	unionType.Dict["__or__"] = py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	unionType.Dict.Set("__or__", py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var other py.Object
-		if err := py.UnpackTuple(args, nil, "__or__", 1, 1, &other); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__or__", 1, 1, &other); err != nil {
 			return nil, err
 		}
 		return form("Union"), nil
-	}, 0, "Return the union of two types.")
+	}, 0, "Return the union of two types."))
 
 	// Every type gains __or__, which is what makes "str | bytes" work.
-	py.TypeType.Dict["__or__"] = py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	py.TypeType.Dict.Set("__or__", py.MustNewMethod("__or__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return form("Union"), nil
-	}, 0, "Return the union of two types.")
-	py.ObjectType.Dict["__or__"] = py.TypeType.Dict["__or__"]
+	}, 0, "Return the union of two types."))
+	py.ObjectType.Dict.Set("__or__", py.TypeType.Dict.GetOrNil("__or__"))
 }

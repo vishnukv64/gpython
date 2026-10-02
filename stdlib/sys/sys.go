@@ -129,7 +129,6 @@ func sys_exc_info(self py.Object) (py.Object, error) {
 	return py.Tuple{exc.Type(), exc, py.None}, nil
 }
 
-
 const exit_doc = `exit([status])
 
 Exit the interpreter by raising SystemExit(status).
@@ -140,12 +139,12 @@ exit status will be one (i.e., failure).`
 
 func sys_exit(self py.Object, args py.Tuple) (py.Object, error) {
 	var exit_code py.Object
-	err := py.UnpackTuple(args, nil, "exit", 0, 1, &exit_code)
+	err := py.UnpackTuple(args, py.StringDict{}, "exit", 0, 1, &exit_code)
 	if err != nil {
 		return nil, err
 	}
 	// Raise SystemExit so callers may catch it or clean up.
-	exc, err := py.ExceptionNew(py.SystemExit, args, nil)
+	exc, err := py.ExceptionNew(py.SystemExit, args, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -665,45 +664,42 @@ func init() {
 		}
 	}
 
-	globals := py.StringDict{
-		"path": py.NewList(),
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "path", Value: py.NewList()},
 		// maxsize and friends: the values a program reads to size things.
-		"maxsize":    py.Int(math.MaxInt64),
-		"maxunicode": py.Int(0x10FFFF),
-		"float_info": floatInfo(),
-		"hexversion": py.Int(0x030400F0),
-		"argv":       py.NewListFromStrings(os.Args[1:]),
-		"stdin":      stdin,
-		"stdout":     stdout,
-		"stderr":     stderr,
-		"__stdin__":  stdin,
-		"__stdout__": stdout,
-		"__stderr__": stderr,
-		"executable": py.String(executable),
-
+		py.DictEntry{Key: "maxsize", Value: py.Int(math.MaxInt64)},
+		py.DictEntry{Key: "maxunicode", Value: py.Int(0x10FFFF)},
+		py.DictEntry{Key: "float_info", Value: floatInfo()},
+		py.DictEntry{Key: "hexversion", Value: py.Int(0x030400F0)},
+		py.DictEntry{Key: "argv", Value: py.NewListFromStrings(os.Args[1:])},
+		py.DictEntry{Key: "stdin", Value: stdin},
+		py.DictEntry{Key: "stdout", Value: stdout},
+		py.DictEntry{Key: "stderr", Value: stderr},
+		py.DictEntry{Key: "__stdin__", Value: stdin},
+		py.DictEntry{Key: "__stdout__", Value: stdout},
+		py.DictEntry{Key: "__stderr__", Value: stderr},
+		py.DictEntry{Key: "executable", Value: py.String(executable)},
 		// The platform and version attributes, which code branches on.
-		"platform":             py.String(runtime.GOOS),
-		"byteorder":            py.String(byteOrder()),
-		"version":              py.String("3.4.0 (gpython)"),
-		"version_info":         py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)},
-		"prefix":               py.String(prefix()),
-		"exec_prefix":          py.String(prefix()),
-		"base_prefix":          py.String(prefix()),
-		"base_exec_prefix":     py.String(prefix()),
-		"implementation":       implementationInfo(),
-		"builtin_module_names": py.NewListFromStrings(builtinModuleNames()),
-		"modules":              py.NewStringDict(),
-		"dont_write_bytecode":  py.False,
-		"flags":                py.NewStringDict(),
-		"warnoptions":          py.NewList(),
-		"ps1":                  py.String(">>> "),
-		"ps2":                  py.String("... "),
-		"api_version":          py.Int(1013),
-		"copyright":            py.String("Copyright (c) gpython contributors."),
-
+		py.DictEntry{Key: "platform", Value: py.String(runtime.GOOS)},
+		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
+		py.DictEntry{Key: "version", Value: py.String("3.4.0 (gpython)")},
+		py.DictEntry{Key: "version_info", Value: py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)}},
+		py.DictEntry{Key: "prefix", Value: py.String(prefix())},
+		py.DictEntry{Key: "exec_prefix", Value: py.String(prefix())},
+		py.DictEntry{Key: "base_prefix", Value: py.String(prefix())},
+		py.DictEntry{Key: "base_exec_prefix", Value: py.String(prefix())},
+		py.DictEntry{Key: "implementation", Value: implementationInfo()},
+		py.DictEntry{Key: "builtin_module_names", Value: py.NewListFromStrings(builtinModuleNames())},
+		py.DictEntry{Key: "modules", Value: py.NewStringDict()},
+		py.DictEntry{Key: "dont_write_bytecode", Value: py.False},
+		py.DictEntry{Key: "flags", Value: py.NewStringDict()},
+		py.DictEntry{Key: "warnoptions", Value: py.NewList()},
+		py.DictEntry{Key: "ps1", Value: py.String(">>> ")},
+		py.DictEntry{Key: "ps2", Value: py.String("... ")},
+		py.DictEntry{Key: "api_version", Value: py.Int(1013)},
+		py.DictEntry{Key: "copyright", Value: py.String("Copyright (c) gpython contributors.")},
 		//"version": py.Int(MARSHAL_VERSION),
 		//     /* stdin/stdout/stderr are now set by pythonrun.c */
-
 		//     PyDict_SetItemString(sysdict, "__displayhook__",
 		//                          PyDict_GetItemString(sysdict, "displayhook"));
 		//     PyDict_SetItemString(sysdict, "__excepthook__",
@@ -755,7 +751,6 @@ func init() {
 		//            Should be safe! */
 		//         unsigned long number = 1;
 		//         char *value;
-
 		//         s = (char *) &number;
 		//         if (s[0] == 0) {
 		//             value = "big";
@@ -783,12 +778,10 @@ func init() {
 		//     if (warnoptions != nil) {
 		//         PyDict_SetItemString(sysdict, "warnoptions", warnoptions);
 		//     }
-
 		//     v = get_xoptions();
 		//     if (v != nil) {
 		//         PyDict_SetItemString(sysdict, "_xoptions", v);
 		//     }
-
 		//     /* version_info */
 		//     if (VersionInfoType.tp_name == 0) {
 		//         PyStructSequence_InitType(&VersionInfoType, &version_info_desc);
@@ -798,10 +791,8 @@ func init() {
 		//     /* prevent user from creating new instances */
 		//     VersionInfoType.tp_init = nil;
 		//     VersionInfoType.tp_new = nil;
-
 		//     /* implementation */
 		//     SET_SYS_FROM_STRING("implementation", make_impl_info(version_info));
-
 		//     /* flags */
 		//     if (FlagsType.tp_name == 0) {
 		//         PyStructSequence_InitType(&FlagsType, &flags_desc);
@@ -810,7 +801,6 @@ func init() {
 		//     /* prevent user from creating new instances */
 		//     FlagsType.tp_init = nil;
 		//     FlagsType.tp_new = nil;
-
 		//     /* float repr style: 0.03 (short) vs 0.029999999999999999 (legacy) */
 		// #ifndef PY_NO_SHORT_FLOAT_REPR
 		//     SET_SYS_FROM_STRING("float_repr_style",
@@ -819,11 +809,10 @@ func init() {
 		//     SET_SYS_FROM_STRING("float_repr_style",
 		//                         PyUnicode_FromString("legacy"));
 		// #endif
-
 		// #ifdef WITH_THREAD
 		//     SET_SYS_FROM_STRING("thread_info", PyThread_GetInfo());
 		// #endif
-	}
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -841,17 +830,17 @@ func init() {
 // or two of these rather than modelling the whole struct.
 func floatInfo() py.Object {
 	d := py.NewStringDict()
-	d["max"] = py.Float(math.MaxFloat64)
-	d["min"] = py.Float(math.SmallestNonzeroFloat64)
-	d["epsilon"] = py.Float(2.220446049250313e-16)
-	d["dig"] = py.Int(15)
-	d["mant_dig"] = py.Int(53)
-	d["max_exp"] = py.Int(1024)
-	d["min_exp"] = py.Int(-1021)
-	d["max_10_exp"] = py.Int(308)
-	d["min_10_exp"] = py.Int(-307)
-	d["radix"] = py.Int(2)
-	d["rounds"] = py.Int(1)
+	d.Set("max", py.Float(math.MaxFloat64))
+	d.Set("min", py.Float(math.SmallestNonzeroFloat64))
+	d.Set("epsilon", py.Float(2.220446049250313e-16))
+	d.Set("dig", py.Int(15))
+	d.Set("mant_dig", py.Int(53))
+	d.Set("max_exp", py.Int(1024))
+	d.Set("min_exp", py.Int(-1021))
+	d.Set("max_10_exp", py.Int(308))
+	d.Set("min_10_exp", py.Int(-307))
+	d.Set("radix", py.Int(2))
+	d.Set("rounds", py.Int(1))
 	return d
 }
 
@@ -880,10 +869,10 @@ func prefix() string {
 // implementationInfo describes the interpreter, as sys.implementation does.
 func implementationInfo() py.Object {
 	d := py.NewStringDict()
-	d["name"] = py.String("gpython")
-	d["version"] = py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)}
-	d["hexversion"] = py.Int(0x030400F0)
-	d["cache_tag"] = py.String("gpython-34")
+	d.Set("name", py.String("gpython"))
+	d.Set("version", py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)})
+	d.Set("hexversion", py.Int(0x030400F0))
+	d.Set("cache_tag", py.String("gpython-34"))
 	return d
 }
 

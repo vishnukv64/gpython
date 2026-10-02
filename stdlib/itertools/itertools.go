@@ -36,26 +36,26 @@ Iterators terminating on the shortest input sequence:
     zip_longest(p, q, ...) --> (p[0],q[0]), (p[1],q[1]), ...`
 
 func init() {
-	globals := py.StringDict{
-		"count":        py.MustNewMethod("count", count, 0, "count(start=0, step=1) --> count object"),
-		"repeat":       py.MustNewMethod("repeat", repeat, 0, "repeat(object [,times]) -> create an iterator which returns the object for the specified number of times."),
-		"cycle":        py.MustNewMethod("cycle", cycle, 0, "cycle(iterable) --> cycle object: repeat the elements of the iterable forever."),
-		"chain":        py.MustNewMethod("chain", chain, 0, "chain(*iterables) --> chain object: chain from the first until the last is exhausted."),
-		"islice":       py.MustNewMethod("islice", islice, 0, "islice(iterable, stop) --> islice object"),
-		"starmap":      py.MustNewMethod("starmap", starmap, 0, "starmap(function, sequence) --> starmap object"),
-		"accumulate":   py.MustNewMethod("accumulate", accumulate, 0, "accumulate(iterable[, func, *, initial=None]) --> accumulate object"),
-		"takewhile":    py.MustNewMethod("takewhile", takewhile, 0, "takewhile(predicate, iterable) --> takewhile object"),
-		"dropwhile":    py.MustNewMethod("dropwhile", dropwhile, 0, "dropwhile(predicate, iterable) --> dropwhile object"),
-		"filterfalse":  py.MustNewMethod("filterfalse", filterfalse, 0, "filterfalse(function or None, sequence) --> filterfalse object"),
-		"compress":     py.MustNewMethod("compress", compress, 0, "compress(data, selectors) --> iterator over selected data"),
-		"groupby":      py.MustNewMethod("groupby", groupby, 0, "groupby(iterable[, keyfunc]) -> create an iterator which returns (key, sub-iterator) grouped by each value of key(value)."),
-		"zip_longest":  py.MustNewMethod("zip_longest", zipLongest, 0, "zip_longest(iter1 [,iter2 [...]], [fillvalue=None]) --> zip_longest object"),
-		"tee":          py.MustNewMethod("tee", tee, 0, "tee(iterable, n=2) --> tuple of n independent iterators."),
-		"pairwise":     py.MustNewMethod("pairwise", pairwise, 0, "pairwise(iterable) --> pairwise object"),
-		"product":      py.MustNewMethod("product", product, 0, "product(*iterables, repeat=1) --> product object"),
-		"permutations": py.MustNewMethod("permutations", permutations, 0, "permutations(iterable[, r]) --> permutations object"),
-		"combinations": py.MustNewMethod("combinations", combinations, 0, "combinations(iterable, r) --> combinations object"),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "count", Value: py.MustNewMethod("count", count, 0, "count(start=0, step=1) --> count object")},
+		py.DictEntry{Key: "repeat", Value: py.MustNewMethod("repeat", repeat, 0, "repeat(object [,times]) -> create an iterator which returns the object for the specified number of times.")},
+		py.DictEntry{Key: "cycle", Value: py.MustNewMethod("cycle", cycle, 0, "cycle(iterable) --> cycle object: repeat the elements of the iterable forever.")},
+		py.DictEntry{Key: "chain", Value: py.MustNewMethod("chain", chain, 0, "chain(*iterables) --> chain object: chain from the first until the last is exhausted.")},
+		py.DictEntry{Key: "islice", Value: py.MustNewMethod("islice", islice, 0, "islice(iterable, stop) --> islice object")},
+		py.DictEntry{Key: "starmap", Value: py.MustNewMethod("starmap", starmap, 0, "starmap(function, sequence) --> starmap object")},
+		py.DictEntry{Key: "accumulate", Value: py.MustNewMethod("accumulate", accumulate, 0, "accumulate(iterable[, func, *, initial=None]) --> accumulate object")},
+		py.DictEntry{Key: "takewhile", Value: py.MustNewMethod("takewhile", takewhile, 0, "takewhile(predicate, iterable) --> takewhile object")},
+		py.DictEntry{Key: "dropwhile", Value: py.MustNewMethod("dropwhile", dropwhile, 0, "dropwhile(predicate, iterable) --> dropwhile object")},
+		py.DictEntry{Key: "filterfalse", Value: py.MustNewMethod("filterfalse", filterfalse, 0, "filterfalse(function or None, sequence) --> filterfalse object")},
+		py.DictEntry{Key: "compress", Value: py.MustNewMethod("compress", compress, 0, "compress(data, selectors) --> iterator over selected data")},
+		py.DictEntry{Key: "groupby", Value: py.MustNewMethod("groupby", groupby, 0, "groupby(iterable[, keyfunc]) -> create an iterator which returns (key, sub-iterator) grouped by each value of key(value).")},
+		py.DictEntry{Key: "zip_longest", Value: py.MustNewMethod("zip_longest", zipLongest, 0, "zip_longest(iter1 [,iter2 [...]], [fillvalue=None]) --> zip_longest object")},
+		py.DictEntry{Key: "tee", Value: py.MustNewMethod("tee", tee, 0, "tee(iterable, n=2) --> tuple of n independent iterators.")},
+		py.DictEntry{Key: "pairwise", Value: py.MustNewMethod("pairwise", pairwise, 0, "pairwise(iterable) --> pairwise object")},
+		py.DictEntry{Key: "product", Value: py.MustNewMethod("product", product, 0, "product(*iterables, repeat=1) --> product object")},
+		py.DictEntry{Key: "permutations", Value: py.MustNewMethod("permutations", permutations, 0, "permutations(iterable[, r]) --> permutations object")},
+		py.DictEntry{Key: "combinations", Value: py.MustNewMethod("combinations", combinations, 0, "combinations(iterable, r) --> combinations object")},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -403,7 +403,7 @@ func (s *starmapIter) M__next__() (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := py.Call(s.fn, py.Tuple(items), nil)
+	res, err := py.Call(s.fn, py.Tuple(items), py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func accumulate(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 	}
 	var initial py.Object
 	hasInitial := false
-	if v, ok := kwargs["initial"]; ok && v != py.None {
+	if v, ok := kwargs.Get("initial"); ok && v != py.None {
 		initial = v
 		hasInitial = true
 	}
@@ -489,7 +489,7 @@ func (a *accumulateIter) M__next__() (py.Object, error) {
 
 func (a *accumulateIter) combine(left, right py.Object) (py.Object, error) {
 	if a.fn != nil {
-		return py.Call(a.fn, py.Tuple{left, right}, nil)
+		return py.Call(a.fn, py.Tuple{left, right}, py.StringDict{})
 	}
 	return py.Add(left, right)
 }
@@ -534,7 +534,7 @@ func (t *takewhileIter) M__next__() (py.Object, error) {
 		t.done = true
 		return nil, py.StopIteration
 	}
-	res, err := py.Call(t.pred, py.Tuple{v}, nil)
+	res, err := py.Call(t.pred, py.Tuple{v}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +587,7 @@ func (d *dropwhileIter) M__next__() (py.Object, error) {
 			return nil, py.StopIteration
 		}
 		if !d.dropped {
-			res, err := py.Call(d.pred, py.Tuple{v}, nil)
+			res, err := py.Call(d.pred, py.Tuple{v}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -651,7 +651,7 @@ func (f *filterfalseIter) M__next__() (py.Object, error) {
 			}
 			keep = b == py.False
 		} else {
-			res, err := py.Call(f.pred, py.Tuple{v}, nil)
+			res, err := py.Call(f.pred, py.Tuple{v}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -787,7 +787,7 @@ func zipLongest(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 	var seqs []py.Object
 	// The last positional argument may be the fillvalue.
 	if len(args) > 0 {
-		if kw, ok := kwargs["fillvalue"]; ok {
+		if kw, ok := kwargs.Get("fillvalue"); ok {
 			fill = kw
 		} else {
 			fill = args[len(args)-1]
@@ -963,7 +963,7 @@ func (g *groupbyIter) Type() *py.Type { return groupbyType }
 // keyOf applies the key function, or the identity when there is none.
 func (g *groupbyIter) keyOf(v py.Object) (py.Object, error) {
 	if g.keyFn != nil {
-		return py.Call(g.keyFn, py.Tuple{v}, nil)
+		return py.Call(g.keyFn, py.Tuple{v}, py.StringDict{})
 	}
 	return v, nil
 }
@@ -1080,7 +1080,7 @@ var (
 
 func product(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	repeat := 1
-	if v, ok := kwargs["repeat"]; ok {
+	if v, ok := kwargs.Get("repeat"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err

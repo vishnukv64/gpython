@@ -416,7 +416,7 @@ func (a Float) M__ge__(other Object) (Object, error) {
 
 // Properties
 func init() {
-	FloatType.Dict["is_integer"] = MustNewMethod("is_integer", func(self Object) (Object, error) {
+	FloatType.Dict.Set("is_integer", MustNewMethod("is_integer", func(self Object) (Object, error) {
 		if a, ok := convertToFloat(self); ok {
 			f, err := FloatAsFloat64(a)
 			if err != nil {
@@ -425,7 +425,7 @@ func init() {
 			return NewBool(math.Floor(f) == f), nil
 		}
 		return cantConvert(self, "float")
-	}, 0, "is_integer() -> Return True if the float instance is finite with integral value, and False otherwise.")
+	}, 0, "is_integer() -> Return True if the float instance is finite with integral value, and False otherwise."))
 }
 
 // Check interface is satisfied

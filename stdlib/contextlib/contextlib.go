@@ -64,7 +64,7 @@ func (g *GeneratorContextManager) exit(excType, excValue, traceback py.Object) (
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "exception type must be a class")
 	}
-	value, err := g.gen.Throw(py.Tuple{typ, excValue}, nil)
+	value, err := g.gen.Throw(py.Tuple{typ, excValue}, py.StringDict{})
 	if err != nil {
 		if py.IsException(py.StopIteration, err) {
 			// The generator handled it and finished: suppressed.
@@ -82,31 +82,31 @@ func (g *GeneratorContextManager) exit(excType, excValue, traceback py.Object) (
 }
 
 func init() {
-	GeneratorContextManagerType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	GeneratorContextManagerType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*GeneratorContextManager).enter()
-	}, 0, "Start the generator and return what it yielded.")
+	}, 0, "Start the generator and return what it yielded."))
 
-	GeneratorContextManagerType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	GeneratorContextManagerType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var excType, excValue = py.Object(py.None), py.Object(py.None)
 		var traceback py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
 			return nil, err
 		}
 		return self.(*GeneratorContextManager).exit(excType, excValue, traceback)
-	}, 0, "Throw the body's exception into the generator.")
+	}, 0, "Throw the body's exception into the generator."))
 
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 
-	globals["contextmanager"] = py.MustNewMethod("contextmanager", contextmanager, 0, contextmanager_doc)
-	globals["AbstractContextManager"] = AbstractContextManagerType
-	globals["AbstractAsyncContextManager"] = AbstractContextManagerType
-	globals["ExitStack"] = ExitStackType
-	globals["nullcontext"] = py.MustNewMethod("nullcontext", nullcontext, 0, "Context manager that does no additional processing.")
-	globals["closing"] = py.MustNewMethod("closing", closing, 0, "Context to automatically close something at the end of a block.")
-	globals["redirect_stdout"] = py.MustNewMethod("redirect_stdout", redirectStdout, 0, "Context manager for temporarily redirecting sys.stdout.")
-	globals["redirect_stderr"] = py.MustNewMethod("redirect_stderr", redirectStderr, 0, "Context manager for temporarily redirecting sys.stderr.")
-	globals["suppress"] = py.MustNewMethod("suppress", suppress, 0, "Context manager to suppress specified exceptions.")
-	globals["ContextDecorator"] = ContextDecoratorType
+	globals.Set("contextmanager", py.MustNewMethod("contextmanager", contextmanager, 0, contextmanager_doc))
+	globals.Set("AbstractContextManager", AbstractContextManagerType)
+	globals.Set("AbstractAsyncContextManager", AbstractContextManagerType)
+	globals.Set("ExitStack", ExitStackType)
+	globals.Set("nullcontext", py.MustNewMethod("nullcontext", nullcontext, 0, "Context manager that does no additional processing."))
+	globals.Set("closing", py.MustNewMethod("closing", closing, 0, "Context to automatically close something at the end of a block."))
+	globals.Set("redirect_stdout", py.MustNewMethod("redirect_stdout", redirectStdout, 0, "Context manager for temporarily redirecting sys.stdout."))
+	globals.Set("redirect_stderr", py.MustNewMethod("redirect_stderr", redirectStderr, 0, "Context manager for temporarily redirecting sys.stderr."))
+	globals.Set("suppress", py.MustNewMethod("suppress", suppress, 0, "Context manager to suppress specified exceptions."))
+	globals.Set("ContextDecorator", ContextDecoratorType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -127,7 +127,7 @@ runs on exit, with the body's exception thrown in at the yield.`
 
 func contextmanager(self py.Object, args py.Tuple) (py.Object, error) {
 	var fn py.Object
-	if err := py.UnpackTuple(args, nil, "contextmanager", 1, 1, &fn); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "contextmanager", 1, 1, &fn); err != nil {
 		return nil, err
 	}
 	if _, ok := fn.(*py.Function); !ok {
@@ -263,10 +263,10 @@ func (s *ExitStack) unwind(excType, excValue, traceback py.Object) (py.Object, e
 }
 
 func init() {
-	ExitStackType.Dict["push"] = py.MustNewMethod("push", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ExitStackType.Dict.Set("push", py.MustNewMethod("push", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*ExitStack)
 		var cm py.Object
-		if err := py.UnpackTuple(args, nil, "push", 1, 1, &cm); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "push", 1, 1, &cm); err != nil {
 			return nil, err
 		}
 		enter, err := py.GetAttrString(cm, "__enter__")
@@ -277,41 +277,41 @@ func init() {
 		if err != nil {
 			return nil, py.ExceptionNewf(py.TypeError, "object does not support the context manager protocol")
 		}
-		value, err := py.Call(enter, py.Tuple{}, nil)
+		value, err := py.Call(enter, py.Tuple{}, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
-		s.push(exit, py.Tuple{}, nil)
+		s.push(exit, py.Tuple{}, py.StringDict{})
 		return value, nil
-	}, 0, "Enter a context manager and register its exit on the stack.")
+	}, 0, "Enter a context manager and register its exit on the stack."))
 
-	ExitStackType.Dict["enter_context"] = ExitStackType.Dict["push"]
+	ExitStackType.Dict.Set("enter_context", ExitStackType.Dict.GetOrNil("push"))
 
-	ExitStackType.Dict["callback"] = py.MustNewMethod("callback", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ExitStackType.Dict.Set("callback", py.MustNewMethod("callback", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*ExitStack)
 		if len(args) < 1 {
 			return nil, py.ExceptionNewf(py.TypeError, "callback() needs at least one argument")
 		}
-		return s.push(args[0], args[1:], nil), nil
-	}, 0, "Register a callback to be called on exit.")
+		return s.push(args[0], args[1:], py.StringDict{}), nil
+	}, 0, "Register a callback to be called on exit."))
 
-	ExitStackType.Dict["push_async_callback"] = ExitStackType.Dict["callback"]
+	ExitStackType.Dict.Set("push_async_callback", ExitStackType.Dict.GetOrNil("callback"))
 
-	ExitStackType.Dict["close"] = py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ExitStackType.Dict.Set("close", py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*ExitStack)
 		s.callbacks = nil
 		return py.None, nil
-	}, 0, "Immediately unwind the stack without an exception.")
+	}, 0, "Immediately unwind the stack without an exception."))
 
-	ExitStackType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ExitStackType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the stack itself.")
+	}, 0, "Return the stack itself."))
 
-	ExitStackType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ExitStackType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		// The with statement passes three arguments; a direct call may pass
 		// none, which means the same as (None, None, None).
 		var excType, excValue, traceback = py.Object(py.None), py.Object(py.None), py.Object(py.None)
-		if err := py.UnpackTuple(args, nil, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
 			return nil, err
 		}
 		s := self.(*ExitStack)
@@ -319,7 +319,7 @@ func init() {
 		// The stack is not reusable after it has been unwound.
 		s.callbacks = nil
 		return res, err
-	}, 0, "Unwind the stack, passing the exception to each callback.")
+	}, 0, "Unwind the stack, passing the exception to each callback."))
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ otherwise does nothing.`
 
 func nullcontext(self py.Object, args py.Tuple) (py.Object, error) {
 	var value py.Object = py.None
-	if err := py.UnpackTuple(args, nil, "nullcontext", 0, 1, &value); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "nullcontext", 0, 1, &value); err != nil {
 		return nil, err
 	}
 	return &nullContext{value: value}, nil
@@ -345,12 +345,12 @@ var nullContextType = py.NewType("contextlib.nullcontext", nullcontext_doc)
 func (n *nullContext) Type() *py.Type { return nullContextType }
 
 func init() {
-	nullContextType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	nullContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*nullContext).value, nil
-	}, 0, "Return the value the context was created with.")
-	nullContextType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the value the context was created with."))
+	nullContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Do nothing.")
+	}, 0, "Do nothing."))
 }
 
 const closing_doc = `closing(thing)
@@ -359,7 +359,7 @@ Return a context manager that closes thing upon completion of the block.`
 
 func closing(self py.Object, args py.Tuple) (py.Object, error) {
 	var thing py.Object
-	if err := py.UnpackTuple(args, nil, "closing", 1, 1, &thing); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "closing", 1, 1, &thing); err != nil {
 		return nil, err
 	}
 	return &closingContext{thing: thing}, nil
@@ -372,11 +372,11 @@ var closingContextType = py.NewType("contextlib.closing", closing_doc)
 func (c *closingContext) Type() *py.Type { return closingContextType }
 
 func init() {
-	closingContextType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	closingContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*closingContext).thing, nil
-	}, 0, "Return the wrapped object.")
+	}, 0, "Return the wrapped object."))
 
-	closingContextType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	closingContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*closingContext)
 		close, err := py.GetAttrString(c.thing, "close")
 		if err != nil {
@@ -384,11 +384,11 @@ func init() {
 			// which is what CPython reports for a missing attribute.
 			return nil, err
 		}
-		if _, err := py.Call(close, py.Tuple{}, nil); err != nil {
+		if _, err := py.Call(close, py.Tuple{}, py.StringDict{}); err != nil {
 			return nil, err
 		}
 		return py.False, nil
-	}, 0, "Close the wrapped object.")
+	}, 0, "Close the wrapped object."))
 }
 
 const suppress_doc = `suppress(*exceptions)
@@ -412,14 +412,14 @@ var suppressContextType = py.NewType("contextlib.suppress", suppress_doc)
 func (s *suppressContext) Type() *py.Type { return suppressContextType }
 
 func init() {
-	suppressContextType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	suppressContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.None, nil
-	}, 0, "Do nothing.")
+	}, 0, "Do nothing."))
 
-	suppressContextType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	suppressContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*suppressContext)
 		var excType, excValue, traceback py.Object
-		if err := py.UnpackTuple(args, nil, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
 			return nil, err
 		}
 		if excType == py.None || excType == nil {
@@ -439,7 +439,7 @@ func init() {
 			}
 		}
 		return py.False, nil
-	}, 0, "Suppress the exception if it is one of the listed types.")
+	}, 0, "Suppress the exception if it is one of the listed types."))
 }
 
 // redirectStdout and redirectStderr swap the sys stream for the block.
@@ -453,7 +453,7 @@ func redirectStderr(self py.Object, args py.Tuple) (py.Object, error) {
 
 func redirectStream(name string, args py.Tuple) (py.Object, error) {
 	var target py.Object
-	if err := py.UnpackTuple(args, nil, "redirect", 1, 1, &target); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "redirect", 1, 1, &target); err != nil {
 		return nil, err
 	}
 	return &redirectContext{name: name, new: target}, nil
@@ -476,23 +476,23 @@ func (r *redirectContext) setStream(value py.Object) error {
 		return py.ExceptionNewf(py.RuntimeError, "sys is not available")
 	}
 	if !r.saved {
-		r.old = mod.Globals[r.name]
+		r.old = mod.Globals.GetOrNil(r.name)
 		r.saved = true
 	}
-	mod.Globals[r.name] = value
+	mod.Globals.Set(r.name, value)
 	return nil
 }
 
 func init() {
-	redirectContextType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	redirectContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		r := self.(*redirectContext)
 		if err := r.setStream(r.new); err != nil {
 			return nil, err
 		}
 		return r.new, nil
-	}, 0, "Redirect the stream and return the new one.")
+	}, 0, "Redirect the stream and return the new one."))
 
-	redirectContextType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	redirectContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		r := self.(*redirectContext)
 		if r.old != nil {
 			if err := r.setStream(r.old); err != nil {
@@ -500,5 +500,5 @@ func init() {
 			}
 		}
 		return py.False, nil
-	}, 0, "Restore the previous stream.")
+	}, 0, "Restore the previous stream."))
 }

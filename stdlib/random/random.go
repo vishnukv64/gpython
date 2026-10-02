@@ -203,7 +203,7 @@ func rndSeed(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) 
 }
 
 func rndRandom(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if err := py.UnpackTuple(args, nil, "random", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "random", 0, 0); err != nil {
 		return nil, err
 	}
 	return py.Float(r.float64()), nil
@@ -211,7 +211,7 @@ func rndRandom(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error
 
 func rndRandbytes(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var nObj py.Object
-	if err := py.UnpackTuple(args, nil, "randbytes", 1, 1, &nObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "randbytes", 1, 1, &nObj); err != nil {
 		return nil, err
 	}
 	n, err := py.IndexInt(nObj)
@@ -241,7 +241,7 @@ func rndRandbytes(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, er
 // modulo bias a bare mask-and-return would introduce in the top bits.
 func rndGetrandbits(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var kObj py.Object
-	if err := py.UnpackTuple(args, nil, "getrandbits", 1, 1, &kObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "getrandbits", 1, 1, &kObj); err != nil {
 		return nil, err
 	}
 	k, err := py.IndexInt(kObj)
@@ -308,7 +308,7 @@ func rndGetrandbits(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, 
 
 func rndRandint(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var aObj, bObj py.Object
-	if err := py.UnpackTuple(args, nil, "randint", 2, 2, &aObj, &bObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "randint", 2, 2, &aObj, &bObj); err != nil {
 		return nil, err
 	}
 	a, err := py.IndexInt(aObj)
@@ -365,12 +365,12 @@ func rangeLen(start, stop, step int64) int64 {
 		if start >= stop {
 			return 0
 		}
-		return (stop-start+step-1)/step
+		return (stop - start + step - 1) / step
 	}
 	if start <= stop {
 		return 0
 	}
-	return (start-stop-step-1)/(-step)
+	return (start - stop - step - 1) / (-step)
 }
 
 func rndRandrange(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -390,7 +390,7 @@ func rndRandrange(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, er
 
 func rndChoice(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var seq py.Object
-	if err := py.UnpackTuple(args, nil, "choice", 1, 1, &seq); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "choice", 1, 1, &seq); err != nil {
 		return nil, err
 	}
 	items, err := py.SequenceList(seq)
@@ -405,7 +405,7 @@ func rndChoice(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error
 
 func rndChoices(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var population py.Object
-	if err := py.UnpackTuple(args, nil, "choices", 1, 1, &population); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "choices", 1, 1, &population); err != nil {
 		return nil, err
 	}
 	var weights py.Object = py.None
@@ -511,7 +511,7 @@ func rndChoices(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 
 func rndUniform(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var aObj, bObj py.Object
-	if err := py.UnpackTuple(args, nil, "uniform", 2, 2, &aObj, &bObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "uniform", 2, 2, &aObj, &bObj); err != nil {
 		return nil, err
 	}
 	a, err := py.FloatAsFloat64(aObj)
@@ -530,7 +530,7 @@ func rndUniform(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 
 func rndShuffle(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var x py.Object
-	if err := py.UnpackTuple(args, nil, "shuffle", 1, 1, &x); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "shuffle", 1, 1, &x); err != nil {
 		return nil, err
 	}
 	l, ok := x.(*py.List)
@@ -547,7 +547,7 @@ func rndShuffle(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 
 func rndSample(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var population, kObj py.Object
-	if err := py.UnpackTuple(args, nil, "sample", 2, 2, &population, &kObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "sample", 2, 2, &population, &kObj); err != nil {
 		return nil, err
 	}
 	items, err := py.SequenceList(population)
@@ -581,7 +581,7 @@ func rndSample(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error
 
 func rndGauss(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var muObj, sigmaObj py.Object
-	if err := py.UnpackTuple(args, nil, "gauss", 2, 2, &muObj, &sigmaObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "gauss", 2, 2, &muObj, &sigmaObj); err != nil {
 		return nil, err
 	}
 	mu, err := py.FloatAsFloat64(muObj)
@@ -601,7 +601,7 @@ func rndGauss(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error)
 
 func rndNormalvariate(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var muObj, sigmaObj py.Object
-	if err := py.UnpackTuple(args, nil, "normalvariate", 2, 2, &muObj, &sigmaObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "normalvariate", 2, 2, &muObj, &sigmaObj); err != nil {
 		return nil, err
 	}
 	mu, err := py.FloatAsFloat64(muObj)
@@ -625,7 +625,7 @@ func rndNormalvariate(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object
 
 func rndExpovariate(r *Random, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var lambdObj py.Object
-	if err := py.UnpackTuple(args, nil, "expovariate", 1, 1, &lambdObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "expovariate", 1, 1, &lambdObj); err != nil {
 		return nil, err
 	}
 	lambd, err := py.FloatAsFloat64(lambdObj)
@@ -688,7 +688,7 @@ var methods = []struct {
 func init() {
 	moduleMethods := make([]*py.Method, 0, len(methods))
 	for _, m := range methods {
-		RandomType.Dict[m.name] = classMethod(m.name, m.doc, m.fn)
+		RandomType.Dict.Set(m.name, classMethod(m.name, m.doc, m.fn))
 		moduleMethods = append(moduleMethods, moduleFn(m.name, m.doc, m.fn))
 	}
 
@@ -698,8 +698,8 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods: moduleMethods,
-		Globals: py.StringDict{
-			"Random": RandomType,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "Random", Value: RandomType},
+		),
 	})
 }

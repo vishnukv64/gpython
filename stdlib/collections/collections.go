@@ -113,29 +113,29 @@ func DequeNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 }
 
 func init() {
-	DequeType.Dict["append"] = py.MustNewMethod("append", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("append", py.MustNewMethod("append", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "append", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "append", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		d.add(item, false)
 		return py.None, nil
-	}, 0, "Add an element to the right side of the deque.")
+	}, 0, "Add an element to the right side of the deque."))
 
-	DequeType.Dict["appendleft"] = py.MustNewMethod("appendleft", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("appendleft", py.MustNewMethod("appendleft", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "appendleft", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "appendleft", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		d.add(item, true)
 		return py.None, nil
-	}, 0, "Add an element to the left side of the deque.")
+	}, 0, "Add an element to the left side of the deque."))
 
-	DequeType.Dict["pop"] = py.MustNewMethod("pop", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("pop", py.MustNewMethod("pop", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
-		if err := py.UnpackTuple(args, nil, "pop", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 0, 0); err != nil {
 			return nil, err
 		}
 		if len(d.items) == 0 {
@@ -144,11 +144,11 @@ func init() {
 		item := d.items[len(d.items)-1]
 		d.items = d.items[:len(d.items)-1]
 		return item, nil
-	}, 0, "Remove and return the rightmost element.")
+	}, 0, "Remove and return the rightmost element."))
 
-	DequeType.Dict["popleft"] = py.MustNewMethod("popleft", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("popleft", py.MustNewMethod("popleft", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
-		if err := py.UnpackTuple(args, nil, "popleft", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "popleft", 0, 0); err != nil {
 			return nil, err
 		}
 		if len(d.items) == 0 {
@@ -157,12 +157,12 @@ func init() {
 		item := d.items[0]
 		d.items = d.items[1:]
 		return item, nil
-	}, 0, "Remove and return the leftmost element.")
+	}, 0, "Remove and return the leftmost element."))
 
-	DequeType.Dict["extend"] = py.MustNewMethod("extend", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("extend", py.MustNewMethod("extend", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var iterable py.Object
-		if err := py.UnpackTuple(args, nil, "extend", 1, 1, &iterable); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "extend", 1, 1, &iterable); err != nil {
 			return nil, err
 		}
 		items, err := py.SequenceList(iterable)
@@ -173,12 +173,12 @@ func init() {
 			d.add(item, false)
 		}
 		return py.None, nil
-	}, 0, "Extend the right side of the deque with elements from the iterable.")
+	}, 0, "Extend the right side of the deque with elements from the iterable."))
 
-	DequeType.Dict["extendleft"] = py.MustNewMethod("extendleft", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("extendleft", py.MustNewMethod("extendleft", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var iterable py.Object
-		if err := py.UnpackTuple(args, nil, "extendleft", 1, 1, &iterable); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "extendleft", 1, 1, &iterable); err != nil {
 			return nil, err
 		}
 		items, err := py.SequenceList(iterable)
@@ -189,29 +189,29 @@ func init() {
 			d.add(item, true)
 		}
 		return py.None, nil
-	}, 0, "Extend the left side of the deque with elements from the iterable.")
+	}, 0, "Extend the left side of the deque with elements from the iterable."))
 
-	DequeType.Dict["clear"] = py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("clear", py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
-		if err := py.UnpackTuple(args, nil, "clear", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "clear", 0, 0); err != nil {
 			return nil, err
 		}
 		d.items = nil
 		return py.None, nil
-	}, 0, "Remove all elements from the deque.")
+	}, 0, "Remove all elements from the deque."))
 
-	DequeType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
-		if err := py.UnpackTuple(args, nil, "__iter__", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__iter__", 0, 0); err != nil {
 			return nil, err
 		}
 		return newIteratorFromItems(d.items), nil
-	}, 0, "Implement iter(self).")
+	}, 0, "Implement iter(self)."))
 
-	DequeType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		i, err := py.IndexInt(key)
@@ -225,12 +225,12 @@ func init() {
 			return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
 		}
 		return d.items[i], nil
-	}, 0, "Return self[index].")
+	}, 0, "Return self[index]."))
 
-	DequeType.Dict["__setitem__"] = py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var key, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setitem__", 2, 2, &key, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
 		i, err := py.IndexInt(key)
@@ -245,12 +245,12 @@ func init() {
 		}
 		d.items[i] = value
 		return py.None, nil
-	}, 0, "Set self[index] to value.")
+	}, 0, "Set self[index] to value."))
 
-	DequeType.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		for _, have := range d.items {
@@ -263,11 +263,11 @@ func init() {
 			}
 		}
 		return py.False, nil
-	}, 0, "Implement 'in'.")
+	}, 0, "Implement 'in'."))
 
-	DequeType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DequeType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Deque)
-		if err := py.UnpackTuple(args, nil, "__repr__", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__repr__", 0, 0); err != nil {
 			return nil, err
 		}
 		parts, err := reprItems(d.items)
@@ -279,7 +279,7 @@ func init() {
 			out = "deque([" + strings.Join(parts, ", ") + "], maxlen=" + itoa(d.maxlen) + ")"
 		}
 		return py.String(out), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 func reprItems(items []py.Object) ([]string, error) {
@@ -442,10 +442,10 @@ func counterGetItem(self py.Object, key py.Object) (py.Object, error) {
 }
 
 func init() {
-	CounterType.Dict["most_common"] = py.MustNewMethod("most_common", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("most_common", py.MustNewMethod("most_common", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
 		var n py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "most_common", 0, 1, &n); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "most_common", 0, 1, &n); err != nil {
 			return nil, err
 		}
 		type pair struct {
@@ -477,11 +477,11 @@ func init() {
 			out[i] = py.Tuple{p.key, py.Int(p.count)}
 		}
 		return py.NewListFromItems(out), nil
-	}, 0, "List the n most common elements and their counts.")
+	}, 0, "List the n most common elements and their counts."))
 
-	CounterType.Dict["elements"] = py.MustNewMethod("elements", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("elements", py.MustNewMethod("elements", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "elements", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "elements", 0, 0); err != nil {
 			return nil, err
 		}
 		items := []py.Object{}
@@ -495,11 +495,11 @@ func init() {
 			}
 		}
 		return newIteratorFromItems(items), nil
-	}, 0, "Iterator over elements repeating each as many times as its count.")
+	}, 0, "Iterator over elements repeating each as many times as its count."))
 
-	CounterType.Dict["total"] = py.MustNewMethod("total", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("total", py.MustNewMethod("total", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "total", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "total", 0, 0); err != nil {
 			return nil, err
 		}
 		total := int64(0)
@@ -511,12 +511,12 @@ func init() {
 			total += count
 		}
 		return py.Int(total), nil
-	}, 0, "Sum of the counts.")
+	}, 0, "Sum of the counts."))
 
-	CounterType.Dict["update"] = py.MustNewMethod("update", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("update", py.MustNewMethod("update", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
 		var arg py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "update", 0, 1, &arg); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "update", 0, 1, &arg); err != nil {
 			return nil, err
 		}
 		if arg != py.None {
@@ -525,13 +525,13 @@ func init() {
 			}
 		}
 		return py.None, nil
-	}, 0, "Like dict.update() but adds counts instead of replacing them.")
+	}, 0, "Like dict.update() but adds counts instead of replacing them."))
 
-	CounterType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		value, ok, err := c.get(key)
@@ -542,29 +542,29 @@ func init() {
 			return def, nil
 		}
 		return value, nil
-	}, 0, "Return the count for key, or the default.")
+	}, 0, "Return the count for key, or the default."))
 
-	CounterType.Dict["keys"] = py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "keys", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "keys", 0, 0); err != nil {
 			return nil, err
 		}
 		return py.NewListFromItems(c.order()), nil
-	}, 0, "Return the element list.")
+	}, 0, "Return the element list."))
 
-	CounterType.Dict["values"] = py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("values", py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "values", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "values", 0, 0); err != nil {
 			return nil, err
 		}
 		out := make([]py.Object, len(c.values))
 		copy(out, c.values)
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the count list.")
+	}, 0, "Return the count list."))
 
-	CounterType.Dict["items"] = py.MustNewMethod("items", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("items", py.MustNewMethod("items", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "items", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "items", 0, 0); err != nil {
 			return nil, err
 		}
 		out := make([]py.Object, 0, len(c.keys))
@@ -576,20 +576,20 @@ func init() {
 			out = append(out, py.Tuple{key, c.values[i]})
 		}
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the (key, count) list.")
+	}, 0, "Return the (key, count) list."))
 
-	CounterType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*Counter).keys)), nil
-	}, 0, "Number of distinct elements.")
+	}, 0, "Number of distinct elements."))
 
-	CounterType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return newIteratorFromItems(self.(*Counter).order()), nil
-	}, 0, "Implement iter(self).")
+	}, 0, "Implement iter(self)."))
 
-	CounterType.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		_, ok, err := c.get(key)
@@ -600,25 +600,25 @@ func init() {
 			return py.True, nil
 		}
 		return py.False, nil
-	}, 0, "Implement 'in'.")
+	}, 0, "Implement 'in'."))
 
-	CounterType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", counterGetItem, 0, "Return the count for key, zero if absent.")
+	CounterType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", counterGetItem, 0, "Return the count for key, zero if absent."))
 
-	CounterType.Dict["__setitem__"] = py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
 		var key, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setitem__", 2, 2, &key, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
 		if err := c.set(key, value); err != nil {
 			return nil, err
 		}
 		return py.None, nil
-	}, 0, "Set the count for key.")
+	}, 0, "Set the count for key."))
 
-	CounterType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	CounterType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*Counter)
-		if err := py.UnpackTuple(args, nil, "__repr__", 0, 0); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__repr__", 0, 0); err != nil {
 			return nil, err
 		}
 		parts := make([]string, 0, len(c.keys))
@@ -638,7 +638,7 @@ func init() {
 			parts = append(parts, keyStr+": "+valueStr)
 		}
 		return py.String("Counter({" + strings.Join(parts, ", ") + "})"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -677,7 +677,10 @@ func orderedDictNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 			}
 		}
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		if err := o.set(py.String(k), v); err != nil {
 			return nil, err
 		}
@@ -690,10 +693,10 @@ func (o *OrderedDict) set(key, value py.Object) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := o.values[encoded]; !ok {
+	if _, ok := o.values.Get(encoded); !ok {
 		o.keys = append(o.keys, encoded)
 	}
-	o.values[encoded] = value
+	o.values.Set(encoded, value)
 	return nil
 }
 
@@ -710,20 +713,20 @@ func (o *OrderedDict) order() []py.Object {
 }
 
 func init() {
-	OrderedDictType.Dict["keys"] = py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewListFromItems(self.(*OrderedDict).order()), nil
-	}, 0, "Return the key list, in insertion order.")
+	}, 0, "Return the key list, in insertion order."))
 
-	OrderedDictType.Dict["values"] = py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("values", py.MustNewMethod("values", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		out := make([]py.Object, 0, len(o.keys))
 		for _, encoded := range o.keys {
-			out = append(out, o.values[encoded])
+			out = append(out, o.values.GetOrNil(encoded))
 		}
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the value list, in insertion order.")
+	}, 0, "Return the value list, in insertion order."))
 
-	OrderedDictType.Dict["items"] = py.MustNewMethod("items", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("items", py.MustNewMethod("items", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		out := make([]py.Object, 0, len(o.keys))
 		for _, encoded := range o.keys {
@@ -731,75 +734,75 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, py.Tuple{key, o.values[encoded]})
+			out = append(out, py.Tuple{key, o.values.GetOrNil(encoded)})
 		}
 		return py.NewListFromItems(out), nil
-	}, 0, "Return the (key, value) list, in insertion order.")
+	}, 0, "Return the (key, value) list, in insertion order."))
 
-	OrderedDictType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err == nil {
-			if v, ok := o.values[encoded]; ok {
+			if v, ok := o.values.Get(encoded); ok {
 				return v, nil
 			}
 		}
 		return def, nil
-	}, 0, "Return the value for key, or the default.")
+	}, 0, "Return the value for key, or the default."))
 
-	OrderedDictType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*OrderedDict).keys)), nil
-	}, 0, "Number of entries.")
+	}, 0, "Number of entries."))
 
-	OrderedDictType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return newIteratorFromItems(self.(*OrderedDict).order()), nil
-	}, 0, "Implement iter(self).")
+	}, 0, "Implement iter(self)."))
 
-	OrderedDictType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err == nil {
-			if v, ok := o.values[encoded]; ok {
+			if v, ok := o.values.Get(encoded); ok {
 				return v, nil
 			}
 		}
 		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
-	}, 0, "Return self[key].")
+	}, 0, "Return self[key]."))
 
-	OrderedDictType.Dict["__setitem__"] = py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setitem__", 2, 2, &key, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
 		if err := self.(*OrderedDict).set(key, value); err != nil {
 			return nil, err
 		}
 		return py.None, nil
-	}, 0, "Set self[key] to value.")
+	}, 0, "Set self[key] to value."))
 
-	OrderedDictType.Dict["__delitem__"] = py.MustNewMethod("__delitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__delitem__", py.MustNewMethod("__delitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__delitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__delitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err != nil {
 			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 		}
-		if _, ok := o.values[encoded]; !ok {
+		if _, ok := o.values.Get(encoded); !ok {
 			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 		}
-		delete(o.values, encoded)
+		o.values.Del(encoded)
 		for i, k := range o.keys {
 			if k == encoded {
 				o.keys = append(o.keys[:i], o.keys[i+1:]...)
@@ -807,28 +810,28 @@ func init() {
 			}
 		}
 		return py.None, nil
-	}, 0, "Delete self[key].")
+	}, 0, "Delete self[key]."))
 
-	OrderedDictType.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err != nil {
 			return py.False, nil
 		}
-		if _, ok := o.values[encoded]; ok {
+		if _, ok := o.values.Get(encoded); ok {
 			return py.True, nil
 		}
 		return py.False, nil
-	}, 0, "Implement 'in'.")
+	}, 0, "Implement 'in'."))
 
-	OrderedDictType.Dict["popitem"] = py.MustNewMethod("popitem", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("popitem", py.MustNewMethod("popitem", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var last py.Object = py.True
-		if err := py.UnpackTuple(args, nil, "popitem", 0, 1, &last); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "popitem", 0, 1, &last); err != nil {
 			return nil, err
 		}
 		if len(o.keys) == 0 {
@@ -843,13 +846,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		value := o.values[encoded]
-		delete(o.values, encoded)
+		value := o.values.GetOrNil(encoded)
+		o.values.Del(encoded)
 		o.keys = append(o.keys[:i], o.keys[i+1:]...)
 		return py.Tuple{key, value}, nil
-	}, 0, "Remove and return a (key, value) pair.")
+	}, 0, "Remove and return a (key, value) pair."))
 
-	OrderedDictType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
 		parts := make([]string, 0, len(o.keys))
 		for _, encoded := range o.keys {
@@ -861,14 +864,14 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			valueStr, err := py.ReprAsString(o.values[encoded])
+			valueStr, err := py.ReprAsString(o.values.GetOrNil(encoded))
 			if err != nil {
 				return nil, err
 			}
 			parts = append(parts, keyStr+": "+valueStr)
 		}
 		return py.String("OrderedDict({" + strings.Join(parts, ", ") + "})"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -915,7 +918,10 @@ func defaultDictNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 			}
 		}
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		if err := d.set(py.String(k), v); err != nil {
 			return nil, err
 		}
@@ -928,10 +934,10 @@ func (d *DefaultDict) set(key, value py.Object) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := d.values[encoded]; !ok {
+	if _, ok := d.values.Get(encoded); !ok {
 		d.keys = append(d.keys, encoded)
 	}
-	d.values[encoded] = value
+	d.values.Set(encoded, value)
 	return nil
 }
 
@@ -940,7 +946,7 @@ func (d *DefaultDict) missing(key py.Object) (py.Object, error) {
 	if d.defaultFactory == py.None || d.defaultFactory == nil {
 		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 	}
-	value, err := py.Call(d.defaultFactory, py.Tuple{}, nil)
+	value, err := py.Call(d.defaultFactory, py.Tuple{}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -951,67 +957,67 @@ func (d *DefaultDict) missing(key py.Object) (py.Object, error) {
 }
 
 func init() {
-	DefaultDictType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		if encoded, err := py.DictKey(key); err == nil {
-			if v, ok := d.values[encoded]; ok {
+			if v, ok := d.values.Get(encoded); ok {
 				return v, nil
 			}
 		}
 		return d.missing(key)
-	}, 0, "Return self[key], creating a default when absent.")
+	}, 0, "Return self[key], creating a default when absent."))
 
-	DefaultDictType.Dict["__setitem__"] = py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setitem__", 2, 2, &key, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
 		if err := self.(*DefaultDict).set(key, value); err != nil {
 			return nil, err
 		}
 		return py.None, nil
-	}, 0, "Set self[key] to value.")
+	}, 0, "Set self[key] to value."))
 
-	DefaultDictType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		if encoded, err := py.DictKey(key); err == nil {
-			if v, ok := d.values[encoded]; ok {
+			if v, ok := d.values.Get(encoded); ok {
 				return v, nil
 			}
 		}
 		return def, nil
-	}, 0, "Return the value for key, or the default (no factory call).")
+	}, 0, "Return the value for key, or the default (no factory call)."))
 
-	DefaultDictType.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		encoded, err := py.DictKey(key)
 		if err != nil {
 			return py.False, nil
 		}
-		if _, ok := d.values[encoded]; ok {
+		if _, ok := d.values.Get(encoded); ok {
 			return py.True, nil
 		}
 		return py.False, nil
-	}, 0, "Implement 'in'.")
+	}, 0, "Implement 'in'."))
 
-	DefaultDictType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*DefaultDict).keys)), nil
-	}, 0, "Number of entries.")
+	}, 0, "Number of entries."))
 
-	DefaultDictType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		items := make([]py.Object, 0, len(d.keys))
 		for _, encoded := range d.keys {
@@ -1022,9 +1028,9 @@ func init() {
 			items = append(items, key)
 		}
 		return newIteratorFromItems(items), nil
-	}, 0, "Implement iter(self).")
+	}, 0, "Implement iter(self)."))
 
-	DefaultDictType.Dict["keys"] = py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		items := make([]py.Object, 0, len(d.keys))
 		for _, encoded := range d.keys {
@@ -1035,9 +1041,9 @@ func init() {
 			items = append(items, key)
 		}
 		return py.NewListFromItems(items), nil
-	}, 0, "Return the key list.")
+	}, 0, "Return the key list."))
 
-	DefaultDictType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DefaultDictType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DefaultDict)
 		parts := make([]string, 0, len(d.keys))
 		for _, encoded := range d.keys {
@@ -1049,7 +1055,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			valueStr, err := py.ReprAsString(d.values[encoded])
+			valueStr, err := py.ReprAsString(d.values.GetOrNil(encoded))
 			if err != nil {
 				return nil, err
 			}
@@ -1060,7 +1066,7 @@ func init() {
 			return nil, err
 		}
 		return py.String("defaultdict(" + factoryStr + ", {" + strings.Join(parts, ", ") + "})"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,11 +1089,12 @@ func chainMapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obj
 	for _, arg := range args {
 		c.maps = append(c.maps, arg)
 	}
-	if len(kwargs) > 0 {
+	if kwargs.Len() > 0 {
 		d := py.NewStringDict()
-		for k, v := range kwargs {
-			d[k] = v
-		}
+		kwargs.Range(func(k string, v py.Object) bool {
+			d.Set(k, v)
+			return false
+		})
 		c.maps = append(c.maps, d)
 	}
 	if len(c.maps) == 0 {
@@ -1106,7 +1113,7 @@ func (c *ChainMap) lookup(key py.Object) (py.Object, bool, error) {
 		}
 		if d, ok := m.(py.StringDict); ok {
 			if encoded, err := py.DictKey(key); err == nil {
-				if v, ok := d[encoded]; ok {
+				if v, ok := d.Get(encoded); ok {
 					return v, true, nil
 				}
 			}
@@ -1116,10 +1123,10 @@ func (c *ChainMap) lookup(key py.Object) (py.Object, bool, error) {
 }
 
 func init() {
-	ChainMapType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		v, ok, err := c.lookup(key)
@@ -1130,13 +1137,13 @@ func init() {
 			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 		}
 		return v, nil
-	}, 0, "Return the value from the first mapping that has it.")
+	}, 0, "Return the value from the first mapping that has it."))
 
-	ChainMapType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		v, ok, err := c.lookup(key)
@@ -1147,12 +1154,12 @@ func init() {
 			return def, nil
 		}
 		return v, nil
-	}, 0, "Return the value for key, or the default.")
+	}, 0, "Return the value for key, or the default."))
 
-	ChainMapType.Dict["__contains__"] = py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__contains__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		_, ok, err := c.lookup(key)
@@ -1163,9 +1170,9 @@ func init() {
 			return py.True, nil
 		}
 		return py.False, nil
-	}, 0, "Implement 'in'.")
+	}, 0, "Implement 'in'."))
 
-	ChainMapType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		seen := map[string]bool{}
 		for _, m := range c.maps {
@@ -1173,28 +1180,28 @@ func init() {
 			if !ok {
 				continue
 			}
-			for k := range d.GetDict() {
+			for _, k := range d.GetDict().Keys() {
 				seen[k] = true
 			}
 		}
 		return py.Int(len(seen)), nil
-	}, 0, "Number of distinct keys across the mappings.")
+	}, 0, "Number of distinct keys across the mappings."))
 
-	ChainMapType.Dict["maps"] = py.MustNewMethod("maps", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("maps", py.MustNewMethod("maps", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		items := make([]py.Object, len(c.maps))
 		copy(items, c.maps)
 		return py.NewListFromItems(items), nil
-	}, 0, "Return the list of mappings.")
+	}, 0, "Return the list of mappings."))
 
-	ChainMapType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ChainMapType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*ChainMap)
 		parts, err := reprItems(c.maps)
 		if err != nil {
 			return nil, err
 		}
 		return py.String("ChainMap(" + strings.Join(parts, ", ") + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -1217,8 +1224,11 @@ var UserDictType = py.NewTypeX("collections.UserDict", userdict_doc, func(metaty
 			return nil, err
 		}
 	}
-	if len(kwargs) > 0 {
-		for k, v := range kwargs {
+	if kwargs.Len() > 0 {
+		for _, __e := range kwargs.Items() {
+			k := __e.Key
+			v := __e.Value
+
 			if _, err := py.SetItem(u.data, py.String(k), v); err != nil {
 				return nil, err
 			}
@@ -1275,28 +1285,28 @@ var UserStringType = py.NewTypeX("collections.UserString", userstring_doc, func(
 func (u *UserString) Type() *py.Type { return UserStringType }
 
 func init() {
-	UserDictType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	UserDictType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Len(self.(*UserDict).data)
-	}, 0, "Number of entries.")
-	UserDictType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Number of entries."))
+	UserDictType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		return py.GetItem(self.(*UserDict).data, key)
-	}, 0, "Return self[key].")
-	UserDictType.Dict["__setitem__"] = py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return self[key]."))
+	UserDictType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key, value py.Object
-		if err := py.UnpackTuple(args, nil, "__setitem__", 2, 2, &key, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
 		return py.SetItem(self.(*UserDict).data, key, value)
-	}, 0, "Set self[key] to value.")
-	UserDictType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Set self[key] to value."))
+	UserDictType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*UserDict)
 		if dd, ok := d.data.(py.IGetDict); ok {
-			items := make([]py.Object, 0, len(dd.GetDict()))
-			for k := range dd.GetDict() {
+			items := make([]py.Object, 0, dd.GetDict().Len())
+			for _, k := range dd.GetDict().Keys() {
 				key, err := py.DictKeyDecode(k)
 				if err != nil {
 					return nil, err
@@ -1306,12 +1316,12 @@ func init() {
 			return newIteratorFromItems(items), nil
 		}
 		return py.Iter(d.data)
-	}, 0, "Implement iter(self).")
-	UserDictType.Dict["keys"] = py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Implement iter(self)."))
+	UserDictType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*UserDict)
 		if dd, ok := d.data.(py.IGetDict); ok {
-			items := make([]py.Object, 0, len(dd.GetDict()))
-			for k := range dd.GetDict() {
+			items := make([]py.Object, 0, dd.GetDict().Len())
+			for _, k := range dd.GetDict().Keys() {
 				key, err := py.DictKeyDecode(k)
 				if err != nil {
 					return nil, err
@@ -1321,70 +1331,70 @@ func init() {
 			return py.NewListFromItems(items), nil
 		}
 		return py.NewListFromItems(nil), nil
-	}, 0, "Return the key list.")
-	UserDictType.Dict["get"] = py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the key list."))
+	UserDictType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key py.Object
 		var def py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "get", 1, 2, &key, &def); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
 			return nil, err
 		}
 		d := self.(*UserDict)
 		if dd, ok := d.data.(py.IGetDict); ok {
 			if encoded, err := py.DictKey(key); err == nil {
-				if v, ok := dd.GetDict()[encoded]; ok {
+				if v, ok := dd.GetDict().Get(encoded); ok {
 					return v, nil
 				}
 			}
 		}
 		return def, nil
-	}, 0, "Return the value for key, or the default.")
-	UserDictType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the value for key, or the default."))
+	UserDictType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s, err := py.ReprAsString(self.(*UserDict).data)
 		if err != nil {
 			return nil, err
 		}
 		return py.String("UserDict(" + s + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
-	UserListType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	UserListType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*UserList).data.Items)), nil
-	}, 0, "Number of items.")
-	UserListType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Number of items."))
+	UserListType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		return py.GetItem(self.(*UserList).data, key)
-	}, 0, "Return self[i].")
-	UserListType.Dict["append"] = py.MustNewMethod("append", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return self[i]."))
+	UserListType.Dict.Set("append", py.MustNewMethod("append", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var item py.Object
-		if err := py.UnpackTuple(args, nil, "append", 1, 1, &item); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "append", 1, 1, &item); err != nil {
 			return nil, err
 		}
 		self.(*UserList).data.Append(item)
 		return py.None, nil
-	}, 0, "Append item to the end.")
-	UserListType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Append item to the end."))
+	UserListType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return newIteratorFromItems(self.(*UserList).data.Items), nil
-	}, 0, "Implement iter(self).")
-	UserListType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Implement iter(self)."))
+	UserListType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s, err := py.ReprAsString(self.(*UserList).data)
 		if err != nil {
 			return nil, err
 		}
 		return py.String("UserList(" + s + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 
-	UserStringType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	UserStringType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Len(self.(*UserString).data)
-	}, 0, "Number of characters.")
-	UserStringType.Dict["__str__"] = py.MustNewMethod("__str__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Number of characters."))
+	UserStringType.Dict.Set("__str__", py.MustNewMethod("__str__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*UserString).data, nil
-	}, 0, "Return str(self).")
-	UserStringType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return str(self)."))
+	UserStringType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		u := self.(*UserString)
 		return py.String("UserString(" + string(u.data) + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -1410,13 +1420,13 @@ var NamedTupleType = py.NewTypeX("collections.namedtuple", namedtuple_doc, nil, 
 func (n *NamedTuple) Type() *py.Type { return NamedTupleType }
 
 func init() {
-	NamedTupleType.Dict["__len__"] = py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	NamedTupleType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*NamedTuple).values)), nil
-	}, 0, "Number of fields.")
-	NamedTupleType.Dict["__getitem__"] = py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Number of fields."))
+	NamedTupleType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		n := self.(*NamedTuple)
 		var key py.Object
-		if err := py.UnpackTuple(args, nil, "__getitem__", 1, 1, &key); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
 		if s, ok := key.(py.String); ok {
@@ -1438,11 +1448,11 @@ func init() {
 			return nil, py.ExceptionNewf(py.IndexError, "tuple index out of range")
 		}
 		return n.values[i], nil
-	}, 0, "Return the field by name or index.")
-	NamedTupleType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the field by name or index."))
+	NamedTupleType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return newIteratorFromItems(self.(*NamedTuple).values), nil
-	}, 0, "Implement iter(self).")
-	NamedTupleType.Dict["_fields"] = &py.Property{
+	}, 0, "Implement iter(self)."))
+	NamedTupleType.Dict.Set("_fields", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			n := self.(*NamedTuple)
 			items := make([]py.Object, len(n.fields))
@@ -1451,17 +1461,17 @@ func init() {
 			}
 			return py.NewListFromItems(items), nil
 		},
-	}
+	})
 
-	NamedTupleType.Dict["_asdict"] = py.MustNewMethod("_asdict", func(self py.Object, args py.Tuple) (py.Object, error) {
+	NamedTupleType.Dict.Set("_asdict", py.MustNewMethod("_asdict", func(self py.Object, args py.Tuple) (py.Object, error) {
 		n := self.(*NamedTuple)
 		out := py.NewStringDict()
 		for i, f := range n.fields {
-			out[f] = n.values[i]
+			out.Set(f, n.values[i])
 		}
 		return out, nil
-	}, 0, "Return a dict of the fields.")
-	NamedTupleType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return a dict of the fields."))
+	NamedTupleType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		n := self.(*NamedTuple)
 		parts := make([]string, len(n.fields))
 		for i, f := range n.fields {
@@ -1472,7 +1482,7 @@ func init() {
 			parts[i] = f + "=" + s
 		}
 		return py.String(n.name + "(" + strings.Join(parts, ", ") + ")"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // namedtupleFactory is what namedtuple() returns: a callable that builds an
@@ -1496,7 +1506,7 @@ func (f *namedtupleFactory) M__repr__() (py.Object, error) {
 }
 
 func (f *namedtupleFactory) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if len(kwargs) > 0 {
+	if kwargs.Len() > 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", f.name)
 	}
 	if len(args) != len(f.fields) {
@@ -1567,17 +1577,17 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 }
 
 func init() {
-	globals := py.StringDict{
-		"deque":       DequeType,
-		"Counter":     CounterType,
-		"OrderedDict": OrderedDictType,
-		"defaultdict": DefaultDictType,
-		"ChainMap":    ChainMapType,
-		"UserDict":    UserDictType,
-		"UserList":    UserListType,
-		"UserString":  UserStringType,
-		"namedtuple":  py.MustNewMethod("namedtuple", namedtupleMethod, 0, namedtuple_doc),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "deque", Value: DequeType},
+		py.DictEntry{Key: "Counter", Value: CounterType},
+		py.DictEntry{Key: "OrderedDict", Value: OrderedDictType},
+		py.DictEntry{Key: "defaultdict", Value: DefaultDictType},
+		py.DictEntry{Key: "ChainMap", Value: ChainMapType},
+		py.DictEntry{Key: "UserDict", Value: UserDictType},
+		py.DictEntry{Key: "UserList", Value: UserListType},
+		py.DictEntry{Key: "UserString", Value: UserStringType},
+		py.DictEntry{Key: "namedtuple", Value: py.MustNewMethod("namedtuple", namedtupleMethod, 0, namedtuple_doc)},
+	)
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
 			Name: "collections",
@@ -1703,7 +1713,7 @@ func (o *OrderedDict) M__iter__() (py.Object, error) { return newIteratorFromIte
 
 func (o *OrderedDict) M__getitem__(key py.Object) (py.Object, error) {
 	if encoded, err := py.DictKey(key); err == nil {
-		if v, ok := o.values[encoded]; ok {
+		if v, ok := o.values.Get(encoded); ok {
 			return v, nil
 		}
 	}
@@ -1722,10 +1732,10 @@ func (o *OrderedDict) M__delitem__(key py.Object) (py.Object, error) {
 	if err != nil {
 		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 	}
-	if _, ok := o.values[encoded]; !ok {
+	if _, ok := o.values.Get(encoded); !ok {
 		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
 	}
-	delete(o.values, encoded)
+	o.values.Del(encoded)
 	for i, k := range o.keys {
 		if k == encoded {
 			o.keys = append(o.keys[:i], o.keys[i+1:]...)
@@ -1740,7 +1750,7 @@ func (o *OrderedDict) M__contains__(item py.Object) (py.Object, error) {
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := o.values[encoded]; ok {
+	if _, ok := o.values.Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -1757,7 +1767,7 @@ func (o *OrderedDict) M__repr__() (py.Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		valueStr, err := py.ReprAsString(o.values[encoded])
+		valueStr, err := py.ReprAsString(o.values.GetOrNil(encoded))
 		if err != nil {
 			return nil, err
 		}
@@ -1770,7 +1780,7 @@ func (d *DefaultDict) M__len__() (py.Object, error) { return py.Int(len(d.keys))
 
 func (d *DefaultDict) M__getitem__(key py.Object) (py.Object, error) {
 	if encoded, err := py.DictKey(key); err == nil {
-		if v, ok := d.values[encoded]; ok {
+		if v, ok := d.values.Get(encoded); ok {
 			return v, nil
 		}
 	}
@@ -1789,7 +1799,7 @@ func (d *DefaultDict) M__contains__(item py.Object) (py.Object, error) {
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := d.values[encoded]; ok {
+	if _, ok := d.values.Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -1913,7 +1923,7 @@ func (d *DefaultDict) M__repr__() (py.Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		valueStr, err := py.ReprAsString(d.values[encoded])
+		valueStr, err := py.ReprAsString(d.values.GetOrNil(encoded))
 		if err != nil {
 			return nil, err
 		}
@@ -1937,7 +1947,7 @@ func (u *UserDict) M__contains__(item py.Object) (py.Object, error) {
 	if err != nil {
 		return py.False, nil
 	}
-	if _, ok := d.GetDict()[encoded]; ok {
+	if _, ok := d.GetDict().Get(encoded); ok {
 		return py.True, nil
 	}
 	return py.False, nil
@@ -2015,7 +2025,9 @@ var _ py.I__getattribute__ = (*NamedTuple)(nil)
 // mean.  SequenceList alone cannot do this: a mapping is not a sequence.
 func updateFrom(target py.Object, source py.Object) error {
 	if d, ok := source.(py.IGetDict); ok {
-		for encoded, value := range d.GetDict() {
+		for _, __e := range d.GetDict().Items() {
+			encoded := __e.Key
+			value := __e.Value
 			key, err := py.DictKeyDecode(encoded)
 			if err != nil {
 				return err
@@ -2052,8 +2064,8 @@ func (u *UserDict) M__setitem__(key, value py.Object) (py.Object, error) {
 
 func (u *UserDict) M__iter__() (py.Object, error) {
 	if d, ok := u.data.(py.IGetDict); ok {
-		items := make([]py.Object, 0, len(d.GetDict()))
-		for k := range d.GetDict() {
+		items := make([]py.Object, 0, d.GetDict().Len())
+		for _, k := range d.GetDict().Keys() {
 			key, err := py.DictKeyDecode(k)
 			if err != nil {
 				return nil, err

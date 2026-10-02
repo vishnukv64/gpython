@@ -48,10 +48,10 @@ var ABCMetaType = py.TypeType
 func markAbstract(obj py.Object, name string) (py.Object, error) {
 	switch o := obj.(type) {
 	case *py.Function:
-		if o.Dict == nil {
+		if o.Dict.IsNil() {
 			o.Dict = py.NewStringDict()
 		}
-		o.Dict["__isabstractmethod__"] = py.True
+		o.Dict.Set("__isabstractmethod__", py.True)
 		return o, nil
 	case *py.Property:
 		o.Abstract = trueValue()
@@ -71,73 +71,73 @@ func init() {
 
 	// __isabstractmethod__ is what code that inspects for abstract methods
 	// reads; a property reports it from the marker set above.
-	py.PropertyType.Dict["__isabstractmethod__"] = &py.Property{
+	py.PropertyType.Dict.Set("__isabstractmethod__", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			if self.(*py.Property).Abstract {
 				return py.True, nil
 			}
 			return py.False, nil
 		},
-	}
+	})
 
-	ABCType.Dict["__class_getitem__"] = py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	ABCType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		// "ABC[T]" is accepted, as in the annotations that use it.
 		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters.")
+	}, 0, "Return the class, ignoring the subscription parameters."))
 
-	globals := py.StringDict{
-		"ABC":     ABCType,
-		"ABCMeta": ABCMetaType,
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "ABC", Value: ABCType},
+		py.DictEntry{Key: "ABCMeta", Value: ABCMetaType},
+	)
 
-	globals["abstractmethod"] = py.MustNewMethod("abstractmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("abstractmethod", py.MustNewMethod("abstractmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var fn py.Object
-		if err := py.UnpackTuple(args, nil, "abstractmethod", 1, 1, &fn); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "abstractmethod", 1, 1, &fn); err != nil {
 			return nil, err
 		}
 		return markAbstract(fn, "__isabstractmethod__")
-	}, 0, "A decorator indicating abstract methods.")
+	}, 0, "A decorator indicating abstract methods."))
 
-	globals["abstractproperty"] = py.MustNewMethod("abstractproperty", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("abstractproperty", py.MustNewMethod("abstractproperty", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var fn py.Object
-		if err := py.UnpackTuple(args, nil, "abstractproperty", 1, 1, &fn); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "abstractproperty", 1, 1, &fn); err != nil {
 			return nil, err
 		}
 		return markAbstract(fn, "__isabstractmethod__")
-	}, 0, "A decorator indicating abstract properties.")
+	}, 0, "A decorator indicating abstract properties."))
 
-	globals["abstractclassmethod"] = py.MustNewMethod("abstractclassmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("abstractclassmethod", py.MustNewMethod("abstractclassmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var fn py.Object
-		if err := py.UnpackTuple(args, nil, "abstractclassmethod", 1, 1, &fn); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "abstractclassmethod", 1, 1, &fn); err != nil {
 			return nil, err
 		}
 		return markAbstract(fn, "__isabstractmethod__")
-	}, 0, "A decorator indicating abstract classmethods.")
+	}, 0, "A decorator indicating abstract classmethods."))
 
-	globals["abstractstaticmethod"] = py.MustNewMethod("abstractstaticmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("abstractstaticmethod", py.MustNewMethod("abstractstaticmethod", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var fn py.Object
-		if err := py.UnpackTuple(args, nil, "abstractstaticmethod", 1, 1, &fn); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "abstractstaticmethod", 1, 1, &fn); err != nil {
 			return nil, err
 		}
 		return markAbstract(fn, "__isabstractmethod__")
-	}, 0, "A decorator indicating abstract staticmethods.")
+	}, 0, "A decorator indicating abstract staticmethods."))
 
-	globals["get_cache_token"] = py.MustNewMethod("get_cache_token", func(self py.Object, args py.Tuple) (py.Object, error) {
-		if err := py.UnpackTuple(args, nil, "get_cache_token", 0, 0); err != nil {
+	globals.Set("get_cache_token", py.MustNewMethod("get_cache_token", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := py.UnpackTuple(args, py.StringDict{}, "get_cache_token", 0, 0); err != nil {
 			return nil, err
 		}
 		// There is no ABC registry to version, so the token is a constant.
 		return py.Int(1), nil
-	}, 0, "Return the current ABC cache token.")
+	}, 0, "Return the current ABC cache token."))
 
-	globals["update_abstractmethods"] = py.MustNewMethod("update_abstractmethods", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("update_abstractmethods", py.MustNewMethod("update_abstractmethods", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var cls py.Object
-		if err := py.UnpackTuple(args, nil, "update_abstractmethods", 1, 1, &cls); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "update_abstractmethods", 1, 1, &cls); err != nil {
 			return nil, err
 		}
 		// Nothing to recompute: abstractness is not tracked per class here.
 		return cls, nil
-	}, 0, "Recalculate the abstract method set of a class.")
+	}, 0, "Recalculate the abstract method set of a class."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

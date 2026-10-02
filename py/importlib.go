@@ -23,7 +23,7 @@ func sysPaths(ctx Context) []string {
 	if err != nil {
 		return []string{"."}
 	}
-	pathList, ok := sysMod.Globals["path"].(*List)
+	pathList, ok := sysMod.Globals.GetOrNil("path").(*List)
 	if !ok {
 		return []string{"."}
 	}
@@ -39,7 +39,7 @@ func sysPaths(ctx Context) []string {
 // packagePaths returns the __path__ of an imported package, which is where
 // its submodules are searched for.
 func packagePaths(parent *Module) []string {
-	pathList, ok := parent.Globals["__path__"].(*List)
+	pathList, ok := parent.Globals.GetOrNil("__path__").(*List)
 	if !ok {
 		return nil
 	}
@@ -130,9 +130,9 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 			pkg = ""
 		}
 	}
-	mod.Globals["__package__"] = String(pkg)
+	mod.Globals.Set("__package__", String(pkg))
 	if isPkg {
-		mod.Globals["__path__"] = NewListFromItems([]Object{String(filepath.Dir(path))})
+		mod.Globals.Set("__path__", NewListFromItems([]Object{String(filepath.Dir(path))}))
 	}
 
 	if _, err := ctx.RunCode(out.Code, mod.Globals, mod.Globals, nil); err != nil {
@@ -152,7 +152,7 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 	// A module does not need a __path__ to have submodules: "from
 	// collections import abc" reaches a submodule that is registered
 	// natively rather than found as a file.
-	_, isPkg := mod.Globals["__path__"]
+	_, isPkg := mod.Globals.Get("__path__")
 	for _, item := range fromlist {
 		sub, ok := item.(String)
 		if !ok || string(sub) == "*" {
@@ -167,7 +167,7 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 			if err != nil {
 				return err
 			}
-			mod.Globals[string(sub)] = subMod
+			mod.Globals.Set(string(sub), subMod)
 			continue
 		}
 		if !isPkg {
@@ -183,7 +183,7 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 		if err != nil {
 			return err
 		}
-		mod.Globals[string(sub)] = subMod
+		mod.Globals.Set(string(sub), subMod)
 	}
 	return nil
 }
@@ -201,19 +201,19 @@ func ResolveModulePath(ctx Context, name string) (string, bool, error) {
 // absolute dotted name using the importing module's package context (PEP 328).
 func resolveRelativeImport(name string, level int, globals StringDict) (string, error) {
 	pkg := ""
-	if p, ok := globals["__package__"]; ok {
+	if p, ok := globals.Get("__package__"); ok {
 		if s, ok := p.(String); ok {
 			pkg = string(s)
 		}
 	}
 	if pkg == "" {
 		// Fall back to deriving the package from __name__
-		if n, ok := globals["__name__"]; ok {
+		if n, ok := globals.Get("__name__"); ok {
 			if s, ok := n.(String); ok {
 				pkg = string(s)
 			}
 		}
-		if _, isPkg := globals["__path__"]; !isPkg {
+		if _, isPkg := globals.Get("__path__"); !isPkg {
 			if i := strings.LastIndex(pkg, "."); i >= 0 {
 				pkg = pkg[:i]
 			} else {

@@ -51,7 +51,7 @@ func lookup(t *testing.T, ctx Context, module, name string) Object {
 	if err != nil {
 		t.Fatalf("GetModule(%q): %v", module, err)
 	}
-	obj, ok := mod.Globals[name]
+	obj, ok := mod.Globals.Get(name)
 	if !ok {
 		t.Fatalf("%s has no global %q", module, name)
 	}
@@ -83,7 +83,7 @@ func TestImportPackageRunsRelativeImport(t *testing.T) {
 		t.Errorf("pkg.NAME = %v, want 'pkg'", got)
 	}
 	helper := lookup(t, ctx, "pkg", "helper")
-	res, err := Call(helper, Tuple{}, nil)
+	res, err := Call(helper, Tuple{}, StringDict{})
 	if err != nil {
 		t.Fatalf("pkg.helper(): %v", err)
 	}
@@ -117,7 +117,7 @@ func TestImportPlainDottedReturnsTopLevelPackage(t *testing.T) {
 	defer ctx.Close()
 
 	// "import a.b" binds the top level package, not the submodule.
-	obj, err := ImportModuleLevelObject(ctx, "pkg2.mod", nil, nil, Tuple{}, 0)
+	obj, err := ImportModuleLevelObject(ctx, "pkg2.mod", StringDict{}, StringDict{}, Tuple{}, 0)
 	if err != nil {
 		t.Fatalf("import pkg2.mod: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestImportPlainDottedReturnsTopLevelPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("import pkg2.mod returned %T, want *Module", obj)
 	}
-	if got := string(mod.Globals["__name__"].(String)); got != "pkg2" {
+	if got := string(mod.Globals.GetOrNil("__name__").(String)); got != "pkg2" {
 		t.Errorf("import pkg2.mod bound %q, want \"pkg2\"", got)
 	}
 }
@@ -135,7 +135,7 @@ func TestImportFromlistBindsSubmodule(t *testing.T) {
 	defer ctx.Close()
 
 	// "from pkg2 import mod" must import and bind the submodule.
-	obj, err := ImportModuleLevelObject(ctx, "pkg2", nil, nil, Tuple{String("mod")}, 0)
+	obj, err := ImportModuleLevelObject(ctx, "pkg2", StringDict{}, StringDict{}, Tuple{String("mod")}, 0)
 	if err != nil {
 		t.Fatalf("from pkg2 import mod: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestImportFromlistBindsSubmodule(t *testing.T) {
 	if !ok {
 		t.Fatalf("from pkg2 import mod returned %T, want *Module", obj)
 	}
-	if got := string(mod.Globals["__name__"].(String)); got != "pkg2" {
+	if got := string(mod.Globals.GetOrNil("__name__").(String)); got != "pkg2" {
 		t.Errorf("from pkg2 import mod bound %q, want \"pkg2\"", got)
 	}
 	if got := lookup(t, ctx, "pkg2", "mod"); got == nil {
@@ -161,8 +161,10 @@ func TestImportRelativeLevel(t *testing.T) {
 
 	// Inside pkg, "from .sub import helper" is a level 1 import of "sub" with
 	// "helper" in the fromlist, so it resolves to pkg.sub and binds helper.
-	globals := StringDict{"__package__": String("pkg")}
-	obj, err := ImportModuleLevelObject(ctx, "sub", globals, nil, Tuple{String("helper")}, 1)
+	globals := NewStringDictFrom(
+		DictEntry{Key: "__package__", Value: String("pkg")},
+	)
+	obj, err := ImportModuleLevelObject(ctx, "sub", globals, StringDict{}, Tuple{String("helper")}, 1)
 	if err != nil {
 		t.Fatalf("from .sub import helper (inside pkg): %v", err)
 	}
@@ -170,14 +172,14 @@ func TestImportRelativeLevel(t *testing.T) {
 	if !ok {
 		t.Fatalf("relative import returned %T, want *Module", obj)
 	}
-	if got := string(mod.Globals["__name__"].(String)); got != "pkg.sub" {
+	if got := string(mod.Globals.GetOrNil("__name__").(String)); got != "pkg.sub" {
 		t.Errorf("relative import resolved to %q, want \"pkg.sub\"", got)
 	}
 
 	// "from . import sub" passes an empty module name and "sub" in the
 	// fromlist, which yields the package itself with the submodule bound onto
 	// it (this is what the IMPORT_FROM opcode then reads).
-	obj, err = ImportModuleLevelObject(ctx, "", globals, nil, Tuple{String("sub")}, 1)
+	obj, err = ImportModuleLevelObject(ctx, "", globals, StringDict{}, Tuple{String("sub")}, 1)
 	if err != nil {
 		t.Fatalf("from . import sub (inside pkg): %v", err)
 	}
@@ -185,10 +187,10 @@ func TestImportRelativeLevel(t *testing.T) {
 	if !ok {
 		t.Fatalf("relative import returned %T, want *Module", obj)
 	}
-	if got := string(pkgMod.Globals["__name__"].(String)); got != "pkg" {
+	if got := string(pkgMod.Globals.GetOrNil("__name__").(String)); got != "pkg" {
 		t.Errorf("from . import sub resolved to %q, want \"pkg\"", got)
 	}
-	if _, ok := pkgMod.Globals["sub"].(*Module); !ok {
+	if _, ok := pkgMod.Globals.GetOrNil("sub").(*Module); !ok {
 		t.Errorf("from . import sub did not bind the submodule onto pkg")
 	}
 }

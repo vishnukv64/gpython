@@ -78,7 +78,7 @@ func NewFunction(ctx Context, code *Code, globals StringDict, qualname string) *
 		Globals:  globals,
 		Name:     code.Name,
 		Doc:      doc,
-		Dict:     make(StringDict),
+		Dict:     NewStringDict(),
 	}
 }
 
@@ -101,7 +101,7 @@ func (f *Function) M__get__(instance, owner Object) (Object, error) {
 
 // Properties
 func init() {
-	FunctionType.Dict["__code__"] = &Property{
+	FunctionType.Dict.Set("__code__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).Code, nil
 		},
@@ -120,8 +120,8 @@ func init() {
 			f.Code = code
 			return nil
 		},
-	}
-	FunctionType.Dict["__defaults__"] = &Property{
+	})
+	FunctionType.Dict.Set("__defaults__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).Defaults, nil
 		},
@@ -138,8 +138,8 @@ func init() {
 			self.(*Function).Defaults = nil
 			return nil
 		},
-	}
-	FunctionType.Dict["__kwdefaults__"] = &Property{
+	})
+	FunctionType.Dict.Set("__kwdefaults__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).KwDefaults, nil
 		},
@@ -153,11 +153,11 @@ func init() {
 			return nil
 		},
 		Fdel: func(self Object) error {
-			self.(*Function).KwDefaults = nil
+			self.(*Function).KwDefaults = NewStringDict()
 			return nil
 		},
-	}
-	FunctionType.Dict["__annotations__"] = &Property{
+	})
+	FunctionType.Dict.Set("__annotations__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).Annotations, nil
 		},
@@ -171,11 +171,11 @@ func init() {
 			return nil
 		},
 		Fdel: func(self Object) error {
-			self.(*Function).Annotations = nil
+			self.(*Function).Annotations = NewStringDict()
 			return nil
 		},
-	}
-	FunctionType.Dict["__dict__"] = &Property{
+	})
+	FunctionType.Dict.Set("__dict__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).Dict, nil
 		},
@@ -188,8 +188,8 @@ func init() {
 			f.Dict = dict
 			return nil
 		},
-	}
-	FunctionType.Dict["__name__"] = &Property{
+	})
+	FunctionType.Dict.Set("__name__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Function).Name), nil
 		},
@@ -202,8 +202,8 @@ func init() {
 			f.Name = string(name)
 			return nil
 		},
-	}
-	FunctionType.Dict["__qualname__"] = &Property{
+	})
+	FunctionType.Dict.Set("__qualname__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Function).Qualname), nil
 		},
@@ -216,7 +216,7 @@ func init() {
 			f.Qualname = string(qualname)
 			return nil
 		},
-	}
+	})
 }
 
 // Make sure it satisfies the interface

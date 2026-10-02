@@ -12,7 +12,7 @@ import (
 
 func Import(ctx Context, names ...string) error {
 	for _, name := range names {
-		_, err := ImportModuleLevelObject(ctx, name, nil, nil, nil, 0)
+		_, err := ImportModuleLevelObject(ctx, name, NewStringDict(), NewStringDict(), nil, 0)
 		if err != nil {
 			return err
 		}
@@ -80,8 +80,8 @@ func Import(ctx Context, names ...string) error {
 // Changed in version 3.3: Negative values for level are no longer
 // supported (which also changes the default value to 0).
 func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDict, fromlist Tuple, level int) (Object, error) {
-	if globals == nil {
-		globals = StringDict{}
+	if globals.IsNil() {
+		globals = NewStringDict()
 	}
 
 	// Resolve explicit relative imports against the importing module's package
@@ -112,7 +112,7 @@ func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDic
 			return nil, err
 		}
 		if parent != nil {
-			parent.Globals[parts[i]] = module
+			parent.Globals.Set(parts[i], module)
 		}
 		parent = module
 	}
@@ -170,7 +170,7 @@ func importDotted(ctx Context, name string) (*Module, error) {
 			return nil, err
 		}
 		leaf := name[i+1:]
-		if child, ok := parent.Globals[leaf].(*Module); ok {
+		if child, ok := parent.Globals.GetOrNil(leaf).(*Module); ok {
 			return child, nil
 		}
 		// A module the parent exposes but that has not been registered under
@@ -205,7 +205,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 	// PyObject_CallMethodObjArgs() truncate the parameter list because of a
 	// nil argument.
 	if given_globals == nil {
-		globals = StringDict{}
+		globals = NewStringDict()
 	} else {
 		// Only have to care what given_globals is if it will be used
 		// for something.
@@ -239,14 +239,14 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 	if level < 0 {
 		return nil, ExceptionNewf(ValueError, "level must be >= 0")
 	} else if level > 0 {
-		PackageObj, ok = globals["__package__"]
+		PackageObj, ok = globals.Get("__package__")
 		if ok && PackageObj != None {
 			if _, ok = PackageObj.(String); !ok {
 				return nil, ExceptionNewf(TypeError, "package must be a string")
 			}
 			Package = string(PackageObj.(String))
 		} else {
-			PackageObj, ok = globals["__name__"]
+			PackageObj, ok = globals.Get("__name__")
 			if !ok {
 				return nil, ExceptionNewf(KeyError, "'__name__' not in globals")
 			} else if _, ok = PackageObj.(String); !ok {
@@ -254,7 +254,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 			}
 			Package = string(PackageObj.(String))
 
-			if _, ok = globals["__path__"]; !ok {
+			if _, ok = globals.Get("__path__"); !ok {
 				i := strings.LastIndex(string(Package), ".")
 				if i < 0 {
 					Package = ""
@@ -300,9 +300,9 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 	// FIXME _PyImport_AcquireLock()
 
 	// From this point forward, goto error_with_unlock!
-	builtins_import, ok = globals["__import__"]
+	builtins_import, ok = globals.Get("__import__")
 	if !ok {
-		builtins_import, ok = store.Builtins.Globals["__import__"]
+		builtins_import, ok = store.Builtins.Globals.Get("__import__")
 		if !ok {
 			return nil, ExceptionNewf(ImportError, "__import__ not found")
 		}
@@ -331,7 +331,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 		}
 		if initializing {
 			// _bootstrap._lock_unlock_module() releases the import lock */
-			_, err = store.Importlib.Call("_lock_unlock_module", Tuple{String(abs_name)}, nil)
+			_, err = store.Importlib.Call("_lock_unlock_module", Tuple{String(abs_name)}, NewStringDict())
 			if err != nil {
 				return nil, err
 			}
@@ -343,7 +343,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 		}
 	} else {
 		// _bootstrap._find_and_load() releases the import lock
-		mod, err = store.Importlib.Call("_find_and_load", Tuple{String(abs_name), builtins_import}, nil)
+		mod, err = store.Importlib.Call("_find_and_load", Tuple{String(abs_name), builtins_import}, NewStringDict())
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +362,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 
 			if level == 0 {
 				var err error
-				final_mod, err = Call(builtins_import, Tuple{String(front)}, nil)
+				final_mod, err = Call(builtins_import, Tuple{String(front)}, NewStringDict())
 				if err != nil {
 					return nil, err
 				}
@@ -379,7 +379,7 @@ func XImportModuleLevelObject(ctx Context, nameObj, given_globals, locals, given
 			final_mod = mod
 		}
 	} else {
-		final_mod, err = store.Importlib.Call("_handle_fromlist", Tuple{mod, fromlist, builtins_import}, nil)
+		final_mod, err = store.Importlib.Call("_handle_fromlist", Tuple{mod, fromlist, builtins_import}, NewStringDict())
 		if err != nil {
 			return nil, err
 		}
@@ -428,12 +428,12 @@ func BuiltinImport(ctx Context, self Object, args Tuple, kwargs StringDict, curr
 		if levelInt > 0 {
 			return nil, ExceptionNewf(TypeError, "globals must be a dict")
 		}
-		globalsDict = StringDict{}
+		globalsDict = NewStringDict()
 	}
 
 	localsDict, ok := locals.(StringDict)
 	if !ok {
-		localsDict = StringDict{}
+		localsDict = NewStringDict()
 	}
 
 	fromlistTuple = Tuple{}

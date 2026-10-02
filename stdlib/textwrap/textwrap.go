@@ -114,11 +114,11 @@ func textWrapperNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 	}
 	// width may also be given by keyword; positional wins if both appear, as
 	// in CPython.
-	if v, ok := kwargs["width"]; ok {
+	if v, ok := kwargs.Get("width"); ok {
 		if len(args) == 0 {
 			width = v
 		}
-		delete(kwargs, "width")
+		kwargs.Del("width")
 	}
 	n, err := py.IndexInt(width)
 	if err != nil {
@@ -127,35 +127,35 @@ func textWrapperNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 	w.width = n
 
 	setString := func(key string, dst *string) error {
-		if v, ok := kwargs[key]; ok {
+		if v, ok := kwargs.Get(key); ok {
 			s, err := py.StrAsString(v)
 			if err != nil {
 				return err
 			}
 			*dst = s
-			delete(kwargs, key)
+			kwargs.Del(key)
 		}
 		return nil
 	}
 	setBool := func(key string, dst *bool) error {
-		if v, ok := kwargs[key]; ok {
+		if v, ok := kwargs.Get(key); ok {
 			b, err := py.ObjectIsTrue(v)
 			if err != nil {
 				return err
 			}
 			*dst = b
-			delete(kwargs, key)
+			kwargs.Del(key)
 		}
 		return nil
 	}
 	setInt := func(key string, dst *int) error {
-		if v, ok := kwargs[key]; ok {
+		if v, ok := kwargs.Get(key); ok {
 			n, err := py.IndexInt(v)
 			if err != nil {
 				return err
 			}
 			*dst = n
-			delete(kwargs, key)
+			kwargs.Del(key)
 		}
 		return nil
 	}
@@ -181,7 +181,7 @@ func textWrapperNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 	if err := setInt("tabsize", &w.tabsize); err != nil {
 		return nil, err
 	}
-	if v, ok := kwargs["max_lines"]; ok {
+	if v, ok := kwargs.Get("max_lines"); ok {
 		if v != py.None {
 			n, err := py.IndexInt(v)
 			if err != nil {
@@ -190,7 +190,7 @@ func textWrapperNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 			w.maxLines = n
 			w.hasMaxLines = true
 		}
-		delete(kwargs, "max_lines")
+		kwargs.Del("max_lines")
 	}
 	if err := setString("placeholder", &w.placeholder); err != nil {
 		return nil, err
@@ -543,7 +543,7 @@ func (w *textWrapper) wrapText(text string) ([]string, error) {
 func wrapMethod(self py.Object, args py.Tuple) (py.Object, error) {
 	w := self.(*textWrapper)
 	var text py.Object
-	if err := py.UnpackTuple(args, nil, "wrap", 1, 1, &text); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "wrap", 1, 1, &text); err != nil {
 		return nil, err
 	}
 	s, err := py.StrAsString(text)
@@ -560,7 +560,7 @@ func wrapMethod(self py.Object, args py.Tuple) (py.Object, error) {
 func fillMethod(self py.Object, args py.Tuple) (py.Object, error) {
 	w := self.(*textWrapper)
 	var text py.Object
-	if err := py.UnpackTuple(args, nil, "fill", 1, 1, &text); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "fill", 1, 1, &text); err != nil {
 		return nil, err
 	}
 	s, err := py.StrAsString(text)
@@ -582,10 +582,11 @@ func fillMethod(self py.Object, args py.Tuple) (py.Object, error) {
 func wrapperFromKwargs(widthObj py.Object, kwargs py.StringDict) (*textWrapper, error) {
 	// Reuse the class constructor so attribute handling lives in one place.
 	args := py.Tuple{widthObj}
-	kw := py.StringDict{}
-	for k, v := range kwargs {
-		kw[k] = v
-	}
+	kw := py.NewStringDict()
+	kwargs.Range(func(k string, v py.Object) bool {
+		kw.Set(k, v)
+		return false
+	})
 	o, err := textWrapperNew(textWrapperType, args, kw)
 	if err != nil {
 		return nil, err
@@ -597,28 +598,28 @@ func wrapperFromKwargs(widthObj py.Object, kwargs py.StringDict) (*textWrapper, 
 // remaining options for the TextWrapper constructor.
 func moduleArgs(args py.Tuple, kwargs py.StringDict, name string, needWidth bool) (string, py.Object, py.StringDict, error) {
 	if len(args) == 0 || len(args) > 2 {
-		return "", nil, nil, py.ExceptionNewf(py.TypeError, "%s() takes 1 or 2 positional arguments (%d given)", name, len(args))
+		return "", nil, py.StringDict{}, py.ExceptionNewf(py.TypeError, "%s() takes 1 or 2 positional arguments (%d given)", name, len(args))
 	}
 	text, err := py.StrAsString(args[0])
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, py.StringDict{}, err
 	}
 	var width py.Object = py.Int(70)
 	if len(args) == 2 {
 		width = args[1]
 	}
-	if v, ok := kwargs["width"]; ok {
+	if v, ok := kwargs.Get("width"); ok {
 		if len(args) < 2 {
 			width = v
 		}
-		delete(kwargs, "width")
+		kwargs.Del("width")
 	}
-	if _, ok := kwargs["text"]; ok {
-		return "", nil, nil, py.ExceptionNewf(py.TypeError, "%s() got multiple values for argument 'text'", name)
+	if _, ok := kwargs.Get("text"); ok {
+		return "", nil, py.StringDict{}, py.ExceptionNewf(py.TypeError, "%s() got multiple values for argument 'text'", name)
 	}
 	if !needWidth {
 		if len(args) < 2 {
-			return "", nil, nil, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: 'width'", name)
+			return "", nil, py.StringDict{}, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: 'width'", name)
 		}
 	}
 	return text, width, kwargs, nil
@@ -683,7 +684,7 @@ func moduleShorten(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 // whitespace are normalised to the empty string.
 func dedent(self py.Object, args py.Tuple) (py.Object, error) {
 	var textObj py.Object
-	if err := py.UnpackTuple(args, nil, "dedent", 1, 1, &textObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "dedent", 1, 1, &textObj); err != nil {
 		return nil, err
 	}
 	text, err := py.StrAsString(textObj)
@@ -800,7 +801,7 @@ func indent(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if len(args) == 3 {
 		predicate = args[2]
 	}
-	if p, ok := kwargs["predicate"]; ok {
+	if p, ok := kwargs.Get("predicate"); ok {
 		if len(args) == 3 {
 			return nil, py.ExceptionNewf(py.TypeError, "indent() got multiple values for argument 'predicate'")
 		}
@@ -812,7 +813,7 @@ func indent(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 		// splitlines never yields an empty line.
 		use := !isAllSpace(line)
 		if predicate != py.None {
-			r, err := py.Call(predicate, py.Tuple{py.String(line)}, nil)
+			r, err := py.Call(predicate, py.Tuple{py.String(line)}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -850,10 +851,10 @@ var wrapperAttrs = []struct {
 }
 
 func init() {
-	textWrapperType.Dict["wrap"] = py.MustNewMethod("wrap", wrapMethod, 0,
-		"wrap(text) -> [lines]\nReformat the single paragraph in 'text' so it fits in lines of no\nmore than 'self.width' columns, and return a list of wrapped lines.")
-	textWrapperType.Dict["fill"] = py.MustNewMethod("fill", fillMethod, 0,
-		"fill(text) -> str\nReformat the single paragraph in 'text' to fit in lines of no more\nthan 'self.width' columns, and return a new string containing the\nentire wrapped paragraph.")
+	textWrapperType.Dict.Set("wrap", py.MustNewMethod("wrap", wrapMethod, 0,
+		"wrap(text) -> [lines]\nReformat the single paragraph in 'text' so it fits in lines of no\nmore than 'self.width' columns, and return a list of wrapped lines."))
+	textWrapperType.Dict.Set("fill", py.MustNewMethod("fill", fillMethod, 0,
+		"fill(text) -> str\nReformat the single paragraph in 'text' to fit in lines of no more\nthan 'self.width' columns, and return a new string containing the\nentire wrapped paragraph."))
 
 	// The attributes are exposed as properties so a script can read and write
 	// them the way CPython allows.
@@ -861,7 +862,7 @@ func init() {
 		name := attr.name
 		isInt := attr.isInt
 		if name == "max_lines" {
-			textWrapperType.Dict[name] = &py.Property{
+			textWrapperType.Dict.Set(name, &py.Property{
 				Fget: func(self py.Object) (py.Object, error) {
 					w := self.(*textWrapper)
 					if !w.hasMaxLines {
@@ -884,11 +885,11 @@ func init() {
 					w.maxLines = n
 					return nil
 				},
-			}
+			})
 			continue
 		}
 		if isInt {
-			textWrapperType.Dict[name] = &py.Property{
+			textWrapperType.Dict.Set(name, &py.Property{
 				Fget: func(self py.Object) (py.Object, error) {
 					w := self.(*textWrapper)
 					switch name {
@@ -913,11 +914,11 @@ func init() {
 					}
 					return nil
 				},
-			}
+			})
 			continue
 		}
 		// bool or string attribute
-		textWrapperType.Dict[name] = &py.Property{
+		textWrapperType.Dict.Set(name, &py.Property{
 			Fget: func(self py.Object) (py.Object, error) {
 				w := self.(*textWrapper)
 				switch name {
@@ -983,7 +984,7 @@ func init() {
 				}
 				return nil
 			},
-		}
+		})
 	}
 
 	py.RegisterModule(&py.ModuleImpl{
@@ -998,8 +999,8 @@ func init() {
 			py.MustNewMethod("dedent", dedent, 0, "dedent(text) -> str\nRemove any common leading whitespace from every line in `text`."),
 			py.MustNewMethod("indent", indent, 0, "indent(text, prefix, predicate=None) -> str\nAdds 'prefix' to the beginning of selected lines in 'text'."),
 		},
-		Globals: py.StringDict{
-			"TextWrapper": textWrapperType,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "TextWrapper", Value: textWrapperType},
+		),
 	})
 }

@@ -326,7 +326,7 @@ func (rfile *rFile) ReadObject() (obj py.Object, err error) {
 			}
 			if value != nil {
 				// FIXME should be objects as key
-				dict[string(key.(py.String))] = value
+				dict.Set(string(key.(py.String)), value)
 			}
 		}
 		return updateRef(iref, dict), nil
@@ -561,7 +561,7 @@ func marshal_dumps(self py.Object, args py.Tuple) (py.Object, error) {
 	// a stream that this module's own loads() could not read back.
 	var x py.Object
 	var versionObj py.Object
-	if err := py.UnpackTuple(args, nil, "dumps", 1, 2, &x, &versionObj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "dumps", 1, 2, &x, &versionObj); err != nil {
 		return nil, err
 	}
 	_ = versionObj // Only version 3 is written; the argument is accepted.
@@ -753,7 +753,7 @@ func marshal_loads(self py.Object, args py.Tuple) (py.Object, error) {
 	// to it.  Trailing bytes are ignored, as CPython's docs say, and a
 	// truncated stream is an EOFError.
 	var src py.Object
-	if err := py.UnpackTuple(args, nil, "loads", 1, 1, &src); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "loads", 1, 1, &src); err != nil {
 		return nil, err
 	}
 	var data []byte
@@ -817,9 +817,9 @@ func init() {
 		py.MustNewMethod("dumps", marshal_dumps, 0, dumps_doc),
 		py.MustNewMethod("loads", marshal_loads, 0, loads_doc),
 	}
-	globals := py.StringDict{
-		"version": py.Int(MARSHAL_VERSION),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "version", Value: py.Int(MARSHAL_VERSION)},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

@@ -122,7 +122,7 @@ func fieldsN(s string, n int) []string {
 }
 
 func init() {
-	StringType.Dict["endswith"] = MustNewMethod("endswith", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("endswith", MustNewMethod("endswith", func(self Object, args Tuple) (Object, error) {
 		selfStr := string(self.(String))
 		suffix := []string{}
 		if len(args) > 0 {
@@ -146,16 +146,16 @@ func init() {
 			}
 		}
 		return Bool(false), nil
-	}, 0, "endswith(suffix[, start[, end]]) -> bool")
+	}, 0, "endswith(suffix[, start[, end]]) -> bool"))
 
-	StringType.Dict["count"] = MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("count", MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
 		return self.(String).Count(args)
 	}, 0, `count(sub[, start[, end]]) -> int
 Return the number of non-overlapping occurrences of substring sub in
 string S[start:end].  Optional arguments start and end are
-interpreted as in slice notation.`)
+interpreted as in slice notation.`))
 
-	StringType.Dict["find"] = MustNewMethod("find", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("find", MustNewMethod("find", func(self Object, args Tuple) (Object, error) {
 		return self.(String).find(args)
 	}, 0, `find(...)
 S.find(sub[, start[, end]]) -> int
@@ -164,9 +164,9 @@ Return the lowest index in S where substring sub is found,
 such that sub is contained within S[start:end].  Optional
 arguments start and end are interpreted as in slice notation.
 
-Return -1 on failure.`)
+Return -1 on failure.`))
 
-	StringType.Dict["replace"] = MustNewMethod("replace", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("replace", MustNewMethod("replace", func(self Object, args Tuple) (Object, error) {
 		return self.(String).Replace(args)
 	}, 0, `replace(self, old, new, count=-1) -> return a copy with all occurrences of substring old replaced by new.
 
@@ -175,13 +175,13 @@ Return -1 on failure.`)
     -1 (the default value) means replace all occurrences.
 
 If the optional argument count is given, only the first count occurrences are
-replaced.`)
+replaced.`))
 
-	StringType.Dict["split"] = MustNewMethod("split", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("split", MustNewMethod("split", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).Split(args, kwargs)
-	}, 0, "split(sub) -> split string with sub.")
+	}, 0, "split(sub) -> split string with sub."))
 
-	StringType.Dict["startswith"] = MustNewMethod("startswith", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("startswith", MustNewMethod("startswith", func(self Object, args Tuple) (Object, error) {
 		selfStr := string(self.(String))
 		prefix := []string{}
 		if len(args) > 0 {
@@ -211,36 +211,36 @@ replaced.`)
 			}
 		}
 		return Bool(false), nil
-	}, 0, "startswith(prefix[, start[, end]]) -> bool")
+	}, 0, "startswith(prefix[, start[, end]]) -> bool"))
 
-	StringType.Dict["strip"] = MustNewMethod("strip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("strip", MustNewMethod("strip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).Strip(args)
-	}, 0, "strip(chars) -> replace chars from begining and end of string")
+	}, 0, "strip(chars) -> replace chars from begining and end of string"))
 
-	StringType.Dict["rstrip"] = MustNewMethod("rstrip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("rstrip", MustNewMethod("rstrip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).RStrip(args)
-	}, 0, "rstrip(chars) -> replace chars from end of string")
+	}, 0, "rstrip(chars) -> replace chars from end of string"))
 
-	StringType.Dict["lstrip"] = MustNewMethod("lstrip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("lstrip", MustNewMethod("lstrip", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).LStrip(args)
-	}, 0, "lstrip(chars) -> replace chars from begining of string")
+	}, 0, "lstrip(chars) -> replace chars from begining of string"))
 
-	StringType.Dict["upper"] = MustNewMethod("upper", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("upper", MustNewMethod("upper", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).Upper()
-	}, 0, "upper() -> a copy of the string converted to uppercase")
+	}, 0, "upper() -> a copy of the string converted to uppercase"))
 
-	StringType.Dict["lower"] = MustNewMethod("lower", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("lower", MustNewMethod("lower", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).Lower()
-	}, 0, "lower() -> a copy of the string converted to lowercase")
+	}, 0, "lower() -> a copy of the string converted to lowercase"))
 
-	StringType.Dict["join"] = MustNewMethod("join", func(self Object, args Tuple) (Object, error) {
+	StringType.Dict.Set("join", MustNewMethod("join", func(self Object, args Tuple) (Object, error) {
 		return self.(String).Join(args)
-	}, 0, "join(iterable) -> return a string which is the concatenation of the strings in iterable")
+	}, 0, "join(iterable) -> return a string which is the concatenation of the strings in iterable"))
 
 	// isidentifier() says whether the string is usable as an identifier, which
 	// is what a library checks before taking a name from its caller - click
 	// does exactly that when it parses a command's declarations.
-	StringType.Dict["isidentifier"] = MustNewMethod("isidentifier", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("isidentifier", MustNewMethod("isidentifier", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		s := string(self.(String))
 		if s == "" {
 			return False, nil
@@ -258,14 +258,14 @@ replaced.`)
 		return True, nil
 	}, 0, `isidentifier() -> bool
 
-Return True if the string is a valid Python identifier, False otherwise.`)
+Return True if the string is a valid Python identifier, False otherwise.`))
 
 	// The str.is*() family.  Each answers for the WHOLE string and needs at
 	// least one character, so an empty string is False for every one of them.
 	// These are what a library reaches for when it takes a name or a token
 	// from its caller; click checks both when it parses declarations.
 	isPred := func(name string, doc string, pred func(rune) bool) {
-		StringType.Dict[name] = MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		StringType.Dict.Set(name, MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 			s := string(self.(String))
 			if s == "" {
 				return False, nil
@@ -276,7 +276,7 @@ Return True if the string is a valid Python identifier, False otherwise.`)
 				}
 			}
 			return True, nil
-		}, 0, doc)
+		}, 0, doc))
 	}
 	isPred("isalpha", "isalpha() -> bool\n\nReturn True if all characters are alphabetic and there is at least one.", unicode.IsLetter)
 	isPred("isdigit", "isdigit() -> bool\n\nReturn True if all characters are digits and there is at least one.", func(r rune) bool { return r >= '0' && r <= '9' })
@@ -290,7 +290,7 @@ Return True if the string is a valid Python identifier, False otherwise.`)
 	// The case tests require at least one cased character, so "123" is neither
 	// upper nor lower - the same rule CPython applies.
 	casePred := func(name string, doc string, upper bool) {
-		StringType.Dict[name] = MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		StringType.Dict.Set(name, MustNewMethod(name, func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 			s := string(self.(String))
 			cased := false
 			for _, r := range s {
@@ -307,14 +307,14 @@ Return True if the string is a valid Python identifier, False otherwise.`)
 				}
 			}
 			return Bool(cased), nil
-		}, 0, doc)
+		}, 0, doc))
 	}
 	casePred("isupper", "isupper() -> bool\n\nReturn True if all cased characters are uppercase and there is at least one.", true)
 	casePred("islower", "islower() -> bool\n\nReturn True if all cased characters are lowercase and there is at least one.", false)
 
 	// istitle() wants each run of letters to start uppercase and every other
 	// letter lowercase, with at least one cased character overall.
-	StringType.Dict["istitle"] = MustNewMethod("istitle", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	StringType.Dict.Set("istitle", MustNewMethod("istitle", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		s := string(self.(String))
 		cased := false
 		prevCased := false
@@ -335,7 +335,7 @@ Return True if the string is a valid Python identifier, False otherwise.`)
 			}
 		}
 		return Bool(cased), nil
-	}, 0, "istitle() -> bool\n\nReturn True if the string is titlecased and there is at least one cased character.")
+	}, 0, "istitle() -> bool\n\nReturn True if the string is titlecased and there is at least one cased character."))
 }
 
 // Type of this object

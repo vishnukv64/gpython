@@ -65,6 +65,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/importlib"
 	_ "github.com/vishnukv64/gpython/stdlib/logging"
 	_ "github.com/vishnukv64/gpython/stdlib/warnings"
+
 )
 
 func init() {
@@ -99,8 +100,8 @@ func NewContext(opts py.ContextOpts) py.Context {
 	py.Import(ctx, "builtins", "sys")
 
 	sys_mod := ctx.Store().MustGetModule("sys")
-	sys_mod.Globals["argv"] = py.NewListFromStrings(opts.SysArgs)
-	sys_mod.Globals["path"] = py.NewListFromStrings(opts.SysPaths)
+	sys_mod.Globals.Set("argv", py.NewListFromStrings(opts.SysArgs))
+	sys_mod.Globals.Set("path", py.NewListFromStrings(opts.SysPaths))
 
 	return ctx
 }
@@ -157,7 +158,8 @@ func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.
 
 	tryPaths := defaultPaths
 	if opts.UseSysPaths {
-		tryPaths = ctx.Store().MustGetModule("sys").Globals["path"].(*py.List).Items
+		pathObj, _ := ctx.Store().MustGetModule("sys").Globals.Get("path")
+		tryPaths = pathObj.(*py.List).Items
 	}
 
 	out := py.CompileOut{}
@@ -334,7 +336,7 @@ func (ctx *context) RunCode(code *py.Code, globals, locals py.StringDict, closur
 		return nil, err
 	}
 
-	return vm.EvalCode(ctx, code, globals, locals, nil, nil, nil, nil, closure)
+	return vm.EvalCode(ctx, code, globals, locals, nil, py.StringDict{}, nil, py.StringDict{}, closure)
 }
 
 // See interface py.Context defined in py/run.go

@@ -290,20 +290,20 @@ func (a Complex) M__ge__(other Object) (Object, error) {
 
 // Properties
 func init() {
-	ComplexType.Dict["real"] = &Property{
+	ComplexType.Dict.Set("real", &Property{
 		Fget: func(self Object) (Object, error) {
 			return Float(real(self.(Complex))), nil
 		},
-	}
-	ComplexType.Dict["imag"] = &Property{
+	})
+	ComplexType.Dict.Set("imag", &Property{
 		Fget: func(self Object) (Object, error) {
 			return Float(imag(self.(Complex))), nil
 		},
-	}
-	ComplexType.Dict["conjugate"] = MustNewMethod("conjugate", func(self Object) (Object, error) {
+	})
+	ComplexType.Dict.Set("conjugate", MustNewMethod("conjugate", func(self Object) (Object, error) {
 		cnj := cmplx.Conj(complex128(self.(Complex)))
 		return Complex(cnj), nil
-	}, 0, "conjugate() -> Returns the complex conjugate.")
+	}, 0, "conjugate() -> Returns the complex conjugate."))
 }
 
 // Check interface is satisfied

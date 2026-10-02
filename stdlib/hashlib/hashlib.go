@@ -115,7 +115,7 @@ func newBlake2s(size int) (hash.Hash, error) {
 	return nil, py.ExceptionNewf(py.ValueError, "digest_size must be 16 or 32 for blake2s")
 }
 
-// hashNew implements hash(name, data=b'') and the named constructors.
+// hashNew implements hash(name, data=b”) and the named constructors.
 func hashNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var name py.Object
 	var data py.Object = py.None
@@ -168,7 +168,7 @@ func namedCtor(name string) func(self py.Object, args py.Tuple, kwargs py.String
 				return nil, err
 			}
 			for _, k := range []string{"key", "salt", "person", "fanout", "depth", "leaf_size", "node_offset", "node_depth", "inner_size", "last_node"} {
-				if _, ok := kwargs[k]; ok {
+				if _, ok := kwargs.Get(k); ok {
 					return nil, py.ExceptionNewf(py.NotImplementedError,
 						"hashlib.%s(): the %s parameter is not supported (Go's BLAKE2b does not expose the tree mode)", name, k)
 				}
@@ -207,7 +207,7 @@ func (h *Hash) update(data py.Object) error {
 func hashUpdate(self py.Object, args py.Tuple) (py.Object, error) {
 	h := self.(*Hash)
 	var data py.Object = py.None
-	if err := py.UnpackTuple(args, nil, "update", 1, 1, &data); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "update", 1, 1, &data); err != nil {
 		return nil, err
 	}
 	if err := h.update(data); err != nil {
@@ -218,7 +218,7 @@ func hashUpdate(self py.Object, args py.Tuple) (py.Object, error) {
 
 func hashDigest(self py.Object, args py.Tuple) (py.Object, error) {
 	h := self.(*Hash)
-	if err := py.UnpackTuple(args, nil, "digest", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "digest", 0, 0); err != nil {
 		return nil, err
 	}
 	// Sum() appends to its argument and does not disturb the running state,
@@ -228,7 +228,7 @@ func hashDigest(self py.Object, args py.Tuple) (py.Object, error) {
 
 func hashHexdigest(self py.Object, args py.Tuple) (py.Object, error) {
 	h := self.(*Hash)
-	if err := py.UnpackTuple(args, nil, "hexdigest", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "hexdigest", 0, 0); err != nil {
 		return nil, err
 	}
 	return py.String(hex.EncodeToString(h.h.Sum(nil))), nil
@@ -236,7 +236,7 @@ func hashHexdigest(self py.Object, args py.Tuple) (py.Object, error) {
 
 func hashCopy(self py.Object, args py.Tuple) (py.Object, error) {
 	h := self.(*Hash)
-	if err := py.UnpackTuple(args, nil, "copy", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "copy", 0, 0); err != nil {
 		return nil, err
 	}
 	return h.copy()
@@ -276,7 +276,7 @@ func (h *Hash) copy() (py.Object, error) {
 func newFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var name py.Object
 	var data py.Object = py.None
-	if err := py.UnpackTuple(args, nil, "new", 1, 2, &name, &data); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "new", 1, 2, &name, &data); err != nil {
 		return nil, err
 	}
 	n, err := py.StrAsString(name)
@@ -291,7 +291,7 @@ func newFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 	// digest_size is meaningful here.
 	size := algo.digestLen
 	if algo.varSize {
-		if ds, ok := kwargs["digest_size"]; ok {
+		if ds, ok := kwargs.Get("digest_size"); ok {
 			s, err := py.IndexInt(ds)
 			if err != nil {
 				return nil, err
@@ -311,7 +311,7 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	var file py.Object
 	var name py.Object
 	var data py.Object = py.None
-	if err := py.UnpackTuple(args, nil, "file_digest", 2, 2, &file, &name); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "file_digest", 2, 2, &file, &name); err != nil {
 		return nil, err
 	}
 	_ = data
@@ -325,7 +325,7 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	}
 	size := algo.digestLen
 	if algo.varSize {
-		if ds, ok := kwargs["digest_size"]; ok {
+		if ds, ok := kwargs.Get("digest_size"); ok {
 			s, err := py.IndexInt(ds)
 			if err != nil {
 				return nil, err
@@ -347,7 +347,7 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, py.ExceptionNewf(py.TypeError, "file_digest() argument 1 must be a file with a read() method")
 	}
 	for {
-		chunk, err := py.Call(readObj, py.Tuple{py.Int(blake2b.BlockSize * 64)}, nil)
+		chunk, err := py.Call(readObj, py.Tuple{py.Int(blake2b.BlockSize * 64)}, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
@@ -375,20 +375,20 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 // digestSizeProp and the other properties report the object's own state, so
 // they are properties on the shared hash type rather than per-algorithm data.
 func init() {
-	hashType.Dict["update"] = py.MustNewMethod("update", hashUpdate, 0, "Update this hash object's state with the provided bytes-like object.")
-	hashType.Dict["digest"] = py.MustNewMethod("digest", hashDigest, 0, "Return the digest value as a bytes object.")
-	hashType.Dict["hexdigest"] = py.MustNewMethod("hexdigest", hashHexdigest, 0, "Return the digest value as a string of hexadecimal digits.")
-	hashType.Dict["copy"] = py.MustNewMethod("copy", hashCopy, 0, "Return a copy of the hash object.")
+	hashType.Dict.Set("update", py.MustNewMethod("update", hashUpdate, 0, "Update this hash object's state with the provided bytes-like object."))
+	hashType.Dict.Set("digest", py.MustNewMethod("digest", hashDigest, 0, "Return the digest value as a bytes object."))
+	hashType.Dict.Set("hexdigest", py.MustNewMethod("hexdigest", hashHexdigest, 0, "Return the digest value as a string of hexadecimal digits."))
+	hashType.Dict.Set("copy", py.MustNewMethod("copy", hashCopy, 0, "Return a copy of the hash object."))
 
-	hashType.Dict["name"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	hashType.Dict.Set("name", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.String(self.(*Hash).algo.name), nil
-	}}
-	hashType.Dict["digest_size"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	hashType.Dict.Set("digest_size", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*Hash).h.Size()), nil
-	}}
-	hashType.Dict["block_size"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	hashType.Dict.Set("block_size", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*Hash).algo.blockLen), nil
-	}}
+	}})
 
 	methods := []*py.Method{
 		py.MustNewMethod("new", newFn, 0, "new(name, data=b'', **kwargs) - returns a new hash object implementing the given hash function."),
@@ -407,10 +407,10 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods: methods,
-		Globals: py.StringDict{
-			"algorithms_guaranteed": guaranteed,
-			"algorithms_available":  available,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "algorithms_guaranteed", Value: guaranteed},
+			py.DictEntry{Key: "algorithms_available", Value: available},
+		),
 	})
 }
 

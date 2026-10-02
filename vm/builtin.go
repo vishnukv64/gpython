@@ -41,8 +41,8 @@ func builtinEvalOrExec(ctx py.Context, args py.Tuple, kwargs, currentLocals, cur
 	}
 
 	// Set __builtins__ if not set
-	if _, ok := globalsDict["__builtins__"]; !ok {
-		globalsDict["__builtins__"] = builtins
+	if _, ok := globalsDict.Get("__builtins__"); !ok {
+		globalsDict.Set("__builtins__", builtins)
 	}
 
 	var codeStr string

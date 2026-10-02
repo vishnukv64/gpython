@@ -152,7 +152,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 		}
 		spec.delimiter = s
 	}
-	if v, ok := kwargs["delimiter"]; ok {
+	if v, ok := kwargs.Get("delimiter"); ok {
 		s, err := py.StrAsString(v)
 		if err != nil {
 			return py.ExceptionNewf(py.TypeError, "\"delimiter\" must be a 1-character string")
@@ -173,7 +173,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 			spec.hasQuotechar = true
 		}
 	}
-	if v, ok := kwargs["quotechar"]; ok {
+	if v, ok := kwargs.Get("quotechar"); ok {
 		if v == py.None {
 			spec.quotechar = ""
 			spec.hasQuotechar = false
@@ -200,7 +200,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 			spec.hasEscapechar = true
 		}
 	}
-	if v, ok := kwargs["escapechar"]; ok {
+	if v, ok := kwargs.Get("escapechar"); ok {
 		if v == py.None {
 			spec.escapechar = ""
 			spec.hasEscapechar = false
@@ -222,7 +222,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 			}
 			*dst = b
 		}
-		if v, ok := kwargs[name]; ok {
+		if v, ok := kwargs.Get(name); ok {
 			b, err := py.ObjectIsTrue(v)
 			if err != nil {
 				return err
@@ -248,7 +248,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 		}
 		spec.lineterminator = s
 	}
-	if v, ok := kwargs["lineterminator"]; ok {
+	if v, ok := kwargs.Get("lineterminator"); ok {
 		s, err := py.StrAsString(v)
 		if err != nil {
 			return py.ExceptionNewf(py.TypeError, "\"lineterminator\" must be a string")
@@ -263,7 +263,7 @@ func applySettings(spec *dialectSpec, source py.Object, kwargs py.StringDict) er
 		}
 		spec.quoting = n
 	}
-	if v, ok := kwargs["quoting"]; ok {
+	if v, ok := kwargs.Get("quoting"); ok {
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return py.ExceptionNewf(py.TypeError, "\"quoting\" must be an integer")
@@ -322,7 +322,7 @@ func lookupDialect(arg py.Object) (dialectSpec, error) {
 		return d.spec, nil
 	}
 	spec := defaultDialect()
-	if err := applySettings(&spec, arg, nil); err != nil {
+	if err := applySettings(&spec, arg, py.StringDict{}); err != nil {
 		return dialectSpec{}, err
 	}
 	return spec, nil
@@ -479,7 +479,7 @@ func (w *Writer) writeRowObj(row py.Object) error {
 	if err != nil {
 		return err
 	}
-	_, err = py.Call(write, py.Tuple{py.String(text)}, nil)
+	_, err = py.Call(write, py.Tuple{py.String(text)}, py.StringDict{})
 	return err
 }
 
@@ -545,7 +545,7 @@ func (r *Reader) readOneLine() (string, bool, error) {
 		if err != nil {
 			return "", false, err
 		}
-		line, err = py.Call(readline, py.Tuple{}, nil)
+		line, err = py.Call(readline, py.Tuple{}, py.StringDict{})
 		if err != nil {
 			return "", false, err
 		}
@@ -729,7 +729,7 @@ type sniffer struct{}
 func (s *sniffer) Type() *py.Type { return snifferType }
 
 func snifferNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if len(args) != 0 || len(kwargs) != 0 {
+	if len(args) != 0 || kwargs.Len() != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "Sniffer() takes no arguments")
 	}
 	return &sniffer{}, nil
@@ -858,23 +858,24 @@ func typeName(s string) string {
 
 func readerFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var csvfile py.Object
-	if err := py.UnpackTuple(args, nil, "reader", 1, 1, &csvfile); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "reader", 1, 1, &csvfile); err != nil {
 		return nil, err
 	}
 	var dialect py.Object = py.None
-	if v, ok := kwargs["dialect"]; ok {
+	if v, ok := kwargs.Get("dialect"); ok {
 		dialect = v
 	}
 	spec, err := lookupDialect(dialect)
 	if err != nil {
 		return nil, err
 	}
-	opts := py.StringDict{}
-	for k, v := range kwargs {
+	opts := py.NewStringDict()
+	kwargs.Range(func(k string, v py.Object) bool {
 		if k != "dialect" {
-			opts[k] = v
+			opts.Set(k, v)
 		}
-	}
+		return false
+	})
 	if err := applySettings(&spec, nil, opts); err != nil {
 		return nil, err
 	}
@@ -900,23 +901,24 @@ func hasReadline(o py.Object) bool {
 
 func writerFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var csvfile py.Object
-	if err := py.UnpackTuple(args, nil, "writer", 1, 1, &csvfile); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "writer", 1, 1, &csvfile); err != nil {
 		return nil, err
 	}
 	var dialect py.Object = py.None
-	if v, ok := kwargs["dialect"]; ok {
+	if v, ok := kwargs.Get("dialect"); ok {
 		dialect = v
 	}
 	spec, err := lookupDialect(dialect)
 	if err != nil {
 		return nil, err
 	}
-	opts := py.StringDict{}
-	for k, v := range kwargs {
+	opts := py.NewStringDict()
+	kwargs.Range(func(k string, v py.Object) bool {
 		if k != "dialect" {
-			opts[k] = v
+			opts.Set(k, v)
 		}
-	}
+		return false
+	})
 	if err := applySettings(&spec, nil, opts); err != nil {
 		return nil, err
 	}
@@ -925,7 +927,7 @@ func writerFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 
 func registerDialectFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var dialect py.Object
-	if err := py.UnpackTuple(args, nil, "register_dialect", 1, 1, &dialect); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "register_dialect", 1, 1, &dialect); err != nil {
 		return nil, err
 	}
 	name, err := py.StrAsString(dialect)
@@ -947,7 +949,7 @@ func registerDialectFn(self py.Object, args py.Tuple) (py.Object, error) {
 
 func getDialectFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var dialect py.Object
-	if err := py.UnpackTuple(args, nil, "get_dialect", 1, 1, &dialect); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "get_dialect", 1, 1, &dialect); err != nil {
 		return nil, err
 	}
 	name, err := py.StrAsString(dialect)
@@ -968,7 +970,7 @@ func dialectObject(spec dialectSpec) py.Object {
 }
 
 func listDialectsFn(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := py.UnpackTuple(args, nil, "list_dialects", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "list_dialects", 0, 0); err != nil {
 		return nil, err
 	}
 	names := make([]string, 0, len(registered))
@@ -979,7 +981,7 @@ func listDialectsFn(self py.Object, args py.Tuple) (py.Object, error) {
 }
 
 func fieldSizeLimitFn(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := py.UnpackTuple(args, nil, "field_size_limit", 0, 0); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "field_size_limit", 0, 0); err != nil {
 		return nil, err
 	}
 	return py.Int(131072), nil
@@ -1005,7 +1007,7 @@ func init() {
 	for _, attr := range dialectAttrs {
 		name := attr.name
 		isStr := attr.isStr
-		dialectType.Dict[name] = &py.Property{
+		dialectType.Dict.Set(name, &py.Property{
 			Fget: func(self py.Object) (py.Object, error) {
 				d := self.(*Dialect)
 				switch name {
@@ -1084,26 +1086,26 @@ func init() {
 				}
 				return nil
 			},
-		}
+		})
 	}
 
 	// writer: writerow / writerows
 	writerType = py.NewTypeX("csv.writer", "CSV writer", nil, nil)
-	writerType.Dict["writerow"] = py.MustNewMethod("writerow", func(self py.Object, args py.Tuple) (py.Object, error) {
+	writerType.Dict.Set("writerow", py.MustNewMethod("writerow", func(self py.Object, args py.Tuple) (py.Object, error) {
 		w := self.(*Writer)
 		var row py.Object
-		if err := py.UnpackTuple(args, nil, "writerow", 1, 1, &row); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "writerow", 1, 1, &row); err != nil {
 			return nil, err
 		}
 		if err := w.writeRowObj(row); err != nil {
 			return nil, err
 		}
 		return py.None, nil
-	}, 0, "writerow(iterable)\n\nWrite a single row to the writer's file.")
-	writerType.Dict["writerows"] = py.MustNewMethod("writerows", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "writerow(iterable)\n\nWrite a single row to the writer's file."))
+	writerType.Dict.Set("writerows", py.MustNewMethod("writerows", func(self py.Object, args py.Tuple) (py.Object, error) {
 		w := self.(*Writer)
 		var rows py.Object
-		if err := py.UnpackTuple(args, nil, "writerows", 1, 1, &rows); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "writerows", 1, 1, &rows); err != nil {
 			return nil, err
 		}
 		it, err := py.Iter(rows)
@@ -1125,17 +1127,17 @@ func init() {
 			}
 		}
 		return py.None, nil
-	}, 0, "writerows(iterable of iterables)\n\nWrite a sequence of rows to the writer's file.")
-	writerType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "writerows(iterable of iterables)\n\nWrite a sequence of rows to the writer's file."))
+	writerType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "The writer is its own iterator.")
+	}, 0, "The writer is its own iterator."))
 
 	// reader: __iter__ / __next__ are defined on the type below.
 	readerType = py.NewTypeX("csv.reader", "CSV reader", nil, nil)
 
-	snifferType.Dict["sniff"] = py.MustNewMethod("sniff", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	snifferType.Dict.Set("sniff", py.MustNewMethod("sniff", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		var sample py.Object
-		if err := py.UnpackTuple(args, nil, "sniff", 1, 1, &sample); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "sniff", 1, 1, &sample); err != nil {
 			return nil, err
 		}
 		s, err := py.StrAsString(sample)
@@ -1147,10 +1149,10 @@ func init() {
 			return nil, err
 		}
 		return dialectObject(spec), nil
-	}, 0, "sniff(sample, [delimiters]) -> Dialect\n\nAnalyse the sample and return a Dialect that describes its format.")
-	snifferType.Dict["has_header"] = py.MustNewMethod("has_header", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "sniff(sample, [delimiters]) -> Dialect\n\nAnalyse the sample and return a Dialect that describes its format."))
+	snifferType.Dict.Set("has_header", py.MustNewMethod("has_header", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var sample py.Object
-		if err := py.UnpackTuple(args, nil, "has_header", 1, 1, &sample); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "has_header", 1, 1, &sample); err != nil {
 			return nil, err
 		}
 		s, err := py.StrAsString(sample)
@@ -1162,7 +1164,7 @@ func init() {
 			return nil, err
 		}
 		return py.NewBool(hasHeader(s, spec)), nil
-	}, 0, "has_header(sample) -> bool\n\nAnalyse the sample text to determine if the first row is a header.")
+	}, 0, "has_header(sample) -> bool\n\nAnalyse the sample text to determine if the first row is a header."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -1175,7 +1177,7 @@ func init() {
 			py.MustNewMethod("register_dialect", registerDialectFn, 0, "Create a mapping from a string name to a dialect class."),
 			py.MustNewMethod("unregister_dialect", func(self py.Object, args py.Tuple) (py.Object, error) {
 				var dialect py.Object
-				if err := py.UnpackTuple(args, nil, "unregister_dialect", 1, 1, &dialect); err != nil {
+				if err := py.UnpackTuple(args, py.StringDict{}, "unregister_dialect", 1, 1, &dialect); err != nil {
 					return nil, err
 				}
 				name, err := py.StrAsString(dialect)
@@ -1194,18 +1196,18 @@ func init() {
 			py.MustNewMethod("list_dialects", listDialectsFn, 0, "Return a list of all know dialect names.\nnames = csv.list_dialects()"),
 			py.MustNewMethod("field_size_limit", fieldSizeLimitFn, 0, "Sets an upper limit on parsed fields.\n    csv.field_size_limit([limit])"),
 		},
-		Globals: py.StringDict{
-			"Error":            csvError,
-			"Dialect":          dialectType,
-			"Sniffer":          snifferType,
-			"excel":            dialectObject(defaultDialect()),
-			"excel_tab":        dialectObject(tabDialect()),
-			"QUOTE_MINIMAL":    py.Int(quoteMinimal),
-			"QUOTE_ALL":        py.Int(quoteAll),
-			"QUOTE_NONNUMERIC": py.Int(quoteNonNumeric),
-			"QUOTE_NONE":       py.Int(quoteNone),
-			"__version__":      py.String("1.0"),
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "Error", Value: csvError},
+			py.DictEntry{Key: "Dialect", Value: dialectType},
+			py.DictEntry{Key: "Sniffer", Value: snifferType},
+			py.DictEntry{Key: "excel", Value: dialectObject(defaultDialect())},
+			py.DictEntry{Key: "excel_tab", Value: dialectObject(tabDialect())},
+			py.DictEntry{Key: "QUOTE_MINIMAL", Value: py.Int(quoteMinimal)},
+			py.DictEntry{Key: "QUOTE_ALL", Value: py.Int(quoteAll)},
+			py.DictEntry{Key: "QUOTE_NONNUMERIC", Value: py.Int(quoteNonNumeric)},
+			py.DictEntry{Key: "QUOTE_NONE", Value: py.Int(quoteNone)},
+			py.DictEntry{Key: "__version__", Value: py.String("1.0")},
+		),
 	})
 }
 
@@ -1236,13 +1238,13 @@ var (
 )
 
 func init() {
-	readerType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	readerType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "The reader is its own iterator.")
-	readerType.Dict["__next__"] = py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "The reader is its own iterator."))
+	readerType.Dict.Set("__next__", py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*Reader).M__next__()
-	}, 0, "Return the next row of the CSV file.")
-	readerType.Dict["line_num"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}, 0, "Return the next row of the CSV file."))
+	readerType.Dict.Set("line_num", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(0), nil
-	}}
+	}})
 }

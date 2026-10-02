@@ -45,7 +45,7 @@ func (c *ClassMethod) GetDict() StringDict {
 // ClassMethodNew
 func ClassMethodNew(metatype *Type, args Tuple, kwargs StringDict) (res Object, err error) {
 	c := &ClassMethod{
-		Dict: make(StringDict),
+		Dict: NewStringDict(),
 	}
 	err = UnpackTuple(args, kwargs, "classmethod", 1, 1, &c.Callable)
 	if err != nil {
@@ -64,11 +64,11 @@ func (c *ClassMethod) M__get__(instance, owner Object) (Object, error) {
 
 // Properties
 func init() {
-	ClassMethodType.Dict["__func__"] = &Property{
+	ClassMethodType.Dict.Set("__func__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*ClassMethod).Callable, nil
 		},
-	}
+	})
 }
 
 // Check interface is satisfied

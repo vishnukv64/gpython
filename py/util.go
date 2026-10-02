@@ -212,7 +212,7 @@ func Println(self Object, args ...string) bool {
 	if err != nil {
 		return false
 	}
-	stdout := sysModule.Globals["stdout"]
+	stdout := sysModule.Globals.GetOrNil("stdout")
 	write, err := GetAttrString(stdout, "write")
 	if err != nil {
 		return false
@@ -225,12 +225,12 @@ func Println(self Object, args ...string) bool {
 		if !strings.Contains(v, "\n") {
 			v += " "
 		}
-		_, err := call.M__call__(Tuple{String(v)}, nil)
+		_, err := call.M__call__(Tuple{String(v)}, NewStringDict())
 		if err != nil {
 			return false
 		}
 
 	}
-	_, err = call.M__call__(Tuple{String("\n")}, nil) // newline
+	_, err = call.M__call__(Tuple{String("\n")}, NewStringDict()) // newline
 	return err == nil
 }

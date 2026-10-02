@@ -50,7 +50,7 @@ func init() {
 
 	// close/closed/flush are common to every stream, so they live on the
 	// base class and the concrete types override what they need to.
-	IOBaseType.Dict["closed"] = &py.Property{
+	IOBaseType.Dict.Set("closed", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			if c, ok := self.(py.I__enter__); ok {
 				_ = c
@@ -60,58 +60,58 @@ func init() {
 			}
 			return py.False, nil
 		},
-	}
-	IOBaseType.Dict["close"] = py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
+	})
+	IOBaseType.Dict.Set("close", py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if s, ok := self.(interface{ doClose() error }); ok {
 			if err := s.doClose(); err != nil {
 				return nil, err
 			}
 		}
 		return py.None, nil
-	}, 0, "Flush and close this stream.")
-	IOBaseType.Dict["flush"] = py.MustNewMethod("flush", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Flush and close this stream."))
+	IOBaseType.Dict.Set("flush", py.MustNewMethod("flush", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.None, nil
-	}, 0, "Flush the write buffers of the stream if applicable.")
-	IOBaseType.Dict["seekable"] = py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Flush the write buffers of the stream if applicable."))
+	IOBaseType.Dict.Set("seekable", py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Return whether the stream supports random access.")
-	IOBaseType.Dict["readable"] = py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return whether the stream supports random access."))
+	IOBaseType.Dict.Set("readable", py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Return whether the stream can be read.")
-	IOBaseType.Dict["writable"] = py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return whether the stream can be read."))
+	IOBaseType.Dict.Set("writable", py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "Return whether the stream can be written.")
-	IOBaseType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return whether the stream can be written."))
+	IOBaseType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the stream itself.")
-	IOBaseType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the stream itself."))
+	IOBaseType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		if s, ok := self.(interface{ doClose() error }); ok {
 			if err := s.doClose(); err != nil {
 				return nil, err
 			}
 		}
 		return py.False, nil
-	}, 0, "Close the stream.")
+	}, 0, "Close the stream."))
 
-	globals := py.StringDict{
-		"IOBase":               IOBaseType,
-		"RawIOBase":            RawIOBaseType,
-		"BufferedIOBase":       BufferedIOBaseType,
-		"TextIOBase":           TextIOBaseType,
-		"BytesIO":              BytesIOType,
-		"StringIO":             StringIOType,
-		"UnsupportedOperation": UnsupportedOperationType,
-		"SEEK_SET":             py.Int(0),
-		"SEEK_CUR":             py.Int(1),
-		"SEEK_END":             py.Int(2),
-		"DEFAULT_BUFFER_SIZE":  py.Int(8192),
-		"BufferedReader":       RawIOBaseType,
-		"BufferedWriter":       RawIOBaseType,
-		"BufferedRandom":       RawIOBaseType,
-		"TextIOWrapper":        TextIOBaseType,
-		"FileIO":               RawIOBaseType,
-		"open":                 py.MustNewMethod("open", pyOpen, 0, "Open a file and return a stream."),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "IOBase", Value: IOBaseType},
+		py.DictEntry{Key: "RawIOBase", Value: RawIOBaseType},
+		py.DictEntry{Key: "BufferedIOBase", Value: BufferedIOBaseType},
+		py.DictEntry{Key: "TextIOBase", Value: TextIOBaseType},
+		py.DictEntry{Key: "BytesIO", Value: BytesIOType},
+		py.DictEntry{Key: "StringIO", Value: StringIOType},
+		py.DictEntry{Key: "UnsupportedOperation", Value: UnsupportedOperationType},
+		py.DictEntry{Key: "SEEK_SET", Value: py.Int(0)},
+		py.DictEntry{Key: "SEEK_CUR", Value: py.Int(1)},
+		py.DictEntry{Key: "SEEK_END", Value: py.Int(2)},
+		py.DictEntry{Key: "DEFAULT_BUFFER_SIZE", Value: py.Int(8192)},
+		py.DictEntry{Key: "BufferedReader", Value: RawIOBaseType},
+		py.DictEntry{Key: "BufferedWriter", Value: RawIOBaseType},
+		py.DictEntry{Key: "BufferedRandom", Value: RawIOBaseType},
+		py.DictEntry{Key: "TextIOWrapper", Value: TextIOBaseType},
+		py.DictEntry{Key: "FileIO", Value: RawIOBaseType},
+		py.DictEntry{Key: "open", Value: py.MustNewMethod("open", pyOpen, 0, "Open a file and return a stream.")},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -208,13 +208,13 @@ func (b *BytesIO) readBytes(n int) []byte {
 }
 
 func init() {
-	BytesIOType.Dict["read"] = py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("read", py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		size := py.Object(py.Int(-1))
-		if err := py.UnpackTuple(args, nil, "read", 0, 1, &size); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "read", 0, 1, &size); err != nil {
 			return nil, err
 		}
 		n, err := py.IndexInt(size)
@@ -222,11 +222,11 @@ func init() {
 			return nil, err
 		}
 		return py.Bytes(b.readBytes(n)), nil
-	}, 0, "Read up to size bytes.")
+	}, 0, "Read up to size bytes."))
 
-	BytesIOType.Dict["read1"] = BytesIOType.Dict["read"]
+	BytesIOType.Dict.Set("read1", BytesIOType.Dict.GetOrNil("read"))
 
-	BytesIOType.Dict["readline"] = py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("readline", py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
@@ -239,9 +239,9 @@ func init() {
 			return py.Bytes(b.readBytes(-1)), nil
 		}
 		return py.Bytes(b.readBytes(idx + 1)), nil
-	}, 0, "Read one line.")
+	}, 0, "Read one line."))
 
-	BytesIOType.Dict["readlines"] = py.MustNewMethod("readlines", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("readlines", py.MustNewMethod("readlines", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
@@ -259,15 +259,15 @@ func init() {
 			items = append(items, py.Bytes(b.readBytes(idx+1)))
 		}
 		return py.NewListFromItems(items), nil
-	}, 0, "Read all lines into a list.")
+	}, 0, "Read all lines into a list."))
 
-	BytesIOType.Dict["readinto"] = py.MustNewMethod("readinto", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("readinto", py.MustNewMethod("readinto", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		var target py.Object
-		if err := py.UnpackTuple(args, nil, "readinto", 1, 1, &target); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "readinto", 1, 1, &target); err != nil {
 			return nil, err
 		}
 		// bytearray does not exist in this interpreter, so there is no
@@ -275,15 +275,15 @@ func init() {
 		// the argument and doing nothing.
 		_ = target
 		return nil, py.ExceptionNewf(UnsupportedOperationType, "readinto() needs a preallocated writable buffer, and bytearray is not available here")
-	}, 0, "Read bytes into a preallocated buffer.")
+	}, 0, "Read bytes into a preallocated buffer."))
 
-	BytesIOType.Dict["write"] = py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("write", py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		var value py.Object
-		if err := py.UnpackTuple(args, nil, "write", 1, 1, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "write", 1, 1, &value); err != nil {
 			return nil, err
 		}
 		var chunk []byte
@@ -304,9 +304,9 @@ func init() {
 		copy(b.data[b.pos:], chunk)
 		b.pos += len(chunk)
 		return py.Int(len(chunk)), nil
-	}, 0, "Write bytes to the buffer.")
+	}, 0, "Write bytes to the buffer."))
 
-	BytesIOType.Dict["getvalue"] = py.MustNewMethod("getvalue", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("getvalue", py.MustNewMethod("getvalue", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
@@ -314,16 +314,16 @@ func init() {
 		out := make([]byte, len(b.data))
 		copy(out, b.data)
 		return py.Bytes(out), nil
-	}, 0, "Return the bytes the buffer holds.")
+	}, 0, "Return the bytes the buffer holds."))
 
-	BytesIOType.Dict["seek"] = py.MustNewMethod("seek", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("seek", py.MustNewMethod("seek", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		var offset py.Object
 		whence := py.Object(py.Int(0))
-		if err := py.UnpackTuple(args, nil, "seek", 1, 2, &offset, &whence); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "seek", 1, 2, &offset, &whence); err != nil {
 			return nil, err
 		}
 		off, err := py.IndexInt(offset)
@@ -350,23 +350,23 @@ func init() {
 		}
 		b.pos = newPos
 		return py.Int(b.pos), nil
-	}, 0, "Change the stream position.")
+	}, 0, "Change the stream position."))
 
-	BytesIOType.Dict["tell"] = py.MustNewMethod("tell", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("tell", py.MustNewMethod("tell", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		return py.Int(b.pos), nil
-	}, 0, "Return the current stream position.")
+	}, 0, "Return the current stream position."))
 
-	BytesIOType.Dict["truncate"] = py.MustNewMethod("truncate", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("truncate", py.MustNewMethod("truncate", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
 		}
 		size := py.Object(py.None)
-		if err := py.UnpackTuple(args, nil, "truncate", 0, 1, &size); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "truncate", 0, 1, &size); err != nil {
 			return nil, err
 		}
 		n := b.pos
@@ -381,9 +381,9 @@ func init() {
 			b.data = b.data[:n]
 		}
 		return py.Int(len(b.data)), nil
-	}, 0, "Truncate the buffer.")
+	}, 0, "Truncate the buffer."))
 
-	BytesIOType.Dict["getbuffer"] = py.MustNewMethod("getbuffer", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("getbuffer", py.MustNewMethod("getbuffer", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
@@ -391,27 +391,27 @@ func init() {
 		out := make([]byte, len(b.data))
 		copy(out, b.data)
 		return py.Bytes(out), nil
-	}, 0, "Return a readable view of the buffer.")
+	}, 0, "Return a readable view of the buffer."))
 
-	BytesIOType.Dict["readable"] = py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	BytesIOType.Dict.Set("readable", py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A BytesIO is always readable.")
-	BytesIOType.Dict["writable"] = py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A BytesIO is always readable."))
+	BytesIOType.Dict.Set("writable", py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A BytesIO is always writable.")
-	BytesIOType.Dict["seekable"] = py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A BytesIO is always writable."))
+	BytesIOType.Dict.Set("seekable", py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A BytesIO is always seekable.")
-	BytesIOType.Dict["isatty"] = py.MustNewMethod("isatty", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A BytesIO is always seekable."))
+	BytesIOType.Dict.Set("isatty", py.MustNewMethod("isatty", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "A BytesIO is never a terminal.")
-	BytesIOType.Dict["fileno"] = py.MustNewMethod("fileno", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A BytesIO is never a terminal."))
+	BytesIOType.Dict.Set("fileno", py.MustNewMethod("fileno", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, py.ExceptionNewf(UnsupportedOperationType, "fileno")
-	}, 0, "An in-memory stream has no file descriptor.")
-	BytesIOType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "An in-memory stream has no file descriptor."))
+	BytesIOType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Iterate over the lines.")
-	BytesIOType.Dict["__next__"] = py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Iterate over the lines."))
+	BytesIOType.Dict.Set("__next__", py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		if err := b.checkOpen(); err != nil {
 			return nil, err
@@ -424,11 +424,11 @@ func init() {
 			return py.Bytes(b.readBytes(-1)), nil
 		}
 		return py.Bytes(b.readBytes(idx + 1)), nil
-	}, 0, "Return the next line.")
-	BytesIOType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the next line."))
+	BytesIOType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		b := self.(*BytesIO)
 		return py.String("<_io.BytesIO at " + reprAddr(b) + ">"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -503,13 +503,13 @@ func (s *StringIO) writeAt(text string) {
 }
 
 func init() {
-	StringIOType.Dict["write"] = py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("write", py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		var value py.Object
-		if err := py.UnpackTuple(args, nil, "write", 1, 1, &value); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "write", 1, 1, &value); err != nil {
 			return nil, err
 		}
 		text, err := py.StrAsString(value)
@@ -518,15 +518,15 @@ func init() {
 		}
 		s.writeAt(text)
 		return py.Int(len(text)), nil
-	}, 0, "Write a string to the buffer.")
+	}, 0, "Write a string to the buffer."))
 
-	StringIOType.Dict["read"] = py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("read", py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		size := py.Object(py.Int(-1))
-		if err := py.UnpackTuple(args, nil, "read", 0, 1, &size); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "read", 0, 1, &size); err != nil {
 			return nil, err
 		}
 		n, err := py.IndexInt(size)
@@ -543,9 +543,9 @@ func init() {
 		out := full[s.pos : s.pos+n]
 		s.pos += n
 		return py.String(out), nil
-	}, 0, "Read up to size characters.")
+	}, 0, "Read up to size characters."))
 
-	StringIOType.Dict["readline"] = py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("readline", py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
@@ -563,16 +563,16 @@ func init() {
 		out := full[s.pos : s.pos+idx+1]
 		s.pos += idx + 1
 		return py.String(out), nil
-	}, 0, "Read one line.")
+	}, 0, "Read one line."))
 
-	StringIOType.Dict["readlines"] = py.MustNewMethod("readlines", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("readlines", py.MustNewMethod("readlines", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		items := []py.Object{}
 		for {
-			line, err := StringIOType.Dict["readline"].(*py.Method).Call(self, py.Tuple{})
+			line, err := StringIOType.Dict.GetOrNil("readline").(*py.Method).Call(self, py.Tuple{})
 			if err != nil {
 				return nil, err
 			}
@@ -582,24 +582,24 @@ func init() {
 			items = append(items, line)
 		}
 		return py.NewListFromItems(items), nil
-	}, 0, "Read all lines into a list.")
+	}, 0, "Read all lines into a list."))
 
-	StringIOType.Dict["getvalue"] = py.MustNewMethod("getvalue", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("getvalue", py.MustNewMethod("getvalue", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		return py.String(s.text()), nil
-	}, 0, "Return the string the buffer holds.")
+	}, 0, "Return the string the buffer holds."))
 
-	StringIOType.Dict["seek"] = py.MustNewMethod("seek", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("seek", py.MustNewMethod("seek", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		var offset py.Object
 		whence := py.Object(py.Int(0))
-		if err := py.UnpackTuple(args, nil, "seek", 1, 2, &offset, &whence); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "seek", 1, 2, &offset, &whence); err != nil {
 			return nil, err
 		}
 		off, err := py.IndexInt(offset)
@@ -624,23 +624,23 @@ func init() {
 			return nil, py.ExceptionNewf(py.ValueError, "negative seek position %d", s.pos)
 		}
 		return py.Int(s.pos), nil
-	}, 0, "Change the stream position.")
+	}, 0, "Change the stream position."))
 
-	StringIOType.Dict["tell"] = py.MustNewMethod("tell", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("tell", py.MustNewMethod("tell", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		return py.Int(s.pos), nil
-	}, 0, "Return the current stream position.")
+	}, 0, "Return the current stream position."))
 
-	StringIOType.Dict["truncate"] = py.MustNewMethod("truncate", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("truncate", py.MustNewMethod("truncate", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {
 			return nil, err
 		}
 		size := py.Object(py.None)
-		if err := py.UnpackTuple(args, nil, "truncate", 0, 1, &size); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "truncate", 0, 1, &size); err != nil {
 			return nil, err
 		}
 		n := s.pos
@@ -657,25 +657,25 @@ func init() {
 			s.data.WriteString(full[:n])
 		}
 		return py.Int(n), nil
-	}, 0, "Truncate the buffer.")
+	}, 0, "Truncate the buffer."))
 
-	StringIOType.Dict["readable"] = py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	StringIOType.Dict.Set("readable", py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A StringIO is always readable.")
-	StringIOType.Dict["writable"] = py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A StringIO is always readable."))
+	StringIOType.Dict.Set("writable", py.MustNewMethod("writable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A StringIO is always writable.")
-	StringIOType.Dict["seekable"] = py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A StringIO is always writable."))
+	StringIOType.Dict.Set("seekable", py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
-	}, 0, "A StringIO is always seekable.")
-	StringIOType.Dict["isatty"] = py.MustNewMethod("isatty", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A StringIO is always seekable."))
+	StringIOType.Dict.Set("isatty", py.MustNewMethod("isatty", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
-	}, 0, "A StringIO is never a terminal.")
-	StringIOType.Dict["__iter__"] = py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "A StringIO is never a terminal."))
+	StringIOType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Iterate over the lines.")
-	StringIOType.Dict["__next__"] = py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		line, err := StringIOType.Dict["readline"].(*py.Method).Call(self, py.Tuple{})
+	}, 0, "Iterate over the lines."))
+	StringIOType.Dict.Set("__next__", py.MustNewMethod("__next__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		line, err := StringIOType.Dict.GetOrNil("readline").(*py.Method).Call(self, py.Tuple{})
 		if err != nil {
 			return nil, err
 		}
@@ -683,10 +683,10 @@ func init() {
 			return nil, py.StopIteration
 		}
 		return line, nil
-	}, 0, "Return the next line.")
-	StringIOType.Dict["__repr__"] = py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the next line."))
+	StringIOType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.String("<_io.StringIO at " + reprAddr(self) + ">"), nil
-	}, 0, "Return repr(self).")
+	}, 0, "Return repr(self)."))
 }
 
 // ---------------------------------------------------------------------------
@@ -714,33 +714,33 @@ func reprAddr(obj py.Object) string {
 // instance here, so the concrete type carries its own.
 func init() {
 	for _, t := range []*py.Type{BytesIOType, StringIOType} {
-		t.Dict["closed"] = &py.Property{
+		t.Dict.Set("closed", &py.Property{
 			Fget: func(self py.Object) (py.Object, error) {
 				if c, ok := self.(interface{ isClosed() bool }); ok {
 					return py.NewBool(c.isClosed()), nil
 				}
 				return py.False, nil
 			},
-		}
-		t.Dict["close"] = py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
+		})
+		t.Dict.Set("close", py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
 			if c, ok := self.(interface{ doClose() error }); ok {
 				if err := c.doClose(); err != nil {
 					return nil, err
 				}
 			}
 			return py.None, nil
-		}, 0, "Close the stream.")
-		t.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Close the stream."))
+		t.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return self, nil
-		}, 0, "Return the stream itself.")
-		t.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}, 0, "Return the stream itself."))
+		t.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 			if c, ok := self.(interface{ doClose() error }); ok {
 				if err := c.doClose(); err != nil {
 					return nil, err
 				}
 			}
 			return py.False, nil
-		}, 0, "Close the stream.")
+		}, 0, "Close the stream."))
 	}
 }
 
@@ -777,7 +777,7 @@ func (b *BytesIO) M__exit__(excType, excValue, traceback py.Object) (py.Object, 
 func (s *StringIO) M__iter__() (py.Object, error) { return s, nil }
 
 func (s *StringIO) M__next__() (py.Object, error) {
-	line, err := StringIOType.Dict["readline"].(*py.Method).Call(s, py.Tuple{})
+	line, err := StringIOType.Dict.GetOrNil("readline").(*py.Method).Call(s, py.Tuple{})
 	if err != nil {
 		return nil, err
 	}

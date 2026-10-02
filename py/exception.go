@@ -106,7 +106,7 @@ var (
 
 func init() {
 	var err error
-	NotImplemented, err = ExceptionNew(NotImplementedError, nil, nil)
+	NotImplemented, err = ExceptionNew(NotImplementedError, nil, NewStringDict())
 	if err != nil {
 		log.Fatalf("Failed to make NotImplemented")
 	}
@@ -138,8 +138,8 @@ func (e *Exception) Error() string {
 		}
 	}
 	// FIXME Print out special stuff for things which look like SyntaxErrors
-	if e.Dict["lineno"] != nil {
-		message = fmt.Sprintf("\n  File \"%v\", line %v, offset %v\n    %s\n\n", e.Dict["filename"], e.Dict["lineno"], e.Dict["offset"], e.Dict["line"]) + message
+	if e.Dict.GetOrNil("lineno") != nil {
+		message = fmt.Sprintf("\n  File \"%v\", line %v, offset %v\n    %s\n\n", e.Dict.GetOrNil("filename"), e.Dict.GetOrNil("lineno"), e.Dict.GetOrNil("offset"), e.Dict.GetOrNil("line")) + message
 	}
 	return message
 }
@@ -176,13 +176,13 @@ func exceptionNew(metatype *Type, args Tuple) *Exception {
 	return &Exception{
 		Base: metatype,
 		Args: args.Copy(),
-		Dict: make(StringDict),
+		Dict: NewStringDict(),
 	}
 }
 
 // ExceptionNew
 func ExceptionNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		// FIXME this causes an initialization loop
 		// return nil, ExceptionNewf(TypeError, "%s does not take keyword arguments", metatype.Name)
 		return nil, fmt.Errorf("TypeError: %s does not take keyword arguments", metatype.Name)
@@ -196,7 +196,7 @@ func ExceptionNewf(metatype *Type, format string, a ...interface{}) *Exception {
 	return &Exception{
 		Base: metatype,
 		Args: Tuple{String(message)},
-		Dict: make(StringDict),
+		Dict: NewStringDict(),
 	}
 }
 
@@ -246,10 +246,10 @@ func MakeSyntaxError(r interface{}, filename string, lineno int, offset int, lin
 	// FIXME add more stuff to make it a SyntaxError!
 	// see Python/errors.c PyErr_SyntaxLocationObject
 	e := MakeException(r)
-	e.Dict["filename"] = String(filename)
-	e.Dict["lineno"] = Int(lineno)
-	e.Dict["offset"] = Int(offset)
-	e.Dict["line"] = String(line)
+	e.Dict.Set("filename", String(filename))
+	e.Dict.Set("lineno", Int(lineno))
+	e.Dict.Set("offset", Int(offset))
+	e.Dict.Set("line", String(line))
 	return e
 }
 
@@ -464,7 +464,7 @@ func init() {
 	// reachable before only by accident, because M__getattr__ answered every
 	// name with the argument tuple; now that unknown names raise, it has to
 	// be registered.
-	BaseException.Dict["args"] = &Property{
+	BaseException.Dict.Set("args", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Exception).Args, nil
 		},
@@ -472,19 +472,19 @@ func init() {
 			self.(*Exception).Args = value
 			return nil
 		},
-	}
+	})
 
-	BaseException.Dict["with_traceback"] = MustNewMethod("with_traceback", func(self Object, args Tuple) (Object, error) {
+	BaseException.Dict.Set("with_traceback", MustNewMethod("with_traceback", func(self Object, args Tuple) (Object, error) {
 		return self.(*Exception).M__with_traceback(args)
 	}, 1, `with_traceback(tb) -> set the traceback and return self.
 
 A traceback is not a Python object here, so tb is accepted and ignored: the
 interpreter builds its own when the exception propagates.  Idiomatic code
-uses this to CLEAR a traceback with None.`)
+uses this to CLEAR a traceback with None.`))
 
 	setErrno := func(self Object) (Object, error) {
 		if e, ok := self.(*Exception); ok {
-			if v, ok := e.Dict["errno"]; ok {
+			if v, ok := e.Dict.Get("errno"); ok {
 				return v, nil
 			}
 		}
@@ -492,31 +492,31 @@ uses this to CLEAR a traceback with None.`)
 	}
 	setStrerror := func(self Object) (Object, error) {
 		if e, ok := self.(*Exception); ok {
-			if v, ok := e.Dict["strerror"]; ok {
+			if v, ok := e.Dict.Get("strerror"); ok {
 				return v, nil
 			}
 		}
 		return None, nil
 	}
-	OSError.Dict["errno"] = &Property{Fget: setErrno}
-	OSError.Dict["strerror"] = &Property{Fget: setStrerror}
-	OSError.Dict["filename"] = &Property{Fget: func(self Object) (Object, error) {
+	OSError.Dict.Set("errno", &Property{Fget: setErrno})
+	OSError.Dict.Set("strerror", &Property{Fget: setStrerror})
+	OSError.Dict.Set("filename", &Property{Fget: func(self Object) (Object, error) {
 		if e, ok := self.(*Exception); ok {
-			if v, ok := e.Dict["filename"]; ok {
+			if v, ok := e.Dict.Get("filename"); ok {
 				return v, nil
 			}
 		}
 		return None, nil
-	}}
+	}})
 
 	// SetErrno records an errno on an OSError, which is what the operating
 	// system wrappers in the standard library use.
 	SetErrno = func(e *Exception, errno int, strerror string) {
-		if e.Dict == nil {
-			e.Dict = make(StringDict)
+		if e.Dict.IsNil() {
+			e.Dict = NewStringDict()
 		}
-		e.Dict["errno"] = Int(errno)
-		e.Dict["strerror"] = String(strerror)
+		e.Dict.Set("errno", Int(errno))
+		e.Dict.Set("strerror", String(strerror))
 	}
 }
 

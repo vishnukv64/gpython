@@ -79,16 +79,16 @@ var pathImpl = &py.ModuleImpl{
 // pathGlobals holds the constants, and is attached before registration so
 // that the module os.path resolves to has them: a Globals map built later in
 // init() was never seen.
-var pathGlobals = py.StringDict{
-	"sep":     osSep,
-	"altsep":  osAltsep,
-	"pathsep": osPathsep,
-	"curdir":  py.String("."),
-	"pardir":  py.String(".."),
-	"extsep":  py.String("."),
-	"defpath": osDefpath,
-	"devnull": osDevnull,
-}
+var pathGlobals = py.NewStringDictFrom(
+	py.DictEntry{Key: "sep", Value: osSep},
+	py.DictEntry{Key: "altsep", Value: osAltsep},
+	py.DictEntry{Key: "pathsep", Value: osPathsep},
+	py.DictEntry{Key: "curdir", Value: py.String(".")},
+	py.DictEntry{Key: "pardir", Value: py.String("..")},
+	py.DictEntry{Key: "extsep", Value: py.String(".")},
+	py.DictEntry{Key: "defpath", Value: osDefpath},
+	py.DictEntry{Key: "devnull", Value: osDevnull},
+)
 
 var pathRegistered = func() bool {
 	pathImpl.Globals = pathGlobals
@@ -123,16 +123,16 @@ func unusedInit() {
 		py.MustNewMethod("samefile", pathSamefile, 0, "samefile(f1, f2) -> Test whether two pathnames reference the same actual file."),
 	}
 
-	globals := py.StringDict{
-		"sep":     sep,
-		"altsep":  osAltsep,
-		"pathsep": osPathsep,
-		"curdir":  py.String("."),
-		"pardir":  py.String(".."),
-		"extsep":  py.String("."),
-		"defpath": osDefpath,
-		"devnull": osDevnull,
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "sep", Value: sep},
+		py.DictEntry{Key: "altsep", Value: osAltsep},
+		py.DictEntry{Key: "pathsep", Value: osPathsep},
+		py.DictEntry{Key: "curdir", Value: py.String(".")},
+		py.DictEntry{Key: "pardir", Value: py.String("..")},
+		py.DictEntry{Key: "extsep", Value: py.String(".")},
+		py.DictEntry{Key: "defpath", Value: osDefpath},
+		py.DictEntry{Key: "devnull", Value: osDevnull},
+	)
 
 	// The module is registered under both names a program may import, and
 	// the same object is what os.path is bound to.

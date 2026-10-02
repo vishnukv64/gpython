@@ -42,7 +42,7 @@ func (c *StaticMethod) GetDict() StringDict {
 // StaticMethodNew
 func StaticMethodNew(metatype *Type, args Tuple, kwargs StringDict) (res Object, err error) {
 	c := &StaticMethod{
-		Dict: make(StringDict),
+		Dict: NewStringDict(),
 	}
 	err = UnpackTuple(args, kwargs, "staticmethod", 1, 1, &c.Callable)
 	if err != nil {
@@ -58,11 +58,11 @@ func (c *StaticMethod) M__get__(instance, owner Object) (Object, error) {
 
 // Properties
 func init() {
-	StaticMethodType.Dict["__func__"] = &Property{
+	StaticMethodType.Dict.Set("__func__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*StaticMethod).Callable, nil
 		},
-	}
+	})
 }
 
 // Check interface is satisfied

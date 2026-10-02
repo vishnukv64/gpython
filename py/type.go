@@ -182,14 +182,14 @@ type Type struct {
 var TypeType *Type = &Type{
 	Name: "type",
 	Doc:  "type(object) -> the object's type\ntype(name, bases, dict) -> a new type",
-	Dict: StringDict{},
+	Dict: NewStringDict(),
 }
 
 var ObjectType = &Type{
 	Name:  "object",
 	Doc:   "The most base type",
 	Flags: TPFLAGS_BASETYPE,
-	Dict:  StringDict{},
+	Dict:  NewStringDict(),
 }
 
 func init() {
@@ -309,8 +309,8 @@ func init() {
 	// otherwise, which is exactly what CPython reports for "x.__name__".
 	typeMeta := func(name string, doc string, get func(t *Type) Object) {
 		d := &typeMetaGetter{name: name, get: get}
-		TypeType.Dict[name] = d
-		ObjectType.Dict[name] = d
+		TypeType.Dict.Set(name, d)
+		ObjectType.Dict.Set(name, d)
 	}
 	typeMeta("__name__", "The name of the type.", func(t *Type) Object { return String(t.Name) })
 	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object { return String(t.Name) })
@@ -321,8 +321,8 @@ func init() {
 	// __class__ is a descriptor registered on both metatypes for the same
 	// reason as the metadata above: an instance of a builtin must be able to
 	// ask for its class, and "(5).__class__" was an AttributeError.
-	ObjectType.Dict["__class__"] = &classGetter{}
-	TypeType.Dict["__class__"] = &classGetter{}
+	ObjectType.Dict.Set("__class__", &classGetter{})
+	TypeType.Dict.Set("__class__", &classGetter{})
 }
 
 // typeMetaGetter is the descriptor behind cls.__name__ and friends.
@@ -388,7 +388,7 @@ func NewType(Name string, Doc string) *Type {
 		ObjectType: TypeType,
 		Name:       Name,
 		Doc:        Doc,
-		Dict:       StringDict{},
+		Dict:       NewStringDict(),
 	}
 	TypeDelayReady(t)
 	return t
@@ -404,7 +404,7 @@ func NewTypeX(Name string, Doc string, New NewFunc, Init InitFunc) *Type {
 		Doc:        Doc,
 		New:        New,
 		Init:       Init,
-		Dict:       StringDict{},
+		Dict:       NewStringDict(),
 	}
 	TypeDelayReady(t)
 	return t
@@ -437,7 +437,7 @@ func (t *Type) NewTypeFlags(Name string, Doc string, New NewFunc, Init InitFunc,
 		New:        New,
 		Init:       Init,
 		Flags:      Flags,
-		Dict:       StringDict{},
+		Dict:       NewStringDict(),
 		Bases:      Tuple{t},
 	}
 	TypeDelayReady(tt)
@@ -527,7 +527,7 @@ func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	}
 	// Ugly exception: when the call was type(something),
 	// don't call tp_init on the result.
-	if t == TypeType && len(args) == 1 && len(kwargs) == 0 {
+	if t == TypeType && len(args) == 1 && kwargs.Len() == 0 {
 		return obj, nil
 	}
 	// If the returned object is not an instance of type,
@@ -589,7 +589,7 @@ func (t *Type) Lookup(name string) Object {
 		// Still not readied - the fallback is the type's own Dict, which is
 		// what lets "Generic[int]" work: Generic's __class_getitem__ lives
 		// there and the type has no MRO.
-		if res, ok := t.Dict[name]; ok {
+		if res, ok := t.Dict.Get(name); ok {
 			return res
 		}
 		if base := t.Base; base != nil {
@@ -604,7 +604,7 @@ func (t *Type) Lookup(name string) Object {
 	for _, baseObj := range mro {
 		base := baseObj.(*Type)
 		var ok bool
-		res, ok = base.Dict[name]
+		res, ok = base.Dict.Get(name)
 		if ok {
 			break
 		}
@@ -636,7 +636,7 @@ func (t *Type) Lookup(name string) Object {
 // See _PyObject_GenericGetAttrWithDict in object.c
 func (t *Type) NativeGetAttrOrNil(name string) Object {
 	// Look in type Dict
-	if res, ok := t.Dict[name]; ok {
+	if res, ok := t.Dict.Get(name); ok {
 		return res
 	}
 	// Now look through base classes etc
@@ -654,11 +654,11 @@ func (t *Type) NativeGetAttrOrNil(name string) Object {
 // See _PyObject_GenericGetAttrWithDict in object.c
 func (t *Type) GetAttrOrNil(name string) Object {
 	// Look in instance dictionary first
-	if res, ok := t.Dict[name]; ok {
+	if res, ok := t.Dict.Get(name); ok {
 		return res
 	}
 	// Then look in type Dict
-	if res, ok := t.Type().Dict[name]; ok {
+	if res, ok := t.Type().Dict.Get(name); ok {
 		return res
 	}
 	// Now look through base classes etc
@@ -732,17 +732,17 @@ func TypeCall(self Object, name string, args Tuple, kwargs StringDict) (Object, 
 
 // Calls TypeCall with 0 arguments
 func TypeCall0(self Object, name string) (Object, bool, error) {
-	return TypeCall(self, name, Tuple{self}, nil)
+	return TypeCall(self, name, Tuple{self}, NewStringDict())
 }
 
 // Calls TypeCall with 1 argument
 func TypeCall1(self Object, name string, arg Object) (Object, bool, error) {
-	return TypeCall(self, name, Tuple{self, arg}, nil)
+	return TypeCall(self, name, Tuple{self, arg}, NewStringDict())
 }
 
 // Calls TypeCall with 2 arguments
 func TypeCall2(self Object, name string, arg1, arg2 Object) (Object, bool, error) {
-	return TypeCall(self, name, Tuple{self, arg1, arg2}, nil)
+	return TypeCall(self, name, Tuple{self, arg1, arg2}, NewStringDict())
 }
 
 // Internal routines to do a method lookup in the type
@@ -955,7 +955,7 @@ func (t *Type) mro_implementation() (Object, error) {
 	// PyObject *to_merge, *bases_aslist;
 	var err error
 
-	if t.Dict == nil {
+	if t.Dict.IsNil() {
 		err = t.Ready()
 		if err != nil {
 			return nil, err
@@ -1029,7 +1029,7 @@ func (t *Type) mro_internal() (err error) {
 				return err
 			}
 		} else {
-			result, err = Call(mro, nil, nil)
+			result, err = Call(mro, nil, NewStringDict())
 			if err != nil {
 				return err
 			}
@@ -1189,7 +1189,7 @@ func (t *Type) Ready() error {
 	var err error
 
 	if t.Flags&TPFLAGS_READY != 0 {
-		if t.Dict == nil {
+		if t.Dict.IsNil() {
 			return ExceptionNewf(SystemError, "Type.Ready is Ready but Dict is nil")
 		}
 		return nil
@@ -1211,7 +1211,7 @@ func (t *Type) Ready() error {
 	// ObjectType.
 
 	// Initialize the base class
-	if base != nil && base.Dict == nil {
+	if base != nil && base.Dict.IsNil() {
 		err = base.Ready()
 		if err != nil {
 			return err
@@ -1244,7 +1244,7 @@ func (t *Type) Ready() error {
 
 	// Initialize tp_dict
 	dict := t.Dict
-	if dict == nil {
+	if dict.IsNil() {
 		dict = NewStringDict()
 		t.Dict = dict
 	}
@@ -1296,11 +1296,11 @@ func (t *Type) Ready() error {
 
 	// if the type dictionary doesn't contain a __doc__, set it from
 	// the tp_doc slot.
-	if _, ok := t.Dict["__doc__"]; !ok {
+	if _, ok := t.Dict.Get("__doc__"); !ok {
 		if t.Doc != "" {
-			t.Dict["__doc__"] = String(t.Doc)
+			t.Dict.Set("__doc__", String(t.Doc))
 		} else {
-			t.Dict["__doc__"] = None
+			t.Dict.Set("__doc__", None)
 		}
 	}
 
@@ -1314,7 +1314,7 @@ func (t *Type) Ready() error {
 	}
 
 	// All done -- set the ready flag
-	if t.Dict == nil {
+	if t.Dict.IsNil() {
 		panic("Type.Ready Dict is nil")
 	}
 	t.Flags = (t.Flags &^ TPFLAGS_READYING) | TPFLAGS_READY
@@ -1379,7 +1379,7 @@ func best_base(bases Tuple) (*Type, error) {
 		if !ok {
 			return nil, ExceptionNewf(TypeError, "bases must be types")
 		}
-		if base_i.Dict == nil {
+		if base_i.Dict.IsNil() {
 			err = base_i.Ready()
 			if err != nil {
 				return nil, err
@@ -1409,7 +1409,7 @@ func (t *Type) Alloc() *Type {
 	obj := &Type{
 		ObjectType: t,
 		Base:       t,
-		Dict:       StringDict{},
+		Dict:       NewStringDict(),
 	}
 	return obj
 }
@@ -1426,14 +1426,14 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// _Py_IDENTIFIER(__slots__);
 
 	// Special case: type(x) should return x.ob_type
-	if metatype != nil && len(args) == 1 && len(kwargs) == 0 {
+	if metatype != nil && len(args) == 1 && kwargs.Len() == 0 {
 		return args[0].Type(), nil
 	}
 
 	// SF bug 475327 -- if that didn't trigger, we need 3
 	// arguments. but PyArg_ParseTupleAndKeywords below may give
 	// a msg saying type() needs exactly 3.
-	if len(args)+len(kwargs) != 3 {
+	if len(args)+kwargs.Len() != 3 {
 		return nil, ExceptionNewf(TypeError, "type() takes 1 or 3 arguments")
 	}
 
@@ -1488,7 +1488,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	dict := orig_dict.Copy()
 
 	// Check for a __slots__ sequence variable in dict, and count it
-	slots, haveSlots := dict["__slots__"]
+	slots, haveSlots := dict.Get("__slots__")
 	nslots := 0
 	// add_dict := 0
 	// add_weak := 0
@@ -1656,7 +1656,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// fmt.Printf("New type dict is %v\n", dict)
 
 	// Set __module__ in the dict
-	if _, ok := dict["__module__"]; !ok {
+	if _, ok := dict.Get("__module__"); !ok {
 		fmt.Printf("*** FIXME need to get the current vm globals somehow\n")
 		// tmp = PyEval_GetGlobals()
 		// if tmp != nil {
@@ -1669,13 +1669,13 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 
 	// Set ht_qualname to dict['__qualname__'] if available, else to
 	// __name__.  The __qualname__ accessor will look for ht_qualname.
-	if qualname, ok := dict["__qualname__"]; ok {
+	if qualname, ok := dict.Get("__qualname__"); ok {
 		if Qualname, ok := qualname.(String); !ok {
 			return nil, ExceptionNewf(TypeError, "type __qualname__ must be a str, not %s", qualname.Type().Name)
 		} else {
 			et.Qualname = string(Qualname)
 		}
-		delete(dict, "__qualname__")
+		dict.Del("__qualname__")
 	} else {
 		et.Qualname = et.Name
 	}
@@ -1683,7 +1683,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// Set tp_doc to a copy of dict['__doc__'], if the latter is there
 	// and is a string.  The __doc__ accessor will first look for tp_doc;
 	// if that fails, it will still look into __dict__.
-	if doc, ok := dict["__doc__"]; ok {
+	if doc, ok := dict.Get("__doc__"); ok {
 		if Doc, ok := doc.(String); ok {
 			new_type.Doc = string(Doc)
 		}
@@ -1789,7 +1789,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 }
 
 func TypeInit(cls Object, args Tuple, kwargs StringDict) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return ExceptionNewf(TypeError, "type.__init__() takes no keyword arguments")
 	}
 
@@ -1799,7 +1799,7 @@ func TypeInit(cls Object, args Tuple, kwargs StringDict) error {
 
 	// Call object.__init__(self) now.
 	// XXX Could call super(type, cls).__init__() but what's the point?
-	return ObjectInit(cls, nil, nil)
+	return ObjectInit(cls, nil, NewStringDict())
 }
 
 // The base type of all types (eventually)... except itself.
@@ -1844,7 +1844,7 @@ func TypeInit(cls Object, args Tuple, kwargs StringDict) error {
 
 // Return true if any arguments supplied
 func excess_args(args Tuple, kwargs StringDict) bool {
-	return len(args) != 0 || len(kwargs) != 0
+	return len(args) != 0 || kwargs.Len() != 0
 }
 
 func ObjectInit(self Object, args Tuple, kwargs StringDict) error {
@@ -1969,7 +1969,7 @@ func (ty *Type) M__str__() (Object, error) {
 	// on its type assertion.  "Name == \"\"" is how this codebase already
 	// tells an instance from a class; see the FIXME below.
 	if ty.Name == "" {
-		if res, ok, err := ty.CallMethod("__str__", Tuple{ty}, nil); ok {
+		if res, ok, err := ty.CallMethod("__str__", Tuple{ty}, NewStringDict()); ok {
 			return res, err
 		}
 	}
@@ -1978,7 +1978,7 @@ func (ty *Type) M__str__() (Object, error) {
 
 func (ty *Type) M__repr__() (Object, error) {
 	if ty.Name == "" {
-		if res, ok, err := ty.CallMethod("__repr__", Tuple{ty}, nil); ok {
+		if res, ok, err := ty.CallMethod("__repr__", Tuple{ty}, NewStringDict()); ok {
 			return res, err
 		}
 	}
@@ -2065,13 +2065,13 @@ func init() {
 	// it, and the Go interface above is what the VM actually reaches.
 	orMethod := MustNewMethod("__or__", func(self Object, args Tuple) (Object, error) {
 		var other Object
-		if err := UnpackTuple(args, nil, "__or__", 1, 1, &other); err != nil {
+		if err := UnpackTuple(args, NewStringDict(), "__or__", 1, 1, &other); err != nil {
 			return nil, err
 		}
 		return unionOf(self, other)
 	}, 0, "Return the union of two types.")
-	if TypeType.Dict != nil {
-		TypeType.Dict["__or__"] = orMethod
+	if !TypeType.Dict.IsNil() {
+		TypeType.Dict.Set("__or__", orMethod)
 	}
 }
 
@@ -2101,8 +2101,8 @@ func init() {
 		StringType, BytesType, IntType, FloatType, BoolType,
 		SliceType, ComplexType, TypeType,
 	} {
-		if t != nil && t.Dict != nil {
-			t.Dict["__class_getitem__"] = getitem
+		if t != nil && !t.Dict.IsNil() {
+			t.Dict.Set("__class_getitem__", getitem)
 		}
 	}
 }

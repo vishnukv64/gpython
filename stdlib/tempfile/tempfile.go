@@ -52,9 +52,9 @@ func init() {
 			py.MustNewMethod("mkdtemp", mkdtemp, 0, mkdtemp_doc),
 			py.MustNewMethod("mkstemp", mkstemp, 0, mkstemp_doc),
 		},
-		Globals: py.StringDict{
-			"tempdir": gblTempDir,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "tempdir", Value: gblTempDir},
+		),
 	})
 }
 

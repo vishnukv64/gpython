@@ -93,7 +93,7 @@ const runExitfuncs_doc = `_run_exitfuncs()
 Run any registered exit functions, in reverse order of registration.`
 
 func runExitfuncs(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := checkArgs(args, nil, "_run_exitfuncs", 0, 0); err != nil {
+	if err := checkArgs(args, py.StringDict{}, "_run_exitfuncs", 0, 0); err != nil {
 		return nil, err
 	}
 	runHandlers()
@@ -105,7 +105,7 @@ const clear_doc = `_clear()
 Clear the list of previously registered exit functions; testing only.`
 
 func clear(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := checkArgs(args, nil, "_clear", 0, 0); err != nil {
+	if err := checkArgs(args, py.StringDict{}, "_clear", 0, 0); err != nil {
 		return nil, err
 	}
 	gHandlers = nil
@@ -177,7 +177,7 @@ func init() {
 // them into named variables.  min may be negative, meaning "no lower
 // bound".
 func checkArgs(args py.Tuple, kwargs py.StringDict, name string, min, max int) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", name)
 	}
 	n := len(args)

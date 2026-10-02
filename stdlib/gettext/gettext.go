@@ -42,7 +42,9 @@ var TranslationsType = py.NewTypeX("gettext.NullTranslations", "A translations o
 	}}
 	if len(args) > 0 {
 		if d, ok := args[0].(py.IGetDict); ok {
-			for encoded, v := range d.GetDict() {
+			for _, __e := range d.GetDict().Items() {
+				encoded := __e.Key
+				v := __e.Value
 				key, err := py.DictKeyDecode(encoded)
 				if err != nil {
 					continue
@@ -79,42 +81,42 @@ func init() {
 	// The plural form: the "plural-forms" expression is evaluated in
 	// CPython; here the standard Germanic rule (n != 1) applies, which is
 	// what an English source catalog uses.
-	globals := py.StringDict{
-		"gettext":                 gettextFn,
-		"ngettext":                ngettextFn,
-		"dgettext":                dgettextFn,
-		"dngettext":               dngettextFn,
-		"pgettext":                pgettextFn,
-		"dpgettext":               dpgettextFn,
-		"npgettext":               npgettextFn,
-		"textdomain":              textdomainFn,
-		"bindtextdomain":          bindtextdomainFn,
-		"bind_textdomain_codeset": py.MustNewMethod("bind_textdomain_codeset", setTwoNames, 0, "Set the encoding of the catalog."),
-		"translation":             py.MustNewMethod("translation", translation, 0, "Return a Translations object."),
-		"install":                 py.MustNewMethod("install", install, 0, "Install _() into the builtins namespace."),
-		"NullTranslations":        TranslationsType,
-		"GNUTranslations":         GNUTranslationsType,
-		"Translations":            TranslationsType,
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "gettext", Value: gettextFn},
+		py.DictEntry{Key: "ngettext", Value: ngettextFn},
+		py.DictEntry{Key: "dgettext", Value: dgettextFn},
+		py.DictEntry{Key: "dngettext", Value: dngettextFn},
+		py.DictEntry{Key: "pgettext", Value: pgettextFn},
+		py.DictEntry{Key: "dpgettext", Value: dpgettextFn},
+		py.DictEntry{Key: "npgettext", Value: npgettextFn},
+		py.DictEntry{Key: "textdomain", Value: textdomainFn},
+		py.DictEntry{Key: "bindtextdomain", Value: bindtextdomainFn},
+		py.DictEntry{Key: "bind_textdomain_codeset", Value: py.MustNewMethod("bind_textdomain_codeset", setTwoNames, 0, "Set the encoding of the catalog.")},
+		py.DictEntry{Key: "translation", Value: py.MustNewMethod("translation", translation, 0, "Return a Translations object.")},
+		py.DictEntry{Key: "install", Value: py.MustNewMethod("install", install, 0, "Install _() into the builtins namespace.")},
+		py.DictEntry{Key: "NullTranslations", Value: TranslationsType},
+		py.DictEntry{Key: "GNUTranslations", Value: GNUTranslationsType},
+		py.DictEntry{Key: "Translations", Value: TranslationsType},
+	)
 
 	// The translation object's methods.
 	for _, t := range []*py.Type{TranslationsType} {
-		t.Dict["gettext"] = gettextMethod
-		t.Dict["ngettext"] = ngettextMethod
-		t.Dict["pgettext"] = gettextMethod
-		t.Dict["npgettext"] = ngettextMethod
-		t.Dict["info"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		t.Dict.Set("gettext", gettextMethod)
+		t.Dict.Set("ngettext", ngettextMethod)
+		t.Dict.Set("pgettext", gettextMethod)
+		t.Dict.Set("npgettext", ngettextMethod)
+		t.Dict.Set("info", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 			d := py.NewStringDict()
 			for k, v := range self.(*Translations).info {
-				d[k] = py.String(v)
+				d.Set(k, py.String(v))
 			}
 			return d, nil
-		}}
-		t.Dict["charset"] = py.MustNewMethod("charset", func(self py.Object, args py.Tuple) (py.Object, error) {
+		}})
+		t.Dict.Set("charset", py.MustNewMethod("charset", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.String("utf-8"), nil
-		}, 0, "Return the encoding of the catalog.")
-		t.Dict["install"] = py.MustNewMethod("install", installSelf, 0, "Install _() into the builtins namespace.")
-		t.Dict["add_fallback"] = py.MustNewMethod("add_fallback", noopSelf, 0, "Add a fallback catalog (no-op).")
+		}, 0, "Return the encoding of the catalog."))
+		t.Dict.Set("install", py.MustNewMethod("install", installSelf, 0, "Install _() into the builtins namespace."))
+		t.Dict.Set("add_fallback", py.MustNewMethod("add_fallback", noopSelf, 0, "Add a fallback catalog (no-op)."))
 	}
 
 	py.RegisterModule(&py.ModuleImpl{
@@ -179,7 +181,7 @@ func doNPgettext(self py.Object, args py.Tuple) (py.Object, error) {
 
 func setName(self py.Object, args py.Tuple) (py.Object, error) {
 	var name py.Object = py.String("messages")
-	if err := py.UnpackTuple(args, nil, "textdomain", 0, 1, &name); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "textdomain", 0, 1, &name); err != nil {
 		return nil, err
 	}
 	return name, nil
@@ -213,9 +215,9 @@ func installSelf(self py.Object, args py.Tuple) (py.Object, error) {
 	if builtins == nil {
 		return py.None, nil
 	}
-	builtins.Globals["_"] = py.MustNewMethod("_", doGettext, 0, "Return the localized translation of message.")
-	builtins.Globals["gettext"] = builtins.Globals["_"]
-	builtins.Globals["ngettext"] = py.MustNewMethod("ngettext", doNgettext, 0, "Return the plural form of a message.")
+	builtins.Globals.Set("_", py.MustNewMethod("_", doGettext, 0, "Return the localized translation of message."))
+	builtins.Globals.Set("gettext", builtins.Globals.GetOrNil("_"))
+	builtins.Globals.Set("ngettext", py.MustNewMethod("ngettext", doNgettext, 0, "Return the plural form of a message."))
 	return py.None, nil
 }
 

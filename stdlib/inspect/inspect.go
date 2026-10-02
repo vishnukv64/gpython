@@ -25,28 +25,28 @@ about live objects such as modules, classes, methods, functions, tracebacks,
 frame objects, and code objects.`
 
 func init() {
-	globals := py.StringDict{
-		"currentframe":        py.MustNewMethod("currentframe", py.InternalMethodGetFrame, 0, currentframe_doc),
-		"cleandoc":            py.MustNewMethod("cleandoc", inspectCleanDoc, 0, cleandoc_doc),
-		"isfunction":          predicate(func(obj py.Object) bool { _, ok := obj.(*py.Function); return ok }),
-		"isgeneratorfunction": py.MustNewMethod("isgeneratorfunction", inspectIsGeneratorFunction, 0, isgeneratorfunction_doc),
-		"isgenerator":         predicate(func(obj py.Object) bool { _, ok := obj.(*py.Generator); return ok }),
-		"isbuiltin":           predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok }),
-		"ismethod":            predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok }),
-		"ismodule":            predicate(func(obj py.Object) bool { _, ok := obj.(*py.Module); return ok }),
-		"isclass":             predicate(func(obj py.Object) bool { _, ok := obj.(*py.Type); return ok }),
-		"isdatadescriptor":    predicate(func(obj py.Object) bool { _, ok := obj.(*py.Property); return ok }),
-		"getdoc":              py.MustNewMethod("getdoc", getdoc, 0, getdoc_doc),
-		"signature":           py.MustNewMethod("signature", notImplemented, 0, signature_doc),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "currentframe", Value: py.MustNewMethod("currentframe", py.InternalMethodGetFrame, 0, currentframe_doc)},
+		py.DictEntry{Key: "cleandoc", Value: py.MustNewMethod("cleandoc", inspectCleanDoc, 0, cleandoc_doc)},
+		py.DictEntry{Key: "isfunction", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Function); return ok })},
+		py.DictEntry{Key: "isgeneratorfunction", Value: py.MustNewMethod("isgeneratorfunction", inspectIsGeneratorFunction, 0, isgeneratorfunction_doc)},
+		py.DictEntry{Key: "isgenerator", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Generator); return ok })},
+		py.DictEntry{Key: "isbuiltin", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
+		py.DictEntry{Key: "ismethod", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
+		py.DictEntry{Key: "ismodule", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Module); return ok })},
+		py.DictEntry{Key: "isclass", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Type); return ok })},
+		py.DictEntry{Key: "isdatadescriptor", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Property); return ok })},
+		py.DictEntry{Key: "getdoc", Value: py.MustNewMethod("getdoc", getdoc, 0, getdoc_doc)},
+		py.DictEntry{Key: "signature", Value: py.MustNewMethod("signature", notImplemented, 0, signature_doc)},
+	)
 
 	// The frame constants are part of the module's interface.
-	globals["CO_GENERATOR"] = py.Int(py.CO_GENERATOR)
-	globals["CO_VARARGS"] = py.Int(py.CO_VARARGS)
-	globals["CO_VARKEYWORDS"] = py.Int(py.CO_VARKEYWORDS)
-	globals["CO_OPTIMIZED"] = py.Int(py.CO_OPTIMIZED)
-	globals["CO_NEWLOCALS"] = py.Int(py.CO_NEWLOCALS)
-	globals["CO_NOFREE"] = py.Int(py.CO_NOFREE)
+	globals.Set("CO_GENERATOR", py.Int(py.CO_GENERATOR))
+	globals.Set("CO_VARARGS", py.Int(py.CO_VARARGS))
+	globals.Set("CO_VARKEYWORDS", py.Int(py.CO_VARKEYWORDS))
+	globals.Set("CO_OPTIMIZED", py.Int(py.CO_OPTIMIZED))
+	globals.Set("CO_NEWLOCALS", py.Int(py.CO_NEWLOCALS))
+	globals.Set("CO_NOFREE", py.Int(py.CO_NOFREE))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -62,7 +62,7 @@ func init() {
 func predicate(test func(py.Object) bool) *py.Method {
 	return py.MustNewMethod("is", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var obj py.Object
-		if err := py.UnpackTuple(args, nil, "is", 1, 1, &obj); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "is", 1, 1, &obj); err != nil {
 			return nil, err
 		}
 		if test(obj) {
@@ -86,7 +86,7 @@ is removed.  Empty lines at the beginning and end are removed.`
 
 func inspectCleanDoc(self py.Object, args py.Tuple) (py.Object, error) {
 	var doc py.Object
-	if err := py.UnpackTuple(args, nil, "cleandoc", 1, 1, &doc); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "cleandoc", 1, 1, &doc); err != nil {
 		return nil, err
 	}
 	text, ok := doc.(py.String)
@@ -147,7 +147,7 @@ Return true if the object is a user-defined generator function.`
 
 func inspectIsGeneratorFunction(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
-	if err := py.UnpackTuple(args, nil, "isgeneratorfunction", 1, 1, &obj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "isgeneratorfunction", 1, 1, &obj); err != nil {
 		return nil, err
 	}
 	fn, ok := obj.(*py.Function)
@@ -166,7 +166,7 @@ Get the documentation string for an object, cleaned up with cleandoc().`
 
 func getdoc(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
-	if err := py.UnpackTuple(args, nil, "getdoc", 1, 1, &obj); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "getdoc", 1, 1, &obj); err != nil {
 		return nil, err
 	}
 	doc, err := py.GetAttrString(obj, "__doc__")

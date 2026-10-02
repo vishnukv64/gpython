@@ -39,10 +39,10 @@ func init() {
 			py.MustNewMethod("a2b_qp", a2b_qp, 0, a2b_qp_doc),
 			py.MustNewMethod("b2a_qp", b2a_qp, 0, b2a_qp_doc),
 		},
-		Globals: py.StringDict{
-			"Incomplete": Incomplete,
-			"Error":      Error,
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "Incomplete", Value: Incomplete},
+			py.DictEntry{Key: "Error", Value: Error},
+		),
 	})
 }
 

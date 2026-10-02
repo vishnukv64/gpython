@@ -16,9 +16,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/vishnukv64/gpython/compile"
 	"github.com/vishnukv64/gpython/py"
-	"github.com/google/go-cmp/cmp"
 
 	_ "github.com/vishnukv64/gpython/stdlib"
 )
@@ -76,7 +76,7 @@ func CompileSrc(t testing.TB, ctx py.Context, pySrc string, prog string) (*py.Mo
 	// what lets it import the helper modules sitting next to it.  This is the
 	// same rule CPython applies to "python script.py".
 	sysMod := ctx.Store().MustGetModule("sys")
-	paths, ok := sysMod.Globals["path"].(*py.List)
+	paths, ok := sysMod.Globals.GetOrNil("path").(*py.List)
 	if ok && !containsString(paths.Items, path.Dir(prog)) {
 		paths.Items = append([]py.Object{py.String(path.Dir(prog))}, paths.Items...)
 	}
@@ -88,7 +88,7 @@ func CompileSrc(t testing.TB, ctx py.Context, pySrc string, prog string) (*py.Mo
 func run(t testing.TB, module *py.Module, code *py.Code) {
 	_, err := gContext.RunCode(code, module.Globals, module.Globals, nil)
 	if err != nil {
-		if wantErrObj, ok := module.Globals["err"]; ok {
+		if wantErrObj, ok := module.Globals.Get("err"); ok {
 			gotExc, ok := err.(py.ExceptionInfo)
 			if !ok {
 				t.Fatalf("got err is not ExceptionInfo: %#v", err)
@@ -100,12 +100,12 @@ func run(t testing.TB, module *py.Module, code *py.Code) {
 			return
 		} else {
 			py.TracebackDump(err)
-			t.Fatalf("Run failed: %v at %q", err, module.Globals["doc"])
+			t.Fatalf("Run failed: %v at %q", err, module.Globals.GetOrNil("doc"))
 		}
 	}
 
 	// t.Logf("%s: Return = %v", prog, res)
-	if doc, ok := module.Globals["doc"]; ok {
+	if doc, ok := module.Globals.Get("doc"); ok {
 		if docStr, ok := doc.(py.String); ok {
 			if string(docStr) != "finished" {
 				t.Fatalf("Didn't finish at %q", docStr)
@@ -250,8 +250,8 @@ func (task *Task) run() error {
 	}
 	defer out.Close()
 
-	sys.Globals["stdout"] = &py.File{File: out, FileMode: py.FileWrite}
-	sys.Globals["stderr"] = &py.File{File: out, FileMode: py.FileWrite}
+	sys.Globals.Set("stdout", &py.File{File: out, FileMode: py.FileWrite})
+	sys.Globals.Set("stderr", &py.File{File: out, FileMode: py.FileWrite})
 
 	if task.PyFile != "" {
 		_, err := py.RunFile(ctx, task.PyFile, py.CompileOpts{}, nil)

@@ -19,7 +19,7 @@ const module_doc = `Constants and functions for interpreting the results of os.s
 os.lstat() and os.fstat().`
 
 func init() {
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 
 	// File mode bits, from the host.
 	for name, value := range map[string]uint32{
@@ -47,20 +47,20 @@ func init() {
 		"S_IWOTH":  syscall.S_IWOTH,
 		"S_IXOTH":  syscall.S_IXOTH,
 	} {
-		globals[name] = py.Int(int64(value))
+		globals.Set(name, py.Int(int64(value)))
 	}
 
 	// The mode predicates.  They take a mode, which is the st_mode field of
 	// an os.stat_result, and answer a bool.
-	globals["S_ISDIR"] = predicate("S_ISDIR", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFDIR })
-	globals["S_ISREG"] = predicate("S_ISREG", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFREG })
-	globals["S_ISCHR"] = predicate("S_ISCHR", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFCHR })
-	globals["S_ISBLK"] = predicate("S_ISBLK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFBLK })
-	globals["S_ISFIFO"] = predicate("S_ISFIFO", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFIFO })
-	globals["S_ISLNK"] = predicate("S_ISLNK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFLNK })
-	globals["S_ISSOCK"] = predicate("S_ISSOCK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFSOCK })
+	globals.Set("S_ISDIR", predicate("S_ISDIR", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFDIR }))
+	globals.Set("S_ISREG", predicate("S_ISREG", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFREG }))
+	globals.Set("S_ISCHR", predicate("S_ISCHR", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFCHR }))
+	globals.Set("S_ISBLK", predicate("S_ISBLK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFBLK }))
+	globals.Set("S_ISFIFO", predicate("S_ISFIFO", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFIFO }))
+	globals.Set("S_ISLNK", predicate("S_ISLNK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFLNK }))
+	globals.Set("S_ISSOCK", predicate("S_ISSOCK", func(mode uint32) bool { return mode&syscall.S_IFMT == syscall.S_IFSOCK }))
 
-	globals["filemode"] = py.MustNewMethod("filemode", filemode, 0, "Convert a file mode to a string of the form '-rwxrwxrwx'.")
+	globals.Set("filemode", py.MustNewMethod("filemode", filemode, 0, "Convert a file mode to a string of the form '-rwxrwxrwx'."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -75,7 +75,7 @@ func init() {
 func predicate(name string, test func(uint32) bool) *py.Method {
 	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
 		var mode py.Object
-		if err := py.UnpackTuple(args, nil, name, 1, 1, &mode); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, name, 1, 1, &mode); err != nil {
 			return nil, err
 		}
 		n, err := py.IndexInt(mode)
@@ -90,7 +90,7 @@ func predicate(name string, test func(uint32) bool) *py.Method {
 func filemode(self py.Object, args py.Tuple) (py.Object, error) {
 	var modeObj py.Object
 	filetype := py.Object(py.Int(0))
-	if err := py.UnpackTuple(args, nil, "filemode", 1, 2, &modeObj, &filetype); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "filemode", 1, 2, &modeObj, &filetype); err != nil {
 		return nil, err
 	}
 	mode, err := py.IndexInt(modeObj)

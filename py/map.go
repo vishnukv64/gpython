@@ -52,7 +52,7 @@ func (m *Map) M__next__() (Object, error) {
 		}
 		argtuple[i] = val
 	}
-	return Call(m.fun, argtuple, nil)
+	return Call(m.fun, argtuple, NewStringDict())
 }
 
 // Check interface is satisfied

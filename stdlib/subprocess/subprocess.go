@@ -69,23 +69,23 @@ var (
 )
 
 func init() {
-	globals := py.StringDict{
-		"PIPE":               pipeSentinel,
-		"DEVNULL":            devnullSentinel,
-		"STDOUT":             STDOUTSentinel,
-		"SubprocessError":    SubprocessErrorType,
-		"CalledProcessError": CalledProcessErrorType,
-		"TimeoutExpired":     TimeoutExpiredType,
-		"CompletedProcess":   CompletedProcessType,
-		"Popen":              PopenType,
-		"call":               py.MustNewMethod("call", call, 0, "Run the command described by args and wait for it to complete, returning the return code."),
-		"check_call":         py.MustNewMethod("check_call", checkCall, 0, "Run a command and raise CalledProcessError if it returns non-zero."),
-		"check_output":       py.MustNewMethod("check_output", checkOutput, 0, "Run a command and return its output."),
-		"run":                py.MustNewMethod("run", run, 0, "Run a command and wait for it to complete."),
-		"getstatusoutput":    py.MustNewMethod("getstatusoutput", getStatusOutput, 0, "Run a command through the shell and return (status, output)."),
-		"getoutput":          py.MustNewMethod("getoutput", getOutput, 0, "Run a command through the shell and return its output."),
-		"list2cmdline":       py.MustNewMethod("list2cmdline", list2cmdline, 0, "Translate a sequence of arguments into a command line string."),
-	}
+	globals := py.NewStringDictFrom(
+		py.DictEntry{Key: "PIPE", Value: pipeSentinel},
+		py.DictEntry{Key: "DEVNULL", Value: devnullSentinel},
+		py.DictEntry{Key: "STDOUT", Value: STDOUTSentinel},
+		py.DictEntry{Key: "SubprocessError", Value: SubprocessErrorType},
+		py.DictEntry{Key: "CalledProcessError", Value: CalledProcessErrorType},
+		py.DictEntry{Key: "TimeoutExpired", Value: TimeoutExpiredType},
+		py.DictEntry{Key: "CompletedProcess", Value: CompletedProcessType},
+		py.DictEntry{Key: "Popen", Value: PopenType},
+		py.DictEntry{Key: "call", Value: py.MustNewMethod("call", call, 0, "Run the command described by args and wait for it to complete, returning the return code.")},
+		py.DictEntry{Key: "check_call", Value: py.MustNewMethod("check_call", checkCall, 0, "Run a command and raise CalledProcessError if it returns non-zero.")},
+		py.DictEntry{Key: "check_output", Value: py.MustNewMethod("check_output", checkOutput, 0, "Run a command and return its output.")},
+		py.DictEntry{Key: "run", Value: py.MustNewMethod("run", run, 0, "Run a command and wait for it to complete.")},
+		py.DictEntry{Key: "getstatusoutput", Value: py.MustNewMethod("getstatusoutput", getStatusOutput, 0, "Run a command through the shell and return (status, output).")},
+		py.DictEntry{Key: "getoutput", Value: py.MustNewMethod("getoutput", getOutput, 0, "Run a command through the shell and return its output.")},
+		py.DictEntry{Key: "list2cmdline", Value: py.MustNewMethod("list2cmdline", list2cmdline, 0, "Translate a sequence of arguments into a command line string.")},
+	)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -117,7 +117,10 @@ func parseOptions(kwargs py.StringDict) (*options, error) {
 		stdout: py.None,
 		stderr: py.None,
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "shell":
 			o.shell = v == py.True
@@ -187,7 +190,9 @@ func envList(v py.Object) ([]string, error) {
 		return nil, py.ExceptionNewf(py.TypeError, "env must be a mapping")
 	}
 	out := []string{}
-	for encoded, value := range d.GetDict() {
+	for _, __e := range d.GetDict().Items() {
+		encoded := __e.Key
+		value := __e.Value
 		key, err := py.DictKeyDecode(encoded)
 		if err != nil {
 			return nil, err
@@ -440,19 +445,19 @@ func (p *Popen) communicate(input py.Object) (string, string, error) {
 // calledProcessError builds the exception raised for a non-zero exit.
 func calledProcessError(code int, cmd py.Object, stdout, stderr string) *py.Exception {
 	e := py.ExceptionNewf(CalledProcessErrorType, "Command returned non-zero exit status %d.", code)
-	if e.Dict == nil {
+	if e.Dict.IsNil() {
 		e.Dict = py.NewStringDict()
 	}
-	e.Dict["returncode"] = py.Int(code)
+	e.Dict.Set("returncode", py.Int(code))
 	if cmd != nil {
-		e.Dict["cmd"] = cmd
+		e.Dict.Set("cmd", cmd)
 	}
 	if stdout != "" {
-		e.Dict["output"] = py.String(stdout)
-		e.Dict["stdout"] = py.String(stdout)
+		e.Dict.Set("output", py.String(stdout))
+		e.Dict.Set("stdout", py.String(stdout))
 	}
 	if stderr != "" {
-		e.Dict["stderr"] = py.String(stderr)
+		e.Dict.Set("stderr", py.String(stderr))
 	}
 	return e
 }
@@ -463,7 +468,7 @@ func init() {
 	attr := func(name string) *py.Property {
 		return &py.Property{Fget: func(self py.Object) (py.Object, error) {
 			if e, ok := self.(*py.Exception); ok {
-				if v, ok := e.Dict[name]; ok {
+				if v, ok := e.Dict.Get(name); ok {
 					return v, nil
 				}
 			}
@@ -471,13 +476,13 @@ func init() {
 		}}
 	}
 	for _, name := range []string{"returncode", "cmd", "output", "stdout", "stderr"} {
-		CalledProcessErrorType.Dict[name] = attr(name)
+		CalledProcessErrorType.Dict.Set(name, attr(name))
 	}
 
-	PopenType.Dict["wait"] = py.MustNewMethod("wait", func(self py.Object, args py.Tuple) (py.Object, error) {
+	PopenType.Dict.Set("wait", py.MustNewMethod("wait", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*Popen)
 		var timeout py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "wait", 0, 1, &timeout); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "wait", 0, 1, &timeout); err != nil {
 			return nil, err
 		}
 		if timeout != py.None {
@@ -508,11 +513,11 @@ func init() {
 			return nil, err
 		}
 		return py.Int(code), nil
-	}, 0, "Wait for the child process to terminate.")
+	}, 0, "Wait for the child process to terminate."))
 
-	PopenType.Dict["communicate"] = py.MustNewMethod("communicate", func(self py.Object, args py.Tuple) (py.Object, error) {
+	PopenType.Dict.Set("communicate", py.MustNewMethod("communicate", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var input py.Object = py.None
-		if err := py.UnpackTuple(args, nil, "communicate", 0, 1, &input); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "communicate", 0, 1, &input); err != nil {
 			return nil, err
 		}
 		p := self.(*Popen)
@@ -521,9 +526,9 @@ func init() {
 			return nil, err
 		}
 		return py.Tuple{streamValue(out, p.text), streamValue(errText, p.text)}, nil
-	}, 0, "Interact with the child: send input, then read output.")
+	}, 0, "Interact with the child: send input, then read output."))
 
-	PopenType.Dict["poll"] = py.MustNewMethod("poll", func(self py.Object, args py.Tuple) (py.Object, error) {
+	PopenType.Dict.Set("poll", py.MustNewMethod("poll", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*Popen)
 		if p.done {
 			return py.Int(p.code), nil
@@ -531,9 +536,9 @@ func init() {
 		// A non-blocking check needs the process to have been reaped; the
 		// honest way here is to report that it is still running.
 		return py.None, nil
-	}, 0, "Return the exit code, or None if the child has not terminated.")
+	}, 0, "Return the exit code, or None if the child has not terminated."))
 
-	PopenType.Dict["returncode"] = &py.Property{
+	PopenType.Dict.Set("returncode", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			p := self.(*Popen)
 			if !p.done {
@@ -541,8 +546,8 @@ func init() {
 			}
 			return py.Int(p.code), nil
 		},
-	}
-	PopenType.Dict["pid"] = &py.Property{
+	})
+	PopenType.Dict.Set("pid", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			p := self.(*Popen)
 			if p.cmd.Process == nil {
@@ -550,28 +555,28 @@ func init() {
 			}
 			return py.Int(p.cmd.Process.Pid), nil
 		},
-	}
-	PopenType.Dict["stdin"] = &py.Property{
+	})
+	PopenType.Dict.Set("stdin", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.None, nil },
-	}
+	})
 
-	PopenType.Dict["kill"] = py.MustNewMethod("kill", func(self py.Object, args py.Tuple) (py.Object, error) {
+	PopenType.Dict.Set("kill", py.MustNewMethod("kill", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*Popen)
 		if p.cmd.Process != nil {
 			p.cmd.Process.Kill()
 		}
 		return py.None, nil
-	}, 0, "Kill the child process.")
-	PopenType.Dict["terminate"] = PopenType.Dict["kill"]
+	}, 0, "Kill the child process."))
+	PopenType.Dict.Set("terminate", PopenType.Dict.GetOrNil("kill"))
 
-	PopenType.Dict["__enter__"] = py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	PopenType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self, nil
-	}, 0, "Return the process itself.")
-	PopenType.Dict["__exit__"] = py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}, 0, "Return the process itself."))
+	PopenType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*Popen)
 		p.wait()
 		return py.False, nil
-	}, 0, "Wait for the process to finish.")
+	}, 0, "Wait for the process to finish."))
 }
 
 // streamValue renders a captured stream as str or bytes, depending on mode.
@@ -608,7 +613,10 @@ var CompletedProcessType = py.NewTypeX("subprocess.CompletedProcess", "A complet
 	if len(args) > 3 {
 		c.stderr = args[3]
 	}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "args":
 			c.args = v
@@ -632,19 +640,19 @@ var CompletedProcessType = py.NewTypeX("subprocess.CompletedProcess", "A complet
 func (c *CompletedProcess) Type() *py.Type { return CompletedProcessType }
 
 func init() {
-	CompletedProcessType.Dict["args"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	CompletedProcessType.Dict.Set("args", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CompletedProcess).args, nil
-	}}
-	CompletedProcessType.Dict["returncode"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CompletedProcessType.Dict.Set("returncode", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*CompletedProcess).returncode), nil
-	}}
-	CompletedProcessType.Dict["stdout"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CompletedProcessType.Dict.Set("stdout", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CompletedProcess).stdout, nil
-	}}
-	CompletedProcessType.Dict["stderr"] = &py.Property{Fget: func(self py.Object) (py.Object, error) {
+	}})
+	CompletedProcessType.Dict.Set("stderr", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*CompletedProcess).stderr, nil
-	}}
-	CompletedProcessType.Dict["check_returncode"] = py.MustNewMethod("check_returncode", func(self py.Object, args py.Tuple) (py.Object, error) {
+	}})
+	CompletedProcessType.Dict.Set("check_returncode", py.MustNewMethod("check_returncode", func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*CompletedProcess)
 		if c.returncode != 0 {
 			out := ""
@@ -658,7 +666,7 @@ func init() {
 			return nil, calledProcessError(c.returncode, c.args, out, errText)
 		}
 		return py.None, nil
-	}, 0, "Raise CalledProcessError if the return code is non-zero.")
+	}, 0, "Raise CalledProcessError if the return code is non-zero."))
 }
 
 func call(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -694,7 +702,7 @@ func checkOutput(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 
 func run(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	capture := false
-	if v, ok := kwargs["capture_output"]; ok && v == py.True {
+	if v, ok := kwargs.Get("capture_output"); ok && v == py.True {
 		capture = true
 	}
 	code, out, errText, o, err := runOnce(args, kwargs, capture)
@@ -734,38 +742,38 @@ func runOnce(args py.Tuple, kwargs py.StringDict, capture bool) (int, string, st
 	}
 	kw := py.NewStringDict()
 	if o.shell {
-		kw["shell"] = py.True
+		kw.Set("shell", py.True)
 	}
 	if o.cwd != "" {
-		kw["cwd"] = py.String(o.cwd)
+		kw.Set("cwd", py.String(o.cwd))
 	}
 	if o.env != nil {
 		env := py.NewStringDict()
 		for _, pair := range o.env {
 			if i := strings.IndexByte(pair, '='); i > 0 {
-				env[pair[:i]] = py.String(pair[i+1:])
+				env.Set(pair[:i], py.String(pair[i+1:]))
 			}
 		}
-		kw["env"] = env
+		kw.Set("env", env)
 	}
 	if o.text {
-		kw["text"] = py.True
+		kw.Set("text", py.True)
 	}
-	kw["stdout"] = o.stdout
-	kw["stderr"] = o.stderr
+	kw.Set("stdout", o.stdout)
+	kw.Set("stderr", o.stderr)
 
 	var input py.Object = py.None
-	if v, ok := kwargs["input"]; ok {
+	if v, ok := kwargs.Get("input"); ok {
 		input = v
-		kw["stdin"] = pipeSentinel
+		kw.Set("stdin", pipeSentinel)
 	} else {
-		kw["stdin"] = py.None
+		kw.Set("stdin", py.None)
 	}
 
 	var popenArgs py.Tuple
 	if len(args) > 0 {
 		popenArgs = py.Tuple{args[0]}
-	} else if v, ok := kwargs["args"]; ok {
+	} else if v, ok := kwargs.Get("args"); ok {
 		popenArgs = py.Tuple{v}
 	} else {
 		return 0, "", "", nil, py.ExceptionNewf(py.TypeError, "missing required argument 'args'")
@@ -801,7 +809,7 @@ func argObject(args py.Tuple) py.Object {
 
 func getStatusOutput(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var cmd py.Object
-	if err := py.UnpackTuple(args, nil, "getstatusoutput", 1, 1, &cmd); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "getstatusoutput", 1, 1, &cmd); err != nil {
 		return nil, err
 	}
 	if _, ok := cmd.(py.String); !ok {
@@ -827,7 +835,7 @@ func getOutput(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 // module's own helper does.
 func list2cmdline(self py.Object, args py.Tuple) (py.Object, error) {
 	var seq py.Object
-	if err := py.UnpackTuple(args, nil, "list2cmdline", 1, 1, &seq); err != nil {
+	if err := py.UnpackTuple(args, py.StringDict{}, "list2cmdline", 1, 1, &seq); err != nil {
 		return nil, err
 	}
 	items, err := py.SequenceList(seq)

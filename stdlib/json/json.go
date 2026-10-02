@@ -41,12 +41,12 @@ const (
 var JSONDecodeErrorType = py.ExceptionType.NewType("json.JSONDecodeError", "JSON decoding error.", nil, nil)
 
 func init() {
-	globals := py.StringDict{}
-	globals["dumps"] = py.MustNewMethod("dumps", jsonDumps, 0, "Serialize obj to a JSON formatted str.")
-	globals["dump"] = py.MustNewMethod("dump", jsonDump, 0, "Serialize obj as a JSON formatted stream to a file.")
-	globals["loads"] = py.MustNewMethod("loads", jsonLoads, 0, "Deserialize a str or bytes to a Python object.")
-	globals["load"] = py.MustNewMethod("load", jsonLoad, 0, "Deserialize a file to a Python object.")
-	globals["JSONDecodeError"] = JSONDecodeErrorType
+	globals := py.NewStringDict()
+	globals.Set("dumps", py.MustNewMethod("dumps", jsonDumps, 0, "Serialize obj to a JSON formatted str."))
+	globals.Set("dump", py.MustNewMethod("dump", jsonDump, 0, "Serialize obj as a JSON formatted stream to a file."))
+	globals.Set("loads", py.MustNewMethod("loads", jsonLoads, 0, "Deserialize a str or bytes to a Python object."))
+	globals.Set("load", py.MustNewMethod("load", jsonLoad, 0, "Deserialize a file to a Python object."))
+	globals.Set("JSONDecodeError", JSONDecodeErrorType)
 
 	// JSONDecodeError exposes msg, doc, pos, lineno and colno as attributes,
 	// which is what code catching it reads.  They live in the exception's
@@ -54,7 +54,7 @@ func init() {
 	msgAttr := func(name string, index int) *py.Property {
 		return &py.Property{Fget: func(self py.Object) (py.Object, error) {
 			if e, ok := self.(*py.Exception); ok {
-				if v, ok := e.Dict[name]; ok {
+				if v, ok := e.Dict.Get(name); ok {
 					return v, nil
 				}
 				if args, ok := e.Args.(py.Tuple); ok && index < len(args) {
@@ -64,15 +64,15 @@ func init() {
 			return py.None, nil
 		}}
 	}
-	JSONDecodeErrorType.Dict["msg"] = msgAttr("msg", 0)
-	JSONDecodeErrorType.Dict["doc"] = msgAttr("doc", 1)
-	JSONDecodeErrorType.Dict["pos"] = msgAttr("pos", 2)
-	JSONDecodeErrorType.Dict["lineno"] = msgAttr("lineno", 3)
-	JSONDecodeErrorType.Dict["colno"] = msgAttr("colno", 4)
-	globals["JSONEncoder"] = EncoderType
-	globals["JSONDecoder"] = DecoderType
-	globals["encoder"] = EncoderType
-	globals["decoder"] = DecoderType
+	JSONDecodeErrorType.Dict.Set("msg", msgAttr("msg", 0))
+	JSONDecodeErrorType.Dict.Set("doc", msgAttr("doc", 1))
+	JSONDecodeErrorType.Dict.Set("pos", msgAttr("pos", 2))
+	JSONDecodeErrorType.Dict.Set("lineno", msgAttr("lineno", 3))
+	JSONDecodeErrorType.Dict.Set("colno", msgAttr("colno", 4))
+	globals.Set("JSONEncoder", EncoderType)
+	globals.Set("JSONDecoder", DecoderType)
+	globals.Set("encoder", EncoderType)
+	globals.Set("decoder", DecoderType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -114,7 +114,10 @@ func (e *Encoder) configure(args py.Tuple, kwargs py.StringDict) error {
 		sortKeys py.Object = py.False
 		seps     py.Object = py.None
 	)
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "skipkeys":
 			skipkeys = v
@@ -236,7 +239,7 @@ func (e *Encoder) encodeValue(obj py.Object, depth int, seen map[uintptr]bool) (
 	// A custom default() may handle it, which is how a decorated class or a
 	// datetime is serialised by real code.
 	if e.defaultFn != nil {
-		converted, err := py.Call(e.defaultFn, py.Tuple{obj}, nil)
+		converted, err := py.Call(e.defaultFn, py.Tuple{obj}, py.StringDict{})
 		if err != nil {
 			return "", err
 		}
@@ -259,9 +262,12 @@ func (e *Encoder) encodeDict(obj py.Object, d py.StringDict, depth int, seen map
 	// Keys become strings, as JSON requires.  An int key is stringified the
 	// way Python does; anything else that is not a string needs skipkeys.
 	type pair struct{ key, value string }
-	pairs := make([]pair, 0, len(d))
+	pairs := make([]pair, 0, d.Len())
 
-	for encoded, value := range d {
+	for _, __e := range d.Items() {
+		encoded := __e.Key
+		value := __e.Value
+
 		key, err := py.DictKeyDecode(encoded)
 		if err != nil {
 			return "", err
@@ -465,7 +471,7 @@ func jsonDump(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if err != nil {
 		return nil, py.ExceptionNewf(py.TypeError, "fp must have a write() method")
 	}
-	if _, err := py.Call(write, py.Tuple{text}, nil); err != nil {
+	if _, err := py.Call(write, py.Tuple{text}, py.StringDict{}); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -491,7 +497,10 @@ func jsonLoads(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	// The module-level loads() accepts the same hook keywords as a Decoder,
 	// so build a decoder when any were given.
 	dec := &Decoder{}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "object_hook":
 			dec.objectHook = v
@@ -520,7 +529,7 @@ func jsonLoad(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if err != nil {
 		return nil, py.ExceptionNewf(py.TypeError, "fp must have a read() method")
 	}
-	text, err := py.Call(read, py.Tuple{}, nil)
+	text, err := py.Call(read, py.Tuple{}, py.StringDict{})
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +561,7 @@ func (d *decoder) error(msg string) error {
 	}
 	e, err := py.ExceptionNew(JSONDecodeErrorType, py.Tuple{
 		py.String(msg), py.String(d.src), py.Int(d.pos),
-	}, nil)
+	}, py.StringDict{})
 	if err != nil {
 		return err
 	}
@@ -560,16 +569,16 @@ func (d *decoder) error(msg string) error {
 	if !ok {
 		return err
 	}
-	if exc.Dict == nil {
+	if exc.Dict.IsNil() {
 		exc.Dict = py.NewStringDict()
 	}
 	// The Dict keys go through a plain map write, which is fine here: these
 	// are string keys and a string key is stored verbatim.
-	exc.Dict["msg"] = py.String(msg)
-	exc.Dict["doc"] = py.String(d.src)
-	exc.Dict["pos"] = py.Int(d.pos)
-	exc.Dict["lineno"] = py.Int(line)
-	exc.Dict["colno"] = py.Int(col)
+	exc.Dict.Set("msg", py.String(msg))
+	exc.Dict.Set("doc", py.String(d.src))
+	exc.Dict.Set("pos", py.Int(d.pos))
+	exc.Dict.Set("lineno", py.Int(line))
+	exc.Dict.Set("colno", py.Int(col))
 	return exc
 }
 
@@ -696,10 +705,10 @@ func (d *decoder) parseObject() (py.Object, error) {
 // object, which is how a caller substitutes its own type for a dict.
 func (d *decoder) applyObjectHooks(result py.StringDict, pairs py.Tuple) (py.Object, error) {
 	if d.objectPairsHook != nil {
-		return py.Call(d.objectPairsHook, py.Tuple{pairs}, nil)
+		return py.Call(d.objectPairsHook, py.Tuple{pairs}, py.StringDict{})
 	}
 	if d.objectHook != nil {
-		return py.Call(d.objectHook, py.Tuple{result}, nil)
+		return py.Call(d.objectHook, py.Tuple{result}, py.StringDict{})
 	}
 	return result, nil
 }
@@ -835,10 +844,10 @@ func (d *decoder) parseNumber() (py.Object, error) {
 	if !isFloat {
 		// parse_int, when given, produces the value for an integer literal.
 		if d.parseInt != nil {
-			return py.Call(d.parseInt, py.Tuple{py.String(text)}, nil)
+			return py.Call(d.parseInt, py.Tuple{py.String(text)}, py.StringDict{})
 		}
 	} else if d.parseFloat != nil {
-		return py.Call(d.parseFloat, py.Tuple{py.String(text)}, nil)
+		return py.Call(d.parseFloat, py.Tuple{py.String(text)}, py.StringDict{})
 	}
 	if !isFloat {
 		// An integer stays an int.  A number too large for the int type
@@ -872,7 +881,10 @@ type Decoder struct {
 
 var DecoderType = py.NewTypeX("json.JSONDecoder", "Simple JSON decoder.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	d := &Decoder{}
-	for k, v := range kwargs {
+	for _, __e := range kwargs.Items() {
+		k := __e.Key
+		v := __e.Value
+
 		switch k {
 		case "object_hook":
 			d.objectHook = v
@@ -924,9 +936,9 @@ func (d *Decoder) decodeText(text string) (py.Object, error) {
 }
 
 func init() {
-	DecoderType.Dict["decode"] = py.MustNewMethod("decode", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DecoderType.Dict.Set("decode", py.MustNewMethod("decode", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var s py.Object
-		if err := py.UnpackTuple(args, nil, "decode", 1, 1, &s); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "decode", 1, 1, &s); err != nil {
 			return nil, err
 		}
 		text, ok := s.(py.String)
@@ -934,14 +946,14 @@ func init() {
 			return nil, py.ExceptionNewf(py.TypeError, "the JSON object must be str, not %s", s.Type().Name)
 		}
 		return self.(*Decoder).decodeText(string(text))
-	}, 0, "Return the Python representation of s.")
+	}, 0, "Return the Python representation of s."))
 
 	// raw_decode stops at the end of the first JSON value rather than
 	// requiring the whole string to be one, and reports where it stopped.
-	DecoderType.Dict["raw_decode"] = py.MustNewMethod("raw_decode", func(self py.Object, args py.Tuple) (py.Object, error) {
+	DecoderType.Dict.Set("raw_decode", py.MustNewMethod("raw_decode", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var s py.Object
 		idx := py.Object(py.Int(0))
-		if err := py.UnpackTuple(args, nil, "raw_decode", 1, 2, &s, &idx); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "raw_decode", 1, 2, &s, &idx); err != nil {
 			return nil, err
 		}
 		text, ok := s.(py.String)
@@ -959,7 +971,7 @@ func init() {
 			return nil, err
 		}
 		return py.Tuple{value, py.Int(sc.pos)}, nil
-	}, 0, "Decode a JSON document from s and return (value, end_index).")
+	}, 0, "Decode a JSON document from s and return (value, end_index)."))
 
 	// The hook attributes are readable, which is how code checks whether one
 	// was set before relying on its effect.
@@ -971,21 +983,21 @@ func init() {
 			return py.None, nil
 		}}
 	}
-	DecoderType.Dict["object_hook"] = hookAttr("object_hook", func(d *Decoder) py.Object { return d.objectHook })
-	DecoderType.Dict["object_pairs_hook"] = hookAttr("object_pairs_hook", func(d *Decoder) py.Object { return d.objectPairsHook })
-	DecoderType.Dict["parse_float"] = hookAttr("parse_float", func(d *Decoder) py.Object { return d.parseFloat })
-	DecoderType.Dict["parse_int"] = hookAttr("parse_int", func(d *Decoder) py.Object { return d.parseInt })
-	DecoderType.Dict["parse_constant"] = hookAttr("parse_constant", func(d *Decoder) py.Object { return d.parseConstant })
+	DecoderType.Dict.Set("object_hook", hookAttr("object_hook", func(d *Decoder) py.Object { return d.objectHook }))
+	DecoderType.Dict.Set("object_pairs_hook", hookAttr("object_pairs_hook", func(d *Decoder) py.Object { return d.objectPairsHook }))
+	DecoderType.Dict.Set("parse_float", hookAttr("parse_float", func(d *Decoder) py.Object { return d.parseFloat }))
+	DecoderType.Dict.Set("parse_int", hookAttr("parse_int", func(d *Decoder) py.Object { return d.parseInt }))
+	DecoderType.Dict.Set("parse_constant", hookAttr("parse_constant", func(d *Decoder) py.Object { return d.parseConstant }))
 
-	EncoderType.Dict["encode"] = py.MustNewMethod("encode", func(self py.Object, args py.Tuple) (py.Object, error) {
+	EncoderType.Dict.Set("encode", py.MustNewMethod("encode", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var obj py.Object
-		if err := py.UnpackTuple(args, nil, "encode", 1, 1, &obj); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "encode", 1, 1, &obj); err != nil {
 			return nil, err
 		}
 		return self.(*Encoder).encode(obj)
-	}, 0, "Return a JSON string representation of a Python data structure.")
+	}, 0, "Return a JSON string representation of a Python data structure."))
 
-	EncoderType.Dict["indent"] = &py.Property{
+	EncoderType.Dict.Set("indent", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			e := self.(*Encoder)
 			if !e.hasIndent {
@@ -993,33 +1005,33 @@ func init() {
 			}
 			return py.String(e.indent), nil
 		},
-	}
-	EncoderType.Dict["sort_keys"] = &py.Property{
+	})
+	EncoderType.Dict.Set("sort_keys", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.NewBool(self.(*Encoder).sortKeys), nil
 		},
-	}
-	EncoderType.Dict["skipkeys"] = &py.Property{
+	})
+	EncoderType.Dict.Set("skipkeys", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.NewBool(self.(*Encoder).skipkeys), nil
 		},
-	}
-	EncoderType.Dict["item_separator"] = &py.Property{
+	})
+	EncoderType.Dict.Set("item_separator", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.String(self.(*Encoder).itemSep), nil
 		},
-	}
-	EncoderType.Dict["key_separator"] = &py.Property{
+	})
+	EncoderType.Dict.Set("key_separator", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			return py.String(self.(*Encoder).keySep), nil
 		},
-	}
+	})
 
 	// iterencode yields the same text as encode() in pieces.  Here it is one
 	// piece, which satisfies callers that concatenate the result.
-	EncoderType.Dict["iterencode"] = py.MustNewMethod("iterencode", func(self py.Object, args py.Tuple) (py.Object, error) {
+	EncoderType.Dict.Set("iterencode", py.MustNewMethod("iterencode", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var obj py.Object
-		if err := py.UnpackTuple(args, nil, "iterencode", 1, 1, &obj); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "iterencode", 1, 1, &obj); err != nil {
 			return nil, err
 		}
 		text, err := self.(*Encoder).encode(obj)
@@ -1027,15 +1039,15 @@ func init() {
 			return nil, err
 		}
 		return py.NewIterator(py.Tuple{text}), nil
-	}, 0, "Encode the given object and yield the string representation.")
+	}, 0, "Encode the given object and yield the string representation."))
 
-	EncoderType.Dict["default"] = py.MustNewMethod("default", func(self py.Object, args py.Tuple) (py.Object, error) {
+	EncoderType.Dict.Set("default", py.MustNewMethod("default", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var obj py.Object
-		if err := py.UnpackTuple(args, nil, "default", 1, 1, &obj); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "default", 1, 1, &obj); err != nil {
 			return nil, err
 		}
 		return nil, py.ExceptionNewf(py.TypeError, "Object of type %s is not JSON serializable", obj.Type().Name)
-	}, 0, "Implement this method to serialise otherwise unsupported objects.")
+	}, 0, "Implement this method to serialise otherwise unsupported objects."))
 }
 
 // keep utf8 referenced: it documents that the decoder works on bytes and the

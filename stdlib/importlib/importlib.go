@@ -100,14 +100,23 @@ func import_module(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 			// The relative import is resolved against the package, which is
 			// recorded in __package__ - the same hook the import statement
 			// uses.
-			globals = py.StringDict{"__package__": py.String(pkg), "__name__": py.String(pkg)}
+			globals = py.NewStringDictFrom(
+				py.DictEntry{Key: "__package__", Value: py.String(pkg)},
+				py.DictEntry{Key: "__name__", Value: py.String(pkg)},
+			)
 		} else {
 			// "import_module('a.b')" with a package just means resolve
 			// relative to it; an absolute name needs no anchor.
-			globals = py.StringDict{"__package__": py.String(pkg), "__name__": py.String(pkg)}
+			globals = py.NewStringDictFrom(
+				py.DictEntry{Key: "__package__", Value: py.String(pkg)},
+				py.DictEntry{Key: "__name__", Value: py.String(pkg)},
+			)
 		}
 	} else {
-		globals = py.StringDict{"__package__": py.None, "__name__": py.String("__main__")}
+		globals = py.NewStringDictFrom(
+			py.DictEntry{Key: "__package__", Value: py.None},
+			py.DictEntry{Key: "__name__", Value: py.String("__main__")},
+		)
 	}
 
 	var (
@@ -115,7 +124,7 @@ func import_module(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 		err error
 	)
 	if level > 0 {
-		mod, err = py.ImportModuleLevelObject(ctx, name, globals, nil, nil, level)
+		mod, err = py.ImportModuleLevelObject(ctx, name, globals, py.StringDict{}, nil, level)
 	} else {
 		if err := py.Import(ctx, name); err != nil {
 			return nil, err
@@ -147,7 +156,7 @@ func reload(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "reload() argument must be a module")
 	}
-	nameObj, ok := mod.Globals["__name__"]
+	nameObj, ok := mod.Globals.Get("__name__")
 	if !ok {
 		return nil, py.ExceptionNewf(py.ImportError, "module has no __name__ attribute")
 	}
@@ -166,7 +175,7 @@ func reload(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	// the module object is reused, so existing references keep working.
 	store := ctx.Store()
 	path := ""
-	if p, ok := mod.Globals["__file__"]; ok {
+	if p, ok := mod.Globals.Get("__file__"); ok {
 		if s, err := py.StrAsString(p); err == nil {
 			path = s
 		}
@@ -339,19 +348,19 @@ const module_from_spec_doc = `module_from_spec(spec)
 Create a module based on the provided spec.`
 
 func init() {
-	ModuleSpecType.Dict["name"] = &py.Property{
+	ModuleSpecType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*ModuleSpec).Name), nil },
 		Doc:  "the module's name",
-	}
-	ModuleSpecType.Dict["origin"] = &py.Property{
+	})
+	ModuleSpecType.Dict.Set("origin", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.String(self.(*ModuleSpec).Origin), nil },
 		Doc:  "the module's file location",
-	}
-	ModuleSpecType.Dict["loader"] = &py.Property{
+	})
+	ModuleSpecType.Dict.Set("loader", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*ModuleSpec).Loader, nil },
 		Doc:  "the loader for this module",
-	}
-	ModuleSpecType.Dict["submodule_search_locations"] = &py.Property{
+	})
+	ModuleSpecType.Dict.Set("submodule_search_locations", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			s := self.(*ModuleSpec)
 			if !s.IsPkg {
@@ -362,7 +371,7 @@ func init() {
 			return l, nil
 		},
 		Doc: "the package search locations, or None",
-	}
+	})
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -374,10 +383,10 @@ func init() {
 			py.MustNewMethod("reload", reload, 0, reload_doc),
 			py.MustNewMethod("invalidate_caches", invalidate_caches, 0, invalidate_caches_doc),
 		},
-		Globals: py.StringDict{
-			"__doc__":     py.String(importlib_doc),
-			"__package__": py.String("importlib"),
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "__doc__", Value: py.String(importlib_doc)},
+			py.DictEntry{Key: "__package__", Value: py.String("importlib")},
+		),
 	})
 	// importlib.util is a module of its own so that "from importlib.util import
 	// find_spec" resolves, exactly as it does in CPython.
@@ -390,7 +399,7 @@ func init() {
 // them into named variables.  min may be negative, meaning "no lower
 // bound".
 func checkArgs(args py.Tuple, kwargs py.StringDict, name string, min, max int) error {
-	if len(kwargs) != 0 {
+	if kwargs.Len() != 0 {
 		return py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", name)
 	}
 	n := len(args)

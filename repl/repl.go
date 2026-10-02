@@ -131,7 +131,7 @@ func (r *REPL) Completer(line string, pos int) (head string, completions []strin
 	// log.Printf("head = %q, partial = %q, tail = %q", head, partial, tail)
 	found := make(map[string]struct{})
 	match := func(d py.StringDict) {
-		for k := range d {
+		for _, k := range d.Keys() {
 			if strings.HasPrefix(k, partial) {
 				if _, ok := found[k]; !ok {
 					completions = append(completions, k)

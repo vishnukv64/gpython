@@ -22,11 +22,11 @@ func init() {
 
 	// For each of your embedded python types, attach instance methods.
 	// When an instance method is invoked, the "self" py.Object is the instance.
-	PyVacationStopType.Dict["Set"] = py.MustNewMethod("Set", VacationStop_Set, 0, "")
-	PyVacationStopType.Dict["Get"] = py.MustNewMethod("Get", VacationStop_Get, 0, "")
-	PyVacationType.Dict["add_stops"] = py.MustNewMethod("Vacation.add_stops", Vacation_add_stops, 0, "")
-	PyVacationType.Dict["num_stops"] = py.MustNewMethod("Vacation.num_stops", Vacation_num_stops, 0, "")
-	PyVacationType.Dict["get_stop"] = py.MustNewMethod("Vacation.get_stop", Vacation_get_stop, 0, "")
+	PyVacationStopType.Dict.Set("Set", py.MustNewMethod("Set", VacationStop_Set, 0, ""))
+	PyVacationStopType.Dict.Set("Get", py.MustNewMethod("Get", VacationStop_Get, 0, ""))
+	PyVacationType.Dict.Set("add_stops", py.MustNewMethod("Vacation.add_stops", Vacation_add_stops, 0, ""))
+	PyVacationType.Dict.Set("num_stops", py.MustNewMethod("Vacation.num_stops", Vacation_num_stops, 0, ""))
+	PyVacationType.Dict.Set("get_stop", py.MustNewMethod("Vacation.get_stop", Vacation_get_stop, 0, ""))
 
 	// Bind methods attached at the module (global) level.
 	// When these are invoked, the first py.Object param (typically "self") is the bound *Module instance.
@@ -42,11 +42,11 @@ func init() {
 			Doc:  "Example embedded python module",
 		},
 		Methods: methods,
-		Globals: py.StringDict{
-			"PY_VERSION": py.String("Python 3.4 (github.com/vishnukv64/gpython)"),
-			"GO_VERSION": py.String(fmt.Sprintf("%s on %s %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)),
-			"MYLIB_VERS": py.String("Vacation 1.0 by Fletch F. Fletcher"),
-		},
+		Globals: py.NewStringDictFrom(
+			py.DictEntry{Key: "PY_VERSION", Value: py.String("Python 3.4 (github.com/vishnukv64/gpython)")},
+			py.DictEntry{Key: "GO_VERSION", Value: py.String(fmt.Sprintf("%s on %s %s", runtime.Version(), runtime.GOOS, runtime.GOARCH))},
+			py.DictEntry{Key: "MYLIB_VERS", Value: py.String("Vacation 1.0 by Fletch F. Fletcher")},
+		),
 		OnContextClosed: func(instance *py.Module) {
 			py.Println(instance, "<<< host py.Context of py.Module instance closing >>>\n+++")
 		},

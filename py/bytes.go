@@ -293,11 +293,11 @@ func (a Bytes) M__len__() (Object, error) {
 }
 
 func init() {
-	BytesType.Dict["__len__"] = MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
+	BytesType.Dict.Set("__len__", MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
 		return self.(Bytes).M__len__()
-	}, 0, "Return the number of bytes in the sequence.")
+	}, 0, "Return the number of bytes in the sequence."))
 
-	BytesType.Dict["replace"] = MustNewMethod("replace", func(self Object, args Tuple) (Object, error) {
+	BytesType.Dict.Set("replace", MustNewMethod("replace", func(self Object, args Tuple) (Object, error) {
 		return self.(Bytes).Replace(args)
 	}, 0, `replace(self, old, new, count=-1) -> return a copy with all occurrences of substring old replaced by new.
 
@@ -306,6 +306,6 @@ func init() {
     -1 (the default value) means replace all occurrences.
 
 If the optional argument count is given, only the first count occurrences are
-replaced.`)
+replaced.`))
 
 }

@@ -290,7 +290,7 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	// Look in the instance dictionary if it exists
 	if I, ok := self.(IGetDict); ok {
 		dict := I.GetDict()
-		res, ok = dict[key]
+		res, ok = dict.Get(key)
 		if ok {
 			// A type's dict is its class namespace, and class attributes
 			// still go through the descriptor protocol: a staticmethod in
@@ -384,10 +384,10 @@ func SetAttrString(self Object, key string, value Object) (Object, error) {
 	// possible
 	if I, ok := self.(IGetDict); ok {
 		dict := I.GetDict()
-		if dict == nil {
+		if dict.IsNil() {
 			return nil, ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
 		}
-		dict[key] = value
+		dict.Set(key, value)
 		return None, nil
 	}
 
@@ -429,11 +429,11 @@ func DeleteAttrString(self Object, key string) error {
 	// if possible
 	if I, ok := self.(IGetDict); ok {
 		dict := I.GetDict()
-		if dict == nil {
+		if dict.IsNil() {
 			return ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
 		}
-		if _, ok := dict[key]; ok {
-			delete(dict, key)
+		if _, ok := dict.Get(key); ok {
+			dict.Del(key)
 			return nil
 		}
 	}

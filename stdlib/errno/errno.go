@@ -131,7 +131,7 @@ var errors = []errnoEntry{
 }
 
 func init() {
-	globals := py.StringDict{}
+	globals := py.NewStringDict()
 
 	// The names are module attributes so that "errno.EPIPE" works; the
 	// message table is what errno.errorcode and errno.strerror use.
@@ -143,7 +143,7 @@ func init() {
 	// plain Go string key would never be found by an int key.
 	for _, e := range errors {
 		number := int(e.number)
-		globals[e.name] = py.Int(number)
+		globals.Set(e.name, py.Int(number))
 		if _, ok := strerror[number]; !ok {
 			strerror[number] = e.number.Error()
 		}
@@ -152,10 +152,10 @@ func init() {
 		}
 	}
 
-	globals["errorcode"] = errorcode
-	globals["strerror"] = py.MustNewMethod("strerror", func(self py.Object, args py.Tuple) (py.Object, error) {
+	globals.Set("errorcode", errorcode)
+	globals.Set("strerror", py.MustNewMethod("strerror", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var code py.Object
-		if err := py.UnpackTuple(args, nil, "strerror", 1, 1, &code); err != nil {
+		if err := py.UnpackTuple(args, py.StringDict{}, "strerror", 1, 1, &code); err != nil {
 			return nil, err
 		}
 		n, err := py.IndexInt(code)
@@ -166,7 +166,7 @@ func init() {
 			return py.String(message), nil
 		}
 		return nil, py.ExceptionNewf(py.ValueError, "Unknown error code %d", n)
-	}, 0, "strerror(code) -> the message for an errno.")
+	}, 0, "strerror(code) -> the message for an errno."))
 
 	// E* constants cover the Linux and BSD names Python exposes; the table
 	// above is deliberately the superset, because a program that imports
