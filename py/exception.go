@@ -462,6 +462,13 @@ func SetCurrentException(e *Exception) {
 		return
 	}
 	gCurrentException.exc[id] = e
+	// This is the raise path - the vm calls SetCurrentException when it raises -
+	// so it is where a traceback is captured.  CPython sets __traceback__ at
+	// raise for the same reason: it is the only moment the frames that led here
+	// are still on the stack.  SetExceptionTraceback does not overwrite a
+	// traceback an exception already carries, so a re-raise or a chain keeps
+	// the place the exception originally came from.
+	SetExceptionTraceback(e, CaptureTraceback())
 }
 
 // CurrentException returns the exception now being handled, or nil.
@@ -486,6 +493,14 @@ func (e *Exception) M__str__() (Object, error) {
 		return String(""), nil
 	}
 	if len(args) == 1 {
+		// KeyError is the one builtin exception whose message is the REPR of
+		// its argument, not str(): str(KeyError('k')) is "'k'", with the
+		// quotes, because a KeyError is reporting a key and the quotes make
+		// a string key distinguishable from a non-string one.  CPython does
+		// this in KeyError_str.
+		if e.Base == KeyError {
+			return Repr(args[0])
+		}
 		// str(ValueError(5)) is "5": the single argument is str()'d, not
 		// returned as it stands.
 		return Str(args[0])

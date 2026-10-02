@@ -1971,6 +1971,17 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 	vm.exc.Type, _ = vm.POP().(*py.Type)
 	vm.exc.Value = vm.POP()
 	vm.exc.Traceback, _ = vm.POP().(*py.Traceback)
+	// The except block has ended, so the exception it was handling is no longer
+	// being handled, and sys.exc_info() must go back to what it was BEFORE the
+	// handler - None in the common case, or the outer handler's exception when
+	// handlers are nested.
+	//
+	// Only the raise path used to touch the Python-visible state, and nothing
+	// ever cleared it, so sys.exc_info() kept reporting an exception long after
+	// its except block finished; nested handlers destroyed the outer one's
+	// state instead of restoring it.  vm.exc is already restored here, so it is
+	// the value to republish.
+	py.SetCurrentExceptionFromValue(vm.exc.Value)
 	if debugging {
 		debugf("** UnwindExceptHandler exc = (type: %v, value: %v, traceback: %v)\n", vm.exc.Type, vm.exc.Value, vm.exc.Traceback)
 	}

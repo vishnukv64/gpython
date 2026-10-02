@@ -1,0 +1,15 @@
+frame order: ['<module>', 'outer', 'inner']
+has tb_lineno: True
+tb_next of innermost is None: True
+only: TypeError: t
+empty: ValueError
+custom: MyErr: custom
+in handler: KeyError
+after handler: None
+KeyError str: "'k'"
+IndexError str: 'i'
+format_exc outside: 'NoneType: None\n'
+extract_tb names: ['<module>', 'outer', 'inner']
+extract_tb file is this file: True
+walk_tb count: 3
+walk_tb pairs are (frame, lineno): True

@@ -77,6 +77,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/textwrap"
 	_ "github.com/vishnukv64/gpython/stdlib/threading"
 	_ "github.com/vishnukv64/gpython/stdlib/time"
+	_ "github.com/vishnukv64/gpython/stdlib/traceback"
 	_ "github.com/vishnukv64/gpython/stdlib/types"
 	_ "github.com/vishnukv64/gpython/stdlib/typing"
 	_ "github.com/vishnukv64/gpython/stdlib/urllib"
