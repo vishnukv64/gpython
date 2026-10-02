@@ -157,7 +157,12 @@ func RunSrc(ctx Context, pySrc string, pySrcDesc string, inModule interface{}) (
 	if pySrcDesc == "" {
 		pySrcDesc = "<run>"
 	}
-	code, err := Compile(pySrc+"\n", pySrcDesc, SingleMode, 0, true)
+	// ExecMode, not SingleMode: "-c" is a program, not a line of interactive
+	// input, and SingleMode compiles exactly ONE statement - everything after
+	// the first newline was silently dropped.  "gpython -c 'a\nb'" printed a
+	// and exited 0, with no error and no traceback, which is the worst way for
+	// a program to be wrong.  CPython compiles -c with Py_file_input.
+	code, err := Compile(pySrc+"\n", pySrcDesc, ExecMode, 0, true)
 	if err != nil {
 		return nil, err
 	}

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/repl"
@@ -42,12 +43,52 @@ Full options:
 
 func main() {
 	flag.Usage = syntaxError
-	flag.Parse()
+	// Stop at the first non-flag argument, the way CPython does.
+	//
+	// Go's flag package keeps parsing after a positional argument, so every
+	// flag AFTER the script name was eaten by gpython instead of reaching the
+	// program: "gpython -m pip --version" printed gpython's own version, and
+	// "gpython -m pip --help" printed gpython's own help.  pip has both flags,
+	// so it could never be invoked at all.  Parse only the leading flags -
+	// everything from the first non-flag word onward belongs to the program.
+	args := os.Args[1:]
+	split := len(args)
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" || len(a) == 0 || a[0] != '-' {
+			// "-" means stdin, which is a positional argument too.
+			split = i
+			break
+		}
+		// "-c" and "-m" take the PROGRAM as their value, so their flag
+		// ends gpython's own option region: everything after it - the
+		// program's arguments, including its own "--version" - belongs to
+		// the program.
+		if a == "-c" || a == "-m" {
+			split = i
+			if split+2 <= len(args) && !strings.Contains(a, "=") {
+				split += 2
+			} else {
+				split++
+			}
+			break
+		}
+		// A flag that takes a separate value must not have that value
+		// mistaken for the first positional argument.
+		if a == "-cpuprofile" && !strings.Contains(a, "=") {
+			i++
+		}
+	}
+	if err := flag.CommandLine.Parse(args[:split]); err != nil {
+		return
+	}
 	if *showVer {
 		fmt.Printf("Gpython %s (%s, %s)\n", version, commit, date)
 		return
 	}
-	xmain(flag.Args())
+	// flag.Args() holds only what Parse itself was given, so the arguments
+	// after gpython's region - the program's own - are appended back.
+	xmain(append(flag.Args(), args[split:]...))
 }
 
 func xmain(args []string) {
