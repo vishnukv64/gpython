@@ -87,7 +87,7 @@ func init() {
 		py.DictEntry{Key: "__debug__", Value: py.True},
 		py.DictEntry{Key: "bool", Value: py.BoolType},
 		// "memoryview":     py.MemoryViewType,
-		// "bytearray":      py.ByteArrayType,
+		py.DictEntry{Key: "bytearray", Value: py.ByteArrayType},
 		py.DictEntry{Key: "bytes", Value: py.BytesType},
 		py.DictEntry{Key: "classmethod", Value: py.ClassMethodType},
 		py.DictEntry{Key: "complex", Value: py.ComplexType},
