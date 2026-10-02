@@ -230,7 +230,7 @@ func init() {
 		"AsyncIterable", "AsyncIterator", "Awaitable", "BinaryIO", "ByteString",
 		"Callable", "ClassVar", "Collection", "Concatenate", "Container",
 		"ContextManager", "Coroutine", "DefaultDict", "Deque", "Dict",
-		"Final", "ForwardRef", "FrozenSet", "Generator",
+		"Final", "FrozenSet", "Generator",
 		"Hashable", "IO", "ItemsView", "Iterable", "Iterator", "KeysView",
 		"List", "Literal", "LiteralString", "Mapping", "MappingView",
 		"Match", "Pattern", "MutableMapping", "MutableSequence", "MutableSet",
@@ -246,6 +246,27 @@ func init() {
 	} {
 		globals.Set(name, form(name))
 	}
+
+	// ForwardRef is a CLASS in CPython, not a subscriptable construct, and
+	// code inspects its __slots__: typing_extensions opens with
+	//
+	//     "__forward_is_class__" in typing.ForwardRef.__slots__
+	//
+	// which is a plain membership test on a slot tuple.  Made a special form,
+	// as everything else in the list above is, it had no __slots__ at all and
+	// typing_extensions and pydantic both died on its first line.  The slots
+	// are the ones CPython 3.14 declares.
+	forwardRef := py.NewTypeX("typing.ForwardRef",
+		"ForwardRef(arg) -> a reference to an argument not yet defined.", nil, nil)
+	forwardRef.Dict.Set("__slots__", py.Tuple{
+		py.String("__forward_is_argument__"), py.String("__forward_is_class__"),
+		py.String("__forward_module__"), py.String("__weakref__"),
+		py.String("__arg__"), py.String("__globals__"), py.String("__extra_names__"),
+		py.String("__code__"), py.String("__ast_node__"), py.String("__cell__"),
+		py.String("__owner__"), py.String("__stringifier_dict__"),
+		py.String("__resolved_str_cache__"),
+	})
+	globals.Set("ForwardRef", forwardRef)
 
 	// The containers that collections.abc actually implements are aliases of
 	// it, so isinstance answers correctly rather than always being False.
