@@ -228,11 +228,35 @@ func (t *Type) GetDict() StringDict {
 // delayedReady holds types waiting to be intialised
 var delayedReady = []*Type{}
 
+// delayedReadyPending records whether delayedReady has entries that arrived
+// after TypeMakeReady last drained the queue.
+//
+// TypeMakeReady runs once, during this package's init, so a type declared by any
+// later-initialising package (every stdlib module) is appended to delayedReady
+// but never readied: it keeps an empty Mro and an incomplete dict copy.  Ready()
+// is idempotent, so a type made this way is readied lazily on first use instead,
+// in TypeEnsureReady.
+var delayedReadyPending bool
+
 // TypeDelayReady stores the list of types to initialise
 //
 // Call MakeReady when all initialised
 func TypeDelayReady(t *Type) {
 	delayedReady = append(delayedReady, t)
+	delayedReadyPending = true
+}
+
+// TypeEnsureReady readies every type queued since the last drain.
+//
+// It is called before an operation that depends on a type's Mro being populated,
+// so that types created by packages which initialise after this one are usable.
+// Ready() is a no-op for an already-ready type, so calling this repeatedly is
+// cheap; the pending flag keeps the common case off the queue entirely.
+func TypeEnsureReady() error {
+	if !delayedReadyPending {
+		return nil
+	}
+	return TypeMakeReady()
 }
 
 // TypeMakeReady readies all the types
@@ -244,6 +268,7 @@ func TypeMakeReady() (err error) {
 		}
 	}
 	delayedReady = nil
+	delayedReadyPending = false
 	return nil
 }
 
@@ -380,6 +405,14 @@ func (t *Type) NewTypeFlags(Name string, Doc string, New NewFunc, Init InitFunc,
 		Init = t.Init
 	}
 	// FIXME inherit more stuff
+	//
+	// TPFLAGS_READY and TPFLAGS_READYING must NOT be inherited: they describe
+	// whether *this* type has been readied, and Ready() returns immediately when
+	// READY is set.  Inheriting READY from the base left every NewType subclass
+	// with an empty Mro, so an except clause naming a grandparent of the raised
+	// class did not match - binascii.Error derives from ValueError, and
+	// 'except Exception' has to catch it.
+	Flags &^= TPFLAGS_READY | TPFLAGS_READYING
 	tt := &Type{
 		ObjectType: t,
 		Name:       Name,
@@ -430,6 +463,16 @@ func (metatype *Type) CalculateMetaclass(bases Tuple) (*Type, error) {
 // reads a IsSubtype of b
 func (a *Type) IsSubtype(b *Type) bool {
 	mro := a.Mro
+	if len(mro) == 0 {
+		// A type whose Mro is still empty has not been readied.  TypeMakeReady
+		// runs once, during this package's init, so a type declared by any
+		// later-initialising package - every stdlib module - is queued but
+		// never readied.  Drain that queue now so the MRO is available; the
+		// fallback below walks Base only and would miss a grandparent.
+		if err := TypeEnsureReady(); err == nil {
+			mro = a.Mro
+		}
+	}
 	if len(mro) != 0 {
 		// Deal with multiple inheritance without recursion
 		// by walking the MRO tuple

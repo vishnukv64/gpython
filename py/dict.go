@@ -83,28 +83,243 @@ func init() {
 	}, 0, "values() -> list of D's values, as a list")
 
 	StringDictType.Dict["get"] = MustNewMethod("get", func(self Object, args Tuple) (Object, error) {
-		var length = len(args)
-		switch {
-		case length == 0:
-			return nil, ExceptionNewf(TypeError, "%s expected at least 1 arguments, got %d", "items()", length)
-		case length > 2:
-			return nil, ExceptionNewf(TypeError, "%s expected at most 2 arguments, got %d", "items()", length)
-		}
 		sMap := self.(StringDict)
-		if str, ok := args[0].(String); ok {
-			if res, ok := sMap[string(str)]; ok {
-				return res, nil
-			}
+		if len(args) < 1 {
+			return nil, ExceptionNewf(TypeError, "get expected at least 1 argument, got %d", len(args))
+		}
+		if len(args) > 2 {
+			return nil, ExceptionNewf(TypeError, "get expected at most 2 arguments, got %d", len(args))
+		}
+		encoded, err := dictKey(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if res, ok := sMap[encoded]; ok {
+			return res, nil
+		}
+		if len(args) == 2 {
+			return args[1], nil
+		}
+		return None, nil
+	}, 0, "get(key[, default]) -> value for key if key is in the dictionary, else default (None by default).")
 
-			switch length {
-			case 2:
+	StringDictType.Dict["pop"] = MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+		d := self.(StringDict)
+		if len(args) < 1 {
+			return nil, ExceptionNewf(TypeError, "pop expected at least 1 argument, got %d", len(args))
+		}
+		if len(args) > 2 {
+			return nil, ExceptionNewf(TypeError, "pop expected at most 2 arguments, got %d", len(args))
+		}
+		// CPython answers an empty dict before it ever hashes the key, so
+		// the default is returned (and an unhashable key is not complained
+		// about) when there is nothing to pop.
+		if len(d) == 0 {
+			if len(args) == 2 {
 				return args[1], nil
-			default:
-				return None, nil
 			}
+			return nil, ExceptionNewf(KeyError, "%v", args[0])
+		}
+		encoded, err := dictKey(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if res, ok := d[encoded]; ok {
+			delete(d, encoded)
+			return res, nil
+		}
+		if len(args) == 2 {
+			return args[1], nil
 		}
 		return nil, ExceptionNewf(KeyError, "%v", args[0])
-	}, 0, "gets(key, default) -> If there is a val corresponding to key, return val, otherwise default")
+	}, 0, "pop(key[, default]) -> value -- remove specified key and return the corresponding value.")
+
+	StringDictType.Dict["popitem"] = MustNewMethod("popitem", func(self Object, args Tuple) (Object, error) {
+		d := self.(StringDict)
+		if err := methodNoArgs("dict.popitem", args); err != nil {
+			return nil, err
+		}
+		// NOTE: StringDict is a Go map, which has no insertion order, so this
+		// returns an arbitrary pair rather than CPython's most recently
+		// added one.  Draining a dict is unaffected; the order of the pairs
+		// is not reproducible.
+		for k, v := range d {
+			key, err := dictKeyDecode(k)
+			if err != nil {
+				return nil, err
+			}
+			delete(d, k)
+			return Tuple{key, v}, nil
+		}
+		return nil, ExceptionNewf(KeyError, "%v", "popitem(): dictionary is empty")
+	}, 0, "popitem() -> (k, v) -- remove and return some (key, value) pair as a 2-tuple.")
+
+	StringDictType.Dict["setdefault"] = MustNewMethod("setdefault", func(self Object, args Tuple) (Object, error) {
+		d := self.(StringDict)
+		if len(args) < 1 {
+			return nil, ExceptionNewf(TypeError, "setdefault expected at least 1 argument, got %d", len(args))
+		}
+		if len(args) > 2 {
+			return nil, ExceptionNewf(TypeError, "setdefault expected at most 2 arguments, got %d", len(args))
+		}
+		encoded, err := dictKey(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if res, ok := d[encoded]; ok {
+			return res, nil
+		}
+		var deflt Object = None
+		if len(args) == 2 {
+			deflt = args[1]
+		}
+		d[encoded] = deflt
+		return deflt, nil
+	}, 0, "setdefault(key[, default]) -> value -- return value if key is in the dictionary, else insert and return default.")
+
+	StringDictType.Dict["update"] = MustNewMethod("update", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		d := self.(StringDict)
+		if len(args) > 1 {
+			return nil, ExceptionNewf(TypeError, "update expected at most 1 argument, got %d", len(args))
+		}
+		if len(args) == 1 {
+			if err := dictUpdateFrom(d, args[0]); err != nil {
+				return nil, err
+			}
+		}
+		// Keyword arguments are name=value pairs; the names are Python
+		// identifiers, so they are stored verbatim, exactly as dict()
+		// stores its own keyword arguments.
+		for k, v := range kwargs {
+			d[k] = v
+		}
+		return None, nil
+	}, 0, "update([other]) -> None.  Update D from a dict/iterable of key/value pairs and keywords.")
+
+	StringDictType.Dict["clear"] = MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
+		d := self.(StringDict)
+		if err := methodNoArgs("dict.clear", args); err != nil {
+			return nil, err
+		}
+		// The map is shared with the caller, so its entries have to be
+		// removed rather than the map being replaced.
+		for k := range d {
+			delete(d, k)
+		}
+		return None, nil
+	}, 0, "clear() -> None.  Remove all items from the dictionary.")
+
+	StringDictType.Dict["copy"] = MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+		d := self.(StringDict)
+		if err := methodNoArgs("dict.copy", args); err != nil {
+			return nil, err
+		}
+		return d.Copy(), nil
+	}, 0, "copy() -> a shallow copy of the dictionary.")
+
+	// dict.fromkeys is a class method in CPython: it is looked up on the
+	// type (dict.fromkeys) as well as on an instance ({}.fromkeys).  In both
+	// forms the arguments arrive unshifted - self is the dict for the bound
+	// form and the module for the unbound one - so unlike the other methods
+	// this one ignores self entirely.
+	StringDictType.Dict["fromkeys"] = MustNewMethod("fromkeys", func(self Object, args Tuple) (Object, error) {
+		if len(args) < 1 {
+			return nil, ExceptionNewf(TypeError, "fromkeys expected at least 1 argument, got %d", len(args))
+		}
+		if len(args) > 2 {
+			return nil, ExceptionNewf(TypeError, "fromkeys expected at most 2 arguments, got %d", len(args))
+		}
+		var value Object = None
+		if len(args) == 2 {
+			value = args[1]
+		}
+		out := NewStringDict()
+		var loopErr error
+		err := Iterate(args[0], func(key Object) bool {
+			encoded, err := dictKey(key)
+			if err != nil {
+				loopErr = err
+				return true
+			}
+			out[encoded] = value
+			return false
+		})
+		if err != nil {
+			return nil, err
+		}
+		if loopErr != nil {
+			return nil, loopErr
+		}
+		return out, nil
+	}, 0, "fromkeys(iterable, value=None, /) -> New dict with keys from iterable and values equal to value.")
+}
+
+// dictUpdateFrom implements the body shared by dict.update() and
+// dict.__ior__().
+//
+// other may be a mapping - anything with a keys() method, which is how
+// CPython tells the two forms apart - or an iterable of key/value pairs.
+func dictUpdateFrom(d StringDict, other Object) error {
+	if src, ok := other.(StringDict); ok {
+		for k, v := range src {
+			d[k] = v
+		}
+		return nil
+	}
+	if keysFn, err := GetAttrString(other, "keys"); err == nil {
+		keys, err := Call(keysFn, nil, nil)
+		if err != nil {
+			return err
+		}
+		var loopErr error
+		err = Iterate(keys, func(key Object) bool {
+			value, err := GetItem(other, key)
+			if err != nil {
+				loopErr = err
+				return true
+			}
+			encoded, err := dictKey(key)
+			if err != nil {
+				loopErr = err
+				return true
+			}
+			d[encoded] = value
+			return false
+		})
+		if err == nil {
+			err = loopErr
+		}
+		return err
+	}
+	index := 0
+	var loopErr error
+	err := Iterate(other, func(item Object) bool {
+		var pair []Object
+		err := Iterate(item, func(o Object) bool {
+			pair = append(pair, o)
+			return false
+		})
+		if err != nil {
+			loopErr = ExceptionNewf(TypeError, "object is not iterable")
+			return true
+		}
+		if len(pair) != 2 {
+			loopErr = ExceptionNewf(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", index, len(pair))
+			return true
+		}
+		encoded, err := dictKey(pair[0])
+		if err != nil {
+			loopErr = err
+			return true
+		}
+		d[encoded] = pair[1]
+		index++
+		return false
+	})
+	if err == nil {
+		err = loopErr
+	}
+	return err
 }
 
 // String to object dictionary
@@ -526,6 +741,32 @@ func (a StringDict) M__ne__(other Object) (Object, error) {
 	return True, nil
 }
 
+// M__or__ merges two dicts into a new one, which is the PEP 584 "|" that
+// CPython 3.9 added.  It only accepts another dict, as CPython does, so a
+// list of pairs yields NotImplemented and the caller reports the operand
+// type error.
+func (a StringDict) M__or__(other Object) (Object, error) {
+	b, ok := other.(StringDict)
+	if !ok {
+		return NotImplemented, nil
+	}
+	out := a.Copy()
+	for k, v := range b {
+		out[k] = v
+	}
+	return out, nil
+}
+
+// M__ior__ is the in-place form of M__or__ (PEP 584 "|=").  It updates the
+// receiver and returns it; like dict.update() it also accepts an iterable of
+// key/value pairs.
+func (a StringDict) M__ior__(other Object) (Object, error) {
+	if err := dictUpdateFrom(a, other); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
 func (a StringDict) M__contains__(other Object) (Object, error) {
 	encoded, err := dictKey(other)
 	if err != nil {
@@ -542,3 +783,5 @@ func (d StringDict) GetDict() StringDict {
 }
 
 var _ IGetDict = (*StringDict)(nil)
+var _ I__or__ = StringDict(nil)
+var _ I__ior__ = StringDict(nil)

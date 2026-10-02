@@ -1431,6 +1431,11 @@ func (vm *Vm) raise(exc, cause py.Object) error {
 		// raise <instance>
 		// raise <type>
 		excException := py.MakeException(exc)
+		// Record it for sys.exc_info().  This is where the interpreter knows
+		// which exception is in play, and nothing clears it until another
+		// raise, so an except clause calling exc_info() sees the exception it
+		// is handling.
+		py.SetCurrentException(excException)
 		if debugging {
 			debugf("raise: excException = %v\n", excException)
 		}

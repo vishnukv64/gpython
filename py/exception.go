@@ -362,6 +362,25 @@ func (e *Exception) M__getattr__(name string) (Object, error) {
 	return e.Args, nil // FIXME All attributes are args!
 }
 
+// gCurrentException is the exception the interpreter is currently handling,
+// which sys.exc_info() reports.  The VM records it when a raise happens.
+//
+// A plain package variable rather than a field on the interpreter context
+// because the VM sets it on its error path and nothing here needs a
+// per-context value.
+//
+// Known difference: CPython clears the state when the except block ends,
+// whereas here it survives until the next raise.  Code that reads exc_info()
+// INSIDE a handler - which is what it is for - sees the right exception.
+var gCurrentException *Exception
+
+// SetCurrentException records the exception now being handled.  The VM calls
+// it; passing nil clears the state.
+func SetCurrentException(e *Exception) { gCurrentException = e }
+
+// CurrentException returns the exception now being handled, or nil.
+func CurrentException() *Exception { return gCurrentException }
+
 func (e *Exception) M__str__() (Object, error) {
 	args, ok := e.Args.(Tuple)
 	if !ok || len(args) == 0 {

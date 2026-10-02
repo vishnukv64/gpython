@@ -17,6 +17,7 @@ import (
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/repl"
 	"github.com/vishnukv64/gpython/repl/cli"
+	"github.com/vishnukv64/gpython/stdlib/atexit"
 
 	_ "github.com/vishnukv64/gpython/stdlib"
 )
@@ -64,12 +65,17 @@ func xmain(args []string) {
 	}
 
 	if err != nil {
+		// The atexit handlers run on every exit path, including this one: a
+		// program that ends with an uncaught exception still runs them, as
+		// CPython does.
+		atexit.RunExitFuncs()
 		if py.IsException(py.SystemExit, err) {
 			handleSystemExit(err.(py.ExceptionInfo).Value.(*py.Exception))
 		}
 		py.TracebackDump(err)
 		os.Exit(1)
 	}
+	atexit.RunExitFuncs()
 }
 
 // runREPL starts the interactive interpreter.

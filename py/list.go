@@ -68,6 +68,205 @@ func init() {
 		return NoneType{}, nil
 	}, 0, "sort(key=None, reverse=False)")
 
+	ListType.Dict["pop"] = MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if len(args) > 1 {
+			return nil, ExceptionNewf(TypeError, "pop expected at most 1 argument, got %d", len(args))
+		}
+		// The index is converted before the list is inspected, so an empty
+		// list with a bad index reports the index error, as CPython does.
+		i := len(l.Items) - 1
+		if len(args) == 1 {
+			var err error
+			i, err = toIndex(args[0])
+			if err != nil {
+				return nil, err
+			}
+		}
+		n := len(l.Items)
+		if n == 0 {
+			return nil, ExceptionNewf(IndexError, "pop from empty list")
+		}
+		if i < 0 {
+			i += n
+		}
+		if i < 0 || i >= n {
+			return nil, ExceptionNewf(IndexError, "pop index out of range")
+		}
+		item := l.Items[i]
+		l.DelItem(i)
+		return item, nil
+	}, 0, "pop([index]) -> item -- remove and return item at index (default last).")
+
+	ListType.Dict["remove"] = MustNewMethod("remove", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "list.remove() takes exactly one argument (%d given)", len(args))
+		}
+		for i, item := range l.Items {
+			eq, err := Eq(item, args[0])
+			if err != nil {
+				return nil, err
+			}
+			if eq == True {
+				l.DelItem(i)
+				return None, nil
+			}
+		}
+		return nil, ExceptionNewf(ValueError, "list.remove(x): x not in list")
+	}, 0, "remove(value) -- remove first occurrence of value.")
+
+	ListType.Dict["insert"] = MustNewMethod("insert", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if len(args) != 2 {
+			return nil, ExceptionNewf(TypeError, "insert expected 2 arguments, got %d", len(args))
+		}
+		i, err := toIndex(args[0])
+		if err != nil {
+			return nil, err
+		}
+		n := len(l.Items)
+		// Clamp like CPython: a negative index counts from the end and is
+		// still clamped at 0, an index past the end appends.
+		if i < 0 {
+			i += n
+			if i < 0 {
+				i = 0
+			}
+		} else if i > n {
+			i = n
+		}
+		l.Items = append(l.Items, nil)
+		copy(l.Items[i+1:], l.Items[i:])
+		l.Items[i] = args[1]
+		return None, nil
+	}, 0, "insert(index, object) -- insert object before index.")
+
+	ListType.Dict["index"] = MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if len(args) < 1 {
+			return nil, ExceptionNewf(TypeError, "index expected at least 1 argument, got %d", len(args))
+		}
+		if len(args) > 3 {
+			return nil, ExceptionNewf(TypeError, "index expected at most 3 arguments, got %d", len(args))
+		}
+		n := len(l.Items)
+		start, stop := 0, n
+		if len(args) >= 2 {
+			var err error
+			start, err = sliceIndex(args[1], n, 0)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(args) >= 3 {
+			var err error
+			stop, err = sliceIndex(args[2], n, n)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for i := start; i < stop; i++ {
+			eq, err := Eq(l.Items[i], args[0])
+			if err != nil {
+				return nil, err
+			}
+			if eq == True {
+				return Int(i), nil
+			}
+		}
+		return nil, ExceptionNewf(ValueError, "list.index(x): x not in list")
+	}, 0, "index(value, [start, [stop]]) -> integer -- return first index of value.")
+
+	ListType.Dict["count"] = MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "list.count() takes exactly one argument (%d given)", len(args))
+		}
+		count := 0
+		for _, item := range l.Items {
+			eq, err := Eq(item, args[0])
+			if err != nil {
+				return nil, err
+			}
+			if eq == True {
+				count++
+			}
+		}
+		return Int(count), nil
+	}, 0, "count(value) -> integer -- return number of occurrences of value.")
+
+	ListType.Dict["reverse"] = MustNewMethod("reverse", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if err := methodNoArgs("list.reverse", args); err != nil {
+			return nil, err
+		}
+		for i, j := 0, len(l.Items)-1; i < j; i, j = i+1, j-1 {
+			l.Items[i], l.Items[j] = l.Items[j], l.Items[i]
+		}
+		return None, nil
+	}, 0, "reverse() -- reverse *IN PLACE*.")
+
+	ListType.Dict["clear"] = MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if err := methodNoArgs("list.clear", args); err != nil {
+			return nil, err
+		}
+		l.Items = nil
+		return None, nil
+	}, 0, "clear() -- remove all items from list.")
+
+	ListType.Dict["copy"] = MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+		l := self.(*List)
+		if err := methodNoArgs("list.copy", args); err != nil {
+			return nil, err
+		}
+		return l.Copy(), nil
+	}, 0, "copy() -> a shallow copy of the list.")
+
+}
+
+// methodNoArgs checks that a method that takes no arguments was given none,
+// raising the TypeError CPython raises for it.
+func methodNoArgs(qualname string, args Tuple) error {
+	if len(args) != 0 {
+		return ExceptionNewf(TypeError, "%s() takes no arguments (%d given)", qualname, len(args))
+	}
+	return nil
+}
+
+// toIndex converts an object used as an index or a repeat count into a Go int.
+//
+// An object with no __index__ is rejected with CPython's message rather than
+// the generic one Index itself produces; an object that has __index__ but
+// returns a non-integer keeps Index's more specific complaint.
+func toIndex(v Object) (int, error) {
+	if _, ok := v.(I__index__); !ok && v.Type().GetAttrOrNil("__index__") == nil {
+		return 0, ExceptionNewf(TypeError, "'%s' object cannot be interpreted as an integer", v.Type().Name)
+	}
+	return IndexInt(v)
+}
+
+// sliceIndex clamps a start or stop argument of index() the way CPython
+// clips the bounds of a slice against a sequence of length n.
+func sliceIndex(v Object, n int, deflt int) (int, error) {
+	if v == nil {
+		return deflt, nil
+	}
+	i, err := toIndex(v)
+	if err != nil {
+		return 0, ExceptionNewf(TypeError, "slice indices must be integers or have an __index__ method")
+	}
+	if i < 0 {
+		i += n
+		if i < 0 {
+			i = 0
+		}
+	}
+	if i > n {
+		i = n
+	}
+	return i, nil
 }
 
 // Type of this List object
@@ -325,6 +524,19 @@ func (a *List) M__rmul__(other Object) (Object, error) {
 	return a.M__mul__(other)
 }
 
+func (a *List) M__contains__(item Object) (Object, error) {
+	for _, x := range a.Items {
+		eq, err := Eq(x, item)
+		if err != nil {
+			return nil, err
+		}
+		if eq == True {
+			return True, nil
+		}
+	}
+	return False, nil
+}
+
 func (a *List) M__imul__(other Object) (Object, error) {
 	return a.M__mul__(other)
 }
@@ -339,6 +551,7 @@ var _ I__bool__ = (*List)(nil)
 var _ I__iter__ = (*List)(nil)
 var _ I__getitem__ = (*List)(nil)
 var _ I__setitem__ = (*List)(nil)
+var _ I__contains__ = (*List)(nil)
 
 // var _ richComparison = (*List)(nil)
 

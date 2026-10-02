@@ -118,8 +118,17 @@ Return information about the most recent exception caught by an except
 clause in the current stack frame or in an older stack frame.`
 
 func sys_exc_info(self py.Object) (py.Object, error) {
-	return nil, py.NotImplementedError
+	// The type and value of the exception being handled.  There is no
+	// traceback OBJECT here - a traceback is a *py.ExceptionInfo rather than
+	// a Python value - so None stands in its place, which is also what
+	// CPython returns when no exception is being handled.
+	exc := py.CurrentException()
+	if exc == nil {
+		return py.Tuple{py.None, py.None, py.None}, nil
+	}
+	return py.Tuple{exc.Type(), exc, py.None}, nil
 }
+
 
 const exit_doc = `exit([status])
 

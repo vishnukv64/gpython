@@ -63,7 +63,10 @@ except TypeError:
 try:
     os.environ.get(15)
     print("expected an error with os.environ.get(15)")
-except KeyError:
+except TypeError:
+    # CPython's os.environ is os._Environ, which ENCODES the key and so
+    # raises TypeError for a non-str one.  A KeyError here would mean the
+    # mapping had quietly fallen back to a plain dict.
     print("os.environ.get(15) failed [OK]")
 
 try:

@@ -65,7 +65,7 @@ func init() {
 	}
 	globals := py.StringDict{
 		"error":   py.OSError,
-		"environ": getEnvVariables(),
+		"environ": Environ,
 		"sep":     osSep,
 		"name":    osName,
 		"curdir":  py.String("."),
