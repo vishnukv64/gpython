@@ -1,12 +1,14 @@
 #!/bin/bash
 # Build gpython from a pristine HEAD checkout with only this task's files overlaid.
 #
-# Peers are editing py/ in the shared working tree, so a build there is not a
-# verdict on this code.  This harness takes HEAD, copies in stdlib/pathlib,
-# stdlib/socket and stdlib/unicodedata plus the three registration lines in
-# stdlib/stdlib.go, and builds that.
+# Peers are editing py/ and the stdlib registration list in the shared working
+# tree, so a build there is not a verdict on this code - and their codemods have
+# also been rewriting files under stdlib/ mid-edit.  This harness therefore
+# takes HEAD and overlays ONLY the task's three packages, from this task's
+# authoritative copy in $SRC.
 set -e
 A=/Users/vishnukv/facets/codebases/gpython
+SRC=/Users/vishnukv/.praxis/agent/sessions/01a0f728-4f0e-7b37-8ac9-65155b22cc91/subagents/workspaces/task-d7bc688b-a719-5f0a-9cba-b7af94d0c39c/workspace
 W=/tmp/vkbuild
 
 rm -rf "$W"
@@ -15,7 +17,7 @@ git -C "$A" archive HEAD | tar -x -C "$W"
 
 for pkg in pathlib socket unicodedata; do
     mkdir -p "$W/stdlib/$pkg"
-    cp "$A"/stdlib/$pkg/*.go "$W/stdlib/$pkg/"
+    cp "$SRC"/stdlib/$pkg/*.go "$W/stdlib/$pkg/"
 done
 
 # Insert the three registration lines after the final existing blank import,

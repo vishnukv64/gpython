@@ -99,14 +99,16 @@ func pathNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 	if isKindOf(concrete, PureWindowsPathType) {
 		f = ntFlavour
 	}
-	// A Windows path cannot exist on a POSIX host, and vice versa.
-	isWindowsKind := isKindOf(concrete, WindowsPathType) || isKindOf(concrete, PureWindowsPathType)
-	isPosixKind := isKindOf(concrete, PosixPathType) || isKindOf(concrete, PurePosixPathType)
-	if isWindowsKind && !windowsSupported() {
+	// A concrete WindowsPath or PosixPath cannot exist on the wrong host, as
+	// in CPython.  The pure classes may: PureWindowsPath is a path with
+	// Windows parsing rules, and is usable anywhere.
+	isConcreteWindows := isKindOf(concrete, WindowsPathType)
+	isConcretePosix := isKindOf(concrete, PosixPathType)
+	if isConcreteWindows && !windowsSupported() {
 		return nil, py.ExceptionNewf(py.NotImplementedError,
 			"cannot instantiate %s on your system", reprOf(shortName(concrete.Name)))
 	}
-	if isPosixKind && runtime.GOOS == "windows" {
+	if isConcretePosix && runtime.GOOS == "windows" {
 		return nil, py.ExceptionNewf(py.NotImplementedError,
 			"cannot instantiate %s on your system", reprOf(shortName(concrete.Name)))
 	}
@@ -240,29 +242,33 @@ func f64Prop(name string, get func(*statResult) float64) *py.Property {
 func init() {
 	// The path constructors are attached here rather than in the type
 	// initialisers, because pathNew names the type variables and would
-	// otherwise make their initialisation circular.  Every subclass
-	// inherits these two, so a subclass constructor still arrives with its
-	// own class in metatype.
-	PurePathType.New = pathNew
-	PathType.New = pathNew
+	// otherwise make their initialisation circular.  Every class is set
+	// explicitly: the interpreter inherits New at type-creation time, which
+	// happens before init() runs, so the subclasses would otherwise have no
+	// constructor at all.
+	for _, t := range []*py.Type{PurePathType, PurePosixPathType, PureWindowsPathType,
+		PathType, PosixPathType, WindowsPathType} {
+		t.New = pathNew
+	}
 
-	StatResultType.Dict.Set("st_mode", intProp("st_mode", func(s *statResult) int64 { return int64(s.stMode) }))
-	StatResultType.Dict.Set("st_ino", intProp("st_ino", func(s *statResult) int64 { return int64(s.stIno) }))
-	StatResultType.Dict.Set("st_dev", intProp("st_dev", func(s *statResult) int64 { return int64(s.stDev) }))
-	StatResultType.Dict.Set("st_nlink", intProp("st_nlink", func(s *statResult) int64 { return int64(s.stNlink) }))
-	StatResultType.Dict.Set("st_uid", intProp("st_uid", func(s *statResult) int64 { return int64(s.stUid) }))
-	StatResultType.Dict.Set("st_gid", intProp("st_gid", func(s *statResult) int64 { return int64(s.stGid) }))
-	StatResultType.Dict.Set("st_size", intProp("st_size", func(s *statResult) int64 { return s.stSize }))
-	StatResultType.Dict.Set("st_blocks", intProp("st_blocks", func(s *statResult) int64 { return s.stBlocks }))
-	StatResultType.Dict.Set("st_blksize", intProp("st_blksize", func(s *statResult) int64 { return s.stBlksize }))
-	StatResultType.Dict.Set("st_rdev", intProp("st_rdev", func(s *statResult) int64 { return int64(s.stRdev) }))
-	StatResultType.Dict.Set("st_atime", f64Prop("st_atime", func(s *statResult) float64 { return s.stAtime }))
-	StatResultType.Dict.Set("st_mtime", f64Prop("st_mtime", func(s *statResult) float64 { return s.stMtime }))
-	StatResultType.Dict.Set("st_ctime", f64Prop("st_ctime", func(s *statResult) float64 { return s.stCtime }))
-	StatResultType.Dict.Set("st_atime_ns", intProp("st_atime_ns", func(s *statResult) int64 { return s.stAtimeNs }))
-	StatResultType.Dict.Set("st_mtime_ns", intProp("st_mtime_ns", func(s *statResult) int64 { return s.stMtimeNs }))
-	StatResultType.Dict.Set("st_ctime_ns", intProp("st_ctime_ns", func(s *statResult) int64 { return s.stCtimeNs }))
-	StatResultType.Dict.Set("__repr__", py.MustNewMethod("__repr__", statRepr, 0, ""))
+	statDict := &StatResultType.Dict
+	statDict.Set("st_mode", intProp("st_mode", func(s *statResult) int64 { return int64(s.stMode) }))
+	statDict.Set("st_ino", intProp("st_ino", func(s *statResult) int64 { return int64(s.stIno) }))
+	statDict.Set("st_dev", intProp("st_dev", func(s *statResult) int64 { return int64(s.stDev) }))
+	statDict.Set("st_nlink", intProp("st_nlink", func(s *statResult) int64 { return int64(s.stNlink) }))
+	statDict.Set("st_uid", intProp("st_uid", func(s *statResult) int64 { return int64(s.stUid) }))
+	statDict.Set("st_gid", intProp("st_gid", func(s *statResult) int64 { return int64(s.stGid) }))
+	statDict.Set("st_size", intProp("st_size", func(s *statResult) int64 { return s.stSize }))
+	statDict.Set("st_blocks", intProp("st_blocks", func(s *statResult) int64 { return s.stBlocks }))
+	statDict.Set("st_blksize", intProp("st_blksize", func(s *statResult) int64 { return s.stBlksize }))
+	statDict.Set("st_rdev", intProp("st_rdev", func(s *statResult) int64 { return int64(s.stRdev) }))
+	statDict.Set("st_atime", f64Prop("st_atime", func(s *statResult) float64 { return s.stAtime }))
+	statDict.Set("st_mtime", f64Prop("st_mtime", func(s *statResult) float64 { return s.stMtime }))
+	statDict.Set("st_ctime", f64Prop("st_ctime", func(s *statResult) float64 { return s.stCtime }))
+	statDict.Set("st_atime_ns", intProp("st_atime_ns", func(s *statResult) int64 { return s.stAtimeNs }))
+	statDict.Set("st_mtime_ns", intProp("st_mtime_ns", func(s *statResult) int64 { return s.stMtimeNs }))
+	statDict.Set("st_ctime_ns", intProp("st_ctime_ns", func(s *statResult) int64 { return s.stCtimeNs }))
+	statDict.Set("__repr__", py.MustNewMethod("__repr__", statRepr, 0, ""))
 }
 
 func statRepr(self py.Object) (py.Object, error) {

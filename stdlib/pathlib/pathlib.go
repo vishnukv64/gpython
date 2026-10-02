@@ -237,16 +237,22 @@ type path struct {
 }
 
 var (
-	// Every class inherits the one New, pathNew, which is what lets Path
-	// choose a concrete flavour at construction time.  The constructors are
-	// attached in init() below, because a New that mentions the type
-	// variables would make their initialisation circular.
+	// Each class is created with py.NewTypeX rather than as a subclass of the
+	// previous one.  NewType sets ObjectType to the parent, which would make
+	// type(PosixPath('a')) report "pathlib.Path" and would make
+	// isinstance(PosixPath('a'), PosixPath) raise "arg 2 must be a type or
+	// tuple of types", because isinstance checks that the argument's own type
+	// is exactly type.  The Go type records which python class an instance is
+	// instead, and that is what repr and isinstance consult.
+	//
+	// The constructors are attached in init() below, because a New that
+	// mentions the type variables would make their initialisation circular.
 	PurePathType        = py.NewTypeX("pathlib.PurePath", "Base class for manipulating paths without I/O.", nil, nil)
-	PurePosixPathType   = PurePathType.NewType("pathlib.PurePosixPath", "PurePath subclass for non-Windows systems.", nil, nil)
-	PureWindowsPathType = PurePathType.NewType("pathlib.PureWindowsPath", "PurePath subclass for Windows systems.", nil, nil)
-	PathType            = PurePathType.NewType("pathlib.Path", "Base class for manipulating paths with I/O.", nil, nil)
-	PosixPathType       = PathType.NewType("pathlib.PosixPath", "Path subclass for non-Windows systems.", nil, nil)
-	WindowsPathType     = PathType.NewType("pathlib.WindowsPath", "Path subclass for Windows systems.", nil, nil)
+	PurePosixPathType   = py.NewTypeX("pathlib.PurePosixPath", "PurePath subclass for non-Windows systems.", nil, nil)
+	PureWindowsPathType = py.NewTypeX("pathlib.PureWindowsPath", "PurePath subclass for Windows systems.", nil, nil)
+	PathType            = py.NewTypeX("pathlib.Path", "Base class for manipulating paths with I/O.", nil, nil)
+	PosixPathType       = py.NewTypeX("pathlib.PosixPath", "Path subclass for non-Windows systems.", nil, nil)
+	WindowsPathType     = py.NewTypeX("pathlib.WindowsPath", "Path subclass for Windows systems.", nil, nil)
 )
 
 func (p *path) Type() *py.Type { return p.t }
@@ -323,7 +329,9 @@ func (p *path) M__fspath__() (py.Object, error) { return py.String(p.String()), 
 func (p *path) M__bytes__() (py.Object, error)  { return py.Bytes(p.String()), nil }
 
 func (p *path) M__repr__() (py.Object, error) {
-	return py.String(fmt.Sprintf("%s('%s')", p.name, p.String())), nil
+	// CPython's repr shows the posix form, so a Windows path prints with
+	// forward slashes.
+	return py.String(fmt.Sprintf("%s('%s')", p.name, p.asPosix())), nil
 }
 
 // strHash is the same FNV-1a the interpreter uses for hash(str), so that
@@ -769,7 +777,10 @@ func globTranslate(pat string, recursive bool, sep string) string {
 			}
 		}
 	}
-	return "(?s:" + sb.String() + `)\z`
+	// "\A" anchors the pattern at the start: CPython compiles the translated
+	// pattern and calls .match(), which is a prefix match, whereas Go's
+	// MatchString searches anywhere in the subject.
+	return `\A(?s:` + sb.String() + `)\z`
 }
 
 var globCache = map[string]*regexp.Regexp{}
@@ -947,15 +958,21 @@ func (p *path) globParts(base string, parts []string, out *[]string, cs bool) er
 	}
 
 	switch {
-	case part == "":
-		// Only reachable as the final component, from parsePattern.
-		target := base
-		if st, err := os.Stat(target); err == nil && st.IsDir() {
-			*out = append(*out, target)
+	case part == "" && len(rest) == 0:
+		// A trailing separator in the pattern: this path itself, when it is
+		// a directory.
+		if st, err := os.Stat(base); err == nil && st.IsDir() {
+			*out = append(*out, base)
 		}
 		return nil
 
 	case part == "**":
+		if len(rest) == 0 {
+			// A trailing "**" matches this directory and everything
+			// under it, files as well as directories.
+			*out = append(*out, base)
+			return p.collectDescendants(base, out)
+		}
 		// Zero directories consumed.
 		if err := p.globParts(base, rest, out, cs); err != nil {
 			return err
@@ -1023,6 +1040,36 @@ func (p *path) globParts(base string, parts []string, out *[]string, cs bool) er
 			if err := p.globParts(target, rest, out, cs); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// collectDescendants appends every descendant of base in sorted, depth-first
+// order, which is the order glob("**") reports.  Symlinked directories are not
+// descended into, matching pathlib's default recurse_symlinks=False.
+func (p *path) collectDescendants(base string, out *[]string) error {
+	entries, err := dirEntries(base)
+	if err != nil {
+		if isNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		target := e.Name()
+		if base != "" && base != "." {
+			target = base + p.f.sep + e.Name()
+		}
+		*out = append(*out, target)
+		if !e.IsDir() {
+			continue
+		}
+		if info, err := os.Lstat(target); err != nil || info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		if err := p.collectDescendants(target, out); err != nil {
+			return err
 		}
 	}
 	return nil

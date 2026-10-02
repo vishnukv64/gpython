@@ -65,6 +65,9 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/importlib"
 	_ "github.com/vishnukv64/gpython/stdlib/logging"
 	_ "github.com/vishnukv64/gpython/stdlib/warnings"
+	_ "github.com/vishnukv64/gpython/stdlib/pathlib"
+	_ "github.com/vishnukv64/gpython/stdlib/socket"
+	_ "github.com/vishnukv64/gpython/stdlib/unicodedata"
 
 )
 
