@@ -1,4 +1,7 @@
 # sleep
 caught error: sleep length must be non-negative
 caught error: sleep() argument 1 must be float, not str
+perf_counter: float=True monotonic=True
+monotonic: float=True
+process_time: float=True ignores sleep=True
 OK
