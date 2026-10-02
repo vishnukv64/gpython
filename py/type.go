@@ -1849,15 +1849,25 @@ func (ty *Type) M__ne__(other Object) (Object, error) {
 }
 
 func (ty *Type) M__str__() (Object, error) {
-	if res, ok, err := ty.CallMethod("__str__", Tuple{ty}, nil); ok {
-		return res, err
+	// An INSTANCE looks its __str__ up through its class, which is how
+	// "str(A())" reaches a user's method.  A CLASS's own __str__ describes
+	// its instances, so it must not be handed the class as self - that is
+	// what made "repr(BytesIO)" call BytesIO.__repr__ with a *Type and panic
+	// on its type assertion.  "Name == \"\"" is how this codebase already
+	// tells an instance from a class; see the FIXME below.
+	if ty.Name == "" {
+		if res, ok, err := ty.CallMethod("__str__", Tuple{ty}, nil); ok {
+			return res, err
+		}
 	}
 	return ty.M__repr__()
 }
 
 func (ty *Type) M__repr__() (Object, error) {
-	if res, ok, err := ty.CallMethod("__repr__", Tuple{ty}, nil); ok {
-		return res, err
+	if ty.Name == "" {
+		if res, ok, err := ty.CallMethod("__repr__", Tuple{ty}, nil); ok {
+			return res, err
+		}
 	}
 	if ty.Name == "" {
 		// FIXME not a good way to tell objects from classes!
