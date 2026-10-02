@@ -275,6 +275,28 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	// Now look in type's dictionary etc
 	t := self.Type()
 	res = t.NativeGetAttrOrNil(key)
+
+	// A class's attributes live in its OWN bases before its metatype's:
+	// "Sub.attr" has to reach Base.attr.  The metatype knows nothing of the
+	// class's bases, and the metatype's result usually wins anyway because
+	// Name, Doc, Dict and the rest are there - so the class's own lookup has
+	// to be consulted whenever the metatype did not find anything, which is
+	// exactly the inherited case.  Instances are untouched: their
+	// t.Type().Lookup(key) already found the attribute, so res is not nil
+	// and this is skipped.
+	if res == nil {
+		if ty, isType := self.(*Type); isType {
+			if own := ty.Lookup(key); own != nil {
+				// Bind as a CLASS access: a staticmethod yields the plain
+				// function, a classmethod a method bound to the class.
+				if I, ok := own.(I__get__); ok {
+					return I.M__get__(None, self)
+				}
+				return own, nil
+			}
+		}
+	}
+
 	if res != nil {
 		// Call __get__ which creates bound methods, reads properties etc
 		if I, ok := res.(I__get__); ok {
