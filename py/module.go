@@ -8,6 +8,7 @@ package py
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -204,6 +205,14 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 	}
 	// Register the module
 	store.modules[name] = m
+
+	// sys.modules is a LIVE view of this registry.  It is installed here
+	// because this is where the store is at hand; the sys module's own
+	// "modules" entry is an empty dict that nothing updated, so
+	// "sys.modules["__main__"]" raised KeyError.
+	if name == "sys" {
+		m.Globals.Set("modules", NewModulesView(store))
+	}
 	// Make a note of some modules
 	switch name {
 	case "builtins":
@@ -213,6 +222,16 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 	}
 	// fmt.Printf("Registered module %q\n", moduleName)
 	return m, nil
+}
+
+// Modules returns the live registry of loaded modules, keyed by name.
+//
+// It is what sys.modules must be: a real mapping of every module the context
+// has loaded, including "__main__".  The builtin sys module had an EMPTY dict
+// of its own, so "sys.modules["__main__"]" raised KeyError and any library
+// that looks itself up there - click does, to find the program name - failed.
+func (store *ModuleStore) Modules() map[string]*Module {
+	return store.modules
 }
 
 // Gets a module
@@ -282,3 +301,135 @@ func (rt *Runtime) RegisterModuleAlias(alias, target string) {
 		rt.ModuleImpls[alias] = impl
 	}
 }
+
+// ModulesView is sys.modules: a live mapping over the module store's registry.
+//
+// A plain dict would have to be kept in step by hand, and it was not - it was
+// simply empty, so "sys.modules[\"__main__\"]" raised KeyError for any library
+// that looks itself up there.  Reading through to the registry means every
+// module the context has loaded is visible, including __main__, with nothing
+// to keep in sync.
+type ModulesView struct {
+	store *ModuleStore
+}
+
+// ModulesViewType is the type of sys.modules.
+//
+// It is named "dict" because that is what CPython reports for sys.modules,
+// and code does check.
+var ModulesViewType = NewType("dict", "A mapping of module name to the module object.")
+
+func (m *ModulesView) Type() *Type { return ModulesViewType }
+
+// NewModulesView returns a live view of store's registry.
+func NewModulesView(store *ModuleStore) *ModulesView {
+	return &ModulesView{store: store}
+}
+
+func (m *ModulesView) M__len__() (Object, error) {
+	return Int(len(m.store.Modules())), nil
+}
+
+func (m *ModulesView) M__contains__(item Object) (Object, error) {
+	name, err := StrAsString(item)
+	if err != nil {
+		return nil, err
+	}
+	_, ok := m.store.Modules()[name]
+	return NewBool(ok), nil
+}
+
+func (m *ModulesView) M__getitem__(key Object) (Object, error) {
+	name, err := StrAsString(key)
+	if err != nil {
+		return nil, err
+	}
+	mod, ok := m.store.Modules()[name]
+	if !ok {
+		return nil, ExceptionNewf(KeyError, "'%s'", name)
+	}
+	return mod, nil
+}
+
+// M__setitem__ lets a module be registered by name, which is what
+// "sys.modules[name] = mod" does in library code and in importlib.
+func (m *ModulesView) M__setitem__(key, value Object) (Object, error) {
+	name, err := StrAsString(key)
+	if err != nil {
+		return nil, err
+	}
+	mod, ok := value.(*Module)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "sys.modules values must be modules, not '%s'", value.Type().Name)
+	}
+	m.store.Modules()[name] = mod
+	return None, nil
+}
+
+func (m *ModulesView) M__delitem__(key Object) (Object, error) {
+	name, err := StrAsString(key)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := m.store.Modules()[name]; !ok {
+		return nil, ExceptionNewf(KeyError, "'%s'", name)
+	}
+	delete(m.store.Modules(), name)
+	return None, nil
+}
+
+func (m *ModulesView) M__iter__() (Object, error) {
+	names := m.store.ModuleNames()
+	items := make(Tuple, 0, len(names))
+	for _, n := range names {
+		items = append(items, String(n))
+	}
+	return NewIterator(items), nil
+}
+
+func init() {
+	ModulesViewType.Dict.Set("get", MustNewMethod("get", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		var key, def Object = nil, None
+		if err := UnpackTuple(args, kwargs, "get", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		name, err := StrAsString(key)
+		if err != nil {
+			return nil, err
+		}
+		if mod, ok := m0(self).store.Modules()[name]; ok {
+			return mod, nil
+		}
+		return def, nil
+	}, 0, "get(name[, default]) -> the module, or default"))
+	ModulesViewType.Dict.Set("keys", MustNewMethod("keys", func(self Object, args Tuple) (Object, error) {
+		names := m0(self).store.ModuleNames()
+		items := make([]Object, 0, len(names))
+		for _, n := range names {
+			items = append(items, String(n))
+		}
+		return NewListFromItems(items), nil
+	}, 0, "keys() -> the names of the loaded modules"))
+}
+
+// m0 asserts the receiver, so the method bodies above stay readable.
+func m0(self Object) *ModulesView { return self.(*ModulesView) }
+
+// ModuleNames returns the registered names in sorted order, so that iterating
+// sys.modules is stable from one run to the next.
+func (store *ModuleStore) ModuleNames() []string {
+	names := make([]string, 0, len(store.modules))
+	for n := range store.modules {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Check the interfaces are satisfied.
+var _ I__len__ = (*ModulesView)(nil)
+var _ I__getitem__ = (*ModulesView)(nil)
+var _ I__setitem__ = (*ModulesView)(nil)
+var _ I__delitem__ = (*ModulesView)(nil)
+var _ I__iter__ = (*ModulesView)(nil)
+var _ I__contains__ = (*ModulesView)(nil)

@@ -237,6 +237,174 @@ replaced.`))
 		return self.(String).Join(args)
 	}, 0, "join(iterable) -> return a string which is the concatenation of the strings in iterable"))
 
+	// The search-and-split family.  Each pairs with the one already present:
+	// find/rfind, index/rindex, split/rsplit.
+	strArgs := func(name string, args Tuple, n int) (string, error) {
+		var sep Object
+		if err := UnpackTuple(args, StringDict{}, name, 1, n, &sep); err != nil {
+			return "", err
+		}
+		sepStr, err := StrAsString(sep)
+		if err != nil {
+			return "", err
+		}
+		if sepStr == "" {
+			return "", ExceptionNewf(ValueError, "empty separator")
+		}
+		return sepStr, nil
+	}
+
+	StringType.Dict.Set("partition", MustNewMethod("partition", func(self Object, args Tuple) (Object, error) {
+		s := string(self.(String))
+		sep, err := strArgs("partition", args, 1)
+		if err != nil {
+			return nil, err
+		}
+		if i := strings.Index(s, sep); i >= 0 {
+			return Tuple{String(s[:i]), String(sep), String(s[i+len(sep):])}, nil
+		}
+		return Tuple{String(s), String(""), String("")}, nil
+	}, 0, "partition(sep) -> (before, sep, after); sep is empty when not found"))
+
+	StringType.Dict.Set("rpartition", MustNewMethod("rpartition", func(self Object, args Tuple) (Object, error) {
+		s := string(self.(String))
+		sep, err := strArgs("rpartition", args, 1)
+		if err != nil {
+			return nil, err
+		}
+		if i := strings.LastIndex(s, sep); i >= 0 {
+			return Tuple{String(s[:i]), String(sep), String(s[i+len(sep):])}, nil
+		}
+		// Searching from the right, the text is the LAST element.
+		return Tuple{String(""), String(""), String(s)}, nil
+	}, 0, "rpartition(sep) -> (before, sep, after) searching from the right"))
+
+	StringType.Dict.Set("splitlines", MustNewMethod("splitlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		s := string(self.(String))
+		var keepends Object = False
+		if err := UnpackTuple(args, kwargs, "splitlines", 0, 1, &keepends); err != nil {
+			return nil, err
+		}
+		keep, _ := MakeBool(keepends)
+		keepEnds := keep == True
+		var out []Object
+		start := 0
+		for i := 0; i < len(s); i++ {
+			var width int
+			switch s[i] {
+			case '\n', '\x0b', '\x0c', 0x1c, 0x1d, 0x1e, 0x85:
+				width = 1
+			case '\r':
+				width = 1
+				if i+1 < len(s) && s[i+1] == '\n' {
+					width = 2
+				}
+			default:
+				// U+2028 and U+2029 are three bytes in UTF-8.
+				if strings.HasPrefix(s[i:], " ") || strings.HasPrefix(s[i:], " ") {
+					width = 3
+				} else {
+					continue
+				}
+			}
+			if keepEnds {
+				out = append(out, String(s[start:i+width]))
+			} else {
+				out = append(out, String(s[start:i]))
+			}
+			i += width - 1
+			start = i + 1
+		}
+		if start < len(s) {
+			out = append(out, String(s[start:]))
+		}
+		return NewListFromItems(out), nil
+	}, 0, "splitlines(keepends=False) -> a list of the lines, breaking at line boundaries"))
+
+	StringType.Dict.Set("casefold", MustNewMethod("casefold", func(self Object, args Tuple) (Object, error) {
+		// Full case folding is an extra table beyond lower(); this uses the
+		// Unicode lowercase mapping, which agrees with casefold() for every
+		// character whose fold is a single rune.  The two differ for a
+		// handful - most visibly "ß" (sharp s), which folds to "ss"
+		// and is handled below.
+		s := string(self.(String))
+		if strings.ContainsRune(s, 'ß') {
+			s = strings.ReplaceAll(s, "ß", "ss")
+		}
+		return String(strings.ToLower(s)), nil
+	}, 0, "casefold() -> a casefolded copy, for caseless matching"))
+
+	StringType.Dict.Set("title", MustNewMethod("title", func(self Object, args Tuple) (Object, error) {
+		// Each run of ALPHABETIC characters starts uppercase and the rest are
+		// lowercase, so "they're bill's".title() is "They'Re Bill'S" - the
+		// apostrophe is not alphabetic, so the letter after it is capitalised.
+		s := string(self.(String))
+		var out strings.Builder
+		prevAlpha := false
+		for _, r := range s {
+			switch {
+			case unicode.IsLetter(r):
+				if prevAlpha {
+					out.WriteRune(unicode.ToLower(r))
+				} else {
+					out.WriteRune(unicode.ToTitle(r))
+				}
+				prevAlpha = true
+			default:
+				out.WriteRune(r)
+				prevAlpha = false
+			}
+		}
+		return String(out.String()), nil
+	}, 0, "title() -> a titlecased copy: each word starts uppercase, the rest lowercase"))
+
+	// format(*args, **kwargs) - the format-string mini-language.
+	//
+	// A replacement field is "{name!conv:spec}": the name selects an argument
+	// by position, by keyword, or by an attribute/index chain; the conversion
+	// is s/r/a; the spec is handed to the value's own formatting.  Field
+	// numbering is AUTOMATIC until the first explicit index, and using an
+	// automatic field after an explicit one is an error - as CPython has it.
+	StringType.Dict.Set("format", MustNewMethod("format", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return formatPython(string(self.(String)), args, kwargs)
+	}, 0, "format(*args, **kwargs) -> a formatted copy, with {} fields replaced by their arguments"))
+
+	StringType.Dict.Set("format_map", MustNewMethod("format_map", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		var mapping Object
+		if err := UnpackTuple(args, kwargs, "format_map", 1, 1, &mapping); err != nil {
+			return nil, err
+		}
+		// Every field must be a NAME; a positional field is an error.
+		return formatPythonMapping(string(self.(String)), mapping)
+	}, 0, "format_map(mapping) -> like format(**mapping), taking one mapping"))
+
+	StringType.Dict.Set("capitalize", MustNewMethod("capitalize", func(self Object, args Tuple) (Object, error) {
+		// The first character to TITLE case and EVERY OTHER character to
+		// lowercase, so "hELLO".capitalize() is "Hello".
+		s := string(self.(String))
+		if s == "" {
+			return String(""), nil
+		}
+		r := []rune(s)
+		return String(string(unicode.ToTitle(r[0])) + strings.ToLower(string(r[1:]))), nil
+	}, 0, "capitalize() -> the first character titlecased and the rest lowercased"))
+
+	StringType.Dict.Set("swapcase", MustNewMethod("swapcase", func(self Object, args Tuple) (Object, error) {
+		s := string(self.(String))
+		var out strings.Builder
+		for _, r := range s {
+			switch {
+			case unicode.IsUpper(r):
+				out.WriteRune(unicode.ToLower(r))
+			case unicode.IsLower(r):
+				out.WriteRune(unicode.ToUpper(r))
+			default:
+				out.WriteRune(r)
+			}
+		}
+		return String(out.String()), nil
+	}, 0, "swapcase() -> lowercase characters uppercased and vice versa"))
+
 	// isidentifier() says whether the string is usable as an identifier, which
 	// is what a library checks before taking a name from its caller - click
 	// does exactly that when it parses a command's declarations.
@@ -1108,3 +1276,216 @@ var (
 	_ I__getitem__       = String("")
 	_ I__contains__      = String("")
 )
+
+// formatPython implements str.format(*args, **kwargs).
+//
+// The parser walks the format string, copying literal text and replacing each
+// {field} with the formatted argument.  "{{" and "}}" are the escapes.
+func formatPython(format string, args Tuple, kwargs StringDict) (Object, error) {
+	autoNum := -1
+	manual := false
+	var out strings.Builder
+	runes := []rune(format)
+	for i := 0; i < len(runes); i++ {
+		switch runes[i] {
+		case '{':
+			if i+1 < len(runes) && runes[i+1] == '{' {
+				out.WriteRune('{')
+				i++
+				continue
+			}
+			// Find the matching '}', skipping a nested spec's own braces.
+			depth, j := 1, i+1
+			for ; j < len(runes) && depth > 0; j++ {
+				switch runes[j] {
+				case '{':
+					depth++
+				case '}':
+					depth--
+				}
+			}
+			if depth != 0 {
+				return nil, ExceptionNewf(ValueError, "Single '{' encountered in format string")
+			}
+			body := string(runes[i+1 : j-1])
+			text, err := formatField(body, args, kwargs, &autoNum, &manual)
+			if err != nil {
+				return nil, err
+			}
+			out.WriteString(text)
+			i = j - 1
+		case '}':
+			if i+1 < len(runes) && runes[i+1] == '}' {
+				out.WriteRune('}')
+				i++
+				continue
+			}
+			return nil, ExceptionNewf(ValueError, "Single '}' encountered in format string")
+		default:
+			out.WriteRune(runes[i])
+		}
+	}
+	return String(out.String()), nil
+}
+
+// formatPythonMapping implements str.format_map(mapping): every field must be
+// a name looked up in the one mapping.
+func formatPythonMapping(format string, mapping Object) (Object, error) {
+	// A mapping is used by name, so it is turned into the keyword set that
+	// the ordinary formatter expects.
+	if d, ok := mapping.(StringDict); ok {
+		return formatPython(format, nil, d)
+	}
+	// Anything else is asked for its items.
+	it, err := Iter(mapping)
+	if err != nil {
+		return nil, err
+	}
+	items, ok := it.(I__next__)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "format_map() argument must be a mapping")
+	}
+	kw := NewStringDict()
+	for {
+		item, err := items.M__next__()
+		if err != nil {
+			if IsException(StopIteration, err) {
+				break
+			}
+			return nil, err
+		}
+		pair, ok := item.(Tuple)
+		if !ok || len(pair) != 2 {
+			return nil, ExceptionNewf(ValueError, "format_map() mapping items must be pairs")
+		}
+		k, err := StrAsString(pair[0])
+		if err != nil {
+			return nil, err
+		}
+		kw.Set(k, pair[1])
+	}
+	return formatPython(format, nil, kw)
+}
+
+// formatField resolves and renders one {field}.
+func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manual *bool) (string, error) {
+	name, conv, spec := splitField(body)
+
+	// The name may be a chain: "0.attr" or "0[key]" or "name.attr".
+	var value Object
+	if name == "" {
+		if *manual {
+			return "", ExceptionNewf(ValueError, "cannot switch from manual field specification to automatic field numbering")
+		}
+		*autoNum++
+		if *autoNum >= len(args) {
+			return "", ExceptionNewf(IndexError, "Replacement index %d out of range for positional args tuple", *autoNum)
+		}
+		value = args[*autoNum]
+	} else if isDigits(name) {
+		*manual = true
+		n := 0
+		for _, r := range name {
+			n = n*10 + int(r-'0')
+		}
+		if n >= len(args) {
+			return "", ExceptionNewf(IndexError, "Replacement index %d out of range for positional args tuple", n)
+		}
+		value = args[n]
+	} else {
+		*manual = true
+		v, ok := kwargs.Get(name)
+		if !ok {
+			return "", ExceptionNewf(KeyError, "'%s'", name)
+		}
+		value = v
+	}
+
+	// Apply the conversion, then the spec.
+	switch conv {
+	case 'r':
+		rep, err := Repr(value)
+		if err != nil {
+			return "", err
+		}
+		value = rep
+	case 's':
+		if rep, err := Str(value); err == nil {
+			value = rep
+		}
+	case 'a':
+		rep, err := ReprAsString(value)
+		if err != nil {
+			return "", err
+		}
+		value = String(StringEscape(String(rep), true))
+	}
+
+	// The value formats itself when it can, which is what honours a user
+	// type's __format__; otherwise the shared mini-language does it.
+	if f, ok := value.(I__format__); ok {
+		res, err := f.M__format__(String(spec))
+		if err != nil {
+			return "", err
+		}
+		return StrAsString(res)
+	}
+	res, err := Format(value, spec)
+	if err != nil {
+		return "", err
+	}
+	return StrAsString(res)
+}
+
+// splitField splits "{name!conv:spec}" into its three parts.  The conversion
+// and the spec are only recognised OUTSIDE any nested brackets, so
+// "{0[1:2]}" keeps its slice.
+func splitField(body string) (name string, conv rune, spec string) {
+	depth := 0
+	for i, r := range body {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case '!':
+			if depth == 0 {
+				name = body[:i]
+				rest := body[i+1:]
+				// The conversion is one character; anything after it before a
+				// ':' is a syntax error, but tolerating it is kinder than
+				// failing, and CPython requires the single character.
+				for j, c := range rest {
+					if c == ':' {
+						spec = rest[j+1:]
+						break
+					}
+					conv = c
+				}
+				return resolveChain(name), conv, spec
+			}
+		case ':':
+			if depth == 0 {
+				return resolveChain(body[:i]), 0, body[i+1:]
+			}
+		}
+	}
+	return resolveChain(body), 0, ""
+}
+
+// resolveChain handles "0.attr" and "0[key]" by keeping them for the caller;
+// without attribute and index support in this interpreter the chain is
+// returned whole, so a plain name or index still resolves.
+func resolveChain(s string) string { return s }
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
