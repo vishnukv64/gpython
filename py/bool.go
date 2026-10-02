@@ -110,6 +110,31 @@ func (a Bool) asInt() Int {
 // "int(True)" raised "unsupported operand type(s) for int: 'bool'".
 func (a Bool) M__int__() (Object, error) { return a.asInt(), nil }
 
+// Bool is a subclass of int, so it answers the ARITHMETIC operators too.
+// True + True is 2 and True * 3 is 3, as CPython has it.  Only the bitwise
+// family was implemented, so "True + True" raised "unsupported operand
+// type(s) for +: 'bool' and 'bool'" - and bool values arrive in arithmetic
+// constantly, from comparisons and from any()/all().
+func (a Bool) M__add__(other Object) (Object, error)      { return a.asInt().M__add__(other) }
+func (a Bool) M__radd__(other Object) (Object, error)     { return a.asInt().M__radd__(other) }
+func (a Bool) M__sub__(other Object) (Object, error)      { return a.asInt().M__sub__(other) }
+func (a Bool) M__rsub__(other Object) (Object, error)     { return a.asInt().M__rsub__(other) }
+func (a Bool) M__mul__(other Object) (Object, error)      { return a.asInt().M__mul__(other) }
+func (a Bool) M__rmul__(other Object) (Object, error)     { return a.asInt().M__rmul__(other) }
+func (a Bool) M__floordiv__(other Object) (Object, error) { return a.asInt().M__floordiv__(other) }
+func (a Bool) M__rfloordiv__(other Object) (Object, error) {
+	return a.asInt().M__rfloordiv__(other)
+}
+func (a Bool) M__mod__(other Object) (Object, error)     { return a.asInt().M__mod__(other) }
+func (a Bool) M__rmod__(other Object) (Object, error)    { return a.asInt().M__rmod__(other) }
+func (a Bool) M__truediv__(other Object) (Object, error) { return a.asInt().M__truediv__(other) }
+func (a Bool) M__rtruediv__(other Object) (Object, error) {
+	return a.asInt().M__rtruediv__(other)
+}
+func (a Bool) M__neg__() (Object, error) { return a.asInt().M__neg__() }
+func (a Bool) M__pos__() (Object, error) { return a.asInt().M__pos__() }
+func (a Bool) M__abs__() (Object, error) { return a.asInt().M__abs__() }
+
 func (a Bool) M__and__(other Object) (Object, error)  { return a.asInt().M__and__(other) }
 func (a Bool) M__rand__(other Object) (Object, error) { return a.asInt().M__rand__(other) }
 func (a Bool) M__iand__(other Object) (Object, error) { return a.asInt().M__iand__(other) }

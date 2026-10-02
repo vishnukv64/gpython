@@ -278,6 +278,27 @@ func do_BINARY_MODULO(vm *Vm, arg int32) error {
 func do_BINARY_ADD(vm *Vm, arg int32) error {
 	b := vm.POP()
 	a := vm.TOP()
+	// Fastpath: two ints add without going through the operator protocol.
+	//
+	// CPython does exactly this in its main loop, and the reason is visible in
+	// a profile: the general path asserts two interfaces, calls M__add__, and
+	// allocates a fresh Int for the result.  "x = x + i" in a loop pays that
+	// on every iteration, and the allocation shows up as mallocgcTiny.
+	//
+	// The fallthrough is unchanged, so a subclass, a float, or a type with
+	// its own __radd__ takes the slower path exactly as before.
+	if ai, ok := a.(py.Int); ok {
+		if bi, ok := b.(py.Int); ok {
+			sum := ai + bi
+			// Only take the fast path when the result is the same as the
+			// protocol would produce: an overflow becomes a long in CPython,
+			// and this interpreter has a BigInt behind the protocol.
+			if !(ai > 0 && bi > 0 && sum < 0 || ai < 0 && bi < 0 && sum > 0) {
+				vm.SET_TOP(sum)
+				return nil
+			}
+		}
+	}
 	return vm.setTopAndCheckErr(py.Add(a, b))
 }
 
