@@ -116,11 +116,21 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 	}
 
 	// ...then give it the package context it needs to import its own members
-	parentPkg := ""
-	if i := strings.LastIndex(name, "."); i >= 0 {
-		parentPkg = name[:i]
+	//
+	// __package__ is the package a module belongs to, which is the module's
+	// OWN name when the module IS a package and its parent otherwise.  Using
+	// the parent for both made every relative import inside a sub-package
+	// resolve one level too high: "from .leaf import basic" in
+	// p2/mid/__init__.py looked for p2.leaf instead of p2.mid.leaf.
+	pkg := name
+	if !isPkg {
+		if i := strings.LastIndex(name, "."); i >= 0 {
+			pkg = name[:i]
+		} else {
+			pkg = ""
+		}
 	}
-	mod.Globals["__package__"] = String(parentPkg)
+	mod.Globals["__package__"] = String(pkg)
 	if isPkg {
 		mod.Globals["__path__"] = NewListFromItems([]Object{String(filepath.Dir(path))})
 	}
