@@ -75,7 +75,34 @@ func SetNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	return NewSet(), nil
 }
 
-var FrozenSetType = NewType("frozenset", "frozenset() -> empty frozenset object\nfrozenset(iterable) -> frozenset object\n\nBuild an immutable unordered collection of unique elements.")
+// FrozenSetNew implements frozenset([iterable]).
+//
+// FrozenSetType was created with NewType, which leaves New nil, so
+// "frozenset(...)" raised "cannot create 'frozenset' instances" and a
+// frozenset literal - which is how idna writes its bidi category tables -
+// could not be built at all.  The elements are collected through the same
+// path set() uses, so the two agree on duplicate and ordering behaviour.
+func FrozenSetNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
+	var iterable Object
+	err := UnpackTuple(args, kwargs, "frozenset", 0, 1, &iterable)
+	if err != nil {
+		return nil, err
+	}
+	if iterable == nil {
+		return NewFrozenSet(), nil
+	}
+	s, err := SequenceSet(iterable)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Object, 0, len(s.items))
+	for item := range s.items {
+		items = append(items, item)
+	}
+	return NewFrozenSetFromItems(items), nil
+}
+
+var FrozenSetType = NewTypeX("frozenset", "frozenset() -> empty frozenset object\nfrozenset(iterable) -> frozenset object\n\nBuild an immutable unordered collection of unique elements.", FrozenSetNew, nil)
 
 type FrozenSet struct {
 	Set
@@ -84,6 +111,23 @@ type FrozenSet struct {
 // Type of this FrozenSet object
 func (o *FrozenSet) Type() *Type {
 	return FrozenSetType
+}
+
+// M__repr__ renders "frozenset({...})".
+//
+// FrozenSet embeds a Set, so it would otherwise inherit Set.M__repr__ - whose
+// receiver is the EMBEDDED field, which cannot tell what encloses it.  This
+// shadows that with the frozen spelling.
+func (o *FrozenSet) M__repr__() (Object, error) {
+	rep, err := o.Set.M__repr__()
+	if err != nil {
+		return nil, err
+	}
+	// The empty frozenset is "frozenset()", not "frozenset({})".
+	if len(o.items) == 0 {
+		return String("frozenset()"), nil
+	}
+	return String("frozenset(" + string(rep.(String)) + ")"), nil
 }
 
 // Make a new empty frozen set
@@ -218,8 +262,17 @@ var _ I__iter__ = (*Set)(nil)
 // var _ richComparison = (*Set)(nil)
 
 func (a *Set) M__eq__(other Object) (Object, error) {
-	b, ok := other.(*Set)
-	if !ok {
+	// A frozenset compares equal to a set with the same members, so the
+	// other side is accepted in either form.  Asserting *Set made
+	// "frozenset([1,2]) == frozenset([2,1])" raise "unsupported operand
+	// type(s) for ==: 'frozenset' and 'frozenset'".
+	var b *Set
+	switch o := other.(type) {
+	case *Set:
+		b = o
+	case *FrozenSet:
+		b = &o.Set
+	default:
 		return NotImplemented, nil
 	}
 	if len(a.items) != len(b.items) {
