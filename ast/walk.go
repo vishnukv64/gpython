@@ -137,6 +137,16 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		// Value Expr
 		walk(node.Value)
 
+	case *MatchGuard:
+		// Pattern Expr
+		// Guard   Expr
+		//
+		// A case with an "if" guard.  Without this the walk reached the
+		// MatchGuard node and stopped with "Unknown ast node *ast.MatchGuard",
+		// which is what "case n if n > 3:" reported.
+		walk(node.Pattern)
+		walk(node.Guard)
+
 	case *MatchCapture:
 		// Name Identifier
 
