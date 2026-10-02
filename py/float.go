@@ -338,16 +338,36 @@ func (a Float) M__complex__() (Object, error) {
 }
 
 func (a Float) M__round__(digitsObj Object) (Object, error) {
-	digits := 0
-	if digitsObj != None {
-		var err error
-		digits, err = MakeGoInt(digitsObj)
-		if err != nil {
-			return nil, err
-		}
+	if digitsObj == None {
+		// No ndigits: round to the nearest whole number and return an INT,
+		// as CPython does - round(2.5) is 2, not 2.0.
+		return Int(math.RoundToEven(float64(a))), nil
 	}
-	scale := Float(math.Pow(10, float64(digits)))
-	return scale * Float(math.Floor(float64(a)/float64(scale))), nil
+	digits, err := MakeGoInt(digitsObj)
+	if err != nil {
+		return nil, err
+	}
+	// Rounding is half-to-EVEN, applied to the EXACT binary value: 2.675 is
+	// 2.67499... in binary, so round(2.675, 2) is 2.67.  Scaling by a power
+	// of ten and rounding the product does not do this - the multiplication
+	// introduces its own error and 2.675*100 lands exactly on 267.5 - so the
+	// value goes through Go's correctly rounded decimal conversion, which
+	// resolves the tie on the true value, and back.
+	if digits >= 0 {
+		v, err := strconv.ParseFloat(strconv.FormatFloat(float64(a), 'f', digits, 64), 64)
+		if err != nil {
+			return nil, ExceptionNewf(ValueError, "round() failed on %v", a)
+		}
+		return Float(v), nil
+	}
+	// Negative ndigits rounds to a multiple of a power of ten -
+	// round(1234.5, -2) is 1200.0.
+	scale := math.Pow(10, float64(-digits))
+	v, err := strconv.ParseFloat(strconv.FormatFloat(float64(a)/scale, 'f', 0, 64), 64)
+	if err != nil {
+		return nil, ExceptionNewf(ValueError, "round() failed on %v", a)
+	}
+	return Float(v * scale), nil
 }
 
 // Rich comparison

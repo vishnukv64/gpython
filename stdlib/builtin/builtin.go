@@ -438,8 +438,11 @@ This returns an int when called with one argument, otherwise the
 same type as the number. ndigits may be negative.`
 
 func builtin_round(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var number, ndigits py.Object
-	ndigits = py.Int(0)
+	var number py.Object
+	// ndigits defaults to NONE, not to 0: "round(2.5)" means "round to a
+	// whole number", which returns an int, while "round(2.5, 0)" returns a
+	// float.  Defaulting it to 0 made the two indistinguishable.
+	var ndigits py.Object = py.None
 	// var kwlist = []string{"number", "ndigits"}
 	// FIXME py.ParseTupleAndKeywords(args, kwargs, "O|O:round", kwlist, &number, &ndigits)
 	err := py.UnpackTuple(args, nil, "round", 1, 2, &number, &ndigits)
