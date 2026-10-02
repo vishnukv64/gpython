@@ -21,11 +21,14 @@ objects so they can be GCed
 */
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -1959,10 +1962,15 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 	// exception, or a yield that suspends the frame.
 	store := frame.Context.Store()
 	store.PushFrame(frame)
-	prevFrame := gCurrentFrame
-	gCurrentFrame = frame
+	// The executing frame is recorded PER GOROUTINE, not in a package-level
+	// variable: two interpreter contexts running in two goroutines each need
+	// their own "current frame", and a shared variable made them fight over
+	// one - a data race on this exact line, and the wrong frame handed to
+	// super() when they interleaved.
+	prevFrame := gCurrentFrame.get()
+	gCurrentFrame.set(frame)
 	defer func() {
-		gCurrentFrame = prevFrame
+		gCurrentFrame.set(prevFrame)
 		store.PopFrame(frame)
 	}()
 
@@ -2444,10 +2452,77 @@ func init() {
 // needs the frame that is executing to read __class__ and self.
 func init() {
 	py.SetCurrentFrame(func() *py.Frame {
-		return gCurrentFrame
+		return gCurrentFrame.get()
 	})
+	py.CurrentGoroutineID = goroutineID
 }
 
-// gCurrentFrame is the frame the interpreter is executing, recorded by
-// RunFrame so that py code can read it without importing this package.
-var gCurrentFrame *py.Frame
+// gCurrentFrame is the frame THIS goroutine is executing, recorded by RunFrame
+// so that py code can read it without importing this package.
+//
+// It is goroutine-local rather than a plain variable so that two interpreter
+// contexts in two goroutines each have their own.  Go has no goroutine-local
+// storage, so the value is kept in a map keyed by the goroutine's id, which
+// is obtained unsupported-ly but is the only handle available; the map is
+// mutex-guarded, and an entry is removed when the goroutine's outermost frame
+// exits so the map cannot grow without bound.
+var gCurrentFrame = &frameSlot{frames: map[uint64]*py.Frame{}}
+
+type frameSlot struct {
+	mu     sync.Mutex
+	frames map[uint64]*py.Frame
+}
+
+func (f *frameSlot) get() *py.Frame {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.frames[goroutineID()]
+}
+
+func (f *frameSlot) set(frame *py.Frame) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := goroutineID()
+	if frame == nil {
+		delete(f.frames, id)
+		return
+	}
+	f.frames[id] = frame
+}
+
+// goroutineID returns the calling goroutine's id.
+//
+// Go deliberately provides no supported way to get this: goroutine-local
+// storage is discouraged because it does not compose with the scheduler, and
+// the runtime does not expose the id.  It is needed here because "the frame
+// currently executing" is genuinely per-goroutine state with no context to
+// hang it off - a builtin method receives only its arguments, so super() has
+// nothing else to ask.
+//
+// The implementation reads the id from the goroutine's own stack header,
+// which the runtime writes as "goroutine N [status]:" at a documented
+// location.  This is a well-known trick rather than a contract, so it is
+// confined to this one function: if a future Go release changes the header
+// the parse below returns 0 for every goroutine, which degrades to the old
+// shared-variable behaviour (correct in the single-threaded case, racy in the
+// concurrent one) rather than crashing.
+func goroutineID() uint64 {
+	var buf [32]byte
+	n := runtime.Stack(buf[:], false)
+	// The header is "goroutine 123 [running]:"; parse the digits after the
+	// space.
+	s := buf[:n]
+	const prefix = "goroutine "
+	if !bytes.HasPrefix(s, []byte(prefix)) {
+		return 0
+	}
+	s = s[len(prefix):]
+	var id uint64
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			break
+		}
+		id = id*10 + uint64(c-'0')
+	}
+	return id
+}

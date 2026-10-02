@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 )
 
 // A python Exception object
@@ -403,21 +404,49 @@ func (e *Exception) M__with_traceback(args Tuple) (Object, error) {
 // gCurrentException is the exception the interpreter is currently handling,
 // which sys.exc_info() reports.  The VM records it when a raise happens.
 //
-// A plain package variable rather than a field on the interpreter context
-// because the VM sets it on its error path and nothing here needs a
-// per-context value.
+// It is GOROUTINE-local, not a plain package variable.  Two interpreter
+// contexts running in two goroutines each handle their own exceptions, and a
+// shared variable was a data race on every raise - the race detector reports
+// it - as well as reporting the wrong exception when they interleaved.
+//
+// Go has no goroutine-local storage, so the value is kept in a mutex-guarded
+// map keyed by the goroutine id; see vm.goroutineID for how the id is
+// obtained and why it is confined to one function.
 //
 // Known difference: CPython clears the state when the except block ends,
 // whereas here it survives until the next raise.  Code that reads exc_info()
 // INSIDE a handler - which is what it is for - sees the right exception.
-var gCurrentException *Exception
+var gCurrentException = &excSlot{exc: map[uint64]*Exception{}}
+
+type excSlot struct {
+	mu  sync.Mutex
+	exc map[uint64]*Exception
+}
 
 // SetCurrentException records the exception now being handled.  The VM calls
 // it; passing nil clears the state.
-func SetCurrentException(e *Exception) { gCurrentException = e }
+func SetCurrentException(e *Exception) {
+	gCurrentException.mu.Lock()
+	defer gCurrentException.mu.Unlock()
+	id := CurrentGoroutineID()
+	if e == nil {
+		delete(gCurrentException.exc, id)
+		return
+	}
+	gCurrentException.exc[id] = e
+}
 
 // CurrentException returns the exception now being handled, or nil.
-func CurrentException() *Exception { return gCurrentException }
+func CurrentException() *Exception {
+	gCurrentException.mu.Lock()
+	defer gCurrentException.mu.Unlock()
+	return gCurrentException.exc[CurrentGoroutineID()]
+}
+
+// CurrentGoroutineID is set by the vm package at init to the same
+// goroutine-id lookup it uses for the current frame.  It is a function
+// variable to avoid a dependency from py on vm.
+var CurrentGoroutineID = func() uint64 { return 0 }
 
 func (e *Exception) M__str__() (Object, error) {
 	args, ok := e.Args.(Tuple)

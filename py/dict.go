@@ -611,9 +611,45 @@ func appendKey(b *[]byte, key Object) error {
 			*b = append(*b, m...)
 		}
 	default:
+		// Anything else is hashable only if it says so.  Rejecting outright meant
+		// that EVERY type defining __hash__ was unusable as a dict key or set
+		// member: pathlib.Path hashes to a string and is used as a key all over
+		// ordinary code, and "{Path('/a'): 1}" raised "unhashable type:
+		// 'pathlib.PosixPath'".
+		//
+		// The value of __hash__ is stored alongside the type name, so two objects
+		// of the same type with the same hash share a bucket - which is exactly
+		// what CPython's hash/eq protocol does.  A type with no __hash__, or one
+		// whose __hash__ is None (explicitly unhashable, as a list is), raises.
+		if h, ok := hashOf(key); ok {
+			*b = append(*b, keyTag...)
+			*b = append(*b, 'H')
+			*b = append(*b, key.Type().Name...)
+			*b = append(*b, ':')
+			*b = append(*b, h...)
+			return nil
+		}
 		return ExceptionNewf(TypeError, "unhashable type: '%s'", key.Type().Name)
 	}
 	return nil
+}
+
+// hashOf renders an object's __hash__ as a string, or reports that it has
+// none.  A __hash__ that is None means explicitly unhashable, which is how a
+// class says "do not use me as a key" - a list is the builtin example.
+func hashOf(key Object) (string, bool) {
+	res, ok, err := TypeCall0(key, "__hash__")
+	if err != nil || !ok {
+		return "", false
+	}
+	if _, isNone := res.(NoneType); isNone {
+		return "", false
+	}
+	n, err := Index(res)
+	if err != nil {
+		return "", false
+	}
+	return strconv.FormatInt(int64(n), 10), true
 }
 
 // DictKey encodes an object into the string form used to store dict keys,
