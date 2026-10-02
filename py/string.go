@@ -610,22 +610,195 @@ Changed in version 3.1: %f conversions for numbers whose absolute
 value is over 1e50 are no longer replaced by %g conversions.
 */
 func (a String) M__mod__(other Object) (Object, error) {
-	var values Tuple
-	switch b := other.(type) {
-	case Tuple:
-		values = b
-	default:
-		values = Tuple{other}
+	// A tuple IS the argument list, always: "%s" % (1, 2) leaves an argument
+	// unused and raises, which is why a one-element tuple has to be written
+	// "((1, 2),)" to format the tuple itself.
+	values := Tuple{other}
+	if t, ok := other.(Tuple); ok {
+		values = t
 	}
-	// FIXME not a full implementation ;-)
-	params := make([]interface{}, len(values))
-	for i := range values {
-		params[i] = values[i]
+
+	var out strings.Builder
+	format := string(a)
+	valueIdx := 0
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			out.WriteByte(format[i])
+			continue
+		}
+		i++
+		if i >= len(format) {
+			return nil, ExceptionNewf(ValueError, "incomplete format")
+		}
+		if format[i] == '%' {
+			out.WriteByte('%')
+			continue
+		}
+
+		// Collect the flags, width and precision, then the conversion.
+		start := i - 1
+		for i < len(format) && strings.ContainsRune("-+ #0", rune(format[i])) {
+			i++
+		}
+		for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+			i++
+		}
+		precisionAfterDot := false
+		if i < len(format) && format[i] == '.' {
+			precisionAfterDot = true
+			i++
+			for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+				i++
+			}
+		}
+		if i >= len(format) {
+			return nil, ExceptionNewf(ValueError, "incomplete format")
+		}
+		verb := format[i]
+		spec := format[start : i+1]
+
+		if valueIdx >= len(values) {
+			return nil, ExceptionNewf(TypeError, "not enough arguments for format string")
+		}
+		value := values[valueIdx]
+		valueIdx++
+
+		// The text of a value comes from Python's own str/repr, not from Go's
+		// fmt: "%s" % [1, 2] used to print "&{[1 2]}".
+		var text string
+		var err error
+		switch verb {
+		case 's':
+			if text, err = StrAsString(value); err != nil {
+				return nil, err
+			}
+		case 'r':
+			if text, err = ReprAsString(value); err != nil {
+				return nil, err
+			}
+		case 'a':
+			var r string
+			if r, err = ReprAsString(value); err != nil {
+				return nil, err
+			}
+			text = StringEscape(String(r), true)
+		case 'd', 'i', 'u', 'x', 'X', 'o':
+			n, err := MakeGoInt(value)
+			if err != nil {
+				return nil, err
+			}
+			if verb == 'u' {
+				text = strconv.FormatInt(int64(n), 10)
+			} else {
+				text = strconv.FormatInt(int64(n), intBaseOf(verb))
+			}
+			if verb == 'X' {
+				text = strings.ToUpper(text)
+			}
+		case 'c':
+			if s, ok := value.(String); ok {
+				text = string(s)
+			} else {
+				n, err := MakeGoInt(value)
+				if err != nil {
+					return nil, err
+				}
+				text = string(rune(n))
+			}
+		case 'e', 'E', 'f', 'F', 'g', 'G':
+			f, err := FloatAsFloat64(value)
+			if err != nil {
+				return nil, err
+			}
+			prec := 6
+			if precisionAfterDot {
+				prec = specPrecision(spec)
+			}
+			text = strconv.FormatFloat(f, verb, prec, 64)
+		default:
+			return nil, ExceptionNewf(ValueError, "unsupported format character '%c'", verb)
+		}
+
+		// Width, the '-' flag and the '0' flag apply to the finished text for
+		// every conversion, so they are handled once here rather than per
+		// verb.  '0' pads with zeros AFTER any sign, which is what makes
+		// "%05.1f" % 3.14159 give "003.1" and not "- 03.1" for a negative.
+		if width := specWidth(spec); width > len([]rune(text)) {
+			padLen := width - len([]rune(text))
+			leftAlign := strings.ContainsRune(spec, '-')
+			zeroPad := strings.ContainsRune(spec, '0') && !leftAlign
+			switch {
+			case leftAlign:
+				text += strings.Repeat(" ", padLen)
+			case zeroPad:
+				sign := ""
+				if len(text) > 0 && (text[0] == '-' || text[0] == '+') {
+					sign, text = text[:1], text[1:]
+				}
+				text = sign + strings.Repeat("0", padLen) + text
+			default:
+				text = strings.Repeat(" ", padLen) + text
+			}
+		}
+		out.WriteString(text)
 	}
-	s := string(a)
-	s = strings.Replace(s, "%s", "%v", -1)
-	s = strings.Replace(s, "%r", "%#v", -1)
-	return String(fmt.Sprintf(s, params...)), nil
+
+	if valueIdx < len(values) {
+		return nil, ExceptionNewf(TypeError, "not all arguments converted during string formatting")
+	}
+	return String(out.String()), nil
+}
+
+// specWidth reads the width out of a conversion specifier such as "%-8.3f".
+func specWidth(spec string) int {
+	digits := ""
+	for i := 1; i < len(spec)-1; i++ {
+		c := spec[i]
+		if c >= '0' && c <= '9' {
+			digits += string(c)
+		} else if c == '.' {
+			break
+		} else {
+			digits = ""
+		}
+	}
+	if digits == "" {
+		return 0
+	}
+	n, _ := strconv.Atoi(digits)
+	return n
+}
+
+// specPrecision reads the precision out of a conversion specifier.
+func specPrecision(spec string) int {
+	dot := strings.IndexByte(spec, '.')
+	if dot < 0 {
+		return -1
+	}
+	digits := ""
+	for i := dot + 1; i < len(spec)-1; i++ {
+		if spec[i] >= '0' && spec[i] <= '9' {
+			digits += string(spec[i])
+		} else {
+			break
+		}
+	}
+	if digits == "" {
+		return 0
+	}
+	n, _ := strconv.Atoi(digits)
+	return n
+}
+
+// intBaseOf maps a conversion verb to the base strconv wants.
+func intBaseOf(verb byte) int {
+	switch verb {
+	case 'x', 'X':
+		return 16
+	case 'o':
+		return 8
+	}
+	return 10
 }
 
 func (a String) M__rmod__(other Object) (Object, error) {

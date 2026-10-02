@@ -298,8 +298,8 @@ typecode 'f'
   itemsize: 4
   typecode: f
   len:      4
-  arr[0]: -1
-  arr[-1]: -4
+  arr[0]: -1.0
+  arr[-1]: -4.0
   caught an exception [ok]
   caught an exception [ok]
   arr[-2]: 0.30000001192092896
@@ -324,8 +324,8 @@ typecode 'd'
   itemsize: 8
   typecode: d
   len:      4
-  arr[0]: -1
-  arr[-1]: -4
+  arr[0]: -1.0
+  arr[-1]: -4.0
   caught an exception [ok]
   caught an exception [ok]
   arr[-2]: 0.3
