@@ -18,107 +18,71 @@ Version this was measured against: `sys.version` reports
 
 ---
 
-## 1. Crash and hang
+## 1. Crash and hang — all four FIXED
 
-### 1.1 `hashlib.file_digest()` panics the interpreter
+Every entry in this section was reproduced against the build of its day and
+has since been fixed. They are kept because each is a bug that shipped, and
+because the reproductions are the regression tests.
 
-Calling `file_digest` dereferences a nil function pointer. The process dies
-with a SIGSEGV; no Python exception is raised.
+### 1.1 `hashlib.file_digest()` panicked the interpreter — FIXED
+
+It called `py.ObjectGetAttr(file, "read")` — a function that is a stub returning
+nil ALWAYS — and passed that nil to `py.Call`, which dereferenced a nil function
+pointer and killed the process. It also returned the digest BYTES where CPython
+returns the digest OBJECT.
+
+It now uses the real lookup, a file without `read()` raises TypeError, and the
+digest matches CPython exactly:
 
 ```python
 import hashlib
-hashlib.file_digest(open("/tmp/f", "wb"), "md5")
+h = hashlib.file_digest(open(f, "rb"), "md5")
+h.hexdigest()      # 9a8ad92c50cae39aa2c5604fd0ab6d8c  (CPython: same)
 ```
 
-```
-panic: runtime error: invalid memory address or nil pointer dereference
-[signal SIGSEGV: segmentation violation code=0x1 addr=0x18 pc=...]
+### 1.2 `pprint.pformat()` on a self-referencing container hung — FIXED
 
-goroutine 1 [running]:
-github.com/vishnukv64/gpython/py.Call({0x0, 0x0?}, {0x1, ...}, 0x0)
-	.../py/internal.go:195 +0x2c8
-github.com/vishnukv64/gpython/stdlib/hashlib.fileDigestFn(...)
-	.../stdlib/hashlib/hashlib.go:341 +0x454
-```
+At `width <= 20` the formatter never returned: no output, no exception, no
+exit. `formatObject` CHECKED `context[objid]` but never SET it, so the guard
+could not fire; and it passed a FRESH context map to `safeRepr`, so the
+one-line rendering lost the stack as well.
 
-The hash functions themselves (`md5`, `sha256`, `blake2b`, …) work fine — see
-`stdlib/hashlib_demo.py`, which hashes file contents it read itself instead.
-
-### 1.2 `pprint.pformat()` on a self-referencing container hangs when `width <= 20`
-
-At the default width a recursive container prints correctly. Narrow it and the
-formatter never returns: no output, no exception, no exit.
+The object is now marked for the duration of the dispatch, as CPython's
+`_format` does, and the context is threaded through:
 
 ```python
-import pprint
 r = []
 r.append(r)
-print(pprint.pformat(r, width=20))   # never returns
+pprint.pformat(r, width=20)   # '[<Recursion on list with id=...>]'
 ```
 
-Observed boundary, running the same snippet at each width:
+### 1.3 A second `acquire()` on a `threading.Lock` aborts the process
 
-| `width` | result |
-| --- | --- |
-| 80 | prints `[<Recursion on list>]` |
-| 40 | prints |
-| 21 | prints |
-| 20 | **hangs** (killed at 5 s, exit 124) |
-| 19 | **hangs** |
-| 10 | **hangs** |
+Not reentrancy — that is correct — but the second acquire does not raise, and
+Go aborts with "all goroutines are asleep - deadlock!". This remains a real
+difference: CPython blocks just that thread and lets others run, whereas here
+there is one thread and nothing can run it.
 
-The same is true of a self-referencing dict. `pprint.isrecursive()` answers
-correctly, so test with that rather than by formatting.
+What IS fixed: `lock.acquire(blocking=False)`, the standard non-blocking idiom,
+raised `TypeError: 'acquire() takes no keyword arguments'`; a caller had no way
+to try for a lock and move on. That now works and matches CPython.
 
-### 1.3 A second `acquire()` on a `threading.Lock` deadlocks the interpreter
+### 1.4 `type(threading.local()).__name__` panicked — FIXED
 
-`threading.Lock` is not reentrant, which is correct, but the second acquire does
-not raise — the runtime detects that every goroutine is blocked and aborts the
-process.
+`threading.local`'s methods asserted their receiver outright, but `self` is the
+CLASS when the attribute is read off `threading.local` itself. Fixing that
+exposed two more, both fixed:
 
-```python
-import threading
-lock = threading.Lock()
-lock.acquire()
-lock.acquire()      # never returns a value
-```
+- `GetAttrString` called `__getattribute__` UNCONDITIONALLY. That is right for
+  an instance, but a class-level `__getattribute__` governs a class's INSTANCES
+  and never the class itself — so any type defining one answered every
+  attribute through it and lost its own metadata.
+- A type declared by any package initialising after `py` itself — every stdlib
+  module — sat in the delayed-ready queue forever, so its Mro stayed empty and
+  lookup found nothing in its bases.
 
-```
-held
-fatal error: all goroutines are asleep - deadlock!
+`threading.local.__name__` is `threading.local`.
 
-goroutine 1 [sync.Mutex.Lock]:
-internal/sync.runtime_SemacquireMutex(...)
-	/opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/sema.go:95 +0x28
-...
-```
-
-Use `threading.RLock` when the same holder needs to re-enter.
-
-### 1.4 `type(threading.local()).__name__` panics
-
-`threading.local()` itself works and holds attributes. Asking for the *name* of
-its type crashes.
-
-```python
-import threading
-local = threading.local()
-local.x = 1
-print(local.x)                      # 1        -- fine
-print(type(local))                  # <class 'threading.local'>  -- fine
-print(type(local).__name__)         # crashes
-```
-
-```
-1
-panic: interface conversion: py.Object is *py.Type, not *threading.Local
-
-goroutine 1 [running]:
-github.com/vishnukv64/gpython/stdlib/threading.init.0.func2(...)
-	.../stdlib/threading/threading.go:145 +0x328
-```
-
----
 
 ## 2. `threading` is largely a re-export of one mutex
 
