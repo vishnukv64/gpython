@@ -25,6 +25,10 @@ type fstringPart struct {
 	expr       string
 	conversion byte // 0, 'r' or 'a'
 	formatSpec string
+	// debug is the self-documenting form, f"{x=}": the rendered output is
+	// prefixed with the source text of the expression and an "=".
+	debug     bool
+	debugText string
 }
 
 // parseFString splits the raw text of an f-string literal into literal
@@ -121,6 +125,68 @@ func parseFString(text string) ([]fstringPart, error) {
 func parseField(body string) (fstringPart, error) {
 	field := fstringPart{field: true}
 
+	// f"{x=}" renders as "x=<repr of x>".  The trailing "=" has to be found
+	// before the conversion and format scan, because it is the last
+	// character of the expression and everything after it is ordinary
+	// conversions and format specs.
+	// The marker is the first "=" at depth 0 outside a string that is not
+	// part of a comparison: it is followed by the conversion, the format
+	// spec or the end of the field, and preceded by the end of the
+	// expression.  Everything after it is parsed as usual, so "f"{x=:>5}""
+	// keeps its format spec.
+	{
+		runes := []rune(body)
+		depth := 0
+		var inStr rune
+		for i := 0; i < len(runes); i++ {
+			r := runes[i]
+			if inStr != 0 {
+				if r == '\\' {
+					i++
+					continue
+				}
+				if r == inStr {
+					inStr = 0
+				}
+				continue
+			}
+			switch r {
+			case '\'', '"':
+				inStr = r
+			case '(', '[', '{':
+				depth++
+			case ')', ']', '}':
+				depth--
+			case '=':
+				if depth != 0 || i == 0 {
+					continue
+				}
+				prev, next := runes[i-1], ' '
+				if i+1 < len(runes) {
+					next = runes[i+1]
+				}
+				// "==", "!=", "<=", ">=" are comparisons, not the marker.
+				if prev == '=' || prev == '!' || prev == '<' || prev == '>' || next == '=' {
+					continue
+				}
+				field.debug = true
+				// The source text is kept EXACTLY as written, padding and
+				// all, because CPython echoes it back: f"{ x = }" renders
+				// " x = 5".  The whitespace that followed the "=" is part of
+				// it too, but only up to the conversion or the format spec.
+				// Only the expression compiled below is trimmed.
+				field.debugText = string(runes[:i]) + "="
+				rest := runes[i+1:]
+				for len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+					field.debugText += string(rest[0])
+					rest = rest[1:]
+				}
+				body = string(runes[:i]) + string(rest)
+				i = len(runes)
+			}
+		}
+	}
+
 	// Find the conversion and format separators at depth 0, outside strings.
 	runes := []rune(body)
 	depth := 0
@@ -213,6 +279,12 @@ func (c *compiler) compileFString(node *ast.FString) {
 		if !part.field {
 			c.LoadConst(py.String(unescapePart(part.text, node.Raw)))
 		} else {
+			// The self-documenting form prints its own source text first, so
+			// the text is pushed and then joined to the value once the value
+			// has been produced.
+			if part.debug {
+				c.LoadConst(py.String(part.debugText))
+			}
 			expr, err := ast.ParseExpr(part.expr)
 			if err != nil {
 				c.panicSyntaxErrorf(node, "f-string: %v", err)
@@ -234,19 +306,28 @@ func (c *compiler) compileFString(node *ast.FString) {
 			// Order matches CPython: the conversion is applied first, then
 			// format() gets the original value (or the converted one), and
 			// str() is only used when there is no format specifier at all.
-			switch part.conversion {
-			case 'r':
+			switch {
+			case part.conversion == 'r' || (part.debug && part.conversion == 0):
+				// f"{x=}" is f"{x=!r}" unless a conversion says otherwise.
 				c.callBuiltin1("repr")
-			case 'a':
+			case part.conversion == 0:
+				// nothing
+			case part.conversion == 'a':
 				c.callBuiltin1("ascii")
-			case 's':
+			case part.conversion == 's':
 				c.callBuiltin1("str")
 			}
 
 			if part.formatSpec != "" {
 				c.callFormat(part.formatSpec)
-			} else if part.conversion == 0 {
+			} else if part.conversion == 0 && !part.debug {
+				// A debug field defaults to repr, not str.
 				c.callBuiltin1("str")
+			}
+
+			// Join the source text pushed above to the rendered value.
+			if part.debug {
+				c.Op(vm.BINARY_ADD)
 			}
 		}
 
