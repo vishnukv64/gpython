@@ -1,0 +1,19 @@
+decode: 'abc'
+encode: b'abc'
+lookup.decode keeps the pair: ('abc', 3)
+lookup.encode keeps the pair: (b'abc', 3)
+lookup name: utf-8
+base decode: NotImplementedError
+split 1: ''
+split 2: 'é'
+then text: 'abc'
+state: (b'', 0)
+state after reset: (b'', 0)
+three-byte partial: ''
+three-byte held: (b'\xe2\x82', 0)
+three-byte done: '€'
+encodings.utf_8 has IncrementalDecoder: True
+via encodings.utf_8: '' 'é'
+alias utf8: utf_8
+alias latin-1: None
+latin-1: 'ÿ'

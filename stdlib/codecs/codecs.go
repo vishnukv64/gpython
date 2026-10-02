@@ -81,6 +81,13 @@ func init() {
 		py.DictEntry{Key: "encode", Value: py.MustNewMethod("encode", moduleEncode, 0, "Encode an object with the given codec.")},
 		py.DictEntry{Key: "decode", Value: py.MustNewMethod("decode", moduleDecode, 0, "Decode an object with the given codec.")},
 		py.DictEntry{Key: "register", Value: py.MustNewMethod("register", registerNoop, 0, "Register a codec search function (not supported).")},
+		// The incremental API.  charset_normalizer -- a dependency of requests
+		// -- opens with "from codecs import IncrementalDecoder", so these have
+		// to be real, subclassable classes.
+		py.DictEntry{Key: "IncrementalDecoder", Value: incrementalDecoderType},
+		py.DictEntry{Key: "IncrementalEncoder", Value: incrementalEncoderType},
+		py.DictEntry{Key: "BufferedIncrementalDecoder", Value: incrementalDecoderType},
+		py.DictEntry{Key: "BufferedIncrementalEncoder", Value: incrementalEncoderType},
 		py.DictEntry{Key: "getencoder", Value: py.MustNewMethod("getencoder", getEncoder, 0, "Look up the encoder for an encoding.")},
 		py.DictEntry{Key: "getdecoder", Value: py.MustNewMethod("getdecoder", getDecoder, 0, "Look up the decoder for an encoding.")},
 		py.DictEntry{Key: "getincrementalencoder", Value: py.MustNewMethod("getincrementalencoder", getEncoder, 0, "Look up the incremental encoder.")},
@@ -163,9 +170,22 @@ func moduleEncode(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return encodeWith(normalise(enc), py.Tuple{args[0]})
+	res, err := encodeWith(normalise(enc), py.Tuple{args[0]})
+	if err != nil {
+		return nil, err
+	}
+	// Unwrapped for the same reason moduleDecode is - see above.
+	return unwrapCodecResult(res), nil
 }
 
+// moduleDecode is the module-level codecs.decode.
+//
+// It UNWRAPS the (value, length) pair its codec function returns.  A codec's
+// own function keeps the tuple - codecs.lookup('utf-8').decode(b'abc') is
+// ('abc', 3) - but the module-level helper is the convenient one and CPython
+// has it return the value alone, so codecs.decode(b'abc', 'utf-8') is 'abc'.
+// Returning the tuple here was simply the wrong shape, and it is the shape
+// ordinary code uses.
 func moduleDecode(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) < 2 {
 		return nil, py.ExceptionNewf(py.TypeError, "decode() needs an object and an encoding")
@@ -174,7 +194,19 @@ func moduleDecode(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return decodeWith(normalise(enc), py.Tuple{args[0]})
+	res, err := decodeWith(normalise(enc), py.Tuple{args[0]})
+	if err != nil {
+		return nil, err
+	}
+	return unwrapCodecResult(res), nil
+}
+
+// unwrapCodecResult drops the length from a (value, length) pair.
+func unwrapCodecResult(res py.Object) py.Object {
+	if t, ok := res.(py.Tuple); ok && len(t) == 2 {
+		return t[0]
+	}
+	return res
 }
 
 // encodeWith encodes text with the named codec, returning (bytes, length).
