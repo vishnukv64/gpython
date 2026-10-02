@@ -351,20 +351,28 @@ limit prevents infinite recursion from causing an overflow of the C
 stack and crashing Python.  The highest possible limit is platform-
 dependent.`
 
+// recursionLimit is the interpreter's Python-stack depth limit.
+//
+// The value is what getrecursionlimit() reports and setrecursionlimit()
+// changes.  tomli reads it at import time to size its own nesting guard, so it
+// has to answer with a number rather than raise - and a program that sets a
+// limit and reads it back must get what it set.
+var recursionLimit = 1000
+
 func sys_setrecursionlimit(self py.Object, args py.Tuple) (py.Object, error) {
-	// int new_limit;
-	// if (!PyArg_ParseTuple(args, "i:setrecursionlimit", &new_limit)) {
-	//     return nil;
-	// }
-	// if (new_limit <= 0) {
-	//     PyErr_SetString(PyExc_ValueError,
-	//                     "recursion limit must be positive");
-	//     return nil;
-	// }
-	// Py_SetRecursionLimit(new_limit);
-	// Py_INCREF(Py_None);
-	// return Py_None;
-	return nil, py.NotImplementedError
+	var limit py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "setrecursionlimit", 1, 1, &limit); err != nil {
+		return nil, err
+	}
+	n, ok := limit.(py.Int)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "an integer is required")
+	}
+	if int64(n) <= 0 {
+		return nil, py.ExceptionNewf(py.ValueError, "recursion limit must be positive")
+	}
+	recursionLimit = int(n)
+	return py.None, nil
 }
 
 // const hash_info_doc = `hash_info
@@ -422,8 +430,7 @@ of the Python interpreter stack.  This limit prevents infinite
 recursion from causing an overflow of the C stack and crashing Python.`
 
 func sys_getrecursionlimit(self py.Object) (py.Object, error) {
-	// return PyLong_FromLong(Py_GetRecursionLimit());
-	return nil, py.NotImplementedError
+	return py.Int(recursionLimit), nil
 }
 
 const getsizeof_doc = `getsizeof(object, default) -> int

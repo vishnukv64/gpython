@@ -28,6 +28,12 @@ type Set struct {
 	// defines __hash__: their items key is a code private to this set, and the
 	// member object is filed here.  A set of plain members never touches it.
 	ht hashTable
+	// order is the encoded keys in the order they were first inserted, so
+	// iteration, repr and every operation that builds a new set follow
+	// insertion.  Without it the members came back in GO MAP order, which is
+	// random: "{1, 2} | frozenset({3})" printed as {2, 3, 1}, and a set built
+	// from a list did not read back in that list's order.
+	order []string
 }
 
 // Type of this Set object
@@ -128,8 +134,14 @@ func (s *Set) setAddCode(item Object) error {
 			code = s.ht.newCode(k)
 			s.ht.objs[code] = item
 		}
+		if _, exists := s.items[code]; !exists {
+			s.order = append(s.order, code)
+		}
 		s.items[code] = SetValue{}
 		return nil
+	}
+	if _, exists := s.items[k]; !exists {
+		s.order = append(s.order, k)
 	}
 	s.items[k] = SetValue{}
 	return nil
@@ -167,6 +179,17 @@ func (s *Set) setDelete(item Object) bool {
 		return false
 	}
 	delete(s.items, k)
+	// The encoded key is dropped from the order slice too.  setItems already
+	// skips a key whose entry is gone, so this is only about not growing the
+	// slice without bound as members come and go; removing from a slice is
+	// O(n) in the WORST case, but a set's deletions are not a hot path the way
+	// list.append is, and correctness of iteration order matters more here.
+	for i, o := range s.order {
+		if o == k {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
 	s.ht.forget(k)
 	return true
 }
@@ -184,7 +207,11 @@ func (s *Set) decodeKey(encoded string) (Object, error) {
 // setItems returns the members as Objects, decoding each key.
 func (s *Set) setItems() []Object {
 	out := make([]Object, 0, len(s.items))
-	for k := range s.items {
+	// Walk the insertion order rather than the Go map, whose order is random.
+	for _, k := range s.order {
+		if _, ok := s.items[k]; !ok {
+			continue
+		}
 		if item, err := s.decodeKey(k); err == nil {
 			out = append(out, item)
 		}
@@ -201,6 +228,9 @@ func (s *Set) Add(item Object) {
 func (s *Set) Copy() *Set {
 	ret := NewSetWithCapacity(len(s.items))
 	ret.ht = s.ht.clone()
+	// The order slice is copied outright: a copy keeps the original's order,
+	// which is what makes it a faithful copy rather than a reshuffle.
+	ret.order = append([]string{}, s.order...)
 	for k := range s.items {
 		ret.items[k] = SetValue{}
 	}
@@ -253,6 +283,45 @@ var FrozenSetType = NewTypeX("frozenset", "frozenset() -> empty frozenset object
 
 type FrozenSet struct {
 	Set
+}
+
+// The frozen set's binary operators, as GO methods.
+//
+// They exist so that py.And / py.Or / py.Sub / py.Xor - which consult the Go
+// interfaces first - see a frozenset receiver rather than the embedded Set.
+func (o *FrozenSet) M__and__(other Object) (Object, error) { return frozenBinary(o, Tuple{other}, "&") }
+func (o *FrozenSet) M__or__(other Object) (Object, error)  { return frozenBinary(o, Tuple{other}, "|") }
+func (o *FrozenSet) M__sub__(other Object) (Object, error) { return frozenBinary(o, Tuple{other}, "-") }
+func (o *FrozenSet) M__xor__(other Object) (Object, error) { return frozenBinary(o, Tuple{other}, "^") }
+
+// frozenBinary runs one of the set operators and returns the result frozen.
+func frozenBinary(self Object, args Tuple, op string) (Object, error) {
+	fs, ok := self.(*FrozenSet)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "%s needs a frozenset", op)
+	}
+	if len(args) != 1 {
+		return nil, ExceptionNewf(TypeError, "operator %s takes exactly one argument", op)
+	}
+	var res Object
+	var err error
+	switch op {
+	case "&":
+		res, err = (&fs.Set).M__and__(args[0])
+	case "|":
+		res, err = (&fs.Set).M__or__(args[0])
+	case "-":
+		res, err = (&fs.Set).M__sub__(args[0])
+	default:
+		res, err = (&fs.Set).M__xor__(args[0])
+	}
+	if err != nil {
+		return nil, err
+	}
+	if rs, ok := res.(*Set); ok {
+		return &FrozenSet{Set: *rs}, nil
+	}
+	return res, nil
 }
 
 // Type of this FrozenSet object
@@ -351,9 +420,48 @@ func (s *Set) M__contains__(item Object) (Object, error) {
 	return NewBool(ok), nil
 }
 
+// asSet returns the Set behind a set OR a frozenset.
+//
+// FrozenSet EMBEDS Set, so a *FrozenSet is not a *Set and the operators that
+// asserted *Set rejected it: "{1, 2} & frozenset({2})" raised "unsupported
+// operand type(s) for &: 'set' and 'frozenset'".  CPython treats the two as
+// interchangeable operands - only the RESULT differs - and tomli builds its
+// tables that way at import.
+// frozenResult reports whether an operation's result should be a frozenset.
+//
+// CPython keeps the type of the LEFT operand: "set & frozenset" is a set and
+// "frozenset & set" is a frozenset.  Measured against CPython, not assumed.
+//
+// The left operand is taken from its TYPE rather than from `self`: these
+// methods are promoted to FrozenSetType, and a promoted method's receiver is
+// the EMBEDDED Set, so `self.(*FrozenSet)` is always false for a frozenset.
+// s.Type() reports the type the object was actually reached through.
+func frozenResult(s *Set, other Object) bool {
+	return s.Type() == FrozenSetType
+}
+
+// asFrozen wraps a freshly built set as a frozenset when the operation calls
+// for one.
+func asFrozen(s *Set, frozen bool) Object {
+	if frozen {
+		return &FrozenSet{Set: *s}
+	}
+	return s
+}
+
+func asSetOf(o Object) (*Set, bool) {
+	switch v := o.(type) {
+	case *Set:
+		return v, true
+	case *FrozenSet:
+		return &v.Set, true
+	}
+	return nil, false
+}
+
 func (s *Set) M__and__(other Object) (Object, error) {
 	ret := NewSet()
-	b, ok := other.(*Set)
+	b, ok := asSetOf(other)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
@@ -367,13 +475,13 @@ func (s *Set) M__and__(other Object) (Object, error) {
 			}
 		}
 	}
-	return ret, nil
+	return asFrozen(ret, frozenResult(s, other)), nil
 }
 
 func (s *Set) M__or__(other Object) (Object, error) {
-	b, ok := other.(*Set)
+	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for |: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {
@@ -381,25 +489,25 @@ func (s *Set) M__or__(other Object) (Object, error) {
 			return nil, err
 		}
 	}
-	return ret, nil
+	return asFrozen(ret, frozenResult(s, other)), nil
 }
 
 func (s *Set) M__sub__(other Object) (Object, error) {
-	b, ok := other.(*Set)
+	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for -: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {
 		ret.setDelete(item)
 	}
-	return ret, nil
+	return asFrozen(ret, frozenResult(s, other)), nil
 }
 
 func (s *Set) M__xor__(other Object) (Object, error) {
-	b, ok := other.(*Set)
+	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ^: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {
@@ -411,7 +519,7 @@ func (s *Set) M__xor__(other Object) (Object, error) {
 			}
 		}
 	}
-	return ret, nil
+	return asFrozen(ret, frozenResult(s, other)), nil
 }
 
 // Check interface is satisfied
@@ -490,18 +598,17 @@ func init() {
 		return list.Items, nil
 	}
 
-	// self-as-Set, working for a frozen set too.  A method promoted from
-	// SetType to FrozenSetType has the EMBEDDED Set as its receiver, so
-	// asserting *Set panicked for "frozenset([1]).union([2])".
+	// These methods are promoted from SetType to FrozenSetType, and a promoted
+	// method has the EMBEDDED Set as its receiver - so a frozenset must be
+	// unwrapped rather than asserted.  This used to be a LOCAL closure named
+	// asSet, which shadowed the package-level asSet for the whole init and made
+	// the subset operators fail to compile; the package-level one does the same
+	// job and is used directly.
 	asSet := func(self Object) *Set {
-		switch o := self.(type) {
-		case *Set:
-			return o
-		case *FrozenSet:
-			return &o.Set
-		}
-		return nil
+		s, _ := asSetOf(self)
+		return s
 	}
+	_ = asSet
 
 	SetType.Dict.Set("update", MustNewMethod("update", func(self Object, args Tuple) (Object, error) {
 		s := asSet(self)
@@ -740,6 +847,64 @@ func init() {
 		return asSet(self).Copy(), nil
 	}, 0, "copy() -> a shallow copy"))
 
+	// The subset operators.  Set had NO comparison operators at all, so
+	// "{1} <= {1, 2}" raised "unsupported operand type(s) for <=" even for two
+	// plain sets - only the named methods worked.  tomli builds its tables with
+	// both spellings.
+	//
+	// A subset comparison accepts a frozenset on either side, as the arithmetic
+	// operators do.
+	for _, op := range []struct {
+		name string
+		// want reports whether "ord" satisfies this operator.
+		want func(ord int, equal bool) bool
+	}{
+		{"__le__", func(ord int, equal bool) bool { return ord < 0 || equal }},
+		{"__lt__", func(ord int, equal bool) bool { return ord < 0 }},
+		{"__ge__", func(ord int, equal bool) bool { return ord > 0 || equal }},
+		{"__gt__", func(ord int, equal bool) bool { return ord > 0 }},
+	} {
+		op := op
+		setter := func(self Object, args Tuple) (Object, error) {
+			if len(args) != 1 {
+				return nil, ExceptionNewf(TypeError, "%s() takes exactly one argument (%d given)", op.name, len(args))
+			}
+			a, aok := asSetOf(self)
+			b, ok := asSetOf(args[0])
+			if !aok {
+				return nil, ExceptionNewf(TypeError, "a set comparison needs a set")
+			}
+			if !ok {
+				return nil, ExceptionNewf(TypeError,
+					"unsupported operand types for a set comparison: '%s' and '%s'",
+					self.Type().Name, args[0].Type().Name)
+			}
+			// Compare the member OBJECTS, not the encoded keys: a member whose
+			// type defines __hash__ is stored under a code private to its own
+			// set.  Same reasoning as M__and__.
+			ord := 0
+			for _, item := range a.setItems() {
+				if !b.setHas(item) {
+					ord = 1
+					break
+				}
+			}
+			if ord == 0 {
+				for _, item := range b.setItems() {
+					if !a.setHas(item) {
+						ord = -1
+						break
+					}
+				}
+			}
+			return NewBool(op.want(ord, ord == 0)), nil
+		}
+		SetType.Dict.Set(op.name, MustNewMethod(op.name, setter, 0,
+			"A subset comparison between two sets."))
+		FrozenSetType.Dict.Set(op.name, MustNewMethod(op.name, setter, 0,
+			"A subset comparison between two sets."))
+	}
+
 	SetType.Dict.Set("issubset", MustNewMethod("issubset", func(self Object, args Tuple) (Object, error) {
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "issubset() takes exactly one argument (%d given)", len(args))
@@ -797,8 +962,28 @@ func init() {
 
 	// The frozen set gets the non-mutating half, on FrozenSetType so the
 	// promoted Set methods do not apply.
+	// The arithmetic operators need their own Go methods on FrozenSet, not a
+	// promotion of Set's.  py.And consults the Go interface I__and__ BEFORE the
+	// type's Dict, and *FrozenSet inherits Set's M__and__ through embedding -
+	// so the Dict entry was never reached and "frozenset({1}) & {1}" came back
+	// a set.  CPython keeps the LEFT operand's type, so a frozenset operand
+	// yields a frozenset.
+	FrozenSetType.Dict.Set("__and__", MustNewMethod("__and__", func(self Object, args Tuple) (Object, error) {
+		return frozenBinary(self, args, "&")
+	}, 0, "A frozenset intersection that stays frozen."))
+	FrozenSetType.Dict.Set("__or__", MustNewMethod("__or__", func(self Object, args Tuple) (Object, error) {
+		return frozenBinary(self, args, "|")
+	}, 0, "A frozenset union that stays frozen."))
+	FrozenSetType.Dict.Set("__sub__", MustNewMethod("__sub__", func(self Object, args Tuple) (Object, error) {
+		return frozenBinary(self, args, "-")
+	}, 0, "A frozenset difference that stays frozen."))
+	FrozenSetType.Dict.Set("__xor__", MustNewMethod("__xor__", func(self Object, args Tuple) (Object, error) {
+		return frozenBinary(self, args, "^")
+	}, 0, "A frozenset symmetric difference that stays frozen."))
+
 	for _, name := range []string{"union", "intersection", "difference",
-		"symmetric_difference", "copy", "issubset", "issuperset", "isdisjoint", "__len__"} {
+		"symmetric_difference", "copy", "issubset", "issuperset", "isdisjoint", "__len__",
+		"__le__", "__lt__", "__ge__", "__gt__"} {
 		FrozenSetType.Dict.Set(name, SetType.Dict.GetOrNil(name))
 	}
 }
