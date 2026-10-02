@@ -23,6 +23,8 @@
 package threading
 
 import (
+	"fmt"
+	"os"
 	"sync"
 
 	"github.com/vishnukv64/gpython/py"
@@ -86,6 +88,26 @@ type Thread struct {
 	kwargs py.StringDict
 	name   string
 	daemon bool
+
+	// A Thread runs its target in a real Go goroutine.
+	//
+	// Interpreter state is per-goroutine (the current frame and the current
+	// exception are keyed by goroutine id), so two goroutines can run py code
+	// at once without fighting over it - which is what made this possible.
+	//
+	// CAVEAT, and it is a real one: this is concurrency, not CPython's
+	// threading.  There is no GIL, so several threads DO run py code
+	// simultaneously; CPython's threads do not.  Code that relies on the GIL
+	// for atomicity - "x += 1" from two threads - is safe here only because
+	// each THREAD shares its globals, and a shared global mutated from two
+	// threads is exactly the data race the Go race detector will report.
+	// Python-level synchronisation (Lock, Event when it exists) is the way to
+	// order them.
+	wg     sync.WaitGroup
+	done   chan struct{}
+	mu     sync.Mutex
+	alive  bool
+	joined bool
 }
 
 var ThreadType = py.NewTypeX("threading.Thread", "A thread of control.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -257,8 +279,42 @@ func init() {
 	}, 0, "Return whether the lock is held."))
 
 	ThreadType.Dict.Set("start", py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return nil, py.ExceptionNewf(py.RuntimeError, "this interpreter does not create Python threads, so Thread.start() cannot run the target")
-	}, 0, "Start the thread (not supported)."))
+		t := self.(*Thread)
+		t.mu.Lock()
+		if t.alive {
+			t.mu.Unlock()
+			return nil, py.ExceptionNewf(py.RuntimeError, "threads can only be started once")
+		}
+		t.alive = true
+		t.done = make(chan struct{})
+		t.mu.Unlock()
+
+		t.wg.Add(1)
+		// The target runs in its own goroutine.  run() is the same code the
+		// single-threaded path used, so a subclass overriding run() still
+		// works.
+		go func() {
+			defer t.wg.Done()
+			defer close(t.done)
+			t.mu.Lock()
+			t.alive = false
+			t.mu.Unlock()
+			// Call run() through the ordinary lookup, so a subclass that
+			// overrides it is honoured.
+			runObj, err := py.GetAttrString(t, "run")
+			if err != nil {
+				logThreadError(t, err)
+				return
+			}
+			if _, err := py.Call(runObj, py.Tuple{}, py.StringDict{}); err != nil {
+				// The result is discarded as CPython discards it, and an
+				// exception is REPORTED rather than propagated: there is no
+				// caller left to receive it.
+				logThreadError(t, err)
+			}
+		}()
+		return py.None, nil
+	}, 0, "Start the thread's activity in a new goroutine."))
 
 	ThreadType.Dict.Set("run", py.MustNewMethod("run", func(self py.Object, args py.Tuple) (py.Object, error) {
 		t := self.(*Thread)
@@ -270,11 +326,24 @@ func init() {
 	}, 0, "Run the target in the current thread."))
 
 	ThreadType.Dict.Set("join", py.MustNewMethod("join", func(self py.Object, args py.Tuple) (py.Object, error) {
+		t := self.(*Thread)
+		t.mu.Lock()
+		done := t.done
+		t.mu.Unlock()
+		if done == nil {
+			// Never started: nothing to wait for.
+			return py.None, nil
+		}
+		<-done
+		t.wg.Wait()
 		return py.None, nil
-	}, 0, "Wait for the thread to finish."))
+	}, 0, "Wait until the thread terminates."))
 
 	ThreadType.Dict.Set("is_alive", py.MustNewMethod("is_alive", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return py.False, nil
+		t := self.(*Thread)
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		return py.NewBool(t.alive), nil
 	}, 0, "Return whether the thread is alive."))
 
 	ThreadType.Dict.Set("name", &py.Property{
@@ -416,3 +485,9 @@ var (
 	_ py.I__enter__ = (*Lock)(nil)
 	_ py.I__exit__  = (*Lock)(nil)
 )
+
+// logThreadError reports a failure from a thread, which has no caller to
+// receive it.  CPython prints to stderr in the same place.
+func logThreadError(t *Thread, err error) {
+	fmt.Fprintf(os.Stderr, "Exception in thread %s: %v\n", t.name, err)
+}
