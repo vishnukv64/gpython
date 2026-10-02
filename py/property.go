@@ -106,6 +106,58 @@ func init() {
 			return String(self.(*Property).Doc), nil
 		},
 	}
+
+	// The accessor decorators.  Each returns a NEW property carrying the part
+	// it was given, which is what the usual idiom relies on:
+	//
+	//     @property
+	//     def x(self): ...
+	//     @x.setter
+	//     def x(self, v): ...
+	//
+	// The second def rebinds the name, and it is the first property that
+	// supplies the getter to the property the decorator returns.  Copying
+	// rather than mutating is also what makes a read-only property genuinely
+	// read-only.
+	accessor := func(name string, doc string, apply func(old, new *Property, fn *Function) *Property) {
+		PropertyType.Dict[name] = MustNewMethod(name, func(self Object, args Tuple) (Object, error) {
+			p, ok := self.(*Property)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "%s expected a property", name)
+			}
+			if len(args) != 1 {
+				return nil, ExceptionNewf(TypeError, "%s expected 1 argument, got %d", name, len(args))
+			}
+			fn, ok := args[0].(*Function)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "%s expected a function, got '%s'", name, args[0].Type().Name)
+			}
+			return apply(p, &Property{Fget: p.Fget, Fset: p.Fset, Fdel: p.Fdel, Doc: p.Doc, Abstract: p.Abstract}, fn), nil
+		}, 0, doc)
+	}
+	// A getter takes only self; a setter takes self and the value; a deleter
+	// takes only self.  Each is wrapped so the property can call it with the
+	// shape its own Fget/Fset/Fdel expect.
+	accessor("getter", "Descriptor to change the getter on a property.", func(old, new *Property, fn *Function) *Property {
+		new.Fget = func(self Object) (Object, error) {
+			return Call(fn, Tuple{self}, nil)
+		}
+		return new
+	})
+	accessor("setter", "Descriptor to change the setter on a property.", func(old, new *Property, fn *Function) *Property {
+		new.Fset = func(self, value Object) error {
+			_, err := Call(fn, Tuple{self, value}, nil)
+			return err
+		}
+		return new
+	})
+	accessor("deleter", "Descriptor to change the deleter on a property.", func(old, new *Property, fn *Function) *Property {
+		new.Fdel = func(self Object) error {
+			_, err := Call(fn, Tuple{self}, nil)
+			return err
+		}
+		return new
+	})
 }
 
 // Interfaces
