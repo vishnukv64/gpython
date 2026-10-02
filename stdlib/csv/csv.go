@@ -492,6 +492,12 @@ type Reader struct {
 	file py.Object
 	// pending holds a partially consumed line when a quoted field spans a
 	// newline.
+
+	// iter is the fallback for an argument that is not a file: CPython's
+	// csv.reader takes any iterable of strings, so "list(csv.reader(['a,b']))"
+	// works.  It is nil when the argument has a readline, which is the usual
+	// file case.
+	iter py.Object
 }
 
 func (r *Reader) Type() *py.Type { return readerType }
@@ -499,31 +505,53 @@ func (r *Reader) Type() *py.Type { return readerType }
 // M__iter__ returns the reader itself.
 func (r *Reader) M__iter__() (py.Object, error) { return r, nil }
 
-// M__next__ yields the next record as a list, or returns EOFError at the end,
-// which is how this interpreter signals iteration exhaustion.
+// M__next__ yields the next record as a list, and signals the end of
+// iteration with StopIteration - which is the exception a for loop looks
+// for here, and in CPython.  Using EOFError made the reader unusable in a
+// for loop: "list(csv.reader([...]))" propagated EOFError instead of ending.
 func (r *Reader) M__next__() (py.Object, error) {
 	rec, err := r.readRecord()
 	if err != nil {
 		return nil, err
 	}
 	if rec == nil {
-		return nil, py.EOFError
+		return nil, py.StopIteration
 	}
 	return py.NewListFromItems(rec), nil
 }
 
 // readOneLine reads one line from the file, reporting false at EOF.
+//
+// A file answers through readline().  Anything else - a list, a generator -
+// is iterated, because csv.reader accepts any iterable of strings and not
+// only a file object.
 func (r *Reader) readOneLine() (string, bool, error) {
-	readline, err := py.GetAttrString(r.file, "readline")
-	if err != nil {
-		return "", false, err
-	}
-	line, err := py.Call(readline, py.Tuple{}, nil)
-	if err != nil {
-		return "", false, err
-	}
-	if line == py.None {
-		return "", false, nil
+	var line py.Object
+	var err error
+	if r.iter != nil {
+		next, ok := r.iter.(py.I__next__)
+		if !ok {
+			return "", false, py.ExceptionNewf(py.TypeError, "argument 1 must be an iterator")
+		}
+		line, err = next.M__next__()
+		if err == py.StopIteration {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+	} else {
+		readline, err := py.GetAttrString(r.file, "readline")
+		if err != nil {
+			return "", false, err
+		}
+		line, err = py.Call(readline, py.Tuple{}, nil)
+		if err != nil {
+			return "", false, err
+		}
+		if line == py.None {
+			return "", false, nil
+		}
 	}
 	s, err := py.StrAsString(line)
 	if err != nil {
@@ -850,7 +878,24 @@ func readerFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if err := applySettings(&spec, nil, opts); err != nil {
 		return nil, err
 	}
-	return &Reader{spec: spec, file: csvfile}, nil
+	// A file answers through readline(); anything else is iterated.  Deciding
+	// once here rather than per line keeps the common file case on its fast
+	// path.
+	if hasReadline(csvfile) {
+		return &Reader{spec: spec, file: csvfile}, nil
+	}
+	it, err := py.Iter(csvfile)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "argument 1 must be an iterator")
+	}
+	return &Reader{spec: spec, file: csvfile, iter: it}, nil
+}
+
+// hasReadline reports whether the object is file-like, which is how CPython
+// tells a file from a plain iterable.
+func hasReadline(o py.Object) bool {
+	_, err := py.GetAttrString(o, "readline")
+	return err == nil
 }
 
 func writerFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {

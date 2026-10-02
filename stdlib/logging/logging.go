@@ -157,6 +157,17 @@ var LoggerType = py.NewType("logging.Logger", "A Logger is a named logging chann
 
 func (l *Logger) Type() *py.Type { return LoggerType }
 
+// Logger attributes.  A logger's name is how code refers to it - a library
+// reads logger.name to label its own output - and it was reachable only from
+// __repr__ before.
+func init() {
+	LoggerType.Dict["name"] = &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			return py.String(self.(*Logger).name), nil
+		},
+	}
+}
+
 func (l *Logger) M__repr__() (py.Object, error) {
 	return py.String(fmt.Sprintf("<Logger %s (%s)>", l.name, effectiveLevelName(l.level))), nil
 }
