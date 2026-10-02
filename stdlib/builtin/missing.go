@@ -82,13 +82,13 @@ func builtin_hash(self, obj py.Object) (py.Object, error) {
 	case py.Float:
 		return py.Int(int64(float64(v))), nil
 	case py.String:
-		// FNV-1a: deterministic, and equal strings hash equal.
-		var h uint64 = 14695981039346656037
-		for i := 0; i < len(v); i++ {
-			h ^= uint64(v[i])
-			h *= 1099511628211
-		}
-		return py.Int(int64(h & (1<<63 - 1))), nil
+		return py.Int(hashBytes([]byte(v))), nil
+	case py.Bytes:
+		// bytes is hashable and "hash(b'a')" must work -- it raised
+		// "descriptor '__hash__' requires a 'type' object", because bytes has
+		// no __hash__ and no case here either.  Equal bytes hash equal, which
+		// is what put them in a set or dict key.
+		return py.Int(hashBytes([]byte(v))), nil
 	}
 
 	if obj.Type().Lookup("__hash__") == nil {
@@ -222,4 +222,24 @@ func builtin_format(self py.Object, args py.Tuple) (py.Object, error) {
 		return v.M__format__(spec)
 	}
 	return py.Format(value, string(specStr))
+}
+
+// hashBytes is the hash of a byte string: FNV-1a, deterministic so that equal
+// values hash equal, which is all a dictionary key needs.
+//
+// It is used for str and bytes alike, so that "hash(b'a') == hash(b'a')" holds
+// and a bytes value can be a dict key or set member.
+func init() {
+	// The builtin module owns the hash of a byte string, and py cannot import
+	// it, so memoryview reads it through this hook.
+	py.MemoryHash = hashBytes
+}
+
+func hashBytes(b []byte) int64 {
+	var h uint64 = 14695981039346656037
+	for i := 0; i < len(b); i++ {
+		h ^= uint64(b[i])
+		h *= 1099511628211
+	}
+	return int64(h & (1<<63 - 1))
 }

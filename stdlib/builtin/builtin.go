@@ -86,7 +86,7 @@ func init() {
 		// that "assert" and ordinary code can read it.
 		py.DictEntry{Key: "__debug__", Value: py.True},
 		py.DictEntry{Key: "bool", Value: py.BoolType},
-		// "memoryview":     py.MemoryViewType,
+		py.DictEntry{Key: "memoryview", Value: py.MemoryViewType},
 		py.DictEntry{Key: "bytearray", Value: py.ByteArrayType},
 		py.DictEntry{Key: "bytes", Value: py.BytesType},
 		py.DictEntry{Key: "classmethod", Value: py.ClassMethodType},
