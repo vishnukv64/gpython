@@ -147,6 +147,8 @@ const (
 	LIST_EXTEND OpCode = 149 // Extend the list at TOS1[-i] with TOS (PEP 448)
 
 	DICT_UPDATE OpCode = 150 // Update the dict at TOS1[-i] with TOS (PEP 448)
+
+	TUPLE_EXTEND OpCode = 151 // Extend the tuple at TOS1[-i] with TOS (PEP 448)
 )
 
 // Rich comparison opcodes

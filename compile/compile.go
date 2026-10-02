@@ -1631,6 +1631,46 @@ func (c *compiler) compileListDisplay(ctx ast.ExprContext, elts []ast.Expr) {
 	}
 }
 
+// compileTupleDisplay compiles a tuple display, honouring PEP 448 unpacking
+// ("(*a, b)").
+//
+// A starred element cannot be expressed with BUILD_TUPLE alone, so the tuple
+// is grown the way a list is: an empty tuple is built and each element is
+// appended, with a starred element extending it.  Without this, "(*params,
+// *self._defaults[...])" - which is how typing_extensions splices two tuples
+// in the middle of an expression - was compiled as an assignment target and
+// failed with "can use starred expression only as assignment target".
+func (c *compiler) compileTupleDisplay(ctx ast.ExprContext, elts []ast.Expr) {
+	if ctx != ast.Load {
+		c.tupleOrList(vm.BUILD_TUPLE, ctx, elts)
+		return
+	}
+	starred := false
+	for _, elt := range elts {
+		if _, ok := elt.(*ast.Starred); ok {
+			starred = true
+			break
+		}
+	}
+	// With no starred element BUILD_TUPLE is shorter and is what the rest of
+	// the interpreter already produces.
+	if !starred {
+		c.tupleOrList(vm.BUILD_TUPLE, ctx, elts)
+		return
+	}
+	// The tuple is built in place, so the oparg is a constant 1.
+	c.OpArg(vm.BUILD_TUPLE, 0)
+	for _, elt := range elts {
+		if star, ok := elt.(*ast.Starred); ok {
+			c.Expr(star.Value)
+			c.OpArg(vm.TUPLE_EXTEND, 1)
+			continue
+		}
+		c.Expr(elt)
+		c.OpArg(vm.LIST_APPEND, 1)
+	}
+}
+
 // Compile a tuple or a list
 func (c *compiler) tupleOrList(op vm.OpCode, ctx ast.ExprContext, elts []ast.Expr) {
 	const INT_MAX = 0x7FFFFFFF
@@ -2099,7 +2139,7 @@ func (c *compiler) Expr(expr ast.Expr) {
 	case *ast.Tuple:
 		// Elts []Expr
 		// Ctx  ExprContext
-		c.tupleOrList(vm.BUILD_TUPLE, node.Ctx, node.Elts)
+		c.compileTupleDisplay(node.Ctx, node.Elts)
 	case *ast.MatchValue, *ast.MatchCapture, *ast.MatchWildcard, *ast.MatchSequence,
 		*ast.MatchStar, *ast.MatchMapping, *ast.MatchClass, *ast.MatchOr, *ast.MatchAs,
 		*ast.MatchGuard:

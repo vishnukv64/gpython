@@ -577,12 +577,48 @@ func do_SET_ADD(vm *Vm, i int32) error {
 func do_LIST_APPEND(vm *Vm, i int32) error {
 	w := vm.POP()
 	v := vm.PEEK(int(i))
-	v.(*py.List).Append(w)
-	return nil
+	if l, ok := v.(*py.List); ok {
+		l.Append(w)
+		return nil
+	}
+	// The same opcode grows a TUPLE in a tuple display: a tuple cannot be
+	// mutated, so the element is appended to a copy which replaces the one
+	// on the stack.  Without this "(*a, b)" panicked with "interface
+	// conversion: py.Object is py.Tuple, not *py.List".
+	if t, ok := v.(py.Tuple); ok {
+		merged := make(py.Tuple, 0, len(t)+1)
+		merged = append(merged, t...)
+		merged = append(merged, w)
+		vm.SET_VALUE(int(i), merged)
+		return nil
+	}
+	return py.ExceptionNewf(py.SystemError, "LIST_APPEND: expected a list or tuple, got %s", v.Type().Name)
 }
 
 // Extends the list at TOS1[-i] with the iterable at TOS, as in
 // "[*a, b]".  Used to implement PEP 448 unpacking in a list display.
+// do_TUPLE_EXTEND implements TUPLE_EXTEND, the tuple counterpart of
+// LIST_EXTEND.  It exists because a tuple cannot be mutated in place: the
+// compiler builds a fresh tuple and the concatenation produces a new one,
+// which is then stored back over the old at TOS1[-i].
+func do_TUPLE_EXTEND(vm *Vm, i int32) error {
+	iterable := vm.POP()
+	tupleObj := vm.PEEK(int(i))
+	tuple, ok := tupleObj.(py.Tuple)
+	if !ok {
+		return py.ExceptionNewf(py.SystemError, "TUPLE_EXTEND: expected a tuple, got %s", tupleObj.Type().Name)
+	}
+	items, err := py.SequenceList(iterable)
+	if err != nil {
+		return err
+	}
+	merged := make(py.Tuple, 0, len(tuple)+len(items.Items))
+	merged = append(merged, tuple...)
+	merged = append(merged, items.Items...)
+	vm.SET_VALUE(int(i), merged)
+	return nil
+}
+
 func do_LIST_EXTEND(vm *Vm, i int32) error {
 	iterable := vm.POP()
 	listObj := vm.PEEK(int(i))

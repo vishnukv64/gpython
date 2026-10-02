@@ -597,6 +597,14 @@ typedargslist:
 		po := $1
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
 	}
+|	posonly_prefix '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef optional_comma
+	{
+		// The same, with the trailing comma of a formatted signature.  Without
+		// this a positional-only function whose signature ends "**kwargs,"
+		// did not parse, which is what typing_extensions writes.
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
+	}
 |	posonly_prefix STARSTAR tfpdef
 	{
 		po := $1
@@ -631,6 +639,15 @@ typedargslist:
 	}
 |	'*' ',' tfpdeftests1 ',' STARSTAR tfpdef optional_comma
 	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
+	}
+|	'*' ',' tfpdeftests1 ',' STARSTAR tfpdef
+	{
+		// The same, without a trailing comma after the **kwargs.  Requiring
+		// optional_comma to match at least one comma made a signature that
+		// ends "**kwargs," or "**kwargs" a syntax error - typing_extensions
+		// writes a bare "*" followed by keyword-only arguments and then
+		// "**kwargs,", which is how a formatted signature is written.
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
 	}
 |	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef

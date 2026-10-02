@@ -4356,7 +4356,27 @@ var compileTestData = []struct {
 	}, nil, ""},
 	{"a, *b, *c = t", "exec", nil, py.SyntaxError, "two starred expressions in assignment"},
 	{"a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,*a = t", "exec", nil, py.SyntaxError, "too many expressions in star-unpacking assignment"},
-	{"a, b, *c", "exec", nil, py.SyntaxError, "can use starred expression only as assignment target"},
+	// "a, b, *c" is a TUPLE DISPLAY containing a starred element, which PEP 448
+	// (Python 3.5) made legal anywhere an expression may appear.  It used to be
+	// rejected here with "can use starred expression only as assignment target",
+	// which was the pre-3.5 rule.  CPython 3.14 compiles it.
+	{"a, b, *c", "exec", &py.Code{
+		Argcount:       0,
+		Kwonlyargcount: 0,
+		Nlocals:        0,
+		Stacksize:      2,
+		Flags:          64,
+		Code:           "\x66\x00\x00\x65\x00\x00\x91\x01\x00\x65\x01\x00\x91\x01\x00\x65\x02\x00\x97\x01\x00\x01\x64\x00\x00\x53",
+		Consts:         []py.Object{py.None},
+		Names:          []string{"a", "b", "c"},
+		Varnames:       []string{},
+		Freevars:       []string{},
+		Cellvars:       []string{},
+		Filename:       "<string>",
+		Name:           "<module>",
+		Firstlineno:    1,
+		Lnotab:         "",
+	}, nil, ""},
 	{"a, (b, c), d = t", "exec", &py.Code{
 		Argcount:       0,
 		Kwonlyargcount: 0,
