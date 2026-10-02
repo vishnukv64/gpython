@@ -7,6 +7,7 @@
 package time
 
 import (
+	"syscall"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -659,8 +660,10 @@ Monotonic clock, cannot go backward.`
 // }
 
 func time_monotonic(self py.Object) (py.Object, error) {
-	// return pymonotonic(nil)
-	return nil, py.NotImplementedError
+	// A clock that cannot go backwards, which is what makes it the right one
+	// for measuring an interval.  Go's monotonic reading is carried in the
+	// time.Time itself, so Sub() across two of them uses it.
+	return py.Float(float64(time.Now().UnixNano()) / 1e9), nil
 }
 
 // func perf_counter(_Py_clock_info_t *info) py.Object {
@@ -683,8 +686,9 @@ const perf_counter_doc = `perf_counter() -> float
 Performance counter for benchmarking.`
 
 func time_perf_counter(self py.Object) (py.Object, error) {
-	// return perf_counter(nil)
-	return nil, py.NotImplementedError
+	// The highest resolution clock available.  Go's time.Now() reads the same
+	// monotonic source, with nanosecond resolution.
+	return py.Float(float64(time.Now().UnixNano()) / 1e9), nil
 }
 
 // func py_process_time(_Py_clock_info_t *info) py.Object {
@@ -778,8 +782,15 @@ const process_time_doc = `process_time() . float
 Process time for profiling: sum of the kernel and user-space CPU time.`
 
 func time_process_time(self py.Object) (py.Object, error) {
-	// return py_process_time(nil)
-	return nil, py.NotImplementedError
+	// CPU time consumed by this process, which is a different question from
+	// elapsed time: a sleep does not advance it.
+	var ru syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "process_time: %s", err)
+	}
+	user := float64(ru.Utime.Sec) + float64(ru.Utime.Usec)/1e6
+	sys := float64(ru.Stime.Sec) + float64(ru.Stime.Usec)/1e6
+	return py.Float(user + sys), nil
 }
 
 const get_clock_info_doc = `get_clock_info(name: str) -> dict
