@@ -90,6 +90,11 @@ type compiler struct {
 	// that only exists for a type checker cannot fail at run time (PEP 563).
 	src               string
 	stringAnnotations bool
+
+	// annotationsDone records that __annotations__ has been created for this
+	// code object, so the first annotated name in a module or class body emits
+	// its creation and later ones index into it (PEP 526).
+	annotationsDone bool
 }
 
 // Set in py to avoid circular import
@@ -1115,18 +1120,39 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		// Annotation Expr
 		// Value      Expr
 		//
-		// The annotation itself is not evaluated for its effect: at module
-		// and class level "x: int" only records the annotation, and the
-		// compiler has no __annotations__ store yet, so it is dropped and
-		// only a value, when present, is assigned.  Evaluating the
-		// annotation would be wrong anyway when it names a type that is not
-		// importable at run time.
+		// PEP 526: at module and class level "x: int" records the annotation
+		// in __annotations__, and with a value also assigns it.  The annotation
+		// is not evaluated for its effect at run time - CPython evaluates it
+		// but under "from __future__ import annotations" stores the source
+		// text, and this compiler does the same via loadAnnotation.  A bare
+		// "x: int" with no value assigns nothing.
+		name, ok := node.Target.(*ast.Name)
+		if !ok || !c.inAnnotationScope() {
+			// An annotated target that is not a plain name (an attribute or a
+			// subscript) is not recorded in __annotations__; only its value
+			// assignment, if any, has an effect.
+			if node.Value != nil {
+				c.Expr(node.Value)
+				if _, ok := node.Target.(ast.SetCtxer); !ok {
+					panic("compile: can't set context in AnnAssign")
+				}
+				c.Expr(node.Target)
+			}
+			break
+		}
+		c.ensureAnnotations()
+		// __annotations__[name] = <annotation>.  STORE_SUBSCR reads the value,
+		// container and key from the bottom of the stack up, so the annotation is
+		// pushed first, then the dict, then the key.
+		if err := c.loadAnnotation(node.Annotation); err != nil {
+			panic(err)
+		}
+		c.NameOp("__annotations__", ast.Load)
+		c.LoadConst(py.String(string(name.Id)))
+		c.Op(vm.STORE_SUBSCR)
 		if node.Value != nil {
 			c.Expr(node.Value)
-			if _, ok := node.Target.(ast.SetCtxer); !ok {
-				panic("compile: can't set context in AnnAssign")
-			}
-			c.Expr(node.Target)
+			c.NameOp(string(name.Id), ast.Store)
 		}
 	case *ast.AugAssign:
 		// Target Expr

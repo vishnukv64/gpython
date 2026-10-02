@@ -158,6 +158,7 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 	groupNames := map[int]string{}
 	nameToNum := map[string]int{}
 	groupNum := 0
+	inClass := false
 
 	// Class translation depends on the ASCII flag.
 	digit := `\d`
@@ -177,6 +178,66 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 
 	for i := 0; i < len(pattern); i++ {
 		c := pattern[i]
+		// A character class is literal: anchors, groups and classes inside
+		// "[...]" are just characters, so the translation of "$", "(" and
+		// friends must not run there.  inClass tracks that, and a ']' as the
+		// first character of a class is a literal, not the end.
+		if c == '[' && !inClass {
+			inClass = true
+			classStart := i
+			b.WriteByte(c)
+			i++
+			if i < len(pattern) && pattern[i] == '^' {
+				b.WriteByte('^')
+				i++
+			}
+			if i < len(pattern) && pattern[i] == ']' {
+				b.WriteByte(']')
+				i++
+			}
+			// Copy the class body, translating escapes but not metacharacters.
+			// The loop test has to skip an escaped '\]' - it is a literal in the
+			// class, not the closing bracket, and stopping at it would end the
+			// class early.
+			for i < len(pattern) {
+				ic := pattern[i]
+				if ic == '\\' && i+1 < len(pattern) {
+					nnext := pattern[i+1]
+					switch nnext {
+					case 'd':
+						b.WriteString(digit)
+					case 'w':
+						b.WriteString(word)
+					case 's':
+						b.WriteString(space)
+					case 'D':
+						b.WriteString(`\D`)
+					case 'W':
+						b.WriteString(`\W`)
+					case 'S':
+						b.WriteString(`\S`)
+					default:
+						b.WriteByte('\\')
+						b.WriteByte(nnext)
+					}
+					// The escape consumes BOTH the backslash and the escaped
+					// character, so advance past both.
+					i += 2
+					continue
+				}
+				if ic == ']' {
+					break
+				}
+				b.WriteByte(ic)
+				i++
+			}
+			_ = classStart
+			if i < len(pattern) {
+				b.WriteByte(']')
+			}
+			inClass = false
+			continue
+		}
 		if c == '\\' && i+1 < len(pattern) {
 			next := pattern[i+1]
 			switch next {

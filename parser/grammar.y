@@ -2357,6 +2357,20 @@ arglist:
 		call.Kwargs = $3
 		$$ = call
 	}
+|	optional_arguments STARSTAR test ',' arguments optional_comma
+	{
+		// "f(**d, k=v)" - the ** unpacking comes before keyword arguments.
+		// The AST holds one Kwargs node, and the compiler emits the keywords
+		// first and then the ** dict, which is exactly how CPython merges
+		// them (a duplicate key raises TypeError at call time).
+		call := $1
+		call.Kwargs = $3
+		if len($5.Args) != 0 {
+			yylex.(*yyLex).SyntaxError("only named arguments may follow **expression")
+		}
+		call.Keywords = append(call.Keywords, $5.Keywords...)
+		$$ = call
+	}
 
 // The reason that keywords are test nodes instead of NAME is that using NAME
 // results in an ambiguity. ast.c makes sure it's a NAME.

@@ -1485,16 +1485,17 @@ func init() {
 	}, 0, "Return repr(self)."))
 }
 
-// namedtupleFactory is what namedtuple() returns: a callable that builds an
-// instance of the named tuple it describes.
+// namedtupleFactory is what namedtuple() returns: a class whose constructor
+// builds an instance of the named tuple it describes.
 //
-// CPython returns a class here.  This interpreter can create a class at run
-// time, but not one deriving from tuple, so the factory is its own callable
-// rather than a type - which is enough for every use that constructs the
-// named tuple or reads its fields.
+// CPython returns a real tuple subclass.  This interpreter cannot subclass
+// tuple, so the class is a distinct type carrying the field list on the class
+// (in _fields) and the values on the instance; it is a genuine *py.Type, which
+// is what lets "class X(namedtuple(...))" derive from it.
 type namedtupleFactory struct {
 	name   string
 	fields []string
+	cls    *py.Type
 }
 
 var namedtupleFactoryType = py.NewType("collections.namedtuple", namedtuple_doc)
@@ -1573,7 +1574,30 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 			return nil, py.ExceptionNewf(py.ValueError, "Field names cannot start with an underscore: %q", f)
 		}
 	}
-	return &namedtupleFactory{name: name, fields: fields}, nil
+
+	// Return a real class, not just a callable: CPython's namedtuple is a
+	// class and code derives from it ("class Url(namedtuple('Url', [...]))").
+	// The field list lives on the class as _fields, and the constructor builds
+	// the instance carrying the values.
+	factory := &namedtupleFactory{name: name, fields: fields}
+	cls := py.NewTypeX(name, "", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		return factory.M__call__(args, kwargs)
+	}, nil)
+	cls.Flags |= py.TPFLAGS_BASETYPE
+	factory.cls = cls
+	fieldItems := make([]py.Object, len(fields))
+	for i, f := range fields {
+		fieldItems[i] = py.String(f)
+	}
+	cls.Dict.Set("_fields", py.NewListFromItems(fieldItems))
+	cls.Dict.Set("__new__", py.MustNewMethod("__new__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		return factory.M__call__(args, kwargs)
+	}, 0, "Create a new named tuple instance."))
+	// The named tuple behaviours are inherited from the shared NamedTupleType
+	// so every generated class has the field accessors, repr and so on.
+	cls.Base = NamedTupleType
+	cls.Bases = py.Tuple{NamedTupleType}
+	return cls, nil
 }
 
 func init() {

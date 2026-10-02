@@ -122,6 +122,32 @@ func fieldsN(s string, n int) []string {
 }
 
 func init() {
+	// str.encode mirrors bytes.decode, sharing encodeStringWith so both go
+	// through one canonical-encoding table.
+	StringType.Dict.Set("encode", MustNewMethod("encode", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		encoding := Object(String("utf-8"))
+		errors := Object(String("strict"))
+		if err := ParseTupleAndKeywords(args, kwargs, "|OO:encode",
+			[]string{"encoding", "errors"}, &encoding, &errors); err != nil {
+			return nil, err
+		}
+		enc, ok := encoding.(String)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "encode() argument 'encoding' must be str, not %s", encoding.Type().Name)
+		}
+		errs, ok := errors.(String)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "encode() argument 'errors' must be str, not %s", errors.Type().Name)
+		}
+		b, err := encodeStringWith(string(enc), string(self.(String)), string(errs))
+		if err != nil {
+			return nil, err
+		}
+		return Bytes(b), nil
+	}, 0, `encode(encoding='utf-8', errors='strict') -> bytes
+
+Encode the string using the codec registered for encoding.`))
+
 	StringType.Dict.Set("endswith", MustNewMethod("endswith", func(self Object, args Tuple) (Object, error) {
 		selfStr := string(self.(String))
 		suffix := []string{}
@@ -789,6 +815,7 @@ func (a String) M__mod__(other Object) (Object, error) {
 	var out strings.Builder
 	format := string(a)
 	valueIdx := 0
+	usedMapping := false
 	for i := 0; i < len(format); i++ {
 		if format[i] != '%' {
 			out.WriteByte(format[i])
@@ -805,6 +832,24 @@ func (a String) M__mod__(other Object) (Object, error) {
 
 		// Collect the flags, width and precision, then the conversion.
 		start := i - 1
+		// A mapping key, "%(name)s", draws its value from a dict argument
+		// instead of taking the next positional one.
+		var mappingKey string
+		var hasMappingKey bool
+		if format[i] == '(' {
+			// Scan to the matching ')' with no nesting; a key cannot contain
+			// an unescaped ')'.
+			j := i + 1
+			for j < len(format) && format[j] != ')' {
+				j++
+			}
+			if j >= len(format) {
+				return nil, ExceptionNewf(ValueError, "incomplete format key")
+			}
+			mappingKey = format[i+1 : j]
+			hasMappingKey = true
+			i = j + 1
+		}
 		for i < len(format) && strings.ContainsRune("-+ #0", rune(format[i])) {
 			i++
 		}
@@ -825,11 +870,27 @@ func (a String) M__mod__(other Object) (Object, error) {
 		verb := format[i]
 		spec := format[start : i+1]
 
-		if valueIdx >= len(values) {
-			return nil, ExceptionNewf(TypeError, "not enough arguments for format string")
+		var value Object
+		if hasMappingKey {
+			// A mapping argument: the value is looked up by key.  Missing keys
+			// are a KeyError, as in CPython.
+			m, ok := other.(StringDict)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "format requires a mapping")
+			}
+			v, ok := m.Get(mappingKey)
+			if !ok {
+				return nil, ExceptionNewf(KeyError, "'%s'", mappingKey)
+			}
+			value = v
+			usedMapping = true
+		} else {
+			if valueIdx >= len(values) {
+				return nil, ExceptionNewf(TypeError, "not enough arguments for format string")
+			}
+			value = values[valueIdx]
+			valueIdx++
 		}
-		value := values[valueIdx]
-		valueIdx++
 
 		// The text of a value comes from Python's own str/repr, not from Go's
 		// fmt: "%s" % [1, 2] used to print "&{[1 2]}".
@@ -918,7 +979,7 @@ func (a String) M__mod__(other Object) (Object, error) {
 		out.WriteString(text)
 	}
 
-	if valueIdx < len(values) {
+	if !usedMapping && valueIdx < len(values) {
 		return nil, ExceptionNewf(TypeError, "not all arguments converted during string formatting")
 	}
 	return String(out.String()), nil

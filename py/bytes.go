@@ -604,9 +604,9 @@ func bytesDecodeMethod(b []byte, args Tuple, kwargs StringDict) (Object, error) 
 
 func bytesHexMethod(b []byte, args Tuple, kwargs StringDict) (Object, error) {
 	var (
-		sep      Object
-		perSep   Object = Int(1)
-		kwlist          = []string{"sep", "bytes_per_sep"}
+		sep    Object
+		perSep Object = Int(1)
+		kwlist        = []string{"sep", "bytes_per_sep"}
 	)
 	if err := ParseTupleAndKeywords(args, kwargs, "|OO:hex", kwlist, &sep, &perSep); err != nil {
 		return nil, err
@@ -1707,6 +1707,38 @@ func init() {
 		return self.(Bytes).M__len__()
 	}, 0, "Return the number of bytes in the sequence."))
 
+	// bytes.__getitem__: b[i] is the int at i, b[a:b] is a new bytes object.
+	// Without this, "b'abc'[0]" raised "'bytes' object is not subscriptable",
+	// which urllib3 hits in _encode_invalid_chars.
+	BytesType.Dict.Set("__getitem__", MustNewMethod("__getitem__", func(self Object, args Tuple) (Object, error) {
+		b := self.(Bytes)
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "bytes.__getitem__() takes exactly one argument")
+		}
+		if sl, ok := args[0].(*Slice); ok {
+			data, err := byteArraySlice(b, sl)
+			if err != nil {
+				return nil, err
+			}
+			return Bytes(data), nil
+		}
+		i, err := indexForContainer(args[0], len(b), "bytes")
+		if err != nil {
+			return nil, err
+		}
+		return Int(b[i]), nil
+	}, 0, "Return self[key]."))
+
+	// bytes.__iter__ yields each byte as an int, as CPython does.
+	BytesType.Dict.Set("__iter__", MustNewMethod("__iter__", func(self Object, args Tuple) (Object, error) {
+		b := self.(Bytes)
+		items := make([]Object, len(b))
+		for i, c := range b {
+			items[i] = Int(c)
+		}
+		return NewListFromItems(items), nil
+	}, 0, "Implement iter(self)."))
+
 	BytesType.Dict.Set("replace", MustNewMethod("replace", func(self Object, args Tuple) (Object, error) {
 		return bytesReplaceMethod(self.(Bytes), false, args)
 	}, 0, `replace(old, new, count=-1) -> bytes
@@ -1727,7 +1759,9 @@ Return a copy with all occurrences of substring old replaced by new.
 		return func(self Object, args Tuple) (Object, error) { return fn(self.(Bytes), args) }
 	}
 	selfKw := func(fn func(b Bytes, args Tuple, kwargs StringDict) (Object, error)) func(self Object, args Tuple, kwargs StringDict) (Object, error) {
-		return func(self Object, args Tuple, kwargs StringDict) (Object, error) { return fn(self.(Bytes), args, kwargs) }
+		return func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+			return fn(self.(Bytes), args, kwargs)
+		}
 	}
 
 	setKw("decode", selfKw(func(b Bytes, args Tuple, kwargs StringDict) (Object, error) {
@@ -1856,4 +1890,31 @@ Example: bytes.fromhex('B9 01EF') -> b'\xb9\x01\xef'.`))
 
 Return a translation table (a bytes object of length 256) suitable for use in
 bytes.translate.`))
+}
+
+// indexForContainer resolves a single subscript against a length, raising the
+// IndexError/TypeError CPython raises for the named container.
+func indexForContainer(key Object, length int, what string) (int, error) {
+	switch key.(type) {
+	case Int, Bool, *BigInt:
+	default:
+		if _, ok := key.(I__index__); !ok {
+			return 0, ExceptionNewf(TypeError, "%s indices must be integers or slices, not %s", what, key.Type().Name)
+		}
+	}
+	i, err := Index(key)
+	if err != nil {
+		if IsException(TypeError, err) {
+			return 0, ExceptionNewf(TypeError, "%s indices must be integers or slices, not %s", what, key.Type().Name)
+		}
+		return 0, err
+	}
+	n := int(i)
+	if i < 0 {
+		n += length
+	}
+	if n < 0 || n >= length {
+		return 0, ExceptionNewf(IndexError, "%s index out of range", what)
+	}
+	return n, nil
 }

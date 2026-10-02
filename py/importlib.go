@@ -131,6 +131,10 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 		}
 	}
 	mod.Globals.Set("__package__", String(pkg))
+	// __file__ is the path the module was loaded from.  CPython sets it on a
+	// file-loaded module, and code reads it - importlib.resources uses it to
+	// find a package's data files.
+	mod.Globals.Set("__file__", String(path))
 	if isPkg {
 		mod.Globals.Set("__path__", NewListFromItems([]Object{String(filepath.Dir(path))}))
 	}

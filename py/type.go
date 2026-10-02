@@ -15,6 +15,7 @@ package py
 import (
 	"fmt"
 	"log"
+	"reflect"
 )
 
 // Type flags (tp_flags)
@@ -323,6 +324,36 @@ func init() {
 	// ask for its class, and "(5).__class__" was an AttributeError.
 	ObjectType.Dict.Set("__class__", &classGetter{})
 	TypeType.Dict.Set("__class__", &classGetter{})
+
+	// object.__init__ exists and takes no arguments, which is what makes
+	// "super().__init__()" work in a class whose base is a native type - such
+	// as urllib3's HTTPConnection, which chains to http.client.HTTPConnection.
+	// It is registered on ObjectType.Dict, the "object" class's namespace, so
+	// every type finds it through its base chain when it does not define one
+	// of its own.  It is deliberately permissive about arguments: this
+	// interpreter calls the MRO's __init__ on every construction, so rejecting
+	// them here would break "class C: pass" when C is instantiated with any
+	// argument the base chain has already consumed.
+	ObjectType.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return None, nil
+	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
+
+	// A type is hashable by identity, as in CPython: "{str: 1, bytes: 2}" is
+	// ordinary code (requests builds HEADER_VALIDATORS that way).  Without a
+	// __hash__ the dict key encoder rejected every type as "unhashable type:
+	// 'object'".  The hash is the type's own pointer, and it is registered on
+	// both metatypes (a native type is an ObjectType, a python class a
+	// TypeType) - but NOT on a plain instance, which keeps lists and dicts
+	// unhashable.
+	typeHash := MustNewMethod("__hash__", func(self Object, args Tuple) (Object, error) {
+		t, ok := self.(*Type)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "descriptor '__hash__' requires a 'type' object")
+		}
+		return Int(int64(reflect.ValueOf(t).Pointer())), nil
+	}, 0, "Return hash(self).")
+	TypeType.Dict.Set("__hash__", typeHash)
+	ObjectType.Dict.Set("__hash__", typeHash)
 }
 
 // typeMetaGetter is the descriptor behind cls.__name__ and friends.
@@ -693,7 +724,18 @@ func (t *Type) GetAttrOrNil(name string) Object {
 //
 // May raise exceptions if calling the method failed
 func (t *Type) CallMethod(name string, args Tuple, kwargs StringDict) (Object, bool, error) {
-	fn := t.GetAttrOrNil(name) // FIXME this should use py.GetAttrOrNil?
+	// Look up the method through the MRO, not only in this type's own Dict.
+	//
+	// GetAttrOrNil consults the type's Dict and then its METATYPE, which is
+	// right for an instance's attributes but wrong here: a SUBCLASS inherits
+	// its base's methods, and they live in the base's Dict.  So
+	// "class D(dict): pass; d["a"] = 1" raised "'D' object does not support
+	// item assignment" - the inherited __setitem__ was never found - and the
+	// same would have hit any operator inherited from a builtin.
+	fn := t.GetAttrOrNil(name)
+	if own := t.Lookup(name); own != nil {
+		fn = own
+	}
 	if fn == nil {
 		return nil, false, nil
 	}
@@ -2060,14 +2102,30 @@ var ABCHooks []func(obj Object, class *Type) bool
 // instead.  It is installed by the enum module.
 var BuildEnumClass func(name string, bases []Object, ns StringDict) (Object, error)
 
+// BuildNamedTupleClass, when set, turns the body of a class that derives from
+// typing.NamedTuple into a named tuple class.  CPython does this with
+// __mro_entries__ on the NamedTuple base (PEP 560); the hook here is the same
+// shape as BuildEnumClass, and is installed by the typing module.
+var BuildNamedTupleClass func(name string, bases []Object, ns StringDict) (Object, error)
+
 // IsEnumBase reports whether the type is an enum class, which is how
 // __build_class__ recognises the bases that need BuildEnumClass.
 func (t *Type) IsEnumBase() bool {
 	return t.Flags&TPFLAGS_ENUM != 0
 }
 
+// IsNamedTupleBase reports whether the type is typing.NamedTuple, which is how
+// __build_class__ recognises the base that needs BuildNamedTupleClass.
+func (t *Type) IsNamedTupleBase() bool {
+	return t.Flags&TPFLAGS_NAMEDTUPLE != 0
+}
+
 // TPFLAGS_ENUM marks a class that derives from enum.Enum.
 const TPFLAGS_ENUM uint = 1 << 20
+
+// TPFLAGS_NAMEDTUPLE marks typing.NamedTuple, the base whose subclasses are
+// built by BuildNamedTupleClass.
+const TPFLAGS_NAMEDTUPLE uint = 1 << 21
 
 // M__or__ gives "type | type" a result.
 //
@@ -2146,7 +2204,7 @@ func init() {
 	for _, t := range []*Type{
 		ListType, TupleType, DictType, SetType, FrozenSetType,
 		StringType, BytesType, IntType, FloatType, BoolType,
-		SliceType, ComplexType, TypeType,
+		SliceType, ComplexType, TypeType, StringDictType,
 	} {
 		if t != nil && !t.Dict.IsNil() {
 			t.Dict.Set("__class_getitem__", getitem)

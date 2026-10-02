@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
 	"sync"
 )
 
@@ -189,6 +190,33 @@ func ExceptionNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error)
 		return nil, fmt.Errorf("TypeError: %s does not take keyword arguments", metatype.Name)
 	}
 	return exceptionNew(metatype, args), nil
+}
+
+// baseExceptionInit registers BaseException.__init__, which stores its
+// positional arguments in .args.  It exists so that a subclass whose own
+// __init__ chains with super().__init__(...) finds a real initializer in the
+// MRO; without it the lookup reached object.__init__, which accepts no
+// arguments, and "super().__init__(*a)" failed.
+func init() {
+	BaseException.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		if kwargs.Len() != 0 {
+			return nil, ExceptionNewf(TypeError, "%s does not take keyword arguments", self.Type().Name)
+		}
+		if e, ok := self.(*Exception); ok {
+			e.Args = args
+			return None, nil
+		}
+		// An instance of a python subclass of Exception is a *Type here
+		// rather than a *Exception, so .args is kept in its dict.  CPython
+		// stores the arguments tuple on every exception instance.
+		if d, ok := self.(IGetDict); ok && !reflect.ValueOf(d).IsNil() {
+			dict := d.GetDict()
+			if !dict.IsNil() {
+				dict.Set("args", args)
+			}
+		}
+		return None, nil
+	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
 }
 
 // ExceptionNewf - make a new exception with fmt parameters
@@ -511,10 +539,28 @@ func init() {
 	// be registered.
 	BaseException.Dict.Set("args", &Property{
 		Fget: func(self Object) (Object, error) {
-			return self.(*Exception).Args, nil
+			if e, ok := self.(*Exception); ok {
+				return e.Args, nil
+			}
+			// An instance of a python subclass of Exception is a *Type here
+			// rather than a *Exception, so its fields live in its dict.
+			if d, ok := self.(IGetDict); ok {
+				if v, ok := d.GetDict().Get("args"); ok {
+					return v, nil
+				}
+			}
+			return None, nil
 		},
 		Fset: func(self, value Object) error {
-			self.(*Exception).Args = value
+			if e, ok := self.(*Exception); ok {
+				e.Args = value
+				return nil
+			}
+			if d, ok := self.(IGetDict); ok {
+				dict := d.GetDict()
+				dict.Set("args", value)
+				return nil
+			}
 			return nil
 		},
 	})

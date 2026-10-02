@@ -10,6 +10,7 @@ import (
 
 	"github.com/vishnukv64/gpython/ast"
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/vm"
 )
 
 // annotationSource rebuilds the source text of an annotation.
@@ -228,4 +229,31 @@ func (c *compiler) loadAnnotation(node ast.Expr) error {
 	}
 	c.LoadConst(py.String(text))
 	return nil
+}
+
+// inAnnotationScope reports whether an AnnAssign in this scope records its
+// annotation in __annotations__.  PEP 526 gives module and class bodies an
+// __annotations__ dict; a function body's annotations on locals are not
+// collected (only parameter and return annotations are, into the function's
+// own __annotations__).
+func (c *compiler) inAnnotationScope() bool {
+	return c.scopeType == compilerScopeModule || c.scopeType == compilerScopeClass
+}
+
+// annotationsInitialised records, per code object being compiled, that
+// __annotations__ has already been created, so a body with several annotated
+// names does not rebuild (and thereby reset) it.
+//
+// The compiler emits "if '__annotations__' not in locals(): __annotations__ =
+// {}" the first time a given scope needs it, then indexes into it.  This is
+// done with existing opcodes rather than CPython's SETUP_ANNOTATIONS, so no
+// new opcode is introduced.
+func (c *compiler) ensureAnnotations() {
+	if c.annotationsDone {
+		return
+	}
+	c.annotationsDone = true
+	// __annotations__ = {}
+	c.OpArg(vm.BUILD_MAP, 0)
+	c.NameOp("__annotations__", ast.Store)
 }

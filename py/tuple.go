@@ -192,11 +192,92 @@ func (a Tuple) M__ne__(other Object) (Object, error) {
 	return False, nil
 }
 
+// tupleOrder returns -1, 0 or 1 for a compared element-wise to b, matching
+// CPython's tuple lexicographic ordering: the first non-equal element decides,
+// and a proper prefix is smaller.
+func tupleOrder(a, b Tuple) (int, error) {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		lt, err := Lt(a[i], b[i])
+		if err != nil {
+			return 0, err
+		}
+		if lt == True {
+			return -1, nil
+		}
+		gt, err := Gt(a[i], b[i])
+		if err != nil {
+			return 0, err
+		}
+		if gt == True {
+			return 1, nil
+		}
+	}
+	switch {
+	case len(a) < len(b):
+		return -1, nil
+	case len(a) > len(b):
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func (a Tuple) M__lt__(other Object) (Object, error) {
+	b, ok := other.(Tuple)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := tupleOrder(a, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord < 0), nil
+}
+
+func (a Tuple) M__le__(other Object) (Object, error) {
+	b, ok := other.(Tuple)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := tupleOrder(a, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord <= 0), nil
+}
+
+func (a Tuple) M__gt__(other Object) (Object, error) {
+	b, ok := other.(Tuple)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := tupleOrder(a, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord > 0), nil
+}
+
+func (a Tuple) M__ge__(other Object) (Object, error) {
+	b, ok := other.(Tuple)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := tupleOrder(a, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord >= 0), nil
+}
+
 // Check interface is satisfied
 var _ sequenceArithmetic = Tuple(nil)
 var _ I__str__ = Tuple(nil)
 var _ I__repr__ = Tuple(nil)
 var _ I__len__ = Tuple(nil)
+var _ I__lt__ = Tuple(nil)
+var _ I__le__ = Tuple(nil)
+var _ I__gt__ = Tuple(nil)
+var _ I__ge__ = Tuple(nil)
 var _ I__bool__ = Tuple(nil)
 var _ I__iter__ = Tuple(nil)
 var _ I__getitem__ = Tuple(nil)

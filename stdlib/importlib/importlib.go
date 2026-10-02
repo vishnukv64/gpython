@@ -19,6 +19,7 @@
 package importlib
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -392,6 +393,132 @@ func init() {
 	// find_spec" resolves, exactly as it does in CPython.
 	py.RegisterModule(utilModule)
 	py.RegisterModuleAlias("importlib._bootstrap", "importlib")
+	// importlib.metadata is a module of its own; version() reads a package's
+	// installed metadata from disk.
+	py.RegisterModule(metadataModule)
+	// importlib.resources is a module of its own; it reads a package's data
+	// files from the filesystem.
+	py.RegisterModule(resourceModule)
+
+	// The Traversable object files() returns.
+	for _, m := range []struct {
+		name string
+		fn   interface{}
+		doc  string
+	}{
+		{"joinpath", traversableJoinpath, "Return a child Traversable."},
+		{"read_text", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
+			return traversableReadText(self, args, kw)
+		}, "Read the file as text."},
+		{"read_bytes", traversableReadBytes, "Read the file as bytes."},
+		{"is_file", traversableIsFile, "True if this is a file."},
+		{"is_dir", traversableIsDir, "True if this is a directory."},
+		{"exists", traversableExists, "True if the resource exists."},
+	} {
+		traversableType.Dict.Set(m.name, py.MustNewMethod(m.name, m.fn, 0, m.doc))
+	}
+	// The as_file() context manager.
+	asFileContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", asFileEnter, 0, "Enter the context, yielding the path."))
+	asFileContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", asFileExit, 0, "Exit the context."))
+}
+
+var metadataDoc = `Access to the metadata of an installed distribution.
+
+version(distribution_name) returns the version recorded in the
+.dist-info/METADATA of an installed distribution, searching sys.path.`
+
+// metadataModule is importlib.metadata.
+var metadataModule = &py.ModuleImpl{
+	Info: py.ModuleInfo{
+		Name: "importlib.metadata",
+		Doc:  metadataDoc,
+	},
+	Methods: []*py.Method{
+		py.MustNewMethod("version", metadataVersion, 0, "version(distribution_name) -> version string"),
+	},
+}
+
+// metadataVersion looks for <name>-<ver>.dist-info/METADATA (or .egg-info) on
+// sys.path and returns its Version field.  A distribution that is not found
+// raises PackageNotFoundError, which is a real exception type so callers can
+// catch it.
+func metadataVersion(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var nameObj py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "s:version", []string{"distribution_name"}, &nameObj); err != nil {
+		return nil, err
+	}
+	name := strings.ToLower(string(nameObj.(py.String)))
+	for _, dir := range metadataSearchDirs(currentContext(self)) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			base := e.Name()
+			if !strings.HasSuffix(base, ".dist-info") && !strings.HasSuffix(base, ".egg-info") {
+				continue
+			}
+			stem := strings.TrimSuffix(strings.TrimSuffix(base, ".dist-info"), ".egg-info")
+			parts := strings.SplitN(stem, "-", 2)
+			if !strings.EqualFold(parts[0], name) {
+				continue
+			}
+			if v := readMetadataVersion(filepath.Join(dir, base, "METADATA")); v != "" {
+				return py.String(v), nil
+			}
+		}
+	}
+	return nil, py.ExceptionNewf(packageNotFoundType, "No package metadata was found for %s", string(nameObj.(py.String)))
+}
+
+// packageNotFoundType is importlib.metadata.PackageNotFoundError.
+var packageNotFoundType = py.ModuleNotFoundError.NewType("importlib.metadata.PackageNotFoundError",
+	"No package metadata was found for the given name.", nil, nil)
+
+// metadataSearchDirs returns the directories version() searches: the entries
+// of sys.path, which is where site-packages lives.
+func metadataSearchDirs(ctx py.Context) []string {
+	if ctx == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(d string) {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	mod, err := ctx.GetModule("sys")
+	if err == nil {
+		if p, err := py.GetAttrString(mod, "path"); err == nil {
+			if l, ok := p.(*py.List); ok {
+				for _, it := range l.Items {
+					if s, ok := it.(py.String); ok {
+						add(string(s))
+					}
+				}
+			}
+		}
+	}
+	return dirs
+}
+
+// readMetadataVersion reads the Version: field of a METADATA file.
+func readMetadataVersion(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "Version:"); ok {
+			return strings.TrimSpace(v)
+		}
+		if line == "" {
+			break // end of the header block
+		}
+	}
+	return ""
 }
 
 // checkArgs validates the positional and keyword argument counts of a
@@ -420,4 +547,271 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// ---------------------------------------------------------------------------
+// importlib.resources
+// ---------------------------------------------------------------------------
+
+// resourcesDoc describes the importlib.resources module.
+var resourcesDoc = `Read, open, and access resources that are part of a package.
+
+files(package) returns a Traversable for the package's directory, as_file()
+returns a context manager yielding its filesystem path, and read_text/read_bytes
+read a file.  This implementation works on the filesystem, which is where the
+interpreter loads packages from; no zip importer is supported.`
+
+// resourceModule is importlib.resources.
+var resourceModule = &py.ModuleImpl{
+	Info: py.ModuleInfo{
+		Name: "importlib.resources",
+		Doc:  resourcesDoc,
+	},
+	Methods: []*py.Method{
+		py.MustNewMethod("files", resourceFiles, 0, "files(package) -> a Traversable for the package directory"),
+		py.MustNewMethod("as_file", resourceAsFile, 0, "as_file(traversable) -> a context manager yielding its path"),
+		py.MustNewMethod("read_text", resourceReadText, 0, "read_text(package, resource) -> the file's text"),
+		py.MustNewMethod("read_binary", resourceReadBinary, 0, "read_binary(package, resource) -> the file's bytes"),
+		py.MustNewMethod("is_resource", resourceIsResource, 0, "is_resource(package, name) -> bool"),
+		py.MustNewMethod("open_text", resourceOpenText, 0, "open_text(package, resource) -> a text file object"),
+		py.MustNewMethod("open_binary", resourceOpenBinary, 0, "open_binary(package, resource) -> a binary file object"),
+		py.MustNewMethod("path", resourcePath, 0, "path(package, resource) -> a context manager yielding the path"),
+	},
+}
+
+// packageDir returns the filesystem directory of a package, given by name or
+// by module object.
+func packageDir(ctx py.Context, pkg py.Object) (string, error) {
+	if s, ok := pkg.(py.String); ok {
+		if ctx == nil {
+			return "", py.ExceptionNewf(py.RuntimeError, "no import context")
+		}
+		mod, err := ctx.GetModule(string(s))
+		if err != nil {
+			return "", err
+		}
+		pkg = mod
+	}
+	if f, err := py.GetAttrString(pkg, "__file__"); err == nil {
+		if s, ok := f.(py.String); ok {
+			return filepath.Dir(string(s)), nil
+		}
+	}
+	if p, err := py.GetAttrString(pkg, "__path__"); err == nil {
+		if l, ok := p.(*py.List); ok && len(l.Items) > 0 {
+			if s, ok := l.Items[0].(py.String); ok {
+				return string(s), nil
+			}
+		}
+	}
+	return "", py.ExceptionNewf(py.TypeError, "package argument must have __file__ or __path__")
+}
+
+// traversable is the object files() returns: a path with the read_text,
+// read_bytes, joinpath and iteration operations.
+type traversable struct {
+	path string
+	Dict py.StringDict
+}
+
+var traversableType = py.NewTypeX("importlib.abc.Traversable",
+	"A path-like object describing a resource.", nil, nil)
+
+func (t *traversable) Type() *py.Type         { return traversableType }
+func (t *traversable) GetDict() py.StringDict { return t.Dict }
+
+func (t *traversable) M__str__() (py.Object, error) { return py.String(t.path), nil }
+func (t *traversable) M__fspath__() (py.Object, error) {
+	return py.String(t.path), nil
+}
+
+func resourceFiles(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "files() takes exactly one argument")
+	}
+	dir, err := packageDir(currentContext(self), args[0])
+	if err != nil {
+		return nil, err
+	}
+	return &traversable{path: dir, Dict: py.NewStringDict()}, nil
+}
+
+func traversableJoinpath(self py.Object, args py.Tuple) (py.Object, error) {
+	t := self.(*traversable)
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "joinpath() takes exactly one argument")
+	}
+	child, err := py.StrAsString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return &traversable{path: filepath.Join(t.path, child), Dict: py.NewStringDict()}, nil
+}
+
+func traversableReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	t := self.(*traversable)
+	encoding := py.Object(py.String("utf-8"))
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:read_text",
+		[]string{"encoding"}, &encoding); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(t.path)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err)
+	}
+	return py.String(string(data)), nil
+}
+
+func traversableReadBytes(self py.Object, args py.Tuple) (py.Object, error) {
+	t := self.(*traversable)
+	data, err := os.ReadFile(t.path)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err)
+	}
+	return py.Bytes(data), nil
+}
+
+func traversableExists(self py.Object, args py.Tuple) (py.Object, error) {
+	t := self.(*traversable)
+	_, err := os.Stat(t.path)
+	return py.Bool(err == nil), nil
+}
+
+func traversableIsFile(self py.Object, args py.Tuple) (py.Object, error) {
+	t := self.(*traversable)
+	fi, err := os.Stat(t.path)
+	return py.Bool(err == nil && !fi.IsDir()), nil
+}
+
+func traversableIsDir(self py.Object, args py.Tuple) (py.Object, error) {
+	t := self.(*traversable)
+	fi, err := os.Stat(t.path)
+	return py.Bool(err == nil && fi.IsDir()), nil
+}
+
+// asFileContext is the context manager as_file() returns: entering yields the
+// path, and exiting does nothing because the resource is not copied out of a
+// zip.
+type asFileContext struct {
+	path string
+	Dict py.StringDict
+}
+
+var asFileContextType = py.NewTypeX("importlib.resources._AsFileContext",
+	"A context manager yielding a resource's filesystem path.", nil, nil)
+
+func (c *asFileContext) Type() *py.Type         { return asFileContextType }
+func (c *asFileContext) GetDict() py.StringDict { return c.Dict }
+
+func resourceAsFile(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "as_file() takes exactly one argument")
+	}
+	t, ok := args[0].(*traversable)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "as_file() takes a Traversable")
+	}
+	return &asFileContext{path: t.path, Dict: py.NewStringDict()}, nil
+}
+
+func asFileEnter(self py.Object, args py.Tuple) (py.Object, error) {
+	return py.String(self.(*asFileContext).path), nil
+}
+
+func asFileExit(self py.Object, args py.Tuple) (py.Object, error) {
+	return py.None, nil
+}
+
+func resourceReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		return nil, py.ExceptionNewf(py.FileNotFoundError, "%s", err)
+	}
+	return py.String(string(data)), nil
+}
+
+func resourceReadBinary(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		return nil, py.ExceptionNewf(py.FileNotFoundError, "%s", err)
+	}
+	return py.Bytes(data), nil
+}
+
+func packageAndResource(pkgCtx py.Context, args py.Tuple, kwargs py.StringDict) (string, string, error) {
+	var pkg, res py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO:resource",
+		[]string{"package", "resource"}, &pkg, &res); err != nil {
+		return "", "", err
+	}
+	dir, err := packageDir(pkgCtx, pkg)
+	if err != nil {
+		return "", "", err
+	}
+	name, err := py.StrAsString(res)
+	if err != nil {
+		return "", "", err
+	}
+	return dir, name, nil
+}
+
+func resourceIsResource(self py.Object, args py.Tuple) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, py.NewStringDict())
+	if err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(filepath.Join(dir, name))
+	return py.Bool(err == nil && !fi.IsDir()), nil
+}
+
+// openBinaryFile and openTextFile return python file objects over the resource
+// path via builtins.open.
+func openResourceFile(ctx py.Context, dir, name, mode string) (py.Object, error) {
+	path := filepath.Join(dir, name)
+	var mod py.Object
+	if ctx == nil {
+		return nil, py.ExceptionNewf(py.RuntimeError, "no import context")
+	}
+	m, err := ctx.GetModule("builtins")
+	if err != nil {
+		return nil, err
+	}
+	mod = m
+	openFn, err := py.GetAttrString(mod, "open")
+	if err != nil {
+		return nil, err
+	}
+	return py.Call(openFn, py.Tuple{py.String(path), py.String(mode)}, py.NewStringDict())
+}
+
+func resourceOpenText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	return openResourceFile(currentContext(self), dir, name, "r")
+}
+
+func resourceOpenBinary(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	return openResourceFile(currentContext(self), dir, name, "rb")
+}
+
+func resourcePath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	return &asFileContext{path: filepath.Join(dir, name), Dict: py.NewStringDict()}, nil
 }

@@ -259,7 +259,7 @@ func init() {
 
 	globals.Set("TypeVar", py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)"))
 	globals.Set("NewType", py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument."))
-	globals.Set("NamedTuple", py.MustNewMethod("NamedTuple", namedTupleNew, 0, "Typed version of collections.namedtuple."))
+	globals.Set("NamedTuple", namedTupleType)
 	// Generic and Protocol are used as bases, so they are real classes with
 	// a class-getitem, rather than inert forms.
 	// TypedDict is a class base for a dict-shaped record, and is also called
@@ -418,7 +418,8 @@ func newTypeNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 
 func namedTupleNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	// The same factory as collections.namedtuple; the class form used by a
-	// type checker ("class P(NamedTuple)") is not supported here.
+	// type checker ("class P(NamedTuple)") is handled by
+	// buildNamedTupleClass, installed on py.BuildNamedTupleClass below.
 	mod := collectionsModule()
 	if mod == nil {
 		return nil, py.ExceptionNewf(py.ImportError, "collections is not available")
@@ -428,6 +429,59 @@ func namedTupleNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 		return nil, err
 	}
 	return py.Call(fn, args, kwargs)
+}
+
+// namedTupleType is typing.NamedTuple.  It carries the flag __build_class__
+// looks for, so "class P(NamedTuple): ..." is handed to buildNamedTupleClass,
+// and it is callable as the factory namedtuple(name, fields).
+var namedTupleType = py.NewType("typing.NamedTuple",
+	"Typed version of collections.namedtuple.  Also usable as a base class:"+
+		" class P(NamedTuple): x: int")
+
+// buildNamedTupleClass turns the namespace of a class deriving from NamedTuple
+// into a named tuple class.  The annotations supply the field names, in order;
+// defaults, if present in the namespace, are applied through the class's
+// __new__ defaults, which collections.namedtuple already honours.
+func buildNamedTupleClass(name string, bases []py.Object, ns py.StringDict) (py.Object, error) {
+	mod := collectionsModule()
+	if mod == nil {
+		return nil, py.ExceptionNewf(py.ImportError, "collections is not available")
+	}
+	fn, err := py.GetAttrString(mod, "namedtuple")
+	if err != nil {
+		return nil, err
+	}
+	// The field names come from __annotations__, in insertion order.
+	var fields []string
+	if anns, ok := ns.Get("__annotations__"); ok {
+		if d, ok := anns.(py.StringDict); ok {
+			for _, ent := range d.Items() {
+				fields = append(fields, ent.Key)
+			}
+		}
+	}
+	if len(fields) == 0 {
+		return nil, py.ExceptionNewf(py.TypeError,
+			"named tuple %s has no fields", name)
+	}
+	clsObj, err := py.Call(fn, py.Tuple{py.String(name), py.NewListFromStrings(fields)}, py.NewStringDict())
+	if err != nil {
+		return nil, err
+	}
+	cls, ok := clsObj.(*py.Type)
+	if !ok {
+		return clsObj, nil
+	}
+	// Method bodies in the class namespace - "def meth(self): ..." - are copied
+	// onto the generated class so a NamedTuple subclass can carry behaviour,
+	// as CPython allows.
+	for _, ent := range ns.Items() {
+		if ent.Key == "__annotations__" || ent.Key == "__module__" || ent.Key == "__qualname__" {
+			continue
+		}
+		cls.Dict.Set(ent.Key, ent.Value)
+	}
+	return cls, nil
 }
 
 // collectionsModule returns the collections module, which is where the
@@ -509,4 +563,16 @@ func init() {
 		return form("Union"), nil
 	}, 0, "Return the union of two types."))
 	py.ObjectType.Dict.Set("__or__", py.TypeType.Dict.GetOrNil("__or__"))
+
+	// typing.NamedTuple is both a base class (recognised by __build_class__
+	// through the flag) and the factory NamedTuple(name, fields).
+	namedTupleType.Flags |= py.TPFLAGS_BASETYPE | py.TPFLAGS_NAMEDTUPLE
+	namedTupleType.New = func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) >= 2 {
+			return namedTupleNew(nil, args, kwargs)
+		}
+		return nil, py.ExceptionNewf(py.TypeError,
+			"NamedTuple() requires a type name and field names")
+	}
+	py.BuildNamedTupleClass = buildNamedTupleClass
 }

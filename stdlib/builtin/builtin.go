@@ -490,6 +490,11 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		return nil, py.ExceptionNewf(py.TypeError, "__build_class__: name is not a string")
 	}
 	bases := args[2:]
+	for _, b := range bases {
+		if _, ok := b.(*py.Type); !ok {
+			println("DBG bad base for class", string(name), "argc:", len(args), "value:", fmt.Sprintf("%v", b))
+		}
+	}
 
 	if !kwargs.IsNil() {
 		mkw = kwargs.Copy()               // Don't modify kwds passed in!
@@ -585,6 +590,25 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 					c.Set(enumCls)
 				}
 				return enumCls, nil
+			}
+		}
+	}
+
+	// A class deriving from typing.NamedTuple is built by the typing module.
+	// Python does this with __mro_entries__ on the NamedTuple base, and the
+	// interpreter has no PEP 560 support, so - like the enum case above - the
+	// class body is handed over instead.
+	if py.BuildNamedTupleClass != nil {
+		for _, base := range bases {
+			if baseType, ok := base.(*py.Type); ok && baseType.IsNamedTupleBase() {
+				ntCls, err := py.BuildNamedTupleClass(string(name), bases, ns)
+				if err != nil {
+					return nil, err
+				}
+				if c, ok := cell.(*py.Cell); ok {
+					c.Set(ntCls)
+				}
+				return ntCls, nil
 			}
 		}
 	}
