@@ -246,23 +246,23 @@ func init() {
 	PurePathType.New = pathNew
 	PathType.New = pathNew
 
-	StatResultType.Dict["st_mode"] = intProp("st_mode", func(s *statResult) int64 { return int64(s.stMode) })
-	StatResultType.Dict["st_ino"] = intProp("st_ino", func(s *statResult) int64 { return int64(s.stIno) })
-	StatResultType.Dict["st_dev"] = intProp("st_dev", func(s *statResult) int64 { return int64(s.stDev) })
-	StatResultType.Dict["st_nlink"] = intProp("st_nlink", func(s *statResult) int64 { return int64(s.stNlink) })
-	StatResultType.Dict["st_uid"] = intProp("st_uid", func(s *statResult) int64 { return int64(s.stUid) })
-	StatResultType.Dict["st_gid"] = intProp("st_gid", func(s *statResult) int64 { return int64(s.stGid) })
-	StatResultType.Dict["st_size"] = intProp("st_size", func(s *statResult) int64 { return s.stSize })
-	StatResultType.Dict["st_blocks"] = intProp("st_blocks", func(s *statResult) int64 { return s.stBlocks })
-	StatResultType.Dict["st_blksize"] = intProp("st_blksize", func(s *statResult) int64 { return s.stBlksize })
-	StatResultType.Dict["st_rdev"] = intProp("st_rdev", func(s *statResult) int64 { return int64(s.stRdev) })
-	StatResultType.Dict["st_atime"] = f64Prop("st_atime", func(s *statResult) float64 { return s.stAtime })
-	StatResultType.Dict["st_mtime"] = f64Prop("st_mtime", func(s *statResult) float64 { return s.stMtime })
-	StatResultType.Dict["st_ctime"] = f64Prop("st_ctime", func(s *statResult) float64 { return s.stCtime })
-	StatResultType.Dict["st_atime_ns"] = intProp("st_atime_ns", func(s *statResult) int64 { return s.stAtimeNs })
-	StatResultType.Dict["st_mtime_ns"] = intProp("st_mtime_ns", func(s *statResult) int64 { return s.stMtimeNs })
-	StatResultType.Dict["st_ctime_ns"] = intProp("st_ctime_ns", func(s *statResult) int64 { return s.stCtimeNs })
-	StatResultType.Dict["__repr__"] = py.MustNewMethod("__repr__", statRepr, 0, "")
+	StatResultType.Dict.Set("st_mode", intProp("st_mode", func(s *statResult) int64 { return int64(s.stMode) }))
+	StatResultType.Dict.Set("st_ino", intProp("st_ino", func(s *statResult) int64 { return int64(s.stIno) }))
+	StatResultType.Dict.Set("st_dev", intProp("st_dev", func(s *statResult) int64 { return int64(s.stDev) }))
+	StatResultType.Dict.Set("st_nlink", intProp("st_nlink", func(s *statResult) int64 { return int64(s.stNlink) }))
+	StatResultType.Dict.Set("st_uid", intProp("st_uid", func(s *statResult) int64 { return int64(s.stUid) }))
+	StatResultType.Dict.Set("st_gid", intProp("st_gid", func(s *statResult) int64 { return int64(s.stGid) }))
+	StatResultType.Dict.Set("st_size", intProp("st_size", func(s *statResult) int64 { return s.stSize }))
+	StatResultType.Dict.Set("st_blocks", intProp("st_blocks", func(s *statResult) int64 { return s.stBlocks }))
+	StatResultType.Dict.Set("st_blksize", intProp("st_blksize", func(s *statResult) int64 { return s.stBlksize }))
+	StatResultType.Dict.Set("st_rdev", intProp("st_rdev", func(s *statResult) int64 { return int64(s.stRdev) }))
+	StatResultType.Dict.Set("st_atime", f64Prop("st_atime", func(s *statResult) float64 { return s.stAtime }))
+	StatResultType.Dict.Set("st_mtime", f64Prop("st_mtime", func(s *statResult) float64 { return s.stMtime }))
+	StatResultType.Dict.Set("st_ctime", f64Prop("st_ctime", func(s *statResult) float64 { return s.stCtime }))
+	StatResultType.Dict.Set("st_atime_ns", intProp("st_atime_ns", func(s *statResult) int64 { return s.stAtimeNs }))
+	StatResultType.Dict.Set("st_mtime_ns", intProp("st_mtime_ns", func(s *statResult) int64 { return s.stMtimeNs }))
+	StatResultType.Dict.Set("st_ctime_ns", intProp("st_ctime_ns", func(s *statResult) int64 { return s.stCtimeNs }))
+	StatResultType.Dict.Set("__repr__", py.MustNewMethod("__repr__", statRepr, 0, ""))
 }
 
 func statRepr(self py.Object) (py.Object, error) {
@@ -319,7 +319,7 @@ func swallowMissing(o py.Object, err error) (py.Object, error) {
 
 func (p *path) statMethod(kwargs py.StringDict) (py.Object, error) {
 	follow := true
-	if v, ok := kwargs["follow_symlinks"]; ok {
+	if v, ok := kwargs.Get("follow_symlinks"); ok {
 		follow = toBool(v)
 	}
 	fi, err := p.statInfo(follow)
