@@ -2068,15 +2068,19 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 		}
 		vm.extended = false
 		// Dispatch on the opcode with a switch rather than an indirect call
-		// through jumpTable.  Measured on this interpreter (darwin/arm64,
-		// Go 1.25.6): a microbenchmark of the two dispatch styles doing
-		// identical work for 200M iterations costs ~527ms as an indirect
-		// call through a function table versus ~64ms as a switch (8.2x),
-		// and pprof -list 'RunFrame$' attributes ~80% of the loop's time
-		// (280 of 350ms) to the jumpTable call below.  Go has no computed
-		// goto, so a switch on the opcode is the cheap equivalent.  The
-		// cases are generated from, and must match, the old jumpTable
-		// entries exactly; do_ILLEGAL is the default for unknown opcodes.
+		// through a function table (jumpTable, now gone).  Go has no computed
+		// goto, which is what CPython uses, so a switch is the equivalent.
+		//
+		// It is a SMALL win, and the honest number matters: a microbenchmark
+		// with one arithmetic operation per handler gave 8.2x, but that is
+		// measuring the call overhead itself.  With realistic handler bodies
+		// it is 1.8x, and end to end on a 3,000,000-iteration loop it is
+		// 0.452-0.463s -> 0.443-0.453s, about 2-3%.  Do not expect an 8x here.
+		//
+		// The cases match the old jumpTable entries exactly - that was checked
+		// by generating both mappings and diffing them - and do_ILLEGAL is the
+		// default, so an unknown opcode still reports rather than silently
+		// doing nothing.
 		switch opcode {
 		case POP_TOP:
 			err = do_POP_TOP(&vm, arg)
