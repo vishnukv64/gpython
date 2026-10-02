@@ -453,6 +453,16 @@ func (t *Type) Lookup(name string) Object {
 	// by PyType_Ready(), or already cleared by type_clear().
 	// Either way the safest thing to do is to return nil.
 	if mro == nil {
+		// A type that was never readied has no MRO, so the walk below would
+		// find nothing - but its own Dict is still populated.  Falling back
+		// to it is what lets "Generic[int]" work: Generic's
+		// __class_getitem__ lives in its Dict and the type has no MRO.
+		if res, ok := t.Dict[name]; ok {
+			return res
+		}
+		if base := t.Base; base != nil {
+			return base.Lookup(name)
+		}
 		return nil
 	}
 
@@ -1875,5 +1885,28 @@ func init() {
 	}, 0, "Return the union of two types.")
 	if TypeType.Dict != nil {
 		TypeType.Dict["__or__"] = orMethod
+	}
+}
+
+// PEP 585: the builtin container types are subscriptable.
+//
+// "tuple[int, ...]" and "list[str]" appear in evaluated positions - a class
+// base, a default value - where deferring annotations does not help, so the
+// builtin types have to answer "[" rather than raising.  The parameters only
+// matter to a type checker, so the class itself is the result, exactly as it
+// is for the abstract base classes.
+func init() {
+	getitem := MustNewMethod("__class_getitem__", func(self Object, args Tuple) (Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters.")
+
+	for _, t := range []*Type{
+		ListType, TupleType, DictType, SetType, FrozenSetType,
+		StringType, BytesType, IntType, FloatType, BoolType,
+		ObjectType, TypeType, SliceType, ComplexType,
+	} {
+		if t != nil && t.Dict != nil {
+			t.Dict["__class_getitem__"] = getitem
+		}
 	}
 }

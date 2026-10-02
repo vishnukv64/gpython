@@ -508,6 +508,18 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		}
 	}
 
+	// A class keyword that type() does not accept - "class X(TypedDict,
+	// total=False)" - belongs to the base's own machinery, and there is no
+	// __init_subclass__ here to receive it.  Passing it on makes the class
+	// statement fail with "type() takes 1 or 3 arguments", so a keyword that
+	// is not "metaclass" is dropped.  It carries no run-time meaning to a
+	// type checker's target anyway.
+	for k := range mkw {
+		if k != "metaclass" {
+			delete(mkw, k)
+		}
+	}
+
 	if cell != nil {
 		// fmt.Printf("Calling %v\n", meta)
 		cls, err = py.Call(meta, py.Tuple{name, bases, ns}, mkw)

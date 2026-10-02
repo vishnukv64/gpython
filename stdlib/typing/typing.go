@@ -270,6 +270,20 @@ func init() {
 	typedDictType.Dict["__call__"] = py.MustNewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		return self, nil
 	}, 0, "Return the class, ignoring the field specification.")
+	// "class X(t.TypedDict, total=False)" is a base with keywords.  There is
+	// no __init_subclass__ here, so the keywords are accepted and ignored
+	// through the type's own constructor.
+	typedDictType.New = func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) >= 2 {
+			// The factory form: TypedDict('Name', {...}) returns a class.
+			nameObj, _ := py.StrAsString(args[0])
+			cls := py.NewType(nameObj, "A TypedDict.")
+			cls.Flags |= py.TPFLAGS_BASETYPE
+			cls.Base = typedDictType
+			return cls, nil
+		}
+		return typedDictType, nil
+	}
 
 	genericType := py.NewType("typing.Generic", "Abstract base class for generic types.")
 	genericType.Flags |= py.TPFLAGS_BASETYPE

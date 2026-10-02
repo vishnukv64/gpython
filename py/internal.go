@@ -196,7 +196,11 @@ func GetItem(self Object, key Object) (Object, error) {
 		// checker - so the class itself is the result.  Anything else falls
 		// through, so a class that defines __getitem__ (an enum class
 		// looking itself up by name) is answered by TypeCall1 below.
-		if t.GetAttrOrNil("__class_getitem__") != nil {
+		//
+		// Lookup walks the MRO; GetAttrOrNil does not, and only looking at
+		// the class's own dict made "class C(CompositeParamType[T])" fail
+		// when CompositeParamType's BASE was the thing providing the hook.
+		if t.Lookup("__class_getitem__") != nil {
 			return self, nil
 		}
 	}
