@@ -24,6 +24,10 @@ type Set struct {
 	// what dict already uses, and it is what makes the Python hash/eq protocol
 	// apply - including raising for a genuinely unhashable member.
 	items map[string]SetValue
+	// ht is the same bucket table dict keeps, for the members whose type
+	// defines __hash__: their items key is a code private to this set, and the
+	// member object is filed here.  A set of plain members never touches it.
+	ht hashTable
 }
 
 // Type of this Set object
@@ -104,42 +108,84 @@ func setKey(item Object) (string, error) {
 
 // setAdd inserts a member, reporting an unhashable one.
 func (s *Set) setAdd(item Object) error {
+	return s.setAddCode(item)
+}
+
+// setAddCode files a member, giving one whose type defines __hash__ a code of
+// its own inside its bucket.  Two members that share a hash are therefore two
+// entries unless __eq__ makes them one.
+func (s *Set) setAddCode(item Object) error {
 	k, err := setKey(item)
 	if err != nil {
 		return err
+	}
+	if isHashKey(k) {
+		code, found, err := s.ht.find(k, item)
+		if err != nil {
+			return err
+		}
+		if !found {
+			code = s.ht.newCode(k)
+			s.ht.objs[code] = item
+		}
+		s.items[code] = SetValue{}
+		return nil
 	}
 	s.items[k] = SetValue{}
 	return nil
 }
 
-// setHas reports whether a member is present.
-func (s *Set) setHas(item Object) bool {
+// codeFor returns the items key a member is stored under, and whether it is
+// present.
+func (s *Set) codeFor(item Object) (string, bool, error) {
 	k, err := setKey(item)
 	if err != nil {
-		return false
+		return "", false, err
 	}
-	_, ok := s.items[k]
-	return ok
+	if !isHashKey(k) {
+		_, ok := s.items[k]
+		return k, ok, nil
+	}
+	code, found, err := s.ht.find(k, item)
+	if err != nil || !found {
+		return "", false, err
+	}
+	_, ok := s.items[code]
+	return code, ok, nil
+}
+
+// setHas reports whether a member is present.
+func (s *Set) setHas(item Object) bool {
+	_, ok, err := s.codeFor(item)
+	return err == nil && ok
 }
 
 // setDelete removes a member, reporting whether it was there.
 func (s *Set) setDelete(item Object) bool {
-	k, err := setKey(item)
-	if err != nil {
-		return false
-	}
-	if _, ok := s.items[k]; !ok {
+	k, ok, err := s.codeFor(item)
+	if err != nil || !ok {
 		return false
 	}
 	delete(s.items, k)
+	s.ht.forget(k)
 	return true
+}
+
+// decodeKey recovers the member an items key stands for.
+func (s *Set) decodeKey(encoded string) (Object, error) {
+	if isHashKey(encoded) {
+		if obj, ok := s.ht.objs[encoded]; ok {
+			return obj, nil
+		}
+	}
+	return DictKeyDecode(encoded)
 }
 
 // setItems returns the members as Objects, decoding each key.
 func (s *Set) setItems() []Object {
 	out := make([]Object, 0, len(s.items))
 	for k := range s.items {
-		if item, err := DictKeyDecode(k); err == nil {
+		if item, err := s.decodeKey(k); err == nil {
 			out = append(out, item)
 		}
 	}
@@ -150,10 +196,11 @@ func (s *Set) Add(item Object) {
 	_ = s.setAdd(item)
 }
 
-// Copy returns a shallow copy of the set.  A new items map, so the copy and
-// the original are independent.
+// Copy returns a shallow copy of the set.  A new items map and a cloned bucket
+// table, so the copy and the original are independent.
 func (s *Set) Copy() *Set {
 	ret := NewSetWithCapacity(len(s.items))
+	ret.ht = s.ht.clone()
 	for k := range s.items {
 		ret.items[k] = SetValue{}
 	}
@@ -289,66 +336,79 @@ func (s *Set) M__iter__() (Object, error) {
 	return NewIterator(items), nil
 }
 
+// M__contains__ is "x in set".
+//
+// Without it, membership fell through to the generic sequence scan, which
+// compares with Eq - and Eq does not call a Python-level __eq__ for a class
+// instance, so a member was found only by IDENTITY.  A user-defined hash key
+// therefore never matched a fresh but equal object.  The bucket lookup is the
+// same one add and discard use, so the three agree.
+func (s *Set) M__contains__(item Object) (Object, error) {
+	_, ok, err := s.codeFor(item)
+	if err != nil {
+		return nil, err
+	}
+	return NewBool(ok), nil
+}
+
 func (s *Set) M__and__(other Object) (Object, error) {
 	ret := NewSet()
 	b, ok := other.(*Set)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for k := range b.items {
-		if _, ok := s.items[k]; ok {
-			ret.items[k] = SetValue{}
+	// Through the member OBJECTS, not their items keys: a member whose type
+	// defines __hash__ is stored under a code private to its own set, so the
+	// two sets' keys for the same member are not the same string.
+	for _, item := range b.setItems() {
+		if s.setHas(item) {
+			if err := ret.setAddCode(item); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return ret, nil
 }
 
 func (s *Set) M__or__(other Object) (Object, error) {
-	ret := NewSet()
 	b, ok := other.(*Set)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for k := range s.items {
-		ret.items[k] = SetValue{}
-	}
-	for k := range b.items {
-		if _, ok := s.items[k]; !ok {
-			ret.items[k] = SetValue{}
+	ret := s.Copy()
+	for _, item := range b.setItems() {
+		if err := ret.setAddCode(item); err != nil {
+			return nil, err
 		}
 	}
 	return ret, nil
 }
 
 func (s *Set) M__sub__(other Object) (Object, error) {
-	ret := NewSet()
 	b, ok := other.(*Set)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for k := range s.items {
-		ret.items[k] = SetValue{}
-	}
-	for k := range b.items {
-		delete(ret.items, k)
+	ret := s.Copy()
+	for _, item := range b.setItems() {
+		ret.setDelete(item)
 	}
 	return ret, nil
 }
 
 func (s *Set) M__xor__(other Object) (Object, error) {
-	ret := NewSet()
 	b, ok := other.(*Set)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
 	}
-	for k := range s.items {
-		ret.items[k] = SetValue{}
-	}
-	for k := range b.items {
-		if _, ok := s.items[k]; ok {
-			delete(ret.items, k)
-		} else {
-			ret.items[k] = SetValue{}
+	ret := s.Copy()
+	for _, item := range b.setItems() {
+		// In one set but not the other: remove it if it was here, add it if
+		// it was not.
+		if !ret.setDelete(item) {
+			if err := ret.setAddCode(item); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return ret, nil
@@ -358,6 +418,7 @@ func (s *Set) M__xor__(other Object) (Object, error) {
 var _ I__len__ = (*Set)(nil)
 var _ I__bool__ = (*Set)(nil)
 var _ I__iter__ = (*Set)(nil)
+var _ I__contains__ = (*Set)(nil)
 
 // var _ richComparison = (*Set)(nil)
 
@@ -378,15 +439,13 @@ func (a *Set) M__eq__(other Object) (Object, error) {
 	if len(a.items) != len(b.items) {
 		return False, nil
 	}
-	// O(n) now, not O(n**2).
-	//
-	// This was a nested loop with a "FIXME waiting for proper hashing",
-	// calling Eq on every pair.  Members are now stored under their ENCODED
-	// form (DictKey), so two members are equal exactly when their keys are -
-	// which makes equality a direct key-set comparison, and it is the same
-	// hash/eq protocol CPython uses.
-	for k := range a.items {
-		if _, ok := b.items[k]; !ok {
+	// Through the member objects, not the items keys: a member whose type
+	// defines __hash__ is stored under a code private to its own set, so the
+	// two sets' keys for the same member differ.  Comparing the keys directly
+	// was what made equality agree with membership while both were broken
+	// alike, and disagreed the moment a hash key was involved.
+	for _, item := range a.setItems() {
+		if !b.setHas(item) {
 			return False, nil
 		}
 	}
@@ -484,19 +543,37 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			// The other iterable's members as a key set.
-			keep := make(map[string]bool, len(items))
+			// The other iterable's members as a decoded slice: a hash member's
+			// items key belongs to its own set, so it cannot be compared across.
+			var keep []Object
 			for _, item := range items {
-				k, err := setKey(item)
-				if err != nil {
-					return nil, err
-				}
-				keep[k] = true
+				keep = append(keep, item)
 			}
-			for k := range ret.items {
-				if !keep[k] {
-					delete(ret.items, k)
+			var dropErr error
+			for _, item := range ret.setItems() {
+				found := false
+				for _, k := range keep {
+					res, err := Eq(item, k)
+					if err != nil {
+						dropErr = err
+						break
+					}
+					eq, err := ObjectIsTrue(res)
+					if err != nil {
+						dropErr = err
+						break
+					}
+					if eq {
+						found = true
+						break
+					}
 				}
+				if !found {
+					ret.setDelete(item)
+				}
+			}
+			if dropErr != nil {
+				return nil, dropErr
 			}
 		}
 		return ret, nil
@@ -510,9 +587,7 @@ func init() {
 				return nil, err
 			}
 			for _, item := range items {
-				if k, err := setKey(item); err == nil {
-					delete(ret.items, k)
-				}
+				ret.setDelete(item)
 			}
 		}
 		return ret, nil
@@ -528,11 +603,11 @@ func init() {
 			return nil, err
 		}
 		ret := s.Copy()
-		for k := range other.items {
-			if _, ok := ret.items[k]; ok {
-				delete(ret.items, k)
-			} else {
-				ret.items[k] = SetValue{}
+		for _, item := range other.setItems() {
+			if !ret.setDelete(item) {
+				if err := ret.setAddCode(item); err != nil {
+					return nil, err
+				}
 			}
 		}
 		return ret, nil
@@ -549,18 +624,35 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			keep := make(map[string]bool, len(items))
+			var keep []Object
 			for _, item := range items {
-				k, err := setKey(item)
-				if err != nil {
-					return nil, err
-				}
-				keep[k] = true
+				keep = append(keep, item)
 			}
-			for k := range s.items {
-				if !keep[k] {
-					delete(s.items, k)
+			var dropErr error
+			for _, item := range s.setItems() {
+				found := false
+				for _, k := range keep {
+					res, err := Eq(item, k)
+					if err != nil {
+						dropErr = err
+						break
+					}
+					eq, err := ObjectIsTrue(res)
+					if err != nil {
+						dropErr = err
+						break
+					}
+					if eq {
+						found = true
+						break
+					}
 				}
+				if !found {
+					s.setDelete(item)
+				}
+			}
+			if dropErr != nil {
+				return nil, dropErr
 			}
 		}
 		return NoneType{}, nil
@@ -574,9 +666,7 @@ func init() {
 				return nil, err
 			}
 			for _, item := range items {
-				if k, err := setKey(item); err == nil {
-					delete(s.items, k)
-				}
+				s.setDelete(item)
 			}
 		}
 		return NoneType{}, nil
@@ -591,11 +681,11 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		for k := range other.items {
-			if _, ok := s.items[k]; ok {
-				delete(s.items, k)
-			} else {
-				s.items[k] = SetValue{}
+		for _, item := range other.setItems() {
+			if !s.setDelete(item) {
+				if err := s.setAddCode(item); err != nil {
+					return nil, err
+				}
 			}
 		}
 		return NoneType{}, nil
@@ -628,11 +718,12 @@ func init() {
 		}
 		// An ARBITRARY element, as CPython says; Go map order is as good as any.
 		for k := range s.items {
-			item, err := DictKeyDecode(k)
+			item, err := s.decodeKey(k)
 			if err != nil {
 				return nil, err
 			}
 			delete(s.items, k)
+			s.ht.forget(k)
 			return item, nil
 		}
 		return NoneType{}, nil
@@ -641,6 +732,7 @@ func init() {
 	SetType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
 		s := asSet(self)
 		s.items = make(map[string]SetValue)
+		s.ht = hashTable{}
 		return NoneType{}, nil
 	}, 0, "clear() -> remove all elements"))
 
@@ -657,8 +749,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		for k := range s.items {
-			if _, ok := other.items[k]; !ok {
+		for _, item := range s.setItems() {
+			if !other.setHas(item) {
 				return False, nil
 			}
 		}
@@ -674,8 +766,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		for k := range other.items {
-			if _, ok := s.items[k]; !ok {
+		for _, item := range other.setItems() {
+			if !s.setHas(item) {
 				return False, nil
 			}
 		}
@@ -691,8 +783,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		for k := range other.items {
-			if _, ok := s.items[k]; ok {
+		for _, item := range other.setItems() {
+			if s.setHas(item) {
 				return False, nil
 			}
 		}

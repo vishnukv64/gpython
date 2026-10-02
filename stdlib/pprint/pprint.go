@@ -351,7 +351,7 @@ func (p *printer) dictEntries(d py.StringDict) []kv {
 		k := __e.Key
 		v := __e.Value
 
-		key, err := py.DictKeyDecode(k)
+		key, err := d.DecodeKey(k)
 		if err != nil {
 			continue
 		}

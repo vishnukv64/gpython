@@ -187,7 +187,7 @@ func init() {
 		o := make(Tuple, 0, sMap.Len())
 		var itemsErr error
 		sMap.Range(func(k string, v Object) bool {
-			key, err := dictKeyDecode(k)
+			key, err := sMap.DecodeKey(k)
 			if err != nil {
 				itemsErr = err
 				return true
@@ -209,7 +209,7 @@ func init() {
 		sMap, _ := dictStorage(self)
 		o := make(Tuple, 0, sMap.Len())
 		for _, k := range sMap.Keys() {
-			key, err := dictKeyDecode(k)
+			key, err := sMap.DecodeKey(k)
 			if err != nil {
 				return nil, err
 			}
@@ -239,12 +239,12 @@ func init() {
 		if len(args) > 2 {
 			return nil, ExceptionNewf(TypeError, "get expected at most 2 arguments, got %d", len(args))
 		}
-		encoded, err := dictKey(args[0])
+		encoded, ok, err := sMap.keyCode(args[0])
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := sMap.Get(encoded); ok {
-			return res, nil
+		if ok {
+			return sMap.GetOrNil(encoded), nil
 		}
 		if len(args) == 2 {
 			return args[1], nil
@@ -269,11 +269,12 @@ func init() {
 			}
 			return nil, ExceptionNewf(KeyError, "%v", args[0])
 		}
-		encoded, err := dictKey(args[0])
+		encoded, ok, err := d.keyCode(args[0])
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := d.Get(encoded); ok {
+		if ok {
+			res := d.GetOrNil(encoded)
 			d.Del(encoded)
 			return res, nil
 		}
@@ -296,11 +297,13 @@ func init() {
 		}
 		k := keys[len(keys)-1]
 		v, _ := d.Get(k)
-		d.Del(k)
-		key, err := dictKeyDecode(k)
+		// Decode BEFORE removing: for a key defining __hash__, the entry's
+		// object lives in the table Del is about to forget.
+		key, err := d.DecodeKey(k)
 		if err != nil {
 			return nil, err
 		}
+		d.Del(k)
 		return Tuple{key, v}, nil
 	}, 0, "popitem() -> (k, v) -- remove and return some (key, value) pair as a 2-tuple."))
 
@@ -312,18 +315,20 @@ func init() {
 		if len(args) > 2 {
 			return nil, ExceptionNewf(TypeError, "setdefault expected at most 2 arguments, got %d", len(args))
 		}
-		encoded, err := dictKey(args[0])
+		encoded, ok, err := d.keyCode(args[0])
 		if err != nil {
 			return nil, err
 		}
-		if res, ok := d.Get(encoded); ok {
-			return res, nil
+		if ok {
+			return d.GetOrNil(encoded), nil
 		}
 		var deflt Object = None
 		if len(args) == 2 {
 			deflt = args[1]
 		}
-		d.Set(encoded, deflt)
+		if err := d.setItem(args[0], deflt); err != nil {
+			return nil, err
+		}
 		return deflt, nil
 	}, 0, "setdefault(key[, default]) -> value -- return value if key is in the dictionary, else insert and return default."))
 
@@ -386,12 +391,10 @@ func init() {
 		out := NewStringDict()
 		var loopErr error
 		err := Iterate(args[0], func(key Object) bool {
-			encoded, err := dictKey(key)
-			if err != nil {
+			if err := out.setItem(key, value); err != nil {
 				loopErr = err
 				return true
 			}
-			out.Set(encoded, value)
 			return false
 		})
 		if err != nil {
@@ -411,12 +414,18 @@ func init() {
 // CPython tells the two forms apart - or an iterable of key/value pairs.
 func dictUpdateFrom(d StringDict, other Object) error {
 	if src, ok := other.(StringDict); ok {
-		// Range snapshots the keys, so "d.update(d)" is safe.
+		// Range snapshots the keys, so "d.update(d)" is safe.  A key with a
+		// __hash__ is re-filed rather than copied verbatim: its code belongs
+		// to the source's table.
+		var copyErr error
 		src.Range(func(k string, v Object) bool {
-			d.Set(k, v)
+			if err := d.copyEntryFrom(src, k, v); err != nil {
+				copyErr = err
+				return true
+			}
 			return false
 		})
-		return nil
+		return copyErr
 	}
 	if keysFn, err := GetAttrString(other, "keys"); err == nil {
 		keys, err := Call(keysFn, nil, NewStringDict())
@@ -430,12 +439,10 @@ func dictUpdateFrom(d StringDict, other Object) error {
 				loopErr = err
 				return true
 			}
-			encoded, err := dictKey(key)
-			if err != nil {
+			if err := d.setItem(key, value); err != nil {
 				loopErr = err
 				return true
 			}
-			d.Set(encoded, value)
 			return false
 		})
 		if err == nil {
@@ -459,12 +466,10 @@ func dictUpdateFrom(d StringDict, other Object) error {
 			loopErr = ExceptionNewf(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", index, len(pair))
 			return true
 		}
-		encoded, err := dictKey(pair[0])
-		if err != nil {
+		if err := d.setItem(pair[0], pair[1]); err != nil {
 			loopErr = err
 			return true
 		}
-		d.Set(encoded, pair[1])
 		index++
 		return false
 	})
@@ -486,11 +491,23 @@ func dictUpdateFrom(d StringDict, other Object) error {
 // The order list is shared through a pointer because a StringDict is copied
 // by value everywhere (Go maps are references, so the map itself needs no such
 // care): every copy has to see the one order, including appends made through
-// a copy.  A StringDict built by NewStringDict always has both fields set; the
-// zero value reads as an empty dict, as the bare nil map did.
+// a copy.  The table of keys that define __hash__ is mutable state of the same
+// kind, so it lives behind the same pointer instead of a field of its own.  A
+// StringDict built by NewStringDict always has it set; the zero value reads as
+// an empty dict, as the bare nil map did.
+type dictShared struct {
+	// order holds the encoded keys in the order they were first inserted,
+	// which is what gives a Python dict its guaranteed insertion order.
+	order []string
+	// ht resolves a key whose type defines __hash__ to the one slot holding
+	// it.  A dict of plain string keys - nearly all of them - never touches
+	// it, and its two maps stay nil.
+	ht hashTable
+}
+
 type StringDict struct {
-	m     map[string]Object
-	order *[]string
+	m      map[string]Object
+	shared *dictShared
 }
 
 // Ptr returns a value identifying this dict's storage, so that tooling such as
@@ -516,7 +533,7 @@ func (d StringDict) Get(key string) (Object, bool) {
 // The storage pointer is the identity - two StringDict values that share an
 // order slice share the same map - and comparing it is one word.
 func (d StringDict) SameAs(other StringDict) bool {
-	return d.order == other.order
+	return d.shared == other.shared
 }
 
 // GetOrNil returns the value stored under an encoded key, or Go nil when the
@@ -547,8 +564,10 @@ func (d *StringDict) Set(key string, value Object) {
 	if d.m == nil {
 		d.m = make(map[string]Object)
 	}
-	if d.order == nil {
-		d.order = new([]string)
+	shared := d.shared
+	if shared == nil {
+		shared = &dictShared{}
+		d.shared = shared
 	}
 	// One hash, not two.
 	//
@@ -568,7 +587,7 @@ func (d *StringDict) Set(key string, value Object) {
 		// The key is new, so it takes its place at the END of the order.
 		// Re-assigning an existing key must keep its original position, which
 		// is why this is not unconditional.
-		*d.order = append(*d.order, key)
+		shared.order = append(shared.order, key)
 	}
 }
 
@@ -578,14 +597,114 @@ func (d *StringDict) Del(key string) bool {
 		return false
 	}
 	delete(d.m, key)
-	keys := *d.order
+	keys := d.shared.order
 	for i, k := range keys {
 		if k == key {
-			*d.order = append(keys[:i], keys[i+1:]...)
+			d.shared.order = append(keys[:i], keys[i+1:]...)
 			break
 		}
 	}
+	// A key whose type defines __hash__ also owns a slot in the bucket table.
+	d.shared.ht.forget(key)
 	return true
+}
+
+// sharedState returns the dict's shared bookkeeping, allocating it for the
+// zero StringDict so that a write through a copy is still visible to the
+// original.
+func (d *StringDict) sharedState() *dictShared {
+	if d.shared == nil {
+		d.shared = &dictShared{}
+	}
+	return d.shared
+}
+
+// hashSet stores value under a key whose type defines __hash__.  bucket is the
+// key's encoded form, which groups together every key sharing its type and
+// hash; the entry is stored under a code of its own, so that two different
+// objects with the same hash are two entries.  __eq__ decides which entry - if
+// any - the key is, exactly as CPython's bucket walk does.
+func (d *StringDict) hashSet(bucket string, key, value Object) error {
+	shared := d.sharedState()
+	code, found, err := shared.ht.find(bucket, key)
+	if err != nil {
+		return err
+	}
+	if !found {
+		code = shared.ht.newCode(bucket)
+		shared.ht.objs[code] = key
+	}
+	d.Set(code, value)
+	return nil
+}
+
+// keyCode returns the code the dict stores an object under, and whether it is
+// already present.  For everything but a key defining __hash__ the code is the
+// key's encoded form; for such a key it is the code of the entry it is equal
+// to, which only the bucket walk can find.
+func (d StringDict) keyCode(key Object) (string, bool, error) {
+	encoded, err := dictKey(key)
+	if err != nil {
+		return "", false, err
+	}
+	if !isHashKey(encoded) {
+		_, ok := d.m[encoded]
+		return encoded, ok, nil
+	}
+	if d.shared == nil {
+		return "", false, nil
+	}
+	code, ok, err := d.shared.ht.find(encoded, key)
+	if err != nil || !ok {
+		return "", false, err
+	}
+	_, ok = d.m[code]
+	return code, ok, nil
+}
+
+// setItem stores value under key.  It is dict.__setitem__'s whole body and the
+// one place that has to tell a hash bucket from an ordinary encoding.
+func (d StringDict) setItem(key, value Object) error {
+	encoded, err := dictKey(key)
+	if err != nil {
+		return err
+	}
+	if isHashKey(encoded) {
+		return d.hashSet(encoded, key, value)
+	}
+	d.Set(encoded, value)
+	return nil
+}
+
+// DecodeKey recovers the object an encoded key stands for.
+//
+// For everything but a key defining __hash__ the encoding is reversible on its
+// own and DictKeyDecode would do.  A hash key is stored under a code whose
+// object lives in this dict's table - hashing is not reversible - so it takes
+// the dict to decode it.  See hashTable.
+func (d StringDict) DecodeKey(encoded string) (Object, error) {
+	if isHashKey(encoded) && d.shared != nil {
+		if obj, ok := d.shared.ht.objs[encoded]; ok {
+			return obj, nil
+		}
+	}
+	return dictKeyDecode(encoded)
+}
+
+// copyEntryFrom copies one of src's entries - given as its code and value -
+// into d.  A builtin key's code is canonical and can be stored as it stands; a
+// hash key's code belongs to src's table, so the key object has to be recovered
+// and filed anew in d.
+func (d *StringDict) copyEntryFrom(src StringDict, code string, value Object) error {
+	if !isHashKey(code) {
+		d.Set(code, value)
+		return nil
+	}
+	key, err := src.DecodeKey(code)
+	if err != nil {
+		return err
+	}
+	return d.setItem(key, value)
 }
 
 // Has reports whether an encoded key is present.
@@ -601,20 +720,20 @@ func (d StringDict) Len() int {
 
 // Keys returns the encoded keys in insertion order.
 func (d StringDict) Keys() []string {
-	if d.order == nil {
+	if d.shared == nil {
 		return nil
 	}
-	out := make([]string, len(*d.order))
-	copy(out, *d.order)
+	out := make([]string, len(d.shared.order))
+	copy(out, d.shared.order)
 	return out
 }
 
 // Values returns the values in insertion order.
 func (d StringDict) Values() []Object {
-	if d.order == nil {
+	if d.shared == nil {
 		return nil
 	}
-	order := *d.order
+	order := d.shared.order
 	out := make([]Object, len(order))
 	for i, k := range order {
 		out[i] = d.m[k]
@@ -626,11 +745,11 @@ func (d StringDict) Values() []Object {
 // write an ordinary range loop - with continue, return and goto - instead of a
 // Range callback.
 func (d StringDict) Items() []DictEntry {
-	if d.order == nil {
+	if d.shared == nil {
 		return nil
 	}
-	out := make([]DictEntry, 0, len(*d.order))
-	for _, k := range *d.order {
+	out := make([]DictEntry, 0, len(d.shared.order))
+	for _, k := range d.shared.order {
 		out = append(out, DictEntry{Key: k, Value: d.m[k]})
 	}
 	return out
@@ -658,7 +777,8 @@ func (d *StringDict) Clear() {
 	for k := range d.m {
 		delete(d.m, k)
 	}
-	*d.order = (*d.order)[:0]
+	d.shared.order = d.shared.order[:0]
+	d.shared.ht = hashTable{}
 }
 
 // DictEntry is one key/value pair for NewStringDictFrom.
@@ -688,6 +808,140 @@ func NewStringDictFrom(entries ...DictEntry) StringDict {
 // dictionary working with no encoding at all; everything else is stored
 // with keyTag and a one byte type marker.
 const keyTag = "\x00"
+
+// hashSep separates an entry's own code from the hash bucket it was derived
+// from.  It cannot occur in a bucket, whose type name is an identifier.
+const hashSep = "\x01"
+
+// isHashKey reports whether an encoded key is a hash bucket rather than a key
+// that identifies its own entry.  The bucket is what a key whose type defines
+// __hash__ encodes to.
+func isHashKey(encoded string) bool {
+	return len(encoded) >= 2 && encoded[0] == keyTag[0] && encoded[1] == 'H'
+}
+
+// hashTable is a dict's bookkeeping for the keys whose type defines __hash__.
+//
+// Such a key cannot be encoded into a string that both finds an equal object
+// and tells two different objects with the same hash apart: the first needs
+// the encoding to depend only on the hash, the second needs it not to.  The
+// hash plus the type name is therefore stored as a BUCKET - which is what
+// CPython has too, where equal hashes share a bucket and __eq__ decides - and
+// each entry the dict actually holds is given a code of its own, the bucket
+// followed by that entry's number.  The object the code stands for is kept
+// here, because nothing else can recover it: that is what hashing does.
+//
+// A dict of plain keys - nearly all of them - never allocates any of this.
+type hashTable struct {
+	// buckets holds, per bucket, the codes of the entries in it.
+	buckets map[string][]string
+	// objs maps a code to the object it stands for, so that keys(), items(),
+	// repr(), iteration and popitem can hand the original back.
+	objs map[string]Object
+	// next numbers the codes.  It numbers them per dict rather than by object
+	// identity, which the encoding is not allowed to depend on.
+	next int
+}
+
+// newCode gives an entry in bucket a code of its own, and records it there.
+func (h *hashTable) newCode(bucket string) string {
+	if h.buckets == nil {
+		h.buckets = make(map[string][]string)
+		h.objs = make(map[string]Object)
+	}
+	code := bucket + hashSep + strconv.Itoa(h.next)
+	h.next++
+	h.buckets[bucket] = append(h.buckets[bucket], code)
+	return code
+}
+
+// find returns the code of the entry equal to obj among the entries that
+// share obj's bucket, and whether there is one.  Equal hashes are only a
+// bucket: __eq__ is what says whether it is the same key.
+func (h *hashTable) find(bucket string, obj Object) (string, bool, error) {
+	for _, code := range h.buckets[bucket] {
+		other := h.objs[code]
+		if other == nil {
+			continue
+		}
+		eq, err := objEq(obj, other)
+		if err != nil {
+			return "", false, err
+		}
+		if eq {
+			return code, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// objEq reports whether two key objects are equal, calling each side's Python
+// __eq__ in turn.
+//
+// Eq does not do that: it dispatches only methods implemented in Go, so a
+// class written in Python - the ordinary case for a custom __hash__ - compared
+// by IDENTITY, and two equal K(1)s were never found equal.  A hash bucket walk
+// is exactly where that matters, so the Python-level __eq__ is tried here, the
+// same way callPyOrdering tries the ordering operators.
+func objEq(a, b Object) (bool, error) {
+	if res, ok, err := callPyOrdering(a, "__eq__", b); err != nil {
+		return false, err
+	} else if ok {
+		return ObjectIsTrue(res)
+	}
+	if res, ok, err := callPyOrdering(b, "__eq__", a); err != nil {
+		return false, err
+	} else if ok {
+		return ObjectIsTrue(res)
+	}
+	res, err := Eq(a, b)
+	if err != nil {
+		return false, err
+	}
+	return ObjectIsTrue(res)
+}
+
+// forget drops the bookkeeping of the entry with this code.  The bucket is
+// recovered from the code itself, so a caller that only has the code - Del,
+// which is handed one by pop and popitem - need not carry it along.
+func (h *hashTable) forget(code string) {
+	if h.objs == nil {
+		return
+	}
+	delete(h.objs, code)
+	i := strings.LastIndexByte(code, hashSep[0])
+	if i < 0 {
+		return
+	}
+	bucket := code[:i]
+	codes := h.buckets[bucket]
+	for j, c := range codes {
+		if c == code {
+			h.buckets[bucket] = append(codes[:j], codes[j+1:]...)
+			break
+		}
+	}
+}
+
+// clone copies the table and the maps in it, so that the copy can be mutated
+// without touching the original.
+func (h hashTable) clone() hashTable {
+	if h.objs == nil {
+		return hashTable{}
+	}
+	c := hashTable{
+		buckets: make(map[string][]string, len(h.buckets)),
+		objs:    make(map[string]Object, len(h.objs)),
+		next:    h.next,
+	}
+	for b, codes := range h.buckets {
+		c.buckets[b] = append([]string(nil), codes...)
+	}
+	for code, obj := range h.objs {
+		c.objs[code] = obj
+	}
+	return c
+}
 
 // Encode an object as a dict key.
 //
@@ -772,8 +1026,22 @@ func appendKey(b *[]byte, key Object) error {
 		// encoded members; re-encoding them would double-encode.  They are
 		// sorted, because Go map iteration is random and the encoding must be
 		// stable for two equal frozensets to hash alike.
+		//
+		// A member whose type defines __hash__ is stored under a code of its
+		// own, and that code is private to the set that made it - so it would
+		// make two equal frozensets encode differently.  The member's BUCKET
+		// (type and hash) is used instead, which is the same in every set.
+		// Two members sharing a hash therefore collapse within one frozenset,
+		// which is the pre-existing limit of an encoding that cannot hold an
+		// object; a frozenset of such members is not a working dict key either
+		// way, because decoding one is not reversible.
 		members := make([]string, 0, len(k.items))
 		for item := range k.items {
+			if isHashKey(item) {
+				if i := strings.LastIndexByte(item, hashSep[0]); i >= 0 {
+					item = item[:i]
+				}
+			}
 			members = append(members, item)
 		}
 		sort.Strings(members)
@@ -840,17 +1108,26 @@ func hashOf(key Object) (string, bool) {
 	return strconv.FormatInt(int64(n), 10), true
 }
 
-// DictKey encodes an object into the string form used to store dict keys,
-// and DictKeyDecode recovers the original object from it.
+// DictKey encodes an object into the string form used to store dict keys.
 //
-// They are exported so that other mapping-like types (collections.Counter,
-// for instance) can share one key encoding with dict rather than inventing
-// a second one.
+// It is exported so that other mapping-like types (collections.Counter, for
+// instance) can share one key encoding with dict rather than inventing a
+// second one.
+//
+// A key whose type defines __hash__ encodes to a BUCKET - its type name and
+// hash - which is what makes lookup by an equal but distinct object work.  It
+// does not identify one entry: the dict's own table maps a bucket to the
+// entries in it.  DictKeyDecode therefore cannot recover such a key on its
+// own; a dict hands its table to StringDict.DecodeKey, which can.
 func DictKey(key Object) (string, error) {
 	return dictKey(key)
 }
 
-// DictKeyDecode is the inverse of DictKey.
+// DictKeyDecode is the inverse of DictKey for every key whose encoding is
+// reversible - that is, every key whose type does not define __hash__.
+//
+// A hash key is not reversible, because hashing loses the object: use
+// StringDict.DecodeKey, which consults the dict that stored it.
 func DictKeyDecode(encoded string) (Object, error) {
 	return dictKeyDecode(encoded)
 }
@@ -974,7 +1251,9 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		if src, isMapping := mappingStorage(arg); isMapping {
 			for _, k := range src.Keys() {
 				if v, ok := src.Get(k); ok {
-					out.Set(k, v)
+					if err := out.copyEntryFrom(src, k, v); err != nil {
+						return nil, err
+					}
 				}
 			}
 		} else {
@@ -1017,7 +1296,9 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 			d := t.GetDict()
 			for _, k := range out.Keys() {
 				if v, ok := out.Get(k); ok {
-					d.Set(k, v)
+					if err := d.copyEntryFrom(out, k, v); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
@@ -1039,12 +1320,12 @@ func (o StringDict) Type() *Type {
 
 // Make a new dictionary
 func NewStringDict() StringDict {
-	return StringDict{m: make(map[string]Object), order: new([]string)}
+	return StringDict{m: make(map[string]Object), shared: &dictShared{}}
 }
 
 // Make a new dictionary with reservation for n entries
 func NewStringDictSized(n int) StringDict {
-	return StringDict{m: make(map[string]Object, n), order: new([]string)}
+	return StringDict{m: make(map[string]Object, n), shared: &dictShared{}}
 }
 
 // Checks that obj is exactly a dictionary and returns an error if not
@@ -1065,10 +1346,17 @@ func DictCheck(obj Object) (StringDict, error) {
 // Copy a dictionary
 func (d StringDict) Copy() StringDict {
 	e := NewStringDictSized(d.Len())
+	var copyErr error
 	d.Range(func(k string, v Object) bool {
-		e.Set(k, v)
+		if err := e.copyEntryFrom(d, k, v); err != nil {
+			copyErr = err
+			return true
+		}
 		return false
 	})
+	// Copy has no error channel, and its only failure is a corrupt entry,
+	// which cannot arise for a dict built by this package.
+	_ = copyErr
 	return e
 }
 
@@ -1090,7 +1378,7 @@ func (a StringDict) M__repr__() (Object, error) {
 		if spacer {
 			out.WriteString(", ")
 		}
-		k, err := dictKeyDecode(key)
+		k, err := a.DecodeKey(key)
 		if err != nil {
 			reprErr = err
 			return true
@@ -1122,7 +1410,7 @@ func (a StringDict) M__repr__() (Object, error) {
 func (d StringDict) M__iter__() (Object, error) {
 	o := make(Tuple, 0, d.Len())
 	for _, k := range d.Keys() {
-		key, err := dictKeyDecode(k)
+		key, err := d.DecodeKey(k)
 		if err != nil {
 			return nil, err
 		}
@@ -1132,21 +1420,19 @@ func (d StringDict) M__iter__() (Object, error) {
 }
 
 func (d StringDict) M__getitem__(key Object) (Object, error) {
-	encoded, err := dictKey(key)
-	if err == nil {
-		if res, ok := d.Get(encoded); ok {
-			return res, nil
-		}
+	encoded, ok, err := d.keyCode(key)
+	if err == nil && ok {
+		return d.GetOrNil(encoded), nil
 	}
 	return nil, ExceptionNewf(KeyError, "%v", key)
 }
 
 func (d StringDict) M__delitem__(key Object) (Object, error) {
-	encoded, err := dictKey(key)
+	encoded, ok, err := d.keyCode(key)
 	if err != nil {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
-	if _, ok := d.Get(encoded); !ok {
+	if !ok {
 		return nil, ExceptionNewf(KeyError, "%v", key)
 	}
 	d.Del(encoded)
@@ -1154,11 +1440,9 @@ func (d StringDict) M__delitem__(key Object) (Object, error) {
 }
 
 func (d StringDict) M__setitem__(key, value Object) (Object, error) {
-	encoded, err := dictKey(key)
-	if err != nil {
+	if err := d.setItem(key, value); err != nil {
 		return nil, err
 	}
-	d.Set(encoded, value)
 	return None, nil
 }
 
@@ -1172,24 +1456,34 @@ func (a StringDict) M__eq__(other Object) (Object, error) {
 	}
 	var eqErr error
 	same := true
-	a.Range(func(k string, av Object) bool {
-
-		bv, ok := b.Get(k)
-		if !ok {
-			same = false
-			return true
-		}
-		res, err := Eq(av, bv)
+	for _, entry := range a.Items() {
+		key, err := a.DecodeKey(entry.Key)
 		if err != nil {
 			eqErr = err
-			return true
+			break
+		}
+		// Through the key OBJECT, not its encoded form: a key defining
+		// __hash__ is stored under a code private to this dict, so the two
+		// dicts' codes for the same key differ.
+		bv, ok, err := b.keyCode(key)
+		if err != nil {
+			eqErr = err
+			break
+		}
+		if !ok {
+			same = false
+			break
+		}
+		res, err := Eq(entry.Value, b.GetOrNil(bv))
+		if err != nil {
+			eqErr = err
+			break
 		}
 		if res == False {
 			same = false
-			return true
+			break
 		}
-		return false
-	})
+	}
 	if eqErr != nil {
 		return nil, eqErr
 	}
@@ -1223,10 +1517,17 @@ func (a StringDict) M__or__(other Object) (Object, error) {
 		return NotImplemented, nil
 	}
 	out := a.Copy()
+	var mergeErr error
 	b.Range(func(k string, v Object) bool {
-		out.Set(k, v)
+		if err := out.copyEntryFrom(b, k, v); err != nil {
+			mergeErr = err
+			return true
+		}
 		return false
 	})
+	if mergeErr != nil {
+		return nil, mergeErr
+	}
 	return out, nil
 }
 
@@ -1241,14 +1542,11 @@ func (a StringDict) M__ior__(other Object) (Object, error) {
 }
 
 func (a StringDict) M__contains__(other Object) (Object, error) {
-	encoded, err := dictKey(other)
+	_, ok, err := a.keyCode(other)
 	if err != nil {
 		return False, nil
 	}
-	if _, ok := a.Get(encoded); ok {
-		return True, nil
-	}
-	return False, nil
+	return NewBool(ok), nil
 }
 
 func (d StringDict) GetDict() StringDict {

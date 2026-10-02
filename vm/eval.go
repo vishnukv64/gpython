@@ -674,9 +674,13 @@ func do_DICT_UPDATE(vm *Vm, i int32) error {
 	if !ok {
 		return py.ExceptionNewf(py.TypeError, "'%s' object is not a mapping", source.Type().Name)
 	}
+	// Through the source dict's DecodeKey, which can recover a key whose type
+	// defines __hash__; DictKeyDecode cannot, and "{**d}" of such a key would
+	// raise "corrupt dict key".
+	srcDict := src.GetDict()
 	var updErr error
-	src.GetDict().Range(func(encoded string, value py.Object) bool {
-		key, err := py.DictKeyDecode(encoded)
+	srcDict.Range(func(encoded string, value py.Object) bool {
+		key, err := srcDict.DecodeKey(encoded)
 		if err != nil {
 			updErr = err
 			return true
