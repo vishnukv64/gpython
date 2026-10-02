@@ -238,6 +238,23 @@ var delayedReady = []*Type{}
 // in TypeEnsureReady.
 var delayedReadyPending bool
 
+// ensureReadyHook lets Lookup drain the delayed-ready queue without Go
+// reporting an initialisation cycle between this file and the type
+// constructors.  It is set in init, which runs before anything can call
+// Lookup.
+var ensureReadyHook func()
+
+func init() {
+	ensureReadyHook = func() {
+		if err := TypeEnsureReady(); err != nil {
+			// A type that fails to ready is skipped rather than fatal: the
+			// alternative is that one bad stdlib type makes every attribute
+			// lookup in the process panic.
+			_ = err
+		}
+	}
+}
+
 // TypeDelayReady stores the list of types to initialise
 //
 // Call MakeReady when all initialised
@@ -551,12 +568,27 @@ func (t *Type) Lookup(name string) Object {
 
 	// If mro is nil, the type is either not yet initialized
 	// by PyType_Ready(), or already cleared by type_clear().
-	// Either way the safest thing to do is to return nil.
 	if mro == nil {
-		// A type that was never readied has no MRO, so the walk below would
-		// find nothing - but its own Dict is still populated.  Falling back
-		// to it is what lets "Generic[int]" work: Generic's
-		// __class_getitem__ lives in its Dict and the type has no MRO.
+		// TypeMakeReady runs once, during THIS package's init, so a type
+		// declared by any package that initialises later - which is every
+		// stdlib module - is queued in delayedReady and would never be
+		// readied.  Its Mro stays empty, and the walk below would find
+		// nothing in its bases: "threading.local.__name__" and
+		// "threading.local.__bases__" raised AttributeError while a class
+		// statement in the same process worked.  Drain the queue first.
+		//
+		// The call goes through a variable because Go's initialisation
+		// analysis otherwise reports a cycle: draining the queue reaches the
+		// type constructors, and those reach this file.
+		if ensureReadyHook != nil {
+			ensureReadyHook()
+			mro = t.Mro
+		}
+	}
+	if mro == nil {
+		// Still not readied - the fallback is the type's own Dict, which is
+		// what lets "Generic[int]" work: Generic's __class_getitem__ lives
+		// there and the type has no MRO.
 		if res, ok := t.Dict[name]; ok {
 			return res
 		}

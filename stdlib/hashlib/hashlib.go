@@ -337,8 +337,17 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	if err != nil {
 		return nil, py.ExceptionNewf(py.ValueError, "%s", err.Error())
 	}
+	// The file must have read().  ObjectGetAttr returns nil when the attribute
+	// is absent, and calling through it dereferenced a nil function pointer and
+	// killed the process with a SIGSEGV.  A missing read is a TypeError.
+	// py.ObjectGetAttr is a stub that always returns nil, so it could never
+	// have found anything: the real lookup is GetAttrString.
+	readObj, err := py.GetAttrString(file, "read")
+	if err != nil || readObj == nil {
+		return nil, py.ExceptionNewf(py.TypeError, "file_digest() argument 1 must be a file with a read() method")
+	}
 	for {
-		chunk, err := py.Call(py.ObjectGetAttr(file, "read"), py.Tuple{py.Int(blake2b.BlockSize * 64)}, nil)
+		chunk, err := py.Call(readObj, py.Tuple{py.Int(blake2b.BlockSize * 64)}, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -354,7 +363,10 @@ func fileDigestFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		}
 		h.Write([]byte(b))
 	}
-	return py.Bytes(h.Sum(nil)), nil
+	// file_digest returns the digest OBJECT, not its bytes: the caller asks it
+	// for hexdigest() or digest().  Returning the bytes made
+	// "file_digest(f, 'md5').hexdigest()" an AttributeError on bytes.
+	return &Hash{algo: *algo, h: h}, nil
 }
 
 // ---------------------------------------------------------------------------

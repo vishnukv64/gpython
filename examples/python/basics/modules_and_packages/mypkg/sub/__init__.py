@@ -1,12 +1,10 @@
 """A sub-package of mypkg (mypkg.sub).
 
-NOTE on this interpreter: `from . import deeper` inside a package's
-__init__.py raises ImportError 'cannot import name deeper'. A submodule can
-still be reached with an absolute import path (`import mypkg.sub.deeper`) or
-with `from mypkg.sub.deeper import shout`. To keep this package working, the
-sibling is pulled in with the absolute form instead of the relative one.
+It pulls in its own submodule with a RELATIVE import, which is the idiomatic
+way and resolves against *this* package: "from . import deeper" means
+mypkg.sub.deeper.
 """
 
-from mypkg.sub import deeper
+from . import deeper
 
 __all__ = ["deeper"]

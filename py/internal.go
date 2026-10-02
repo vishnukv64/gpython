@@ -249,11 +249,25 @@ func DelItem(self Object, key Object) (Object, error) {
 //
 // If not found err will be an AttributeError
 func GetAttrString(self Object, key string) (res Object, err error) {
-	// Call __getattribute__ unconditionally if it exists
+	// Call __getattribute__ if it exists.
+	//
+	// For an INSTANCE that means whatever its class defines, which is the
+	// point of the hook.  For a CLASS it does NOT: a class-level
+	// __getattribute__ governs its instances, never the class itself, so
+	// reading "type.__name__" must not run "type.__getattribute__".  The
+	// distinction matters because this branch is reached before the ordinary
+	// lookup - so a type that defines __getattribute__, as threading.local
+	// does, otherwise answered EVERY attribute through it and lost its own
+	// metadata: "threading.local.__name__" raised AttributeError.
 	if I, ok := self.(I__getattribute__); ok {
-		return I.M__getattribute__(key)
-	} else if res, ok, err = TypeCall1(self, "__getattribute__", Object(String(key))); ok {
-		return res, err
+		if _, isType := self.(*Type); !isType {
+			return I.M__getattribute__(key)
+		}
+	}
+	if _, isType := self.(*Type); !isType {
+		if r, found, err2 := TypeCall1(self, "__getattribute__", Object(String(key))); found {
+			return r, err2
+		}
 	}
 
 	// Look up any __special__ methods as M__special__ and return a bound method.

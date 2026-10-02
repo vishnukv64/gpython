@@ -142,7 +142,14 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		l := self.(*Local)
+		// self is the CLASS when the attribute is being read off
+		// "threading.local" itself - "type(threading.local()).__name__" - and
+		// only an instance otherwise.  Asserting outright panicked with
+		// "interface conversion: py.Object is *py.Type, not *threading.Local".
+		l, ok := self.(*Local)
+		if !ok {
+			return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", "type", text)
+		}
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		if v, ok := l.data[text]; ok {
@@ -159,7 +166,10 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		l := self.(*Local)
+		l, ok := self.(*Local)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "cannot set attribute on '%s' object", "type")
+		}
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.data[text] = value
