@@ -6,10 +6,12 @@
 package marshal
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"strconv"
 
@@ -192,32 +194,41 @@ func (rfile *rFile) ReadObject() (obj py.Object, err error) {
 		if err != nil {
 			return
 		}
-		// FIXME negative := false
-		if size < 0 {
-			// FIXME negative = true
+		// A NEGATIVE count means a negative number.  The sign was read and
+		// then thrown away, so every large negative integer came back
+		// positive.
+		negative := size < 0
+		if negative {
 			size = -size
 		}
 		if size < 0 || size > SIZE32_MAX {
 			return nil, errors.New("bad marshal data (long size out of range)")
 		}
-		// FIXME not sure what -ve size means!
-		// Now read shorts which have 15 bits of the number in
+		// The digits are base 2**15, least significant first, 16 bits each.
 		digits := make([]int16, size)
 		err = binary.Read(rfile.r, binary.LittleEndian, &digits)
 		if err != nil {
 			return
 		}
-		if digits[0] == 0 {
-			// FIXME should be ValueError
-			return nil, errors.New("bad marshal data (digit out of range in long)")
+		// The digit that must be non-zero is the MOST significant one, which
+		// is the LAST in this little-endian array.  Checking digits[0]
+		// rejected perfectly good data: CPython encodes 2**40 as
+		// 03000000 0000 0000 0400, whose first digit is legitimately 0.
+		if len(digits) == 0 || digits[len(digits)-1] == 0 {
+			return nil, py.ExceptionNewf(py.ValueError, "bad marshal data (digit out of range in long)")
 		}
-		// Convert into a big.Int
+		// Convert into a big.Int.  Horner's rule needs the MOST significant
+		// digit first, and the array is least significant first, so it is
+		// walked backwards.  Going forwards made 2**40 come back as 1024.
 		r := new(big.Int)
 		t := new(big.Int)
-		for _, digit := range digits {
+		for i := len(digits) - 1; i >= 0; i-- {
 			r.Lsh(r, 15)
-			t.SetInt64(int64(digit))
+			t.SetInt64(int64(digits[i]))
 			r.Add(r, t)
+		}
+		if negative {
+			r.Neg(r)
 		}
 		// FIXME try to fit into int64 if possible
 		return addRef((*py.BigInt)(r)), nil
@@ -235,7 +246,11 @@ func (rfile *rFile) ReadObject() (obj py.Object, err error) {
 		if err != nil {
 			return
 		}
-		// FIXME do something different for unicode & interned?
+		// TYPE_STRING is BYTES and the rest are text; returning py.String for
+		// every one of them made "marshal.loads(marshal.dumps(b'xy'))" a str.
+		if Type == TYPE_STRING {
+			return addRef(py.Bytes(buf)), nil
+		}
 		return addRef(py.String(buf)), nil
 	case TYPE_SHORT_ASCII, TYPE_SHORT_ASCII_INTERNED:
 		var size uint8
@@ -537,14 +552,192 @@ value has (or contains an object that has) an unsupported type.
 The version argument indicates the data format that dumps should use.`
 
 func marshal_dumps(self py.Object, args py.Tuple) (py.Object, error) {
-	/*
-	   PyObject *x;
-	   int version = Py_MARSHAL_VERSION;
-	   if (!PyArg_ParseTuple(args, "O|i:dumps", &x, &version))
-	       return NULL;
-	   return PyMarshal_WriteObjectToString(x, version);
-	*/
-	return nil, py.ExceptionNewf(py.SystemError, "dumps not implemented")
+	// dumps(value[, version]) -> the value as marshal bytes.
+	//
+	// This is a real encoder for the format the reader above accepts.  It
+	// writes the subset that covers the values marshal is actually used for -
+	// None, bool, the numbers, strings, bytes, and the containers - and
+	// refuses anything else with the message CPython uses rather than writing
+	// a stream that this module's own loads() could not read back.
+	var x py.Object
+	var versionObj py.Object
+	if err := py.UnpackTuple(args, nil, "dumps", 1, 2, &x, &versionObj); err != nil {
+		return nil, err
+	}
+	_ = versionObj // Only version 3 is written; the argument is accepted.
+	e := &marshalWriter{}
+	if err := e.write(x); err != nil {
+		return nil, err
+	}
+	return py.Bytes(e.buf), nil
+}
+
+// marshalWriter encodes values in the format the reader accepts.
+//
+// The format supports shared references - a container written twice is
+// written once and referred to after that - and CPython uses them.  This
+// writer does NOT: identifying an object would need a map keyed by identity,
+// and the container types here are a Go slice and a Go map, neither of which
+// can be a map key.  Every value is therefore written out in full.
+//
+// The consequence is that a SELF-REFERENTIAL structure cannot be written and
+// would recurse until the depth guard stops it; CPython raises ValueError for
+// one at depth 1, this at maxDepth.  For the flat data marshal is used for,
+// the output is identical.
+type marshalWriter struct {
+	buf   []byte
+	depth int
+}
+
+// maxDepth bounds the recursion.  CPython caps marshal nesting at 2000; the
+// limit is what turns a cyclic structure into an error instead of a stack
+// overflow.
+const maxDepth = 2000
+
+func (e *marshalWriter) writeInt32(n int32) {
+	var b [4]byte
+	binary.LittleEndian.PutUint32(b[:], uint32(n))
+	e.buf = append(e.buf, b[:]...)
+}
+
+// writeBytes writes a length-prefixed byte string, which is how the format
+// stores strings, bytes and the text of a float.
+func (e *marshalWriter) writeBytes(data []byte) {
+	e.writeInt32(int32(len(data)))
+	e.buf = append(e.buf, data...)
+}
+
+func (e *marshalWriter) write(o py.Object) error {
+	e.depth++
+	defer func() { e.depth-- }()
+	if e.depth > maxDepth {
+		return py.ExceptionNewf(py.ValueError, "exceeded maximum marshal recursion depth")
+	}
+
+	switch v := o.(type) {
+	case nil:
+		e.buf = append(e.buf, TYPE_NULL)
+		return nil
+	case py.NoneType:
+		e.buf = append(e.buf, TYPE_NONE)
+		return nil
+	case py.Bool:
+		if v {
+			e.buf = append(e.buf, TYPE_TRUE)
+		} else {
+			e.buf = append(e.buf, TYPE_FALSE)
+		}
+		return nil
+	case py.EllipsisType:
+		e.buf = append(e.buf, TYPE_ELLIPSIS)
+		return nil
+	case py.Int:
+		n := int64(v)
+		if n >= math.MinInt32 && n <= math.MaxInt32 {
+			e.buf = append(e.buf, TYPE_INT)
+			e.writeInt32(int32(n))
+			return nil
+		}
+		// Too large for the 4-byte form.  The long form is a count of
+		// base-2**15 digits followed by that many 16-bit digits, least
+		// significant first, and the count is NEGATED for a negative value.
+		// Writing raw bytes here produced a stream the reader rejected with
+		// "EOF read where object expected".
+		e.buf = append(e.buf, TYPE_LONG)
+		neg := n < 0
+		m := uint64(n)
+		if neg {
+			m = uint64(-n)
+		}
+		var digits []int16
+		for m > 0 {
+			digits = append(digits, int16(m&PyLong_MARSHAL_MASK))
+			m >>= PyLong_MARSHAL_SHIFT
+		}
+		if len(digits) == 0 {
+			digits = append(digits, 0)
+		}
+		size := int32(len(digits))
+		if neg {
+			size = -size
+		}
+		e.writeInt32(size)
+		for _, d := range digits {
+			var b [2]byte
+			binary.LittleEndian.PutUint16(b[:], uint16(d))
+			e.buf = append(e.buf, b[:]...)
+		}
+		return nil
+	case py.Float:
+		// The binary float form: an 8-byte float64.  'g' is the binary
+		// form, which is what version 3 writes.
+		e.buf = append(e.buf, TYPE_BINARY_FLOAT)
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], math.Float64bits(float64(v)))
+		e.buf = append(e.buf, b[:]...)
+		return nil
+	case py.String:
+		e.buf = append(e.buf, TYPE_UNICODE)
+		e.writeBytes([]byte(v))
+		return nil
+	case py.Bytes:
+		e.buf = append(e.buf, TYPE_STRING)
+		e.writeBytes([]byte(v))
+		return nil
+	case py.Tuple:
+		e.buf = append(e.buf, TYPE_TUPLE)
+		e.writeInt32(int32(len(v)))
+		for _, item := range v {
+			if err := e.write(item); err != nil {
+				return err
+			}
+		}
+		return nil
+	case *py.List:
+		e.buf = append(e.buf, TYPE_LIST)
+		e.writeInt32(int32(len(v.Items)))
+		for _, item := range v.Items {
+			if err := e.write(item); err != nil {
+				return err
+			}
+		}
+		return nil
+	case py.StringDict:
+		e.buf = append(e.buf, TYPE_DICT)
+		// A dict is NOT length-prefixed: it is a run of key/value pairs
+		// terminated by a NULL.  Writing a count instead left the reader
+		// reading pairs past the end, which reported "unknown type code 0x02".
+		keys, err := v.M__iter__()
+		if err != nil {
+			return err
+		}
+		it, ok := keys.(py.I__next__)
+		if !ok {
+			return py.ExceptionNewf(py.ValueError, "unmarshallable object")
+		}
+		for {
+			k, err := it.M__next__()
+			if err != nil {
+				if py.IsException(py.StopIteration, err) {
+					break
+				}
+				return err
+			}
+			if err := e.write(k); err != nil {
+				return err
+			}
+			val, err := v.M__getitem__(k)
+			if err != nil {
+				return err
+			}
+			if err := e.write(val); err != nil {
+				return err
+			}
+		}
+		e.buf = append(e.buf, TYPE_NULL)
+		return nil
+	}
+	return py.ExceptionNewf(py.ValueError, "unmarshallable object")
 }
 
 const loads_doc = `loads(bytes)
@@ -554,27 +747,39 @@ EOFError, ValueError or TypeError. Extra characters in the input are
 ignored.`
 
 func marshal_loads(self py.Object, args py.Tuple) (py.Object, error) {
-	/*
-	   RFILE rf;
-	   Py_buffer p;
-	   char *s;
-	   Py_ssize_t n;
-	   PyObject* result;
-	   if (!PyArg_ParseTuple(args, "y*:loads", &p))
-	       return NULL;
-	   s = p.buf;
-	   n = p.len;
-	   rf.fp = NULL;
-	   rf.readable = NULL;
-	   rf.current_filename = NULL;
-	   rf.ptr = s;
-	   rf.end = s + n;
-	   rf.depth = 0;
-	   result = read_object(&rf);
-	   PyBuffer_Release(&p);
-	   return result;
-	*/
-	return nil, py.ExceptionNewf(py.SystemError, "loads not implemented")
+	// loads(bytes) -> the value those bytes encode.
+	//
+	// The reader above implements the whole format; this only had to be wired
+	// to it.  Trailing bytes are ignored, as CPython's docs say, and a
+	// truncated stream is an EOFError.
+	var src py.Object
+	if err := py.UnpackTuple(args, nil, "loads", 1, 1, &src); err != nil {
+		return nil, err
+	}
+	var data []byte
+	switch v := src.(type) {
+	case py.Bytes:
+		data = []byte(v)
+	case py.String:
+		return nil, py.ExceptionNewf(py.TypeError, "a bytes-like object is required, not 'str'")
+	case *py.File:
+		return nil, py.ExceptionNewf(py.TypeError, "a bytes-like object is required, not 'file'")
+	default:
+		if b, ok := src.(interface{ Bytes() []byte }); ok {
+			data = b.Bytes()
+			break
+		}
+		return nil, py.ExceptionNewf(py.TypeError, "a bytes-like object is required, not '%s'", src.Type().Name)
+	}
+	rf := &rFile{r: bytes.NewReader(data)}
+	value, err := rf.ReadObject()
+	if err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return nil, py.ExceptionNewf(py.EOFError, "EOF read where object expected")
+		}
+		return nil, err
+	}
+	return value, nil
 }
 
 const module_doc = `This module contains functions that can read and write Python values in

@@ -1428,16 +1428,28 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 			}
 			return nil, err
 		}
-		t, ok := item.(py.Tuple)
-		if !ok || len(t) == 0 {
+		// A field entry is a name on its own - "make_dataclass('X', ['a'])" -
+		// or a (name, type) / even (name, type, Field) sequence.  Requiring a
+		// sequence rejected the plain-string form that CPython accepts and
+		// which is the common way to call this.
+		var fname string
+		switch v := item.(type) {
+		case py.String:
+			fname = string(v)
+		case py.Tuple:
+			if len(v) == 0 {
+				return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
+			}
+			name, err := py.StrAsString(v[0])
+			if err != nil {
+				return nil, err
+			}
+			fname = name
+			if len(v) >= 3 {
+				namespace[fname] = v[2]
+			}
+		default:
 			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
-		}
-		fname, err := py.StrAsString(t[0])
-		if err != nil {
-			return nil, err
-		}
-		if len(t) >= 3 {
-			namespace[fname] = t[2]
 		}
 	}
 
@@ -1481,11 +1493,28 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 			}
 			return nil, err
 		}
-		t := item.(py.Tuple)
-		fname, _ := py.StrAsString(t[0])
+		// The annotations are built from the same entries, and each may be a
+		// bare name or a (name, type) pair.  This is the same unguarded
+		// assertion that panicked a moment earlier at the loop above.
+		fname := ""
 		var typ py.Object = py.None
-		if len(t) >= 2 {
-			typ = t[1]
+		switch v := item.(type) {
+		case py.String:
+			fname = string(v)
+		case py.Tuple:
+			if len(v) == 0 {
+				return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
+			}
+			name, err := py.StrAsString(v[0])
+			if err != nil {
+				return nil, err
+			}
+			fname = name
+			if len(v) >= 2 {
+				typ = v[1]
+			}
+		default:
+			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
 		}
 		ann[fname] = typ
 	}

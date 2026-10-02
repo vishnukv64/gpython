@@ -1022,6 +1022,28 @@ func commonArgs(name string, args py.Tuple, kwargs py.StringDict) (*Pattern, py.
 	// The flags argument is positional in the module-level functions -
 	// re.findall(pattern, string, flags) - and may also be a keyword.  Only
 	// looking at the keyword made re.findall(p, s, re.I) ignore the flag.
+	//
+	// sub, subn and split are the exceptions: their THIRD argument is the
+	// count / maxsplit, not flags, and the replacement or string sits between
+	// - "re.sub(pattern, repl, string, count, flags)".  Reading args[2] as
+	// flags here called IndexInt on the REPLACEMENT and made every
+	// "re.sub(pattern, repl, string)" fail with "unsupported operand type(s)
+	// for index: 'str'".
+	if name == "sub" || name == "subn" || name == "split" {
+		flags := 0
+		if v, ok := kwargs["flags"]; ok {
+			n, err := py.IndexInt(v)
+			if err != nil {
+				return nil, nil, err
+			}
+			flags = n
+		}
+		p, err := asPattern(args[0], flags)
+		if err != nil {
+			return nil, nil, err
+		}
+		return p, args[1:], nil
+	}
 	flags := 0
 	if len(args) >= 3 {
 		n, err := py.IndexInt(args[2])
