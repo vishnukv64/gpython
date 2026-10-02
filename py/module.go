@@ -63,7 +63,15 @@ type ModuleStore struct {
 	// It is guarded because a context may be shared by goroutines: the
 	// frame a goroutine is executing is its own, and the lock only covers
 	// the bookkeeping.
-	frameMu    sync.Mutex
+	frameMu sync.Mutex
+
+	// moduleMu guards the module registry.  A context is not meant to be
+	// entered by two goroutines at once, but a shared context is a mistake
+	// that is easy to make and the race detector catches it here: two
+	// goroutines initialising modules wrote this map concurrently.  Holding
+	// a lock is cheap next to that, and it makes the mistake correct rather
+	// than silently corrupting the registry.
+	moduleMu   sync.Mutex
 	frameStack []*Frame
 }
 
@@ -179,6 +187,12 @@ var _ IGetDict = (*Module)(nil)
 // Each given Method prototype is used to create a new "live" Method bound this the newly created Module.
 // This func also sets appropriate module global attribs based on the given ModuleInfo (e.g. __name__).
 func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, error) {
+	// Serialise registrations.  This covers the insert AND the sys.modules
+	// view install at the end of the function, which must not be observed
+	// half-done.
+	store.moduleMu.Lock()
+	defer store.moduleMu.Unlock()
+
 	name := impl.Info.Name
 	if name == "" {
 		name = MainModuleName
@@ -236,7 +250,9 @@ func (store *ModuleStore) Modules() map[string]*Module {
 
 // Gets a module
 func (store *ModuleStore) GetModule(name string) (*Module, error) {
+	store.moduleMu.Lock()
 	m, ok := store.modules[name]
+	store.moduleMu.Unlock()
 	if !ok {
 		return nil, ExceptionNewf(ImportError, "Module '%s' not found", name)
 	}
