@@ -29,6 +29,7 @@ caught: Bad file descriptor [OK]
 ['dir1', 'dir2']
 caught: SystemError - no such file or directory [OK]
 caught: FileExistsError [OK]
-could not create/remove directories: unbound method __enter__() needs an argument
+caught: SystemError - directory not empty [OK]
+['dir1']
 os.{mkdir,rmdir,remove,removedirs} worked as expected
 OK
