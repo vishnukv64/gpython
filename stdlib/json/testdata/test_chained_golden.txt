@@ -1,0 +1,33 @@
+--- json: chained subscript ---
+42
+--- json: chained get ---
+42
+--- json: subscript then get, and the reverse ---
+42 42
+--- json: a default at the end of a chain ---
+DEFAULT
+--- json: through a list ---
+2
+--- json: keys and items of a nested map ---
+['c']
+[('c', 42)]
+True
+--- json: roundtrip keeps the chain ---
+1
+--- json: null in the middle ---
+None
+DEFAULT
+--- json: building a nested structure by chaining setdefault ---
+{'a': {'b': {'c': 1}}}
+--- json: mutating a nested map ---
+{'a': {'b': 2, 'c': 3}}
+3 {'a': {'b': 2}}
+--- yaml: chained subscript and get ---
+42 42
+--- yaml: through a list ---
+1
+--- yaml: flow style nests too ---
+9
+--- yaml: safe_dump roundtrip keeps the chain ---
+5
+done
