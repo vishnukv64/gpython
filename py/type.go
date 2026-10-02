@@ -456,6 +456,17 @@ func NewTypeX(Name string, Doc string, New NewFunc, Init InitFunc) *Type {
 		New:        New,
 		Init:       Init,
 		Dict:       NewStringDict(),
+		// Subclassable, for the same reason NewType is: a type made this way
+		// models a python-level class, and CPython lets those be derived from.
+		//
+		// This was missing, so every type built with NewTypeX was refused as a
+		// base - "type 'typing._Final' is not an acceptable base type" stopped
+		// typing_extensions, which opens with
+		// "class _SpecialForm(typing._Final, _root=True)".  A native type that
+		// genuinely cannot be subclassed (list, set) opts out with NoSubclass,
+		// which is the one place that decides; the flag must not be the
+		// default refusal.
+		Flags: TPFLAGS_BASETYPE,
 	}
 	TypeDelayReady(t)
 	return t

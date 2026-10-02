@@ -268,6 +268,45 @@ func init() {
 	})
 	globals.Set("ForwardRef", forwardRef)
 
+	// typing's own private machinery, which typing_extensions subclasses.
+	//
+	// It opens with "class _SpecialForm(typing._Final, _root=True)" and
+	// "class _ExtensionsSpecialForm(typing._SpecialForm, _root=True)", and
+	// reaches for typing._overload_dummy and typing._tp_cache at module
+	// level, so all four names have to exist or nothing below imports.
+	// Without them typing_extensions and pydantic both die on their first
+	// line.
+	//
+	// _Final is a real class in CPython - the base that marks a form as
+	// final, whose __init_subclass__ is what inspects the _root keyword.
+	// This interpreter does not call __init_subclass__ yet, so the
+	// _root=True that typing_extensions passes has no effect here; the name
+	// is accepted so the class statement parses and the hierarchy matches.
+	finalType := py.NewTypeX("typing._Final",
+		"A typing construct that may not be subclassed.", nil, nil)
+	globals.Set("_Final", finalType)
+	globals.Set("_SpecialForm", SpecialFormType)
+
+	// typing._overload_dummy is the function an @overload definition
+	// returns: calling an overload stub returns this instead of running a
+	// body that was never meant to run.
+	globals.Set("_overload_dummy", py.MustNewMethod("_overload_dummy", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		return nil, py.ExceptionNewf(py.NotImplementedError,
+			"You should never call this directly. It's an internal Python function.")
+	}, 0, "Internal placeholder for @overload definitions."))
+
+	// typing._tp_cache memoises a generic alias's parameters.  A pass-through
+	// is correct, just uncached - the cache is an optimisation, and a wrong
+	// cache key would be a correctness bug, so this does not pretend to
+	// memoise.  It is a no-op decorator, as it is used: "@_tp_cache" with no
+	// parentheses, on a function whose result it returns unchanged.
+	globals.Set("_tp_cache", py.MustNewMethod("_tp_cache", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "_tp_cache() takes exactly one argument")
+		}
+		return args[0], nil
+	}, 0, "No-op cache decorator for typing generics."))
+
 	// The containers that collections.abc actually implements are aliases of
 	// it, so isinstance answers correctly rather than always being False.
 	globals.Set("Iterable", abc.IterableType)
@@ -523,16 +562,53 @@ func buildNamedTupleClass(name string, bases []py.Object, ns py.StringDict) (py.
 	if !ok {
 		return clsObj, nil
 	}
+	// Field defaults come from the class body: "number: int | None = None"
+	// assigns None in the namespace, and only the LAST fields may have one.
+	// They have to be handed to the factory, because the generated __init__
+	// is what applies them - rich's Color declares two such fields and is
+	// constructed without them, and "Color() missing required argument:
+	// number" is what stopped pip.
+	defaults := make([]py.Object, len(fields))
+	for i, f := range fields {
+		if v, ok := ns.Get(f); ok {
+			defaults[i] = v
+		}
+	}
+	seenDefault := false
+	for i, d := range defaults {
+		if d != nil {
+			seenDefault = true
+		} else if seenDefault {
+			return nil, py.ExceptionNewf(py.TypeError,
+				"non-default namedtuple field %s cannot follow default field", fields[i])
+		}
+	}
+	collections.SetNamedTupleDefaults(cls, defaults)
 	// Method bodies in the class namespace - "def meth(self): ..." - are copied
 	// onto the generated class so a NamedTuple subclass can carry behaviour,
-	// as CPython allows.
+	// as CPython allows.  A plain value that names a FIELD is a default, not a
+	// class attribute, and is already recorded above; CPython does not leave
+	// it visible on the class.
 	for _, ent := range ns.Items() {
-		if ent.Key == "__annotations__" || ent.Key == "__module__" || ent.Key == "__qualname__" {
+		if ent.Key == "__annotations__" || ent.Key == "__module__" || ent.Key == "__qualname__" || ent.Key == "__doc__" {
+			continue
+		}
+		if isFieldName(fields, ent.Key) {
 			continue
 		}
 		cls.Dict.Set(ent.Key, ent.Value)
 	}
 	return cls, nil
+}
+
+// isFieldName reports whether name is one of the named tuple's fields.
+func isFieldName(fields []string, name string) bool {
+	for _, f := range fields {
+		if f == name {
+			return true
+		}
+	}
+	return false
 }
 
 // collectionsModule returns the collections module, which is where the

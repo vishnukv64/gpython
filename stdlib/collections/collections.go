@@ -1566,10 +1566,58 @@ func init() {
 type namedtupleFactory struct {
 	name   string
 	fields []string
-	cls    *py.Type
+	// defaults holds one entry per field that has a default, in CPython's
+	// "_field_defaults" order: the LAST n fields may have defaults.  A nil
+	// entry means the field is required.
+	defaults []py.Object
+	cls      *py.Type
 }
 
 var namedtupleFactoryType = py.NewType("collections.namedtuple", namedtuple_doc)
+
+// SetNamedTupleDefaults records the field defaults on a generated named tuple
+// class.
+//
+// It is exported for typing, which builds the class from a "class P(NamedTuple)"
+// body: the annotations supply the field names and the body's assignments
+// supply the defaults, and only the factory can apply them at construction.
+// The factory struct stays unexported, so this is the one way in.
+func SetNamedTupleDefaults(cls *py.Type, defaults []py.Object) {
+	if f, ok := namedTupleFactoryFor(cls); ok {
+		f.defaults = defaults
+		// _field_defaults is the mapping CPython exposes for the fields that
+		// have one; code reads it (typing's own tests, and pydantic).
+		d := py.NewStringDict()
+		for i, v := range defaults {
+			if v != nil && i < len(f.fields) {
+				d.Set(f.fields[i], v)
+			}
+		}
+		cls.Dict.Set("_field_defaults", d)
+	}
+}
+
+// namedTupleFactoryFor returns the factory backing a generated namedtuple class.
+func namedTupleFactoryFor(cls *py.Type) (*namedtupleFactory, bool) {
+	if cls == nil {
+		return nil, false
+	}
+	v, ok := cls.Dict.Get("_factory")
+	if !ok {
+		return nil, false
+	}
+	c, ok := v.(*namedtupleFactoryCell)
+	if !ok {
+		return nil, false
+	}
+	return c.f, true
+}
+
+// namedtupleFactoryCell lets a generated class point back at its factory
+// without the factory being a Python object.
+type namedtupleFactoryCell struct{ f *namedtupleFactory }
+
+func (c *namedtupleFactoryCell) Type() *py.Type { return namedtupleFactoryType }
 
 func (f *namedtupleFactory) Type() *py.Type { return namedtupleFactoryType }
 
@@ -1578,14 +1626,55 @@ func (f *namedtupleFactory) M__repr__() (py.Object, error) {
 }
 
 func (f *namedtupleFactory) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if kwargs.Len() > 0 {
-		return nil, py.ExceptionNewf(py.TypeError, "%s() takes no keyword arguments", f.name)
-	}
-	if len(args) != len(f.fields) {
+	// A namedtuple is constructed by POSITION or by FIELD NAME, and CPython
+	// allows a mix: "P(1, y=2)" is ordinary.  Every keyword argument used to
+	// be rejected with "P() takes no keyword arguments".
+	//
+	// This is not a corner.  rich's Color -- and any class deriving from
+	// NamedTuple, which is how the annotations idiom spells a record -- is
+	// built that way, and "Color(color, type=ColorType.DEFAULT)" is what
+	// rich.color.Color.parse does on every call.  It stopped pip, whose
+	// progress bars go through rich.
+	values := make([]py.Object, len(f.fields))
+	filled := make([]bool, len(f.fields))
+	if len(args) > len(f.fields) {
 		return nil, py.ExceptionNewf(py.TypeError, "%s() takes %d arguments (%d given)", f.name, len(f.fields), len(args))
 	}
-	values := make([]py.Object, len(args))
-	copy(values, args)
+	for i, v := range args {
+		values[i] = v
+		filled[i] = true
+	}
+	for _, kwarg := range kwargs.Items() {
+		idx := -1
+		for i, name := range f.fields {
+			if name == kwarg.Key {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() got an unexpected keyword argument %q", f.name, kwarg.Key)
+		}
+		if filled[idx] {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() got multiple values for argument %q", f.name, kwarg.Key)
+		}
+		values[idx] = kwarg.Value
+		filled[idx] = true
+	}
+	for i, ok := range filled {
+		if ok {
+			continue
+		}
+		// A field with a default may be left out, and the default fills it.
+		// Without this, "Color(name, type=...)" failed with "missing required
+		// argument: number" even though rich declares "number: int | None =
+		// None" - the class body's defaults were never recorded.
+		if i < len(f.defaults) && f.defaults[i] != nil {
+			values[i] = f.defaults[i]
+			continue
+		}
+		return nil, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: %q", f.name, f.fields[i])
+	}
 	return &NamedTuple{values: values, fields: f.fields, name: f.name}, nil
 }
 
@@ -1656,6 +1745,10 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 	}, nil)
 	cls.Flags |= py.TPFLAGS_BASETYPE
 	factory.cls = cls
+	// The class points back at its factory so typing can hand it the field
+	// defaults discovered in a "class P(NamedTuple)" body - see
+	// SetNamedTupleDefaults.
+	cls.Dict.Set("_factory", &namedtupleFactoryCell{f: factory})
 	fieldItems := make([]py.Object, len(fields))
 	for i, f := range fields {
 		fieldItems[i] = py.String(f)
