@@ -1243,7 +1243,6 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 	var defaultValue py.Object
 	var keyFunc py.Object
 	var maxVal, maxItem py.Object
-	var kf *py.Function
 
 	if positional > 1 {
 		values = args
@@ -1260,17 +1259,15 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 	if keyFunc == py.None {
 		keyFunc = nil
 	}
-	if keyFunc != nil {
-		var ok bool
-		kf, ok = keyFunc.(*py.Function)
-		if !ok {
-			return nil, py.ExceptionNewf(py.TypeError, "'%s' object is not callable", keyFunc.Type())
-		}
-	}
+	// key may be ANY callable, not only a Python-defined function.  It used to
+	// be type-asserted to *py.Function, so a builtin - "min(xs, key=len)" -
+	// failed with "'method' object is not callable" even though len is
+	// perfectly callable.  py.Call below is what actually invokes it, and that
+	// takes any Object, so the assertion was only ever a way to lose.
 	if defaultValue != nil {
 		maxItem = defaultValue
 		if keyFunc != nil {
-			maxVal, err = py.Call(kf, py.Tuple{defaultValue}, py.StringDict{})
+			maxVal, err = py.Call(keyFunc, py.Tuple{defaultValue}, py.StringDict{})
 			if err != nil {
 				return nil, err
 			}
@@ -1293,7 +1290,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 		}
 		if maxVal == nil {
 			if keyFunc != nil {
-				maxVal, err = py.Call(kf, py.Tuple{item}, py.StringDict{})
+				maxVal, err = py.Call(keyFunc, py.Tuple{item}, py.StringDict{})
 				if err != nil {
 					return nil, err
 				}
@@ -1304,7 +1301,7 @@ func min_max(args py.Tuple, kwargs py.StringDict, name string) (py.Object, error
 		} else {
 			var compareVal py.Object
 			if keyFunc != nil {
-				compareVal, err = py.Call(kf, py.Tuple{item}, py.StringDict{})
+				compareVal, err = py.Call(keyFunc, py.Tuple{item}, py.StringDict{})
 				if err != nil {
 					return nil, err
 				}

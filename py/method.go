@@ -72,6 +72,11 @@ type Method struct {
 	method interface{}
 	// Parent module of this method
 	Module *Module
+	// Unbound marks a Method reached through its CLASS rather than an
+	// instance - "str.upper" - where CPython has an unbound method
+	// descriptor.  Its first argument supplies the instance, as
+	// str.upper(s) is s.upper(); see callUnbound.
+	Unbound bool
 }
 
 // Internal method types implemented within eval.go
@@ -235,7 +240,16 @@ func newBoundMethod(name string, fn interface{}) (Object, error) {
 }
 
 // Call a method
+//
+// bound reports whether this Method already carries its instance - see
+// newBoundMethod, whose closure ignores the self it is passed.
 func (m *Method) M__call__(args Tuple, kwargs StringDict) (Object, error) {
+	// An unbound method takes its instance from the first argument.  A bound
+	// one - including the closure newBoundMethod builds, which ignores the
+	// self it is handed - carries it already.
+	if m.Unbound {
+		return m.callUnbound(args, kwargs)
+	}
 	self := Object(m.Module)
 	if !kwargs.IsNil() {
 		return m.CallWithKeywords(self, args, kwargs)
@@ -243,12 +257,42 @@ func (m *Method) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	return m.Call(self, args)
 }
 
+// callUnbound calls a Method that was NOT reached through an instance -
+// "str.upper" plucked off the class, or "min(xs, key=str.upper)".
+//
+// Such a method must not manufacture a self.  It used to pass the method's
+// MODULE as self, so the implementation received a *py.Module where it asserted
+// a String and the whole process died with "interface conversion: py.Object is
+// *py.Module, not py.String" - not an exception, a panic.
+//
+// CPython's equivalent is an unbound method descriptor, and there the INSTANCE
+// comes from the first argument: str.upper(s) is s.upper().  That is what
+// happens here - the first argument becomes self, the rest the arguments.  With
+// no argument at all there is no instance to work on, so it says so rather than
+// being handed something arbitrary.
+func (m *Method) callUnbound(args Tuple, kwargs StringDict) (Object, error) {
+	if len(args) == 0 {
+		return nil, ExceptionNewf(TypeError, "unbound method %s() needs an argument", m.Name)
+	}
+	self := args[0]
+	reduced := args[1:]
+	if !kwargs.IsNil() {
+		return m.CallWithKeywords(self, reduced, kwargs)
+	}
+	return m.Call(self, reduced)
+}
+
 // Read a method from a class which makes a bound method
 func (m *Method) M__get__(instance, owner Object) (Object, error) {
 	if instance != None {
 		return NewBoundMethod(instance, m), nil
 	}
-	return m, nil
+	// Read off the CLASS, so there is no instance yet: CPython hands back an
+	// unbound method descriptor, and the caller supplies the instance as the
+	// first argument.  Copying the Method keeps the shared one unmarked.
+	unbound := *m
+	unbound.Unbound = true
+	return &unbound, nil
 }
 
 // FIXME this should be the default?

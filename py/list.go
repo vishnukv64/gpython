@@ -7,8 +7,8 @@
 package py
 
 import (
-	"sync"
 	"sort"
+	"sync"
 )
 
 var ListType = ObjectType.NewType("list", "list() -> new empty list\nlist(iterable) -> new list initialized from iterable's items", ListNew, nil)
@@ -409,6 +409,91 @@ func (l *List) Len() int {
 
 func (l *List) M__str__() (Object, error) {
 	return l.M__repr__()
+}
+
+// listOrder compares two lists elementwise, returning -1, 0 or 1.
+//
+// Same rule as tupleOrder, and CPython has the same rule for both: the first
+// pair that differs decides, comparing with < and > so a user type's own
+// ordering methods are consulted; if one is a prefix of the other, the shorter
+// is less.  Tuples had this and lists did not, so "[1, 2] < [1, 3]" raised
+// "unsupported operand type(s) for <" while the tuple spelling worked.
+func listOrder(a, b *List) (int, error) {
+	n := len(a.Items)
+	if len(b.Items) < n {
+		n = len(b.Items)
+	}
+	for i := 0; i < n; i++ {
+		lt, err := Lt(a.Items[i], b.Items[i])
+		if err != nil {
+			return 0, err
+		}
+		if lt == True {
+			return -1, nil
+		}
+		gt, err := Gt(a.Items[i], b.Items[i])
+		if err != nil {
+			return 0, err
+		}
+		if gt == True {
+			return 1, nil
+		}
+	}
+	switch {
+	case len(a.Items) < len(b.Items):
+		return -1, nil
+	case len(a.Items) > len(b.Items):
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func (l *List) M__lt__(other Object) (Object, error) {
+	b, ok := other.(*List)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := listOrder(l, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord < 0), nil
+}
+
+func (l *List) M__le__(other Object) (Object, error) {
+	b, ok := other.(*List)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := listOrder(l, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord <= 0), nil
+}
+
+func (l *List) M__gt__(other Object) (Object, error) {
+	b, ok := other.(*List)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := listOrder(l, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord > 0), nil
+}
+
+func (l *List) M__ge__(other Object) (Object, error) {
+	b, ok := other.(*List)
+	if !ok {
+		return NotImplemented, nil
+	}
+	ord, err := listOrder(l, b)
+	if err != nil {
+		return nil, err
+	}
+	return Bool(ord >= 0), nil
 }
 
 func (l *List) M__repr__() (Object, error) {
