@@ -177,6 +177,18 @@ func Not(a Object) (Object, error) {
 //
 // The result is returned
 func Call(fn Object, args Tuple, kwargs StringDict) (Object, error) {
+	// An instance of a python class is represented as a Type with an EMPTY
+	// NAME - see the FIXME in Type.M__repr__ - so it is a *Type and would
+	// otherwise be caught by Type.M__call__ below, which is the constructor.
+	// "h(5)" on a class defining __call__ therefore failed with "cannot
+	// create '' instances".  Such an object is callable only if its CLASS
+	// defines __call__, looked up as a descriptor so self is supplied.
+	if t, ok := fn.(*Type); ok && t.Name == "" {
+		if res, ok, err := TypeCall(fn, "__call__", append(Tuple{fn}, args...), kwargs); ok {
+			return res, err
+		}
+		return nil, ExceptionNewf(TypeError, "'%s' object is not callable", t.Type().Name)
+	}
 	if I, ok := fn.(I__call__); ok {
 		return I.M__call__(args, kwargs)
 	}
@@ -244,12 +256,20 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 		return res, err
 	}
 
-	// Look up any __special__ methods as M__special__ and return a bound method
-	if len(key) >= 5 && strings.HasPrefix(key, "__") && strings.HasSuffix(key, "__") {
-		objectValue := reflect.ValueOf(self)
-		methodValue := objectValue.MethodByName("M" + key)
-		if methodValue.IsValid() {
-			return newBoundMethod(key, methodValue.Interface())
+	// Look up any __special__ methods as M__special__ and return a bound method.
+	//
+	// Not for an instance of a python class: those are represented as a Type
+	// with an empty Name, so this would answer with the interpreter's own
+	// M__call__ (the type constructor) where the user's __call__ was meant -
+	// "h.__call__(5)" built a new object instead of calling the method.  The
+	// ordinary lookup below finds the user's method.
+	if _, isInstance := self.(*Type); !isInstance || self.(*Type).Name != "" {
+		if len(key) >= 5 && strings.HasPrefix(key, "__") && strings.HasSuffix(key, "__") {
+			objectValue := reflect.ValueOf(self)
+			methodValue := objectValue.MethodByName("M" + key)
+			if methodValue.IsValid() {
+				return newBoundMethod(key, methodValue.Interface())
+			}
 		}
 	}
 

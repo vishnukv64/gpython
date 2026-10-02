@@ -611,21 +611,46 @@ func (t *Type) CallMethod(name string, args Tuple, kwargs StringDict) (Object, b
 		res, err := m.Call(args[0], args[1:])
 		return res, true, err
 	}
+	// A python function defined in the class body is bound the same way:
+	// going through __get__ supplies self.  Without this the function was
+	// called with the arguments shifted up by one, so "g[3]" on a class
+	// defining __getitem__ returned the instance rather than calling the
+	// method, and "__call__" was never found at all.
+	if len(args) > 0 {
+		if d, ok := fn.(I__get__); ok {
+			bound, err := d.M__get__(args[0], t)
+			if err != nil {
+				return nil, true, err
+			}
+			// A plain function and a staticmethod both decline to bind, and
+			// answer with themselves - in which case self is NOT passed.
+			if bound != nil && bound != fn {
+				res, err := Call(bound, args[1:], kwargs)
+				return res, true, err
+			}
+			res, err := Call(fn, args[1:], kwargs)
+			return res, true, err
+		}
+	}
 	res, err := Call(fn, args, kwargs)
 	return res, true, err
 }
 
 // Calls a type method on obj
 //
-// If obj isnt a *Type or the method isn't found on it returns (nil, false, nil)
+// If the method isn't found on the object returns (nil, false, nil)
 //
 // Otherwise returns (object, true, err)
 //
 // May raise exceptions if calling the method fails
 func TypeCall(self Object, name string, args Tuple, kwargs StringDict) (Object, bool, error) {
+	// Any object answers for itself through its class.  Handling only a
+	// *Type here is why "g[3]" returned the instance itself for a class that
+	// defines __getitem__: the lookup reported "not found", so GetItem fell
+	// through to its error path rather than calling the method.
 	t, ok := self.(*Type)
 	if !ok {
-		return nil, false, nil
+		t = self.Type()
 	}
 	return t.CallMethod(name, args, kwargs)
 }
@@ -1974,10 +1999,15 @@ func init() {
 		return self, nil
 	}, 0, "Return the class, ignoring the subscription parameters.")
 
+	// Deliberately NOT ObjectType or TypeType: every class's MRO includes
+	// object, so putting the hook there made EVERY class subscriptable-as-
+	// class and shadowed __getitem__, which is why "g[3]" on a class that
+	// defines __getitem__ returned the instance itself.  CPython raises
+	// TypeError for "object[int]" and "type[int]", and so do we.
 	for _, t := range []*Type{
 		ListType, TupleType, DictType, SetType, FrozenSetType,
 		StringType, BytesType, IntType, FloatType, BoolType,
-		ObjectType, TypeType, SliceType, ComplexType,
+		SliceType, ComplexType,
 	} {
 		if t != nil && t.Dict != nil {
 			t.Dict["__class_getitem__"] = getitem
