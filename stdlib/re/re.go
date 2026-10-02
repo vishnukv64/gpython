@@ -67,6 +67,10 @@ type Pattern struct {
 	groupNames map[int]string
 	nameToNum  map[string]int
 	ngroups    int
+	// lifted carries the pattern with any negative lookahead REMOVED and the
+	// assertions to re-check, or nil when the pattern had none - which is the
+	// overwhelmingly common case and skips every check below.
+	lifted *lifted
 }
 
 var PatternType = py.NewTypeX("re.Pattern", "A compiled regular expression.", nil, nil)
@@ -169,7 +173,10 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 		}
 		i++
 	}
-	for _, unsupported := range []string{"(?=", "(?!", "(?<=", "(?<!", "(?(", "(?P="} {
+	// Lookbehind, conditionals and backreferences still have no equivalent in
+	// Go's engine and are refused by name.  NEGATIVE lookahead is handled now -
+	// see lookahead.go - because pip cannot start without it.
+	for _, unsupported := range []string{"(?<=", "(?<!", "(?(", "(?P="} {
 		if strings.Contains(pattern, unsupported) {
 			return "", nil, nil, 0, py.ExceptionNewf(ErrorType, "lookaround and conditionals are not supported: Go's regexp engine has no equivalent (%s)", unsupported)
 		}
@@ -535,6 +542,18 @@ func compile(pattern string, flags int) (*Pattern, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Negative lookahead is lifted out before Go sees the pattern: the engine
+	// compiles the pattern with the assertions removed, and the match paths
+	// re-check them.  A pattern with none takes the identical old path.
+	var liftedForm *lifted
+	if hasLookahead(translated) {
+		l, lerr := lift(translated)
+		if lerr != nil {
+			return nil, lerr
+		}
+		translated = l.pattern
+		liftedForm = &l
+	}
 	if prefix := goFlags(flags); prefix != "" {
 		translated = "(?" + prefix + ")" + translated
 	}
@@ -550,6 +569,7 @@ func compile(pattern string, flags int) (*Pattern, error) {
 		groupNames: names,
 		nameToNum:  nameToNum,
 		ngroups:    ngroups,
+		lifted:     liftedForm,
 	}
 	if flags&FlagASCII == 0 {
 		// A str pattern is Unicode by default, which is what flags reports.
@@ -880,7 +900,14 @@ func matchAt(p *Pattern, text string, pos int) *Match {
 // searchIn finds the first match anywhere from pos.
 func searchIn(p *Pattern, text string, pos int) *Match {
 	sub := text[byteOffset(text, pos):]
-	idx := p.re.FindStringSubmatchIndex(sub)
+	var idx []int
+	if p.lifted != nil {
+		// The pattern carried a negative lookahead.  Candidates whose
+		// assertions fail are skipped rather than ending the search.
+		idx = p.matchWithAssertions(*p.lifted, sub, false)
+	} else {
+		idx = p.re.FindStringSubmatchIndex(sub)
+	}
 	if idx == nil {
 		return nil
 	}
@@ -935,6 +962,15 @@ func (p *Pattern) anchoredMatch(text string, whole bool) []int {
 		} else {
 			body = translated
 		}
+	}
+	if p.lifted != nil {
+		// Anchored, with assertions: only the first candidate can ever be
+		// considered, and it is accepted only if its assertions hold.
+		idx := p.matchWithAssertionsAnchored(*p.lifted, text, whole)
+		if idx == nil {
+			return nil
+		}
+		return idx
 	}
 	anchored, err := regexp.Compile("(?-m)^(?:" + body + ")")
 	if err != nil {
