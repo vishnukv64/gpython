@@ -365,6 +365,18 @@ func (d StringDict) Get(key string) (Object, bool) {
 	return v, ok
 }
 
+// SameAs reports whether two dicts are the SAME dict, not merely equal.
+//
+// It exists so a frame can skip a redundant lookup: at module scope Locals and
+// Globals are one namespace, so a miss in Locals has already searched Globals
+// and searching it again costs a hash and a string compare per name read.
+//
+// The storage pointer is the identity - two StringDict values that share an
+// order slice share the same map - and comparing it is one word.
+func (d StringDict) SameAs(other StringDict) bool {
+	return d.order == other.order
+}
+
 // GetOrNil returns the value stored under an encoded key, or Go nil when the
 // key is absent.  It is the exact equivalent of a Go map read d[key] on the
 // old map-typed StringDict, for the few places that relied on that - notably
@@ -396,10 +408,26 @@ func (d *StringDict) Set(key string, value Object) {
 	if d.order == nil {
 		d.order = new([]string)
 	}
-	if _, ok := d.m[key]; !ok {
+	// One hash, not two.
+	//
+	// This used to read the map to test for the key and then write it, which
+	// hashes and compares the name twice on EVERY assignment.  STORE_NAME is
+	// one of the hottest opcodes there is - "i = i + 1" in a loop is a store
+	// per iteration - and a profile of a module-level loop put
+	// mapassign_faststr at 9% of samples for exactly this reason.
+	//
+	// Assigning first and testing the old value for nil gives the same answer
+	// with a single hash.  A nil Object can never have been stored as a
+	// value - the interpreter has no nil value, None is a real type - so the
+	// test is unambiguous.
+	prev := d.m[key]
+	d.m[key] = value
+	if prev == nil {
+		// The key is new, so it takes its place at the END of the order.
+		// Re-assigning an existing key must keep its original position, which
+		// is why this is not unconditional.
 		*d.order = append(*d.order, key)
 	}
-	d.m[key] = value
 }
 
 // Del removes an encoded key, reporting whether it was present.
