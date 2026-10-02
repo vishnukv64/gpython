@@ -1484,7 +1484,16 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		return nil, err
 	}
 	name := nameObj.(String)
-	bases := basesObj.(Tuple)
+	// COPY the bases.  A type assertion on a Tuple ALIASES the caller's
+	// backing array, and the caller is the VM passing its argument tuple -
+	// whose storage is reused.  The class's Bases then changed under it:
+	// "class C(object): pass" followed by ANY annotated definition turned
+	// C.__bases__ into the function's name, because the annotated def reused
+	// that stack slot and wrote over the shared array in place.
+	// Tested: "class C(object): pass; def f() -> int: pass; print(C.__bases__)"
+	// printed ('f').
+	bases := make(Tuple, len(basesObj.(Tuple)))
+	copy(bases, basesObj.(Tuple))
 	orig_dict := orig_dictObj.(StringDict)
 
 	// Determine the proper metatype to deal with this:
