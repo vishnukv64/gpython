@@ -363,8 +363,22 @@ func (e *Exception) M__getattr__(name string) (Object, error) {
 }
 
 func (e *Exception) M__str__() (Object, error) {
-	msg := e.Args.(Tuple)[0]
-	return msg, nil
+	args, ok := e.Args.(Tuple)
+	if !ok || len(args) == 0 {
+		// "str(ValueError())" is "" - CPython gives an argument-less
+		// exception the empty string.  Indexing [0] unguarded panicked with
+		// "index out of range [0] with length 0", which repr() already
+		// guarded against.
+		return String(""), nil
+	}
+	if len(args) == 1 {
+		// str(ValueError(5)) is "5": the single argument is str()'d, not
+		// returned as it stands.
+		return Str(args[0])
+	}
+	// Several arguments stringify as the repr of the whole tuple, so
+	// str(ValueError("a", "b")) is "('a', 'b')".
+	return args.M__repr__()
 }
 
 func (e *Exception) M__repr__() (Object, error) {
