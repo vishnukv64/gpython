@@ -69,6 +69,7 @@ func init() {
 		py.MustNewMethod("print", builtin_print, 0, print_doc),
 		py.MustNewMethod("quit", builtin_quit, 0, quit_doc),
 		py.MustNewMethod("repr", builtin_repr, 0, repr_doc),
+		py.MustNewMethod("reversed", builtin_reversed, 0, reversed_doc),
 		py.MustNewMethod("round", builtin_round, 0, round_doc),
 		py.MustNewMethod("setattr", builtin_setattr, 0, setattr_doc),
 		py.MustNewMethod("sorted", builtin_sorted, 0, sorted_doc),
@@ -187,6 +188,48 @@ func init() {
 		Methods: methods,
 		Globals: globals,
 	})
+}
+
+const reversed_doc = `reversed(sequence) -> reverse iterator over the values of a sequence
+
+Return a reverse iterator.  seq must be an object which has a __reversed__()
+method or supports the sequence protocol (the __len__() method and the
+__getitem__() method with integer arguments starting at 0).`
+
+func builtin_reversed(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "reversed expected 1 argument, got %d", len(args))
+	}
+	v := args[0]
+
+	// A type may answer for itself.
+	if res, ok, err := py.TypeCall1(v, "__reversed__", nil); ok {
+		return res, err
+	}
+
+	// Otherwise walk the object from the end.  The length is read once, as
+	// CPython does, so replacing the object mid-iteration cannot shift what
+	// is being walked.
+	lengthObj, err := py.Len(v)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "'%s' object is not reversible", v.Type().Name)
+	}
+	lengthInt, ok := lengthObj.(py.Int)
+	if !ok {
+		// A sequence whose __len__ is not an int cannot be indexed backwards
+		// either, so this is the same failure CPython reports.
+		return nil, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", lengthObj.Type().Name)
+	}
+	length := int(lengthInt)
+	items := make(py.Tuple, 0, length)
+	for i := length - 1; i >= 0; i-- {
+		item, err := py.GetItem(v, py.Int(i))
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return py.NewIterator(items), nil
 }
 
 const print_doc = `print(value, ..., sep=' ', end='\\n', file=sys.stdout, flush=False)
