@@ -1264,6 +1264,89 @@ const math_isinf_doc = `isinf(x) -> bool
 
 Return True if x is a positive or negative infinity, and False otherwise.`
 
+func math_isclose(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var (
+		ob, oc py.Object
+		relTol = py.Object(py.Float(1e-09))
+		absTol = py.Object(py.Float(0.0))
+	)
+	// rel_tol and abs_tol are keyword-only, as in CPython.
+	err := py.ParseTupleAndKeywords(args, kwargs, "OO$|OO:isclose", []string{"a", "b", "rel_tol", "abs_tol"}, &ob, &oc, &relTol, &absTol)
+	if err != nil {
+		return nil, err
+	}
+	b, err := realAsFloat64(ob)
+	if err != nil {
+		return nil, err
+	}
+	c, err := realAsFloat64(oc)
+	if err != nil {
+		return nil, err
+	}
+	rt, err := realAsFloat64(relTol)
+	if err != nil {
+		return nil, err
+	}
+	at, err := realAsFloat64(absTol)
+	if err != nil {
+		return nil, err
+	}
+	if rt < 0.0 || at < 0.0 {
+		return nil, py.ExceptionNewf(py.ValueError, "tolerances must be non-negative")
+	}
+	// The comparison is exactly CPython's: the difference must be within the
+	// larger of the relative tolerance scaled by the larger magnitude and the
+	// absolute tolerance.  NaN compares as not close, even to itself, and the
+	// infinity arithmetic makes an infinity close only to itself.
+	if b == c {
+		return py.True, nil
+	}
+	if math.IsInf(b, 0) || math.IsInf(c, 0) {
+		return py.False, nil
+	}
+	diff := math.Abs(b - c)
+	return py.Bool(diff <= math.Max(rt*math.Max(math.Abs(b), math.Abs(c)), at)), nil
+}
+
+const math_isclose_doc = `isclose(a, b, *, rel_tol=1e-09, abs_tol=0.0) -> bool
+
+Determine whether two floating point numbers are close in value.
+
+  rel_tol
+    maximum difference for being considered "close", relative to the
+    magnitude of the input values
+  abs_tol
+    maximum difference for being considered "close", regardless of the
+    magnitude of the input values
+
+Return True if a is close in value to b, and False otherwise.
+
+For the values to be considered close, the difference between them
+must be smaller than at least one of the tolerances.
+
+-inf, inf and NaN behave similarly to the IEEE 754 Standard.  That
+is, NaN is not close to anything, even itself.  inf and -inf are
+only close to themselves.`
+
+// realAsFloat64 is the argument conversion CPython's math functions use: a
+// number, or anything with __float__, and otherwise a TypeError naming the
+// offending type.
+func realAsFloat64(obj py.Object) (float64, error) {
+	// A bool is a number to CPython's math functions; the interpreter's own
+	// FloatAsFloat64 rejects it, so it is converted here.
+	if b, ok := obj.(py.Bool); ok {
+		if bool(b) {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	f, err := py.FloatAsFloat64(obj)
+	if err != nil {
+		return 0, py.ExceptionNewf(py.TypeError, "must be real number, not %s", obj.Type().Name)
+	}
+	return f, nil
+}
+
 func math_to_ulps(self py.Object, arg py.Object) (py.Object, error) {
 	x, err := py.FloatAsFloat64(arg)
 	if err != nil {
@@ -1529,6 +1612,7 @@ func init() {
 		py.MustNewMethod("hypot", math_hypot, 0, math_hypot_doc),
 		py.MustNewMethod("isfinite", math_isfinite, 0, math_isfinite_doc),
 		py.MustNewMethod("isinf", math_isinf, 0, math_isinf_doc),
+		py.MustNewMethod("isclose", math_isclose, 0, math_isclose_doc),
 		py.MustNewMethod("isnan", math_isnan, 0, math_isnan_doc),
 		py.MustNewMethod("isqrt", math_isqrt, 0, math_isqrt_doc),
 		py.MustNewMethod("lcm", math_lcm, 0, math_lcm_doc),

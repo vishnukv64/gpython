@@ -54,6 +54,7 @@ func init() {
 		py.MustNewMethod("getenv", getenv, 0, "Return the value of the environment variable key if it exists, or default if it doesn’t. key, default and the result are str."),
 		py.MustNewMethod("getpid", getpid, 0, "Return the current process id."),
 		py.MustNewMethod("listdir", listDir, 0, listDir_doc),
+		py.MustNewMethod("walk", walk, 0, walk_doc),
 		py.MustNewMethod("makedirs", makedirs, 0, makedirs_doc),
 		py.MustNewMethod("mkdir", mkdir, 0, mkdir_doc),
 		py.MustNewMethod("putenv", putenv, 0, "Set the environment variable named key to the string value."),
@@ -306,8 +307,264 @@ func listDir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	return result, nil
 }
 
-const makedirs_doc = `makedirs(name [, mode=0o777][, exist_ok=False])
+const walk_doc = `Directory tree generator.
 
+For each directory in the directory tree rooted at top (including top
+itself, but excluding '.' and '..'), yields a 3-tuple
+
+    dirpath, dirnames, filenames
+
+dirpath is a string, the path to the directory.  dirnames is a list of
+the names of the subdirectories in dirpath (including symlinks to
+directories, and excluding '.' and '..').  filenames is a list of the
+names of the non-directory files in dirpath.
+Note that the names in the lists are just names, with no path
+components.  To get a full path (which begins with top) to a file or
+directory in dirpath, do os.path.join(dirpath, name).
+
+If optional arg 'topdown' is true or not specified, the triple for a
+directory is generated before the triples for any of its subdirectories
+(directories are generated top down).  If topdown is false, the triple
+for a directory is generated after the triples for all of its
+subdirectories (directories are generated bottom up).
+
+When topdown is true, the caller can modify the dirnames list in-place
+(e.g., via del or slice assignment), and walk will only recurse into the
+subdirectories whose names remain in dirnames; this can be used to prune
+the search, or to impose a specific order of visiting.  Modifying
+dirnames when topdown is false has no effect on the behavior of
+os.walk(), since the directories in dirnames have already been generated
+by the time dirnames itself is generated.  No matter the value of
+topdown, the list of subdirectories is retrieved before the tuples for
+the directory and its subdirectories are generated.
+
+By default errors from the os.scandir() call are ignored.  If
+optional arg 'onerror' is specified, it should be a function; it
+will be called with one argument, an OSError instance.  It can
+report the error to continue with the walk, or raise the exception
+to abort the walk.  Note that the filename is available as the
+filename attribute of the exception object.
+
+By default, os.walk does not follow symbolic links to subdirectories on
+systems that support them.  In order to get this functionality, set the
+optional argument 'followlinks' to true.
+
+Caution:  if you pass a relative pathname for top, don't change the
+current working directory between resumptions of walk.  walk never
+changes the current directory, and assumes that the client doesn't
+either.`
+
+// walkIterator is os.walk.  CPython implements walk as a generator over an
+// explicit stack, and the same stack lives here so that pruning behaves: the
+// children of a directory are pushed only after its triple has been yielded
+// and the caller has had the chance to edit dirnames in place.
+type walkIterator struct {
+	// stack holds work items.  A py.Tuple is a finished bottom-up triple
+	// waiting to be yielded; anything else is a path still to visit.
+	stack   []py.Object
+	topdown bool
+	follow  bool
+	onerror py.Object
+	// pending and yielded are the directory whose children are pushed next
+	// and the list the caller may have pruned while handling the yield.
+	pending    py.Object
+	yielded    *py.List
+	hasPending bool
+}
+
+var walkIteratorType = py.NewType("os.walk", "Directory tree generator.")
+
+func (w *walkIterator) Type() *py.Type { return walkIteratorType }
+
+func (w *walkIterator) M__iter__() (py.Object, error) { return w, nil }
+
+var _ py.I__iter__ = (*walkIterator)(nil)
+var _ py.I__next__ = (*walkIterator)(nil)
+
+func (w *walkIterator) M__next__() (py.Object, error) {
+	for len(w.stack) > 0 || w.hasPending {
+		if w.hasPending {
+			dir, names := w.pending, w.yielded
+			w.pending, w.yielded, w.hasPending = nil, nil, false
+			w.pushChildren(dir, names)
+			continue
+		}
+		top := w.stack[len(w.stack)-1]
+		// A bottom-up triple is already a value to yield.
+		if tup, ok := top.(py.Tuple); ok {
+			w.stack = w.stack[:len(w.stack)-1]
+			return tup, nil
+		}
+
+		dirPath, isBytes := pathString(top)
+		entries, err := readDirNames(dirPath)
+		if err != nil {
+			if w.onerror != nil && w.onerror != py.None {
+				if _, callErr := py.Call(w.onerror, py.Tuple{osErrorFor(err, dirPath)}, py.StringDict{}); callErr != nil {
+					return nil, callErr
+				}
+			}
+			w.stack = w.stack[:len(w.stack)-1]
+			continue
+		}
+		w.stack = w.stack[:len(w.stack)-1]
+
+		var dirs, walkDirs, nondirs []string
+		for _, name := range entries {
+			full := joinOne(dirPath, name)
+			// A symlink to a directory is a directory here, which is
+			// entry.is_dir() following the link.
+			if entryIsDir(full) {
+				dirs = append(dirs, name)
+				if !w.topdown && (w.follow || !isSymlink(full)) {
+					walkDirs = append(walkDirs, full)
+				}
+			} else {
+				nondirs = append(nondirs, name)
+			}
+		}
+
+		mk := func(s string) py.Object {
+			if isBytes {
+				return py.Bytes(s)
+			}
+			return py.String(s)
+		}
+		dirList := py.NewListSized(len(dirs))
+		for i, d := range dirs {
+			dirList.Items[i] = mk(d)
+		}
+		fileList := py.NewListSized(len(nondirs))
+		for i, d := range nondirs {
+			fileList.Items[i] = mk(d)
+		}
+		triple := py.Tuple{mk(dirPath), dirList, fileList}
+
+		if w.topdown {
+			w.pending, w.yielded, w.hasPending = top, dirList, true
+			return triple, nil
+		}
+
+		w.stack = append(w.stack, triple)
+		for i := len(walkDirs) - 1; i >= 0; i-- {
+			w.stack = append(w.stack, mk(walkDirs[i]))
+		}
+	}
+	return nil, py.StopIteration
+}
+
+// pushChildren queues the surviving children of a just-yielded directory.  A
+// name the caller removed from the list during the yield is skipped, which is
+// what makes "del dirs[i]" prune the walk.
+func (w *walkIterator) pushChildren(dir py.Object, dirnames *py.List) {
+	dirPath, isBytes := pathString(dir)
+	for i := len(dirnames.Items) - 1; i >= 0; i-- {
+		name, err := py.StrAsString(dirnames.Items[i])
+		if err != nil {
+			continue
+		}
+		newPath := joinOne(dirPath, name)
+		if !w.follow && isSymlink(newPath) {
+			continue
+		}
+		if isBytes {
+			w.stack = append(w.stack, py.Bytes(newPath))
+		} else {
+			w.stack = append(w.stack, py.String(newPath))
+		}
+	}
+}
+
+// pathString extracts the string of a path argument.
+func pathString(v py.Object) (string, bool) {
+	switch p := v.(type) {
+	case py.String:
+		return string(p), false
+	case py.Bytes:
+		return string(p), true
+	}
+	return "", false
+}
+
+// joinOne is os.path.join for a single name on the running platform's
+// separator.
+func joinOne(dir, name string) string {
+	if dir == "" {
+		return name
+	}
+	if strings.HasSuffix(dir, string(osSep)) {
+		return dir + name
+	}
+	return dir + string(osSep) + name
+}
+
+// readDirNames lists a directory in the order the filesystem returns it.
+// os.ReadDir sorts, and sorting the names would not match CPython's scandir
+// order, so Readdirnames is used directly.
+func readDirNames(dir string) ([]string, error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return f.Readdirnames(-1)
+}
+
+// entryIsDir follows symlinks, so a link to a directory lands in dirnames the
+// way entry.is_dir() does.
+func entryIsDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}
+
+func isSymlink(p string) bool {
+	info, err := os.Lstat(p)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+// osErrorFor wraps a filesystem error as the OSError onerror receives,
+// carrying the offending path in filename.
+func osErrorFor(err error, path string) py.Object {
+	e := py.ExceptionNewf(py.OSError, "%s: '%s'", err.Error(), path)
+	e.Dict.Set("filename", py.String(path))
+	return e
+}
+
+func walk(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var (
+		top       py.Object
+		topdown   py.Object = py.True
+		onerror   py.Object = py.None
+		followObj py.Object = py.False
+	)
+	err := py.ParseTupleAndKeywords(args, kwargs, "O|OOO:walk",
+		[]string{"top", "topdown", "onerror", "followlinks"},
+		&top, &topdown, &onerror, &followObj)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := top.(py.String); !ok {
+		if _, ok := top.(py.Bytes); !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", top.Type().Name)
+		}
+	}
+	td, err := py.ObjectIsTrue(topdown)
+	if err != nil {
+		return nil, err
+	}
+	fl, err := py.ObjectIsTrue(followObj)
+	if err != nil {
+		return nil, err
+	}
+	return &walkIterator{
+		stack:   []py.Object{top},
+		topdown: td,
+		follow:  fl,
+		onerror: onerror,
+	}, nil
+}
+
+const makedirs_doc = `makedirs(name [, mode=0o777][, exist_ok=False])
 Super-mkdir; create a leaf directory and all intermediate ones.  Works like
 mkdir, except that any intermediate path segment (not just the rightmost)
 will be created if it does not exist. If the target directory already

@@ -33,13 +33,9 @@ except TypeError as e:
     print("caught error: %s" % (e,))
     pass
 
-notimplemented(time.gmtime)
-notimplemented(time.localtime)
-notimplemented(time.asctime)
-notimplemented(time.ctime)
-notimplemented(time.mktime, 1)
-notimplemented(time.strftime)
-notimplemented(time.strptime)
+# gmtime, localtime, asctime, ctime, mktime, strftime and strptime are real
+# now; the NotImplementedError check is kept only for tzset and the clock
+# functions, which still have no implementation.
 notimplemented(time.tzset)
 # These three are real clocks now, so they return a float rather than
 # raising.  Each must advance (or hold still) rather than go backwards.

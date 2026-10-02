@@ -13,3 +13,7 @@ import (
 func TestString(t *testing.T) {
 	pytest.RunScript(t, "./testdata/test.py")
 }
+
+func TestTemplate(t *testing.T) {
+	pytest.RunScript(t, "./testdata/template.py")
+}

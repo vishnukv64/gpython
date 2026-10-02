@@ -7,6 +7,7 @@
 package time
 
 import (
+	"fmt"
 	"syscall"
 	"time"
 
@@ -246,25 +247,28 @@ If the platform supports the tm_gmtoff and tm_zone, they are available as
 attributes only.`
 
 func time_gmtime(self py.Object, args py.Tuple) (py.Object, error) {
-	// var when time_t
-	// var buf tm
-	// var local *tm
+	when, err := parseTimeArg(args, "gmtime", py.Float(time.Now().UnixNano())/1e9)
+	if err != nil {
+		return nil, err
+	}
+	return gmStructTime(when), nil
+}
 
-	// if !parse_time_t_args(args, "|O:gmtime", &when) {
-	// 	return nil
-	// }
-
-	// errno = 0
-	// local = gmtime(&when)
-	// if local == nil {
-	// 	if errno == 0 {
-	// 		errno = EINVAL
-	// 	}
-	// 	return PyErr_SetFromErrno(PyExc_OSError)
-	// }
-	// buf = *local
-	// return tmtotuple(&buf)
-	return nil, py.NotImplementedError
+// parseTimeArg reads the optional "seconds since the Epoch" argument that
+// gmtime, localtime and ctime share.
+func parseTimeArg(args py.Tuple, name string, def py.Float) (int64, error) {
+	when := py.Object(def)
+	if err := py.ParseTupleAndKeywords(args, py.StringDict{}, "|O:"+name, []string{"secs"}, &when); err != nil {
+		return 0, err
+	}
+	if when == py.None {
+		return int64(def), nil
+	}
+	f, err := py.FloatAsFloat64(when)
+	if err != nil {
+		return 0, py.ExceptionNewf(py.TypeError, "%s() argument must be a number, not '%s'", name, when.Type().Name)
+	}
+	return int64(f), nil
 }
 
 // func pylocaltime(timep *time_t, result *tm) int {
@@ -291,17 +295,11 @@ Convert seconds since the Epoch to a time tuple expressing local time.
 When 'seconds' is not passed in, convert the current time instead.`
 
 func time_localtime(self py.Object, args py.Tuple) (py.Object, error) {
-	// var when time_t
-	// var buf tm
-
-	// if !parse_time_t_args(args, "|O:localtime", &when) {
-	// 	return nil
-	// }
-	// if pylocaltime(&when, &buf) == -1 {
-	// 	return nil
-	// }
-	// return tmtotuple(&buf)
-	return nil, py.NotImplementedError
+	when, err := parseTimeArg(args, "localtime", py.Float(time.Now().UnixNano())/1e9)
+	if err != nil {
+		return nil, err
+	}
+	return localStructTime(when), nil
 }
 
 /* Convert 9-item tuple to tm structure.  Return 1 on success, set
@@ -417,78 +415,48 @@ See the library reference manual for formatting codes. When the time tuple
 is not present, current time as returned by localtime() is used.`
 
 func time_strftime(self py.Object, args py.Tuple) (py.Object, error) {
-	// var tup py.Object
-	// var buf tm
-	// var fmt *time_char
-	// var format py.Object
-	// var format_arg py.Object
-	// var fmtlen, buflen int
-	// var outbuf *time_char
-	// var i int
-	// var ret py.Object
+	var (
+		formatObj py.Object
+		tup       py.Object = py.None
+	)
+	if err := py.ParseTupleAndKeywords(args, py.StringDict{}, "O|O:strftime",
+		[]string{"format", "t"}, &formatObj, &tup); err != nil {
+		return nil, err
+	}
+	format, err := py.StrAsString(formatObj)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "strftime() argument 1 must be str, not %s", formatObj.Type().Name)
+	}
 
-	// // memset((void *) &buf, '\0', sizeof(buf));
-
-	// /* Will always expect a unicode string to be passed as format.
-	//    Given that there's no str type anymore in py3k this seems safe.
-	// */
-	// if !PyArg_ParseTuple(args, "U|O:strftime", &format_arg, &tup) {
-	// 	return nil
-	// }
-
-	// if tup == nil {
-	// 	tt := time(nil)
-	// 	if pylocaltime(&tt, &buf) == -1 {
-	// 		return nil
-	// 	}
-	// } else if !gettmarg(tup, &buf) || !checktm(&buf) {
-	// 	return nil
-	// }
-
-	// /* Normalize tm_isdst just in case someone foolishly implements %Z
-	//    based on the assumption that tm_isdst falls within the range of
-	//    [-1, 1] */
-	// if buf.tm_isdst < -1 {
-	// 	buf.tm_isdst = -1
-	// } else if buf.tm_isdst > 1 {
-	// 	buf.tm_isdst = 1
-	// }
-
-	// /* Convert the unicode string to an ascii one */
-	// format = PyUnicode_EncodeLocale(format_arg, "surrogateescape")
-	// if format == nil {
-	// 	return nil
-	// }
-	// fmt = PyBytes_AS_STRING(format)
-
-	// fmtlen = time_strlen(fmt)
-
-	// /* I hate these functions that presume you know how big the output
-	//  * will be ahead of time...
-	//  */
-	// for i = 1024; ; i += i {
-	// 	outbuf = PyMem_Malloc(i * sizeof(time_char))
-	// 	if outbuf == nil {
-	// 		PyErr_NoMemory()
-	// 		break
-	// 	}
-	// 	buflen = format_time(outbuf, i, fmt, &buf)
-	// 	if buflen > 0 || i >= 256*fmtlen {
-	// 		/* If the buffer is 256 times as long as the format,
-	// 		   it's probably not failing for lack of room!
-	// 		   More likely, the format yields an empty result,
-	// 		   e.g. an empty format, or %Z when the timezone
-	// 		   is unknown. */
-	// 		ret = PyUnicode_DecodeLocaleAndSize(outbuf, buflen,
-	// 			"surrogateescape")
-	// 		PyMem_Free(outbuf)
-	// 		break
-	// 	}
-	// 	PyMem_Free(outbuf)
-	// }
-	// Py_DECREF(format)
-	// return ret
-	return nil, py.NotImplementedError
+	var (
+		tt      *timeTuple
+		zone    = ""
+		gmtoff  = 0
+		hasZone = false
+	)
+	if tup == py.None {
+		st := localStructTime(time.Now().Unix())
+		tt = &timeTuple{year: st.Year, mon: st.Mon, mday: st.Mday, hour: st.Hour, min: st.Min, sec: st.Sec, wday: st.Wday, yday: st.Yday, isdst: st.Isdst}
+		zone = string(st.Zone.(py.String))
+		gmtoff = st.Gmtoff
+		hasZone = true
+	} else {
+		tt, err = getTimeTuple(tup)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkTimeTuple(tt); err != nil {
+			return nil, err
+		}
+		if st, ok := tup.(*StructTime); ok {
+			if z, ok := st.Zone.(py.String); ok {
+				zone = string(z)
+				gmtoff = st.Gmtoff
+				hasZone = true
+			}
+		}
+	}
+	return py.String(formatTime(format, tt, zone, gmtoff, hasZone)), nil
 }
 
 const strptime_doc = `strptime(string, format) -> struct_time
@@ -497,16 +465,38 @@ Parse a string to a time tuple according to a format specification.
 See the library reference manual for formatting codes (same as strftime()).`
 
 func time_strptime(self py.Object, args py.Tuple) (py.Object, error) {
-	// strptime_module := PyImport_ImportModuleNoBlock("_strptime")
+	var (
+		textObj   py.Object
+		formatObj py.Object = py.None
+	)
+	if err := py.ParseTupleAndKeywords(args, py.StringDict{}, "O|O:strptime",
+		[]string{"string", "format"}, &textObj, &formatObj); err != nil {
+		return nil, err
+	}
+	text, err := py.StrAsString(textObj)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "strptime() argument 1 must be str, not %s", textObj.Type().Name)
+	}
+	format := "%a %b %d %H:%M:%S %Y" // the default CPython's _strptime uses
+	if formatObj != py.None {
+		format, err = py.StrAsString(formatObj)
+		if err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "strptime() argument 2 must be str, not %s", formatObj.Type().Name)
+		}
+	}
+	tt, err := parseTime(text, format)
+	if err != nil {
+		return nil, err
+	}
+	return newStructTimeFromTuple(tt), nil
+}
 
-	// if !strptime_module {
-	// 	return nil
-	// }
-	// strptime_result = _py.Object_CallMethodId(strptime_module,
-	// 	"_strptime_time", "O", args)
-	// Py_DECREF(strptime_module)
-	// return strptime_result
-	return nil, py.NotImplementedError
+// newStructTimeFromTuple builds a struct_time from parsed fields, without the
+// zone attributes strptime does not know.
+func newStructTimeFromTuple(tt *timeTuple) *StructTime {
+	return newStructTime(
+		time.Date(tt.year, time.Month(tt.mon), tt.mday, tt.hour, tt.min, tt.sec, 0, time.UTC),
+		py.None, 0, tt.isdst)
 }
 
 // func _asctime(timeptr *tm) py.Object {
@@ -535,23 +525,32 @@ When the time tuple is not present, current time as returned by localtime()
 is used.`
 
 func time_asctime(self py.Object, args py.Tuple) (py.Object, error) {
-	// var tup py.Object
-	// var buf tm
+	var tup py.Object = py.None
+	if err := py.ParseTupleAndKeywords(args, py.StringDict{}, "|O:asctime", []string{"t"}, &tup); err != nil {
+		return nil, err
+	}
+	var tt *timeTuple
+	if tup == py.None {
+		st := localStructTime(time.Now().Unix())
+		tt = &timeTuple{year: st.Year, mon: st.Mon, mday: st.Mday, hour: st.Hour, min: st.Min, sec: st.Sec, wday: st.Wday, yday: st.Yday, isdst: st.Isdst}
+	} else {
+		var err error
+		tt, err = getTimeTuple(tup)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkTimeTuple(tt); err != nil {
+			return nil, err
+		}
+	}
+	return py.String(formatAsctime(tt)), nil
+}
 
-	// if !PyArg_UnpackTuple(args, "asctime", 0, 1, &tup) {
-	// 	return nil
-	// }
-	// if tup == nil {
-	// 	tt := time(nil)
-	// 	if pylocaltime(&tt, &buf) == -1 {
-	// 		return nil
-	// 	}
-
-	// } else if !gettmarg(tup, &buf) || !checktm(&buf) {
-	// 	return nil
-	// }
-	// return _asctime(&buf)
-	return nil, py.NotImplementedError
+// formatAsctime renders the fixed "Thu Jan  1 00:00:00 1970" form.
+func formatAsctime(tt *timeTuple) string {
+	return fmt.Sprintf("%s %s %2d %02d:%02d:%02d %d",
+		weekdaysAbbr[tt.wday], monthsAbbr[tt.mon-1], tt.mday,
+		tt.hour, tt.min, tt.sec, tt.year)
 }
 
 const ctime_doc = `ctime(seconds) -> string
@@ -561,16 +560,13 @@ This is equivalent to asctime(localtime(seconds)). When the time tuple is
 not present, current time as returned by localtime() is used.`
 
 func time_ctime(self py.Object, args py.Tuple) (py.Object, error) {
-	// var tt int
-	// var tm buf
-	// if !parse_time_t_args(args, "|O:ctime", &tt) {
-	// 	return nil
-	// }
-	// if pylocaltime(&tt, &buf) == -1 {
-	// 	return nil
-	// }
-	// return _asctime(&buf)
-	return nil, py.NotImplementedError
+	when, err := parseTimeArg(args, "ctime", py.Float(time.Now().UnixNano())/1e9)
+	if err != nil {
+		return nil, err
+	}
+	st := localStructTime(when)
+	tt := &timeTuple{year: st.Year, mon: st.Mon, mday: st.Mday, hour: st.Hour, min: st.Min, sec: st.Sec, wday: st.Wday, yday: st.Yday, isdst: st.Isdst}
+	return py.String(formatAsctime(tt)), nil
 }
 
 const mktime_doc = `mktime(tuple) -> floating point number
@@ -580,23 +576,18 @@ Note that mktime(gmtime(0)) will not generally return zero for most
 time zones; instead the returned value will either be equal to that
 of the timezone or altzone attributes on the time module.`
 
-func time_mktime(self, tup py.Object) (py.Object, error) {
-	// var buf tm
-	// var tt int
-	// if !gettmarg(tup, &buf) {
-	// 	return nil
-	// }
-	// buf.tm_wday = -1 /* sentinel; original value ignored */
-	// tt = mktime(&buf)
-	// /* Return value of -1 does not necessarily mean an error, but tm_wday
-	//  * cannot remain set to -1 if mktime succeeded. */
-	// if tt == (time_t)(-1) && buf.tm_wday == -1 {
-	// 	PyErr_SetString(PyExc_OverflowError,
-	// 		"mktime argument out of range")
-	// 	return nil
-	// }
-	// return py.Float(float64(tt))
-	return nil, py.NotImplementedError
+func time_mktime(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) < 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "mktime() takes exactly one argument")
+	}
+	tt, err := getTimeTuple(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := checkTimeTuple(tt); err != nil {
+		return nil, err
+	}
+	return py.Float(float64(tt.epochSeconds(true))), nil
 }
 
 const tzset_doc = `tzset()
@@ -1025,8 +1016,72 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods: methods,
-		Globals: py.NewStringDict(),
+		Globals: moduleGlobals(),
 	})
+}
+
+// moduleGlobals is the constant and derived data CPython exports from the
+// module: the struct_time type, and the local timezone description.
+func moduleGlobals() py.StringDict {
+	g := py.NewStringDict()
+	g.Set("struct_time", StructTimeType)
+	g.Set("_STRUCT_TM_ITEMS", py.Int(9))
+	g.Set("timezone", py.Int(-localGmtoff(time.Now().Unix())))
+	g.Set("altzone", py.Int(altzone(time.Now().Unix())))
+	g.Set("daylight", py.Bool(isDstNow()))
+	g.Set("tzname", py.Tuple{py.String(zoneName(time.Now().Unix())), py.String(dstZoneName())})
+	// The clock id constants code passes to clock_gettime.
+	g.Set("CLOCK_REALTIME", py.Int(0))
+	g.Set("CLOCK_MONOTONIC", py.Int(6))
+	g.Set("CLOCK_MONOTONIC_RAW", py.Int(4))
+	g.Set("CLOCK_PROCESS_CPUTIME_ID", py.Int(12))
+	g.Set("CLOCK_THREAD_CPUTIME_ID", py.Int(16))
+	return g
+}
+
+// localGmtoff is the standard-time offset from UTC in seconds.
+func localGmtoff(sec int64) int {
+	_, off := time.Unix(sec, 0).Zone()
+	return off
+}
+
+func zoneName(sec int64) string {
+	name, _ := time.Unix(sec, 0).Zone()
+	return name
+}
+
+// dstZoneName reports the DST abbreviation.  Go's time package does not
+// expose the summer/winter names separately, so a location that observes DST
+// uses the January name and its daylight counterpart is the same string -
+// which is what a zone with a single abbreviation also reports.
+func dstZoneName() string {
+	j := time.Date(time.Now().Year(), 1, 1, 12, 0, 0, 0, time.Local)
+	jl := time.Date(time.Now().Year(), 7, 1, 12, 0, 0, 0, time.Local)
+	if j.IsDST() {
+		name, _ := j.Zone()
+		return name
+	}
+	name, _ := jl.Zone()
+	return name
+}
+
+// altzone is the DST offset from UTC in seconds, or the standard offset when
+// the location does not observe DST.
+func altzone(sec int64) int {
+	j := time.Date(time.Now().Year(), 1, 1, 12, 0, 0, 0, time.Local)
+	jl := time.Date(time.Now().Year(), 7, 1, 12, 0, 0, 0, time.Local)
+	dstT := jl
+	if j.IsDST() {
+		dstT = j
+	}
+	_, off := dstT.Zone()
+	return -off
+}
+
+func isDstNow() bool {
+	j := time.Date(time.Now().Year(), 1, 1, 12, 0, 0, 0, time.Local)
+	jl := time.Date(time.Now().Year(), 7, 1, 12, 0, 0, 0, time.Local)
+	return j.IsDST() != jl.IsDST()
 }
 
 const module_doc = `This module provides various functions to manipulate time values.

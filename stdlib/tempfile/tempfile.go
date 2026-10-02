@@ -51,6 +51,7 @@ func init() {
 			py.MustNewMethod("gettempdirb", gettempdirb, 0, gettempdirb_doc),
 			py.MustNewMethod("mkdtemp", mkdtemp, 0, mkdtemp_doc),
 			py.MustNewMethod("mkstemp", mkstemp, 0, mkstemp_doc),
+			py.MustNewMethod("mktemp", mktemp, 0, mktemp_doc),
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "tempdir", Value: gblTempDir},
@@ -280,4 +281,95 @@ func mkstemp(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	}
 
 	return tuple, nil
+}
+
+const mktemp_doc = `mktemp(suffix="", prefix="tmp", dir=None, [default=None]) -> pathname
+
+    User-callable function to return a unique temporary file name.  The
+    file is not created.
+
+    Arguments are as for mkstemp, except that the 'text' argument is
+    not accepted.
+
+    It is possible that a path returned does not exist by the time the
+    caller gets to create it - the name is chosen and then released, so
+    another process may take it in between.  That race is why this
+    function is deprecated; use mkstemp instead.`
+
+// mktemp picks a name no process is using and hands it back.  It cannot be
+// made safe - between the lstat and the caller's open() another process may
+// claim the name - but code still calls it, so it is implemented faithfully
+// rather than refused: the name is generated, checked absent, and released.
+func mktemp(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var (
+		pysuffix py.Object = py.None
+		pyprefix py.Object = py.None
+		pydir    py.Object = py.None
+	)
+	err := py.ParseTupleAndKeywords(args, kwargs,
+		"|z#z#z#:mktemp",
+		[]string{"suffix", "prefix", "dir"},
+		&pysuffix, &pyprefix, &pydir,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	str := func(v py.Object, typ *uint8) string {
+		switch v := v.(type) {
+		case py.Bytes:
+			*typ = 2
+			return string(v)
+		case py.String:
+			*typ = 1
+			return string(v)
+		case py.NoneType:
+			*typ = 0
+			return ""
+		default:
+			panic(fmt.Errorf("tempfile: invalid type %T (v=%+v)", v, v))
+		}
+	}
+
+	var (
+		t1, t2, t3 uint8
+		suffix     = str(pysuffix, &t1)
+		prefix     = str(pyprefix, &t2)
+		dir        = str(pydir, &t3)
+	)
+	if prefix == "" {
+		prefix = "tmp"
+	}
+
+	// mktemp builds the name with os.path.join on str components, so any
+	// bytes argument is a TypeError - a bytes suffix included, because the
+	// random middle segment is always str.
+	if t1 == 2 || t2 == 2 || t3 == 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "Can't mix strings and bytes in path components")
+	}
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	tmp, err := uniqueName(dir, prefix, suffix)
+	if err != nil {
+		return nil, err
+	}
+	return py.String(tmp), nil
+}
+
+// uniqueName finds a free name by creating the file and removing it again, so
+// the answer is one that did not exist when it was picked (which is all
+// mktemp promises).
+func uniqueName(dir, prefix, suffix string) (string, error) {
+	f, err := os.CreateTemp(dir, prefix+"*"+suffix)
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	f.Close()
+	if err := os.Remove(name); err != nil {
+		return "", err
+	}
+	return name, nil
 }

@@ -1879,7 +1879,7 @@ Return a copy with each byte mapped through the given translation table.`)
 			return nil, err
 		}
 		return Bytes(raw), nil
-	}, 0, `fromhex(string, /) -> bytes
+	}, METH_CLASS, `fromhex(string, /) -> bytes
 
 Create a bytes object from a string of hexadecimal numbers.
 

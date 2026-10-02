@@ -404,7 +404,7 @@ func init() {
 			return nil, loopErr
 		}
 		return out, nil
-	}, 0, "fromkeys(iterable, value=None, /) -> New dict with keys from iterable and values equal to value."))
+	}, METH_CLASS, "fromkeys(iterable, value=None, /) -> New dict with keys from iterable and values equal to value."))
 }
 
 // dictUpdateFrom implements the body shared by dict.update() and

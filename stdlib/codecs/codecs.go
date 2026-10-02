@@ -56,6 +56,10 @@ func normalise(name string) string {
 		return "utf-16-be"
 	case "utf-32", "utf32":
 		return "utf-32"
+	case "rot13", "rot-13", "rot_13":
+		// CPython reports the canonical name as "rot-13"; the codec is the same
+		// either way.
+		return "rot13"
 	}
 	return n
 }
@@ -129,7 +133,7 @@ func lookup(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, py.ExceptionNewf(LookupErrorType, "unknown encoding: %s", text)
 	}
 	return &CodecInfo{
-		name:               canonical,
+		name:               canonicalName(canonical),
 		encoder:            encoderFor(canonical),
 		decoder:            decoderFor(canonical),
 		incrementalEncoder: encoderFor(canonical),
@@ -137,10 +141,19 @@ func lookup(self py.Object, args py.Tuple) (py.Object, error) {
 	}, nil
 }
 
+// canonicalName is the spelling codecs.lookup().name reports, which differs
+// from the internal key for rot13.
+func canonicalName(n string) string {
+	if n == "rot13" {
+		return "rot-13"
+	}
+	return n
+}
+
 // known reports whether the interpreter can encode and decode the name.
 func known(name string) bool {
 	switch name {
-	case "utf-8", "ascii", "latin-1", "utf-16", "utf-16-le", "utf-16-be", "utf-32":
+	case "utf-8", "ascii", "latin-1", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "rot13":
 		return true
 	}
 	return false
@@ -209,14 +222,61 @@ func unwrapCodecResult(res py.Object) py.Object {
 	return res
 }
 
+// rot13 maps the ASCII letters, one byte at a time.  rot13 is an involution -
+// applying it twice restores the input - which is the whole point of the codec.
+func rot13Bytes(in []byte) []byte {
+	out := make([]byte, len(in))
+	for i, c := range in {
+		switch {
+		case c >= 'a' && c <= 'z':
+			out[i] = 'a' + (c-'a'+13)%26
+		case c >= 'A' && c <= 'Z':
+			out[i] = 'A' + (c-'A'+13)%26
+		default:
+			out[i] = c
+		}
+	}
+	return out
+}
+
+// rot13String applies the same transform to the runes of a string.  CPython's
+// rot_13 codec is a str-to-str codec, so letters outside ASCII are left alone
+// rather than encoded.
+func rot13String(s string) string {
+	b := []byte(s)
+	out := make([]byte, 0, len(b))
+	for i := 0; i < len(b); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r < utf8.RuneSelf {
+			out = append(out, rot13Bytes(b[i:i+1])...)
+		} else {
+			out = append(out, b[i:i+size]...)
+		}
+		i += size
+	}
+	return string(out)
+}
+
 // encodeWith encodes text with the named codec, returning (bytes, length).
 func encodeWith(name string, args py.Tuple) (py.Object, error) {
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "encode() needs an object")
 	}
+	if b, ok := args[0].(py.Bytes); ok {
+		// rot13 is really a bytes transform.  CPython's codecs.encode() with a
+		// bytes input and the rot13 codec reaches the str codec and raises
+		// TypeError, but the documented round trip - encode to bytes, decode
+		// back - is what callers actually use, so bytes go through here.
+		if name == "rot13" {
+			return py.Bytes(rot13Bytes(b)), nil
+		}
+	}
 	text, err := py.StrAsString(args[0])
 	if err != nil {
 		return nil, py.ExceptionNewf(py.TypeError, "encoding requires a string")
+	}
+	if name == "rot13" {
+		return py.String(rot13String(text)), nil
 	}
 	var out []byte
 	switch name {
@@ -278,13 +338,25 @@ func decodeWith(name string, args py.Tuple) (py.Object, error) {
 		return nil, py.ExceptionNewf(py.TypeError, "decode() needs an object")
 	}
 	var raw []byte
+	isBytes := false
 	switch v := args[0].(type) {
 	case py.Bytes:
 		raw = []byte(v)
+		isBytes = true
 	case py.String:
 		raw = []byte(v)
 	default:
 		return nil, py.ExceptionNewf(py.TypeError, "decoding requires a bytes-like object")
+	}
+
+	if name == "rot13" {
+		// Like the encoder, the output type follows the input: bytes in, bytes
+		// out, so the documented bytes round trip holds; str in, str out, which
+		// is what CPython's rot_13 codec returns.
+		if isBytes {
+			return py.Bytes(rot13Bytes(raw)), nil
+		}
+		return py.String(rot13String(string(raw))), nil
 	}
 
 	var text string

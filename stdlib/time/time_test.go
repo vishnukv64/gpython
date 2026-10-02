@@ -13,3 +13,7 @@ import (
 func TestTime(t *testing.T) {
 	pytest.RunScript(t, "./testdata/test.py")
 }
+
+func TestStrftime(t *testing.T) {
+	pytest.RunScript(t, "./testdata/strftime.py")
+}

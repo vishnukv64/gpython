@@ -195,6 +195,7 @@ func init() {
 		"Return True if the proxy should be bypassed for the given host."))
 	globals.Set("proxy_bypass_environment", py.MustNewMethod("proxy_bypass_environment", urllibProxyBypassEnvironment, 0,
 		"Return True if the proxy should be bypassed for the given host, per no_proxy."))
+	globals.Set("urlopen", py.MustNewMethod("urlopen", urlopen, 0, urlopen_doc))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

@@ -840,7 +840,7 @@ Return a copy with each byte mapped through the given translation table.`)
 	ByteArrayType.Dict.Set("__hash__", None)
 	ByteArrayType.Dict.Set("__len__", MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
 		return self.(*ByteArray).M__len__()
-	}, 0, "Return the number of bytes in the bytearray."))
+	}, METH_CLASS, "Return the number of bytes in the bytearray."))
 	ByteArrayType.Dict.Set("__sizeof__", MustNewMethod("__sizeof__", func(self Object, args Tuple) (Object, error) {
 		return Int(len(self.(*ByteArray).b)), nil
 	}, 0, "Size of the bytearray object in memory."))

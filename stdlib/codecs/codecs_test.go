@@ -1,3 +1,7 @@
+// Copyright 2024 The go-python Authors.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package codecs_test
 
 import (
@@ -12,4 +16,9 @@ import (
 // per-encoding modules are pinned rather than merely exercised.
 func TestCodecs(t *testing.T) {
 	pytest.RunTests(t, "./testdata")
+}
+
+// TestRot13 checks the rot13 transform round-trips and matches CPython.
+func TestRot13(t *testing.T) {
+	pytest.RunScript(t, "./testdata/rot13.py")
 }

@@ -16,6 +16,7 @@ package datetime
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -343,10 +344,25 @@ func init() {
 	DateTimeType.Dict.Set("isoweekday", py.MustNewMethod("isoweekday", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(int(self.(*DateTime).toTime().Weekday()) + 1), nil
 	}, 0, "Return the day of the week, where Monday is 1."))
+	DateTimeType.Dict.Set("fromisoformat", py.MustNewMethod("fromisoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var text py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "fromisoformat", 1, 1, &text); err != nil {
+			return nil, err
+		}
+		s, err := py.StrAsString(text)
+		if err != nil {
+			return nil, err
+		}
+		d, ok := parseIsoDateTime(s)
+		if !ok {
+			return nil, py.ExceptionNewf(py.ValueError, "Invalid isoformat string: '%s'", s)
+		}
+		return d, nil
+	}, py.METH_CLASS, "Construct a datetime from an ISO 8601 formatted string."))
 
 	DateTimeType.Dict.Set("now", py.MustNewMethod("now", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return fromTime(time.Now()), nil
-	}, 0, "Return the current local date and time."))
+	}, py.METH_CLASS, "Return the current local date and time."))
 	DateTimeType.Dict.Set("utcnow", DateTimeType.Dict.GetOrNil("now"))
 	DateTimeType.Dict.Set("today", DateTimeType.Dict.GetOrNil("now"))
 	DateTimeType.Dict.Set("fromtimestamp", py.MustNewMethod("fromtimestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -361,7 +377,7 @@ func init() {
 		sec := int64(f)
 		nsec := int64((f - float64(sec)) * 1e9)
 		return fromTime(time.Unix(sec, nsec).UTC()), nil
-	}, 0, "Return the local date and time corresponding to a POSIX timestamp."))
+	}, py.METH_CLASS, "Return the local date and time corresponding to a POSIX timestamp."))
 
 	DateTimeType.Dict.Set("timestamp", py.MustNewMethod("timestamp", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*DateTime)
@@ -381,7 +397,7 @@ func init() {
 		}
 		return &DateTime{Year: date.Year, Month: date.Month, Day: date.Day,
 			Hour: clock.Hour, Minute: clock.Minute, Second: clock.Second, Micro: clock.Micro}, nil
-	}, 0, "Combine a date and a time into a datetime."))
+	}, py.METH_CLASS, "Combine a date and a time into a datetime."))
 
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "datetime", Value: DateTimeType},
@@ -832,7 +848,7 @@ func init() {
 	DateType.Dict.Set("isoformat", py.MustNewMethod("isoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Date)
 		return py.String(fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)), nil
-	}, 0, "ISO 8601 form."))
+	}, py.METH_CLASS, "ISO 8601 form."))
 	DateType.Dict.Set("today", py.MustNewMethod("today", func(self py.Object, args py.Tuple) (py.Object, error) {
 		now := time.Now()
 		return &Date{Year: now.Year(), Month: int(now.Month()), Day: now.Day()}, nil
@@ -841,6 +857,40 @@ func init() {
 		d := self.(*Date)
 		return py.Int(int(time.Date(d.Year, time.Month(d.Month), d.Day, 0, 0, 0, 0, time.UTC).Weekday())), nil
 	}, 0, "Day of the week, Monday is 0."))
+	DateType.Dict.Set("toordinal", py.MustNewMethod("toordinal", func(self py.Object, args py.Tuple) (py.Object, error) {
+		d := self.(*Date)
+		return py.Int(ordinal(d.Year, d.Month, d.Day)), nil
+	}, 0, "Return the proleptic Gregorian ordinal of the date."))
+	DateType.Dict.Set("fromordinal", py.MustNewMethod("fromordinal", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var n py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "fromordinal", 1, 1, &n); err != nil {
+			return nil, err
+		}
+		ord, err := py.IndexInt(n)
+		if err != nil {
+			return nil, err
+		}
+		if ord < 1 {
+			return nil, py.ExceptionNewf(py.ValueError, "ordinal must be >= 1")
+		}
+		t := time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, ord-1)
+		return &Date{Year: t.Year(), Month: int(t.Month()), Day: t.Day()}, nil
+	}, py.METH_CLASS, "Construct a date from a proleptic Gregorian ordinal."))
+	DateType.Dict.Set("fromisoformat", py.MustNewMethod("fromisoformat", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var text py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "fromisoformat", 1, 1, &text); err != nil {
+			return nil, err
+		}
+		s, err := py.StrAsString(text)
+		if err != nil {
+			return nil, err
+		}
+		y, m, dd, ok := parseIsoDate(s)
+		if !ok {
+			return nil, py.ExceptionNewf(py.ValueError, "Invalid isoformat string: '%s'", s)
+		}
+		return &Date{Year: y, Month: m, Day: dd}, nil
+	}, py.METH_CLASS, "Construct a date from an ISO 8601 formatted string."))
 
 	ClockType.Dict.Set("hour", intProp(func(self py.Object) int { return self.(*Clock).Hour }))
 	ClockType.Dict.Set("minute", intProp(func(self py.Object) int { return self.(*Clock).Minute }))
@@ -917,6 +967,200 @@ func microPart(micro int) string {
 		return ""
 	}
 	return fmt.Sprintf(", %d", micro)
+}
+
+// ---------------------------------------------------------------------------
+// Arithmetic
+//
+// date/datetime and timedelta add and subtract the way CPython defines them,
+// through the Go interfaces so the vm's binary operators find them.  An
+// operand of any other type returns NotImplemented, which is what lets the vm
+// fall through to the reflected method and finally raise the same TypeError
+// CPython does.
+
+// shiftBy moves a calendar day by a timedelta.  The day count goes through
+// AddDate so that a timedelta of years keeps working: folding the whole
+// duration into a time.Duration would overflow after about 292 years.
+func shiftBy(year, month, day int, t *TimeDelta) (int, int, int) {
+	tt := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	tt = tt.AddDate(0, 0, t.Days)
+	// Seconds and microseconds are normalised non-negative and below their
+	// limits, so this cannot overflow the duration.
+	tt = tt.Add(time.Duration(t.Seconds)*time.Second + time.Duration(t.Microseconds)*time.Microsecond)
+	return tt.Year(), int(tt.Month()), tt.Day()
+}
+
+// ordinal is the proleptic Gregorian ordinal CPython counts from: 0001-01-01
+// is 1, so 1970-01-01 is 719163.
+func ordinal(year, month, day int) int {
+	return int(time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC).Unix()/86400) + 719163
+}
+
+// parseIsoDate parses the ISO 8601 forms CPython's date.fromisoformat accepts:
+// YYYY-MM-DD, the compact YYYYMMDD, and the ISO week form YYYY-Www-D.  It
+// returns the fields and whether the text matched; anything else is the
+// ValueError the caller raises.
+func parseIsoDate(text string) (int, int, int, bool) {
+	if len(text) == 10 && text[4] == '-' && text[5] == 'W' && text[8] == '-' {
+		// YYYY-Www-D: the week form, converted through the ISO year.
+		year := atoiOr(text[0:4], -1)
+		week := atoiOr(text[6:8], -1)
+		day := atoiOr(text[9:10], -1)
+		if year < 0 || week < 1 || week > 53 || day < 1 || day > 7 {
+			return 0, 0, 0, false
+		}
+		// The Monday of ISO week 1 is the week containing January 4th.
+		jan4 := time.Date(year, 1, 4, 0, 0, 0, 0, time.UTC)
+		monday := jan4.AddDate(0, 0, -((int(jan4.Weekday()) + 6) % 7))
+		monday = monday.AddDate(0, 0, (week-1)*7+day-1)
+		return monday.Year(), int(monday.Month()), monday.Day(), true
+	}
+	s := text
+	if len(s) == 10 && s[4] == '-' && s[7] == '-' {
+		s = s[:4] + s[5:7] + s[8:10]
+	}
+	if len(s) != 8 {
+		return 0, 0, 0, false
+	}
+	year := atoiOr(s[0:4], -1)
+	month := atoiOr(s[4:6], -1)
+	day := atoiOr(s[6:8], -1)
+	if year < 0 || month < 0 || day < 0 {
+		return 0, 0, 0, false
+	}
+	if validateDate(year, month, day) != nil {
+		return 0, 0, 0, false
+	}
+	return year, month, day, true
+}
+
+// atoiOr is strconv.Atoi with a fallback, kept local so the parse helpers do
+// not need an error return at every call.
+func atoiOr(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+func (d *Date) M__add__(other py.Object) (py.Object, error) {
+	t, ok := other.(*TimeDelta)
+	if !ok {
+		return py.NotImplemented, nil
+	}
+	y, m, dd := shiftBy(d.Year, d.Month, d.Day, t)
+	return &Date{Year: y, Month: m, Day: dd}, nil
+}
+
+// M__radd__ is the timedelta + date order, which the vm reflects here.
+func (d *Date) M__radd__(other py.Object) (py.Object, error) {
+	return d.M__add__(other)
+}
+
+func (d *Date) M__sub__(other py.Object) (py.Object, error) {
+	switch o := other.(type) {
+	case *TimeDelta:
+		neg := &TimeDelta{Days: -o.Days, Seconds: -o.Seconds, Microseconds: -o.Microseconds}
+		y, m, dd := shiftBy(d.Year, d.Month, d.Day, neg)
+		return &Date{Year: y, Month: m, Day: dd}, nil
+	case *Date:
+		days := ordinal(d.Year, d.Month, d.Day) - ordinal(o.Year, o.Month, o.Day)
+		return &TimeDelta{Days: days}, nil
+	}
+	return py.NotImplemented, nil
+}
+
+func (d *DateTime) M__add__(other py.Object) (py.Object, error) {
+	t, ok := other.(*TimeDelta)
+	if !ok {
+		return py.NotImplemented, nil
+	}
+	y, m, dd := shiftBy(d.Year, d.Month, d.Day, t)
+	tt := time.Date(y, time.Month(m), dd, d.Hour, d.Minute, d.Second, d.Micro*1000, time.UTC).
+		Add(time.Duration(t.Seconds)*time.Second + time.Duration(t.Microseconds)*time.Microsecond)
+	out := fromTime(tt)
+	out.TZInfo = d.TZInfo
+	return out, nil
+}
+
+func (d *DateTime) M__radd__(other py.Object) (py.Object, error) {
+	return d.M__add__(other)
+}
+
+// parseIsoDateTime parses the ISO 8601 forms datetime.fromisoformat accepts.
+// The date part is shared with parseIsoDate; a space or 'T' introduces the
+// time, which may carry a fractional second and an (ignored, naive-keeping)
+// UTC offset.
+func parseIsoDateTime(text string) (*DateTime, bool) {
+	datePart := text
+	rest := ""
+	if i := strings.IndexAny(text, "T "); i >= 0 {
+		datePart, rest = text[:i], text[i+1:]
+	}
+	y, m, dd, ok := parseIsoDate(datePart)
+	if !ok {
+		return nil, false
+	}
+	d := &DateTime{Year: y, Month: m, Day: dd}
+	if rest == "" {
+		t := time.Date(y, time.Month(m), dd, 0, 0, 0, 0, time.UTC)
+		d.Hour, d.Minute, d.Second = t.Hour(), t.Minute(), t.Second()
+		return d, true
+	}
+	// Drop an offset; a naive datetime keeps the wall-clock fields.
+	if i := strings.IndexAny(rest, "+-"); i > 0 {
+		rest = rest[:i]
+	}
+	rest = strings.TrimSuffix(rest, "Z")
+	parts := strings.SplitN(rest, ":", 3)
+	if len(parts) != 3 {
+		return nil, false
+	}
+	h := atoiOr(parts[0], -1)
+	mi := atoiOr(parts[1], -1)
+	secPart := parts[2]
+	frac := 0
+	if i := strings.IndexAny(secPart, ".,"); i >= 0 {
+		fracText := secPart[i+1:]
+		secPart = secPart[:i]
+		if len(fracText) > 6 {
+			fracText = fracText[:6]
+		}
+		for len(fracText) < 6 {
+			fracText += "0"
+		}
+		frac = atoiOr(fracText, 0)
+	}
+	sec := atoiOr(secPart, -1)
+	if h < 0 || mi < 0 || sec < 0 {
+		return nil, false
+	}
+	d.Hour, d.Minute, d.Second, d.Micro = h, mi, sec, frac
+	if err := d.validate(); err != nil {
+		return nil, false
+	}
+	return d, true
+}
+
+func (d *DateTime) M__sub__(other py.Object) (py.Object, error) {
+	switch o := other.(type) {
+	case *TimeDelta:
+		neg := &TimeDelta{Days: -o.Days, Seconds: -o.Seconds, Microseconds: -o.Microseconds}
+		return d.M__add__(neg)
+	case *DateTime:
+		micros := (int64(ordinal(d.Year, d.Month, d.Day))-int64(ordinal(o.Year, o.Month, o.Day)))*86400*1000000 +
+			int64(d.Hour-o.Hour)*3600*1000000 + int64(d.Minute-o.Minute)*60*1000000 +
+			int64(d.Second-o.Second)*1000000 + int64(d.Micro-o.Micro)
+		td := &TimeDelta{
+			Days:         int(micros / (86400 * 1000000)),
+			Seconds:      int((micros % (86400 * 1000000)) / 1000000),
+			Microseconds: int(micros % 1000000),
+		}
+		td.normalize()
+		return td, nil
+	}
+	return py.NotImplemented, nil
 }
 
 // Comparisons.  A datetime is ordered by its value, which is what sorting a

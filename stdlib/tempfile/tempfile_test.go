@@ -13,3 +13,7 @@ import (
 func TestTempfile(t *testing.T) {
 	pytest.RunScript(t, "./testdata/test.py")
 }
+
+func TestMktemp(t *testing.T) {
+	pytest.RunScript(t, "./testdata/mktemp.py")
+}

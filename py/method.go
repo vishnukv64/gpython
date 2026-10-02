@@ -287,9 +287,23 @@ func (m *Method) M__get__(instance, owner Object) (Object, error) {
 	if instance != None {
 		return NewBoundMethod(instance, m), nil
 	}
-	// Read off the CLASS, so there is no instance yet: CPython hands back an
-	// unbound method descriptor, and the caller supplies the instance as the
-	// first argument.  Copying the Method keeps the shared one unmarked.
+	// Read off the CLASS, so there is no instance yet.
+	//
+	// Whether that makes the method UNBOUND depends on whether it is an
+	// instance method or a classmethod, and METH_CLASS is how this codebase
+	// already spells the latter.  The signature cannot tell them apart: both
+	// are written "func(self Object, args Tuple, ...)", and bytes.fromhex
+	// simply ignores the self it is handed while str.upper uses it.
+	//
+	// Marking every class read as unbound ate the first argument of
+	// bytes.fromhex, float.fromhex, int.from_bytes and date.fromisoformat at
+	// once - each is registered as an instance method for want of a flag.
+	if m.Flags&METH_CLASS != 0 || m.Flags&METH_STATIC != 0 {
+		return m, nil
+	}
+	// Otherwise CPython hands back an unbound method descriptor, and the caller
+	// supplies the instance as the first argument - str.upper(s) is s.upper().
+	// Copying the Method keeps the shared one unmarked.
 	unbound := *m
 	unbound.Unbound = true
 	return &unbound, nil
