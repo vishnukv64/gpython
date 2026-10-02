@@ -93,6 +93,34 @@ func (a Bool) M__ne__(other Object) (Object, error) {
 	return True, nil
 }
 
+// Bool is a subclass of int, so it answers the integer operators too.  They
+// delegate to Int, which is what makes "True & True" work: bitwise and,
+// or and xor on two bools raised "unsupported operand type(s)" because Bool
+// implemented none of them.  The result is an Int, as in CPython - "True & 1"
+// is 1, not True.
+func (a Bool) asInt() Int {
+	if a {
+		return Int(1)
+	}
+	return Int(0)
+}
+
+// int(True) is 1 and int(False) is 0.  Bool is a subclass of int, so MakeInt
+// has to be able to convert it: it asks for __int__ first, and without this
+// "int(True)" raised "unsupported operand type(s) for int: 'bool'".
+func (a Bool) M__int__() (Object, error) { return a.asInt(), nil }
+
+func (a Bool) M__and__(other Object) (Object, error)  { return a.asInt().M__and__(other) }
+func (a Bool) M__rand__(other Object) (Object, error) { return a.asInt().M__rand__(other) }
+func (a Bool) M__iand__(other Object) (Object, error) { return a.asInt().M__iand__(other) }
+func (a Bool) M__or__(other Object) (Object, error)   { return a.asInt().M__or__(other) }
+func (a Bool) M__ror__(other Object) (Object, error)  { return a.asInt().M__ror__(other) }
+func (a Bool) M__ior__(other Object) (Object, error)  { return a.asInt().M__ior__(other) }
+func (a Bool) M__xor__(other Object) (Object, error)  { return a.asInt().M__xor__(other) }
+func (a Bool) M__rxor__(other Object) (Object, error) { return a.asInt().M__rxor__(other) }
+func (a Bool) M__ixor__(other Object) (Object, error) { return a.asInt().M__ixor__(other) }
+func (a Bool) M__invert__() (Object, error)           { return a.asInt().M__invert__() }
+
 func notEq(eq Object, err error) (Object, error) {
 	if err != nil {
 		return nil, err
@@ -106,6 +134,16 @@ func notEq(eq Object, err error) (Object, error) {
 // Check interface is satisfied
 var _ I__bool__ = Bool(false)
 var _ I__index__ = Bool(false)
+var _ I__and__ = Bool(false)
+var _ I__rand__ = Bool(false)
+var _ I__iand__ = Bool(false)
+var _ I__or__ = Bool(false)
+var _ I__ror__ = Bool(false)
+var _ I__ior__ = Bool(false)
+var _ I__xor__ = Bool(false)
+var _ I__rxor__ = Bool(false)
+var _ I__ixor__ = Bool(false)
+var _ I__int__ = Bool(false)
 var _ I__str__ = Bool(false)
 var _ I__repr__ = Bool(false)
 var _ I__eq__ = Bool(false)
