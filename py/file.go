@@ -34,6 +34,47 @@ func init() {
 	FileType.Dict["readline"] = MustNewMethod("readline", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(*File).ReadLine(args, kwargs)
 	}, 0, "readline(size=-1, /) -> Read and return one line from the stream. If size is specified, at most size bytes will be read.\n\nThe line terminator is always b'\\n' for binary files; for text files, the newline argument to open can be used to select the line terminator(s) recognized.")
+
+	// A file is its own iterator over its lines.  "for line in open(path)" is
+	// the ordinary way to read a file, and it raised "'file' object is not
+	// iterable".  __next__ is the same readline that returns StopIteration at
+	// the end instead of the empty string.
+	FileType.Dict["__iter__"] = MustNewMethod("__iter__", func(self Object, args Tuple) (Object, error) {
+		return self, nil
+	}, 0, "__iter__() -> self, so a file can be iterated for its lines.")
+	FileType.Dict["__next__"] = MustNewMethod("__next__", func(self Object, args Tuple) (Object, error) {
+		f := self.(*File)
+		line, err := f.ReadLine(nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		if s, ok := line.(String); ok && s == "" {
+			return nil, StopIteration
+		}
+		if b, ok := line.(Bytes); ok && len(b) == 0 {
+			return nil, StopIteration
+		}
+		return line, nil
+	}, 0, "__next__() -> the next line, or StopIteration at the end.")
+
+	FileType.Dict["readlines"] = MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		f := self.(*File)
+		lines := &List{}
+		for {
+			line, err := f.ReadLine(nil, nil)
+			if err != nil {
+				return nil, err
+			}
+			if s, ok := line.(String); ok && s == "" {
+				break
+			}
+			if b, ok := line.(Bytes); ok && len(b) == 0 {
+				break
+			}
+			lines.Append(line)
+		}
+		return lines, nil
+	}, 0, "readlines(hint=-1, /) -> Return a list of lines from the stream.")
 }
 
 type FileMode int
