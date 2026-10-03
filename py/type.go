@@ -352,6 +352,16 @@ func init() {
 		return None, nil
 	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
 
+	// __new__ is registered on the OBJECT type's namespace, so every class
+	// inherits a callable one.  "tuple.__new__(cls, args)" is how a Python
+	// subclass of a builtin constructs itself - pygments' Token type does
+	// exactly that - and without a native __new__ to call, its __new__ raised
+	// "'object' has no attribute '__new__'" and the class could not be built.
+	//
+	// The descriptor form is what makes it useful: "tuple.__new__(T, ...)" must
+	// build a T, and only the owner knows that.
+	ObjectType.Dict.Set("__new__", &nativeNew{})
+
 	// A type is hashable by identity, as in CPython: "{str: 1, bytes: 2}" is
 	// ordinary code (requests builds HEADER_VALIDATORS that way).  Without a
 	// __hash__ the dict key encoder rejected every type as "unhashable type:
@@ -598,9 +608,80 @@ func (a *Type) IsSubtype(b *Type) bool {
 }
 
 // Call type()
+// nativeNew is the __new__ of a type whose constructor is implemented in Go.
+//
+// It exists so that "tuple.__new__(cls, args)" works, which is how a Python
+// subclass of a builtin constructs its own instance.  It is a DESCRIPTOR: the
+// class it is reached through supplies the type, so "tuple.__new__(T, ...)"
+// builds a T rather than a tuple.
+type nativeNew struct{}
+
+func (n *nativeNew) Type() *Type { return TypeType }
+
+func (n *nativeNew) M__get__(instance, owner Object) (Object, error) { return n, nil }
+
+func (n *nativeNew) M__call__(args Tuple, kwargs StringDict) (Object, error) {
+	if len(args) == 0 {
+		return nil, ExceptionNewf(TypeError, "__new__() takes at least 1 argument")
+	}
+	t, ok := args[0].(*Type)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "__new__() requires a type as its first argument")
+	}
+	if t.New == nil {
+		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
+	}
+	return t.New(t, args[1:], kwargs)
+}
+
+// lookupPython returns the named attribute when it is a PYTHON-defined
+// function - a *Function - walking this type's MRO.  nil otherwise.
+//
+// It exists so that a Python override such as __new__ can be told apart from a
+// native one, which is a Go method that the native constructor already calls.
+func (t *Type) lookupPython(name string) Object {
+	if v := t.Lookup(name); v != nil {
+		if _, ok := v.(*Function); ok {
+			return v
+		}
+	}
+	return nil
+}
+
 func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	if t.New == nil {
 		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
+	}
+
+	// A __new__ DEFINED IN PYTHON governs construction.  Without this the
+	// inherited Go constructor ran instead and the override was ignored
+	// entirely: "class T(tuple): def __new__(cls, *a): ..." produced a plain
+	// tuple, so "T()" was not a T at all and every attribute it declares raised
+	// AttributeError.  pygments' Token type is built that way, so pip could not
+	// import pygments.
+	//
+	// The lookup is on the class's own MRO, and only a *Function - something
+	// written in Python - is honoured.  A native __new__ is the Go New the code
+	// below already calls, so consulting it here would recurse.
+	if t.Name != "" {
+		if newFn := t.lookupPython("__new__"); newFn != nil {
+			obj, err := Call(newFn, append(Tuple{t}, args...), kwargs)
+			if err != nil {
+				return nil, err
+			}
+			// __init__ runs only when the result really is an instance of this
+			// class, which is the rule CPython applies.
+			if !obj.Type().IsSubtype(t) {
+				return obj, nil
+			}
+			objType := obj.Type()
+			if objType.Init != nil {
+				if err := objType.Init(obj, args, kwargs); err != nil {
+					return nil, err
+				}
+			}
+			return obj, nil
+		}
 	}
 
 	obj, err := t.New(t, args, kwargs)
@@ -1800,6 +1881,15 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// Allocate the type object
 	_ = nslots // FIXME
 	new_type = metatype.Alloc()
+	// A class's native constructor is exposed as __new__, so that
+	// "tuple.__new__(cls, args)" - which is how a Python subclass of a builtin
+	// constructs itself - actually works.  Only when the class body does NOT
+	// define one: a Python __new__ is kept as written and honoured by
+	// Type.M__call__.
+	if _, hasOwnNew := new_type.Dict.Get("__new__"); !hasOwnNew {
+		new_type.Dict.Set("__new__", &nativeNew{})
+	}
+
 	// A class INHERITS its base's constructor, which is what makes a subclass
 	// of a builtin behave like the builtin: without this, "class D(dict): pass;
 	// D({'a': 1})" produced an EMPTY dict, because the hardcoded ObjectNew

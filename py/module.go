@@ -54,6 +54,17 @@ type ModuleImpl struct {
 type ModuleStore struct {
 	// Registry of installed modules
 	modules map[string]*Module
+	// moduleLike holds objects substituted into sys.modules that are NOT
+	// *Module: a subclass of types.ModuleType, which a Python program builds
+	// when it replaces a module at run time.  pygments does exactly that
+	//
+	//	newmod = _automodule(__name__)   # a types.ModuleType subclass
+	//	sys.modules[__name__] = newmod
+	//
+	// Keeping them in a map of their own means GetModule keeps its *Module
+	// contract for the import machinery - which needs a real Module to compile
+	// into - while sys.modules can still carry what the program put there.
+	moduleLike map[string]Object
 	// Builtin module
 	Builtins *Module
 	// this should be the frozen module importlib/_bootstrap.py generated
@@ -259,6 +270,10 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 
 	// Register the module
 	store.modules[name] = m
+	if store.moduleLike == nil {
+		store.moduleLike = map[string]Object{}
+	}
+	delete(store.moduleLike, name)
 
 	// sys.modules is a LIVE view of this registry.  It is installed here
 	// because this is where the store is at hand; the sys module's own
@@ -286,6 +301,37 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 // that looks itself up there - click does, to find the program name - failed.
 func (store *ModuleStore) Modules() map[string]*Module {
 	return store.modules
+}
+
+// ModuleLike returns the object registered under a name in sys.modules, which
+// may be a *Module or a program-supplied substitute.
+func (store *ModuleStore) ModuleLike(name string) (Object, bool) {
+	store.moduleMu.Lock()
+	defer store.moduleMu.Unlock()
+	if m, ok := store.modules[name]; ok {
+		return m, true
+	}
+	if o, ok := store.moduleLike[name]; ok {
+		return o, true
+	}
+	return nil, false
+}
+
+// SetModuleLike registers a module substitute.  A *Module goes into the real
+// registry, so the import system finds it as usual; anything else - a Python
+// subclass of types.ModuleType - goes into the overlay.
+func (store *ModuleStore) SetModuleLike(name string, value Object) {
+	store.moduleMu.Lock()
+	defer store.moduleMu.Unlock()
+	if store.moduleLike == nil {
+		store.moduleLike = map[string]Object{}
+	}
+	if m, ok := value.(*Module); ok {
+		store.modules[name] = m
+		delete(store.moduleLike, name)
+		return
+	}
+	store.moduleLike[name] = value
 }
 
 // Gets a module
@@ -391,7 +437,7 @@ func (m *ModulesView) M__contains__(item Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, ok := m.store.Modules()[name]
+	_, ok := m.store.ModuleLike(name)
 	return NewBool(ok), nil
 }
 
@@ -400,7 +446,7 @@ func (m *ModulesView) M__getitem__(key Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	mod, ok := m.store.Modules()[name]
+	mod, ok := m.store.ModuleLike(name)
 	if !ok {
 		return nil, ExceptionNewf(KeyError, "'%s'", name)
 	}
@@ -414,11 +460,16 @@ func (m *ModulesView) M__setitem__(key, value Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	mod, ok := value.(*Module)
-	if !ok {
-		return nil, ExceptionNewf(TypeError, "sys.modules values must be modules, not '%s'", value.Type().Name)
+	// A module SUBSTITUTE is accepted: CPython allows anything with a module
+	// shape, and pygments puts a "types.ModuleType" subclass here.  Refusing it
+	// meant "sys.modules[__name__] = newmod" raised and pip could not import
+	// pygments at all.
+	if _, ok := value.(*Module); !ok {
+		if _, isType := value.(*Type); !isType {
+			return nil, ExceptionNewf(TypeError, "sys.modules values must be modules, not '%s'", value.Type().Name)
+		}
 	}
-	m.store.Modules()[name] = mod
+	m.store.SetModuleLike(name, value)
 	return None, nil
 }
 
