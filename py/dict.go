@@ -959,6 +959,12 @@ func dictKey(key Object) (string, error) {
 }
 
 func appendKey(b *[]byte, key Object) error {
+	// A payload-carrying instance encodes as the container it carries, so
+	// "d[T((1,2))]" finds the entry "d[(1, 2)]" stored - the two are equal and
+	// hash alike, and a key must encode alike to be found.
+	if payload, ok := payloadOf(key); ok {
+		key = payload
+	}
 	switch k := key.(type) {
 	case String:
 		s := string(k)
