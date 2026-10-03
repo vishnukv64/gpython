@@ -330,6 +330,27 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 
 	// Now look in type's dictionary etc
 	t := self.Type()
+
+	// A PURE-PYTHON instance is a *Type with an empty Name, and its attributes
+	// must come from its class's MRO before the metatype is consulted: the
+	// metatype describes the CLASS, not the instance.  Without this ordering an
+	// attribute the metatype happens to have shadowed the instance's own.
+	//
+	// This does NOT fix a subclass of a NATIVE type - "class E(Filter)" - whose
+	// instance is a Go struct rather than a *Type.  There type(e) reports the
+	// native base and the base's methods win over the subclass's overrides,
+	// which is a limitation of the object model, not of this lookup.  See the
+	// note in py/type.go.
+	if ty, isInstance := self.(*Type); isInstance && ty.Name == "" && ty.ObjectType != nil {
+		t = ty.ObjectType
+		if own := t.Lookup(key); own != nil {
+			if I, ok := own.(I__get__); ok {
+				return I.M__get__(self, t)
+			}
+			return own, nil
+		}
+	}
+
 	res = t.NativeGetAttrOrNil(key)
 
 	// A class's attributes live in its OWN bases before its metatype's:

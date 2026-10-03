@@ -62,7 +62,63 @@ type LogRecord struct {
 	Created  float64
 }
 
-var LogRecordType = py.NewType("logging.LogRecord", "A LogRecord instance represents an event being logged.")
+var LogRecordType = py.NewTypeX("logging.LogRecord",
+	"A LogRecord instance represents an event being logged.",
+	func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		// CPython's signature is LogRecord(name, level, pathname, lineno, msg,
+		// args, exc_info, func=None, sinfo=None).  A record can be built
+		// directly - a Filter is handed one, and a test constructs one - so the
+		// type has to be constructible rather than raising.
+		rec := &LogRecord{Created: 0}
+		var name, pathname, funcName string
+		var level, lineno int
+		var msg, a, exc py.Object
+		get := func(i int, kw string) py.Object {
+			if v, ok := kwargs.Get(kw); ok {
+				return v
+			}
+			if i < len(args) {
+				return args[i]
+			}
+			return nil
+		}
+		if v := get(0, "name"); v != nil {
+			name, _ = py.StrAsString(v)
+		}
+		if v := get(1, "level"); v != nil {
+			level = int(intArgOf(v))
+		}
+		if v := get(2, "pathname"); v != nil {
+			pathname, _ = py.StrAsString(v)
+		}
+		if v := get(3, "lineno"); v != nil {
+			lineno = int(intArgOf(v))
+		}
+		if v := get(4, "msg"); v != nil {
+			msg = v
+		}
+		if v := get(5, "args"); v != nil {
+			a = v
+		}
+		if v := get(6, "exc_info"); v != nil {
+			exc = v
+		}
+		if v := get(7, "func"); v != nil {
+			funcName, _ = py.StrAsString(v)
+		}
+		rec.Name, rec.LevelNo, rec.Pathname, rec.Lineno = name, level, pathname, lineno
+		rec.Msg, rec.Args, rec.ExcInfo, rec.FuncName = msg, a, exc, funcName
+		return rec, nil
+	}, nil)
+
+// intArgOf reads an integer from a Python value, returning 0 when it is not one.
+func intArgOf(o py.Object) int64 {
+	if v, ok := o.(py.Int); ok {
+		n, _ := v.GoInt64()
+		return n
+	}
+	return 0
+}
 
 func (r *LogRecord) Type() *py.Type { return LogRecordType }
 
@@ -84,6 +140,72 @@ func (r *LogRecord) getMessage() (string, error) {
 }
 
 // Handler is the base class: anything that can emit a formatted record.
+// filterObj is the Go value behind logging.Filter.
+type filterObj struct {
+	name string
+}
+
+var filterType = py.NewTypeX("logging.Filter",
+	"Filter instances are used to perform arbitrary filtering of LogRecords.",
+	func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		f := &filterObj{}
+		// __init__ is not run for a NewTypeX-built type, so the name is applied
+		// here - the same reason logging.handlers applies its arguments in its
+		// constructor.
+		if len(args) > 0 {
+			f.name, _ = py.StrAsString(args[0])
+		}
+		if v, ok := kwargs.Get("name"); ok {
+			f.name, _ = py.StrAsString(v)
+		}
+		return f, nil
+	}, nil)
+
+func (f *filterObj) Type() *py.Type { return filterType }
+
+// filterMatches is the filtering rule itself, CPython's Filter.filter: a record
+// from the named logger OR ANY OF ITS CHILDREN passes.
+//
+// The child rule is the whole point - "Filter('a')" passes "a.b" - and getting it
+// backwards turns a filter into a silencer.
+func filterMatches(name, recordName string) bool {
+	if name == "" {
+		return true
+	}
+	return recordName == name || strings.HasPrefix(recordName, name+".")
+}
+
+// filterOf returns the filter behind an object, or false when it has none.
+//
+// A filter written in Python is a subclass of this type, so it is not a
+// *filterObj; its filter() method is what must run.  Callers use this only to
+// reach the method, never to assume the Go type.
+func filterNameOf(o py.Object) (string, bool) {
+	switch f := o.(type) {
+	case *filterObj:
+		return f.name, true
+	}
+	return "", false
+}
+
+// runFilter calls an object's filter(record) and reports whether it passed.
+//
+// Anything callable is accepted, because a Python subclass of Filter keeps its
+// override as a method rather than being a *filterObj.
+func runFilter(o py.Object, record *LogRecord) (bool, error) {
+	fn, err := py.GetAttrString(o, "filter")
+	if err != nil {
+		// No filter method: a filter object without one passes everything, as
+		// CPython's duck-typing expects.
+		return true, nil
+	}
+	res, err := py.Call(fn, py.Tuple{record}, py.NewStringDict())
+	if err != nil {
+		return false, err
+	}
+	return res == py.True, nil
+}
+
 type Handler struct {
 	level     int
 	formatter *Formatter
@@ -95,6 +217,9 @@ type Handler struct {
 	// handler from another module.  callHandlers uses it to reach the
 	// subclass's own emit rather than the base one.
 	owner py.Object
+	// filters are run before a record is emitted; one returning false
+	// suppresses it.
+	filters []py.Object
 }
 
 var HandlerType = py.NewTypeX("logging.Handler",
@@ -155,6 +280,8 @@ type Logger struct {
 	parent   *Logger
 	// propagate mirrors the attribute of the same name.
 	propagate bool
+	// filters are run before dispatch; one returning false drops the record.
+	filters []py.Object
 }
 
 var LoggerType = py.NewType("logging.Logger", "A Logger is a named logging channel.")
@@ -324,6 +451,22 @@ func getLogger(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 
 // callHandlers runs the record through this logger and, unless propagation
 // stops, its ancestors.
+// handlerDrops runs a handler's filters, reporting whether the record is
+// suppressed.  A filter that returns a falsey value drops the record, which is
+// the rule for a Python subclass too.
+func handlerDrops(h *Handler, record *LogRecord) (bool, error) {
+	for _, f := range h.filters {
+		passes, err := runFilter(f, record)
+		if err != nil {
+			return false, err
+		}
+		if !passes {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (l *Logger) callHandlers(record *LogRecord) error {
 	for logger := l; logger != nil; logger = logger.parent {
 		for _, h := range logger.handlers {
@@ -366,6 +509,21 @@ func (l *Logger) handle(level int, msg py.Object, args py.Object) (bool, error) 
 		LevelNo: level,
 		Msg:     msg,
 		Args:    args,
+	}
+	// This logger's filters, and every ancestor's, run BEFORE dispatch - a
+	// record dropped here never reaches a handler.  pip's ExcludeLoggerFilter
+	// depends on it: it suppresses a whole logger's output, and without this the
+	// filter was silently ignored and every record was written anyway.
+	for logger := l; logger != nil; logger = logger.parent {
+		for _, f := range logger.filters {
+			passes, ferr := runFilter(f, record)
+			if ferr != nil {
+				return false, ferr
+			}
+			if !passes {
+				return false, nil
+			}
+		}
 	}
 	if err := l.callHandlers(record); err != nil {
 		return false, err
@@ -1091,6 +1249,59 @@ func getLevelName(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 }
 
 func init() {
+	LoggerType.Dict.Set("addFilter", py.MustNewMethod("addFilter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		l, ok := self.(*Logger)
+		if !ok || len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "addFilter() takes a filter")
+		}
+		for _, existing := range l.filters {
+			if existing == args[0] {
+				return py.None, nil
+			}
+		}
+		l.filters = append(l.filters, args[0])
+		return py.None, nil
+	}, 0, "Add the specified filter to this logger."))
+
+	LoggerType.Dict.Set("removeFilter", py.MustNewMethod("removeFilter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		l, ok := self.(*Logger)
+		if !ok || len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "removeFilter() takes a filter")
+		}
+		for i, f := range l.filters {
+			if f == args[0] {
+				l.filters = append(l.filters[:i], l.filters[i+1:]...)
+				break
+			}
+		}
+		return py.None, nil
+	}, 0, "Remove the specified filter from this logger."))
+
+	// filter consults this logger's filters AND every ancestor's: a record is
+	// dispatched up the chain, and each level may drop it.
+	LoggerType.Dict.Set("filter", py.MustNewMethod("filter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		l, ok := self.(*Logger)
+		if !ok || len(args) < 1 {
+			return py.True, nil
+		}
+		rec, ok := args[0].(*LogRecord)
+		if !ok {
+			return py.True, nil
+		}
+		for logger := l; logger != nil; logger = logger.parent {
+			for _, f := range logger.filters {
+				passes, err := runFilter(f, rec)
+				if err != nil {
+					return nil, err
+				}
+				if !passes {
+					return py.False, nil
+				}
+			}
+		}
+		return py.True, nil
+	}, 0, "Run this logger's filters and its ancestors'; a record is dropped when any returns false."))
+
 	LoggerType.Dict.Set("debug", py.MustNewMethod("debug", loggerDebug, 0, "Log 'msg % args' with severity 'DEBUG'."))
 	LoggerType.Dict.Set("info", py.MustNewMethod("info", loggerInfo, 0, "Log 'msg % args' with severity 'INFO'."))
 	LoggerType.Dict.Set("warning", py.MustNewMethod("warning", loggerWarning, 0, "Log 'msg % args' with severity 'WARNING'."))
@@ -1105,6 +1316,100 @@ func init() {
 	LoggerType.Dict.Set("getEffectiveLevel", py.MustNewMethod("getEffectiveLevel", loggerGetEffectiveLevel, 0, loggerGetEffectiveLevel_doc))
 	LoggerType.Dict.Set("addHandler", py.MustNewMethod("addHandler", loggerAddHandler, 0, loggerAddHandler_doc))
 	LoggerType.Dict.Set("removeHandler", py.MustNewMethod("removeHandler", loggerRemoveHandler, 0, loggerRemoveHandler_doc))
+
+	// logging.Filter.  pip subclasses it - "class ExcludeLoggerFilter(Filter)" -
+	// and calls super().filter(record), so the base implementation has to be a
+	// real method on a real type.
+	filterType.Dict.Set("__init__", py.MustNewMethod("__init__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		f, ok := self.(*filterObj)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "not a Filter")
+		}
+		if len(args) > 0 {
+			f.name, _ = py.StrAsString(args[0])
+		}
+		if v, ok := kwargs.Get("name"); ok {
+			f.name, _ = py.StrAsString(v)
+		}
+		return py.None, nil
+	}, 0, "__init__(name='')"))
+
+	filterType.Dict.Set("filter", py.MustNewMethod("filter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "filter() takes a record")
+		}
+		rec, ok := args[0].(*LogRecord)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "a LogRecord is required")
+		}
+		name, _ := filterNameOf(self)
+		return py.NewBool(filterMatches(name, rec.Name)), nil
+	}, 0, "Filter a record: pass it when it came from the named logger or a child."))
+
+	filterType.Dict.Set("name", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			name, _ := filterNameOf(self)
+			return py.String(name), nil
+		},
+		Fset: func(self py.Object, value py.Object) error {
+			if f, ok := self.(*filterObj); ok {
+				f.name, _ = py.StrAsString(value)
+			}
+			return nil
+		},
+		Doc: "The name of the logger this filter admits.",
+	})
+
+	HandlerType.Dict.Set("addFilter", py.MustNewMethod("addFilter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		h, ok := HandlerOf(self)
+		if !ok || len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "addFilter() takes a filter")
+		}
+		// The filter object is KEPT AS GIVEN, not unwrapped: a Python subclass's
+		// filter() override is what has to run.
+		for _, existing := range h.filters {
+			if existing == args[0] {
+				return py.None, nil
+			}
+		}
+		h.filters = append(h.filters, args[0])
+		return py.None, nil
+	}, 0, "Add the specified filter to this handler."))
+
+	HandlerType.Dict.Set("removeFilter", py.MustNewMethod("removeFilter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		h, ok := HandlerOf(self)
+		if !ok || len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "removeFilter() takes a filter")
+		}
+		for i, f := range h.filters {
+			if f == args[0] {
+				h.filters = append(h.filters[:i], h.filters[i+1:]...)
+				break
+			}
+		}
+		return py.None, nil
+	}, 0, "Remove the specified filter from this handler."))
+
+	HandlerType.Dict.Set("filter", py.MustNewMethod("filter", func(self py.Object, args py.Tuple) (py.Object, error) {
+		h, ok := HandlerOf(self)
+		if !ok || len(args) < 1 {
+			return py.True, nil
+		}
+		rec, ok := args[0].(*LogRecord)
+		if !ok {
+			return py.True, nil
+		}
+		for _, f := range h.filters {
+			passes, err := runFilter(f, rec)
+			if err != nil {
+				return nil, err
+			}
+			if !passes {
+				return py.False, nil
+			}
+		}
+		return py.True, nil
+	}, 0, "Run every filter; a record is dropped when any returns false."))
 
 	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
 	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
@@ -1202,6 +1507,7 @@ define __init__ such that it requires only a name argument.`),
 			py.DictEntry{Key: "NOTSET", Value: py.Int(NOTSET)},
 			py.DictEntry{Key: "Logger", Value: LoggerType},
 			py.DictEntry{Key: "LogRecord", Value: LogRecordType},
+			py.DictEntry{Key: "Filter", Value: filterType},
 			py.DictEntry{Key: "Handler", Value: HandlerType},
 			py.DictEntry{Key: "StreamHandler", Value: StreamHandlerType},
 			py.DictEntry{Key: "FileHandler", Value: FileHandlerType},
