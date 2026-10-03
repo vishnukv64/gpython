@@ -41,19 +41,11 @@ func init() {
 	// In CPython "class L(list): pass" is ordinary.  Here an instance of a
 	// python-level class is represented as a *Type whose namespace is a DICT -
 	// which is exactly what a dict subclass needs, so dict subclassing works -
-	// but a sequence has POSITIONAL items and a namespace has nowhere to put
-	// them.  "class L(list): pass; L([1,2])" produced an object whose len()
-	// raised "object of type 'L' has no len()": a class you can define and
-	// never use.
-	//
-	// Refusing the base is the honest answer.  Making it truly work needs the
-	// instance representation to carry a payload - the "FIXME not telling
-	// instances and classes apart" running through py/type.go.
-	//
-	// NoSubclass rather than clearing the flag: NewType inherits flags from the
-	// superclass, so ListType inherits BASETYPE from object, and clearing it
-	// here does not stick because Ready() assigns the flags afterwards.
-	ListType.NoSubclass = true
+	// list IS subclassable.  It used to be refused, because an instance of a
+	// python-level class is a *Type whose namespace is a dict and a sequence has
+	// positional items with nowhere to put them: "class L(list): pass; L([1,2])"
+	// produced an object whose len() raised.  Type.Payload now carries the value,
+	// and the container protocols read it, so the refusal is gone.
 
 	// FIXME: all methods should be callable using list.method([], *args, **kwargs) or [].method(*args, **kwargs)
 	ListType.Dict.Set("append", MustNewMethod("append", func(self Object, args Tuple) (Object, error) {

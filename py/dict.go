@@ -1082,6 +1082,12 @@ func appendKey(b *[]byte, key Object) error {
 // none.  A __hash__ that is None means explicitly unhashable, which is how a
 // class says "do not use me as a key" - a list is the builtin example.
 func hashOf(key Object) (string, bool) {
+	// A payload-carrying instance, and every type with a natural hash, is hashed
+	// from its VALUE.  HashValue has no case that calls back here - its fallback
+	// performs the __hash__ lookup itself - so this cannot recurse.
+	if n, ok := HashValue(key); ok {
+		return strconv.FormatInt(n, 10), true
+	}
 	// hash(x) is type(x).__hash__(x), and for a CLASS that is the METATYPE's
 	// __hash__ - the identity hash on "type".  Going through the class's own
 	// __hash__ instead picked up the method meant for its INSTANCES: h11's
@@ -1106,6 +1112,70 @@ func hashOf(key Object) (string, bool) {
 		return "", false
 	}
 	return strconv.FormatInt(int64(n), 10), true
+}
+
+// HashValue returns an object's hash as an int64, the way hash() reports it.
+//
+// This is the value hash() returns for the concrete types that have a natural
+// hash.  A tuple's is computed from its ELEMENTS, because a tuple has no
+// __hash__ of its own to look up; anything else falls back to its own
+// __hash__, which is what makes a user type's hash respected.
+func HashValue(o Object) (int64, bool) {
+	// A payload-carrying instance hashes as the container it carries, so
+	// "hash(T((1,2))) == hash((1,2))" and the two key the same dict entry.
+	if payload, ok := payloadOf(o); ok {
+		return HashValue(payload)
+	}
+	switch v := o.(type) {
+	case NoneType:
+		return 0, true
+	case Bool:
+		if v {
+			return 1, true
+		}
+		return 0, true
+	case Int:
+		return int64(v), true
+	case Float:
+		return int64(float64(v)), true
+	case String:
+		return MemoryHash([]byte(v)), true
+	case Bytes:
+		return MemoryHash([]byte(v)), true
+	case Tuple:
+		// CPython's sequence hash: combine the elements in order, so the same
+		// items in a different order hash differently.
+		var h int64 = 0x345678
+		for _, item := range v {
+			ih, ok := HashValue(item)
+			if !ok {
+				return 0, false
+			}
+			h = (h ^ ih) * 1000003
+		}
+		return h ^ int64(len(v)), true
+	}
+	// Anything else answers through its own __hash__, looked up on its TYPE - the
+	// metatype for a class, the class for an instance.
+	//
+	// This deliberately does NOT call hashOf: hashOf routes back here, and the
+	// two together recursed until the process died.
+	target := o.Type()
+	if t, isType := o.(*Type); isType && t.ObjectType != nil {
+		target = t.ObjectType
+	}
+	res, found, err := target.CallMethod("__hash__", Tuple{o}, NewStringDict())
+	if err != nil || !found {
+		return 0, false
+	}
+	if _, isNone := res.(NoneType); isNone {
+		return 0, false
+	}
+	n, err := Index(res)
+	if err != nil {
+		return 0, false
+	}
+	return int64(n), true
 }
 
 // DictKey encodes an object into the string form used to store dict keys.

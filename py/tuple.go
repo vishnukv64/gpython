@@ -124,7 +124,13 @@ func (a Tuple) M__add__(other Object) (Object, error) {
 	if b, ok := other.(Tuple); ok {
 		newTuple := make(Tuple, len(a)+len(b))
 		copy(newTuple, a)
-		copy(newTuple[len(b):], b)
+		// The second copy goes at len(a) - where the first one ENDS.  Writing it
+		// at len(b) instead left a nil slot whenever the two lengths differed:
+		// "() + ('AAA',)" produced a 1-element tuple whose single entry was nil,
+		// and the nil then PANICKED the host process the moment anything looked
+		// at it - repr, a loop, or a list().  "('AAA',) + ()" happened to work
+		// because there len(b) is 0 and equals len(a).
+		copy(newTuple[len(a):], b)
 		return newTuple, nil
 	}
 

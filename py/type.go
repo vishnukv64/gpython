@@ -108,6 +108,26 @@ type Type struct {
 	// check reads this field, which is the one place that decides.
 	NoSubclass bool
 
+	// Payload is where an INSTANCE of a Python subclass of a builtin container
+	// keeps its data.
+	//
+	// An instance of a python-level class is a *Type whose namespace is a Dict,
+	// so "class D(dict)" works - the instance's Dict IS the mapping.  A
+	// SEQUENCE has positional items and a namespace has nowhere to put them, so
+	// "class L(list); L([1, 2])" produced an object whose len() raised, and
+	// "class _TokenType(tuple)" - pygments' token type, which pip needs - was not
+	// a tuple at all, so "Token.Text" raised AttributeError.
+	//
+	// This field holds the value the native constructor produced, and the
+	// container protocols read it.  It is nil on every class and on every
+	// ordinary python-level instance, which is what distinguishes an instance
+	// that carries data from one that does not.
+	//
+	// An instance is NOT marked by any other field: Name is empty for every
+	// instance and ObjectType points at the class, so Payload is the one thing
+	// that says "a builtin's data lives here".
+	Payload Object
+
 	/*
 	   Py_ssize_t tp_basicsize, tp_itemsize; // For allocation
 
@@ -634,6 +654,46 @@ func (n *nativeNew) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	return t.New(t, args[1:], kwargs)
 }
 
+// payloadContainers are the builtin containers whose whole content can live in
+// an instance's Payload.
+//
+// A dict subclass is NOT among them: an instance's Dict already IS the mapping,
+// and the dict machinery reaches it through dictStorage, which is the
+// arrangement that already makes "class D(dict)" work.  A set, list and tuple
+// have positional contents and nothing to read them from, so their subclass
+// instances read the Payload.
+var payloadContainers = []*Type{TupleType, ListType, SetType}
+
+// isUserContainerSubclass reports whether t is a class the program declared that
+// derives from a builtin container, and value is that container's own value.
+func isUserContainerSubclass(t *Type, value Object) bool {
+	if t == nil || t.Name == "" {
+		// A class always has a name; an instance does not.
+		return false
+	}
+	// Do not wrap a value that is ALREADY an instance of t - a constructor that
+	// honoured its class has nothing left to do.
+	if value.Type() == t {
+		return false
+	}
+	ot := value.Type()
+	for _, c := range payloadContainers {
+		if ot == c && t.IsSubtype(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// unwrapPayload returns the container behind a value, so that wrapping a value
+// that already carries a payload does not nest two of them.
+func unwrapPayload(o Object) Object {
+	if p, ok := payloadOf(o); ok {
+		return p
+	}
+	return o
+}
+
 // lookupPython returns the named attribute when it is a PYTHON-defined
 // function - a *Function - walking this type's MRO.  nil otherwise.
 //
@@ -687,6 +747,24 @@ func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	obj, err := t.New(t, args, kwargs)
 	if err != nil {
 		return nil, err
+	}
+	// A Python subclass of a BUILTIN CONTAINER carries the value its native
+	// constructor produced.  Without this the value was of the BASE type:
+	// "class _TokenType(tuple); _TokenType()" was a plain tuple, so "Token.Text"
+	// raised AttributeError and pygments' token table could not be built.
+	//
+	// The condition is deliberately narrow.  It fires only when the value's type
+	// is a builtin container this class DERIVES FROM, and the class is one the
+	// program declared - so a native constructor that honoured its argument (a
+	// dict subclass, say) is untouched, and a __new__ returning something else
+	// entirely is left alone, as CPython does.
+	if isUserContainerSubclass(t, obj) {
+		obj = &Type{
+			ObjectType: t,
+			Base:       t,
+			Dict:       NewStringDict(),
+			Payload:    unwrapPayload(obj),
+		}
 	}
 	// Ugly exception: when the call was type(something),
 	// don't call tp_init on the result.
@@ -2272,6 +2350,19 @@ func (ty *Type) M__str__() (Object, error) {
 
 func (ty *Type) M__repr__() (Object, error) {
 	if ty.Name == "" {
+		// A Python __repr__ on the class wins; then the payload's.
+		//
+		// pygments' Token defines __repr__, and its children print as
+		// "Token.Text" because of this.  A plain subclass with none prints as
+		// its container, which is what "class L(list)" should do.
+		if fn := ty.lookupPython("__repr__"); fn != nil {
+			if res, err := Call(fn, Tuple{ty}, NewStringDict()); err == nil {
+				return res, nil
+			}
+		}
+		if payload, ok := payloadOf(ty); ok {
+			return Repr(payload)
+		}
 		if res, ok, err := ty.CallMethod("__repr__", Tuple{ty}, NewStringDict()); ok {
 			return res, err
 		}

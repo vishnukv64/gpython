@@ -61,6 +61,15 @@ Hash values are integers.  Two objects that compare equal must have the same
 hash value.`
 
 func builtin_hash(self, obj py.Object) (py.Object, error) {
+	// The concrete types with a natural hash - a tuple, an int, a string, and
+	// an instance of a subclass carrying one - are hashed from their VALUE,
+	// through the same encoder a dict key takes.  This comes FIRST: a tuple
+	// defines no __hash__ of its own, so the lookup below found object's
+	// identity descriptor and raised "descriptor '__hash__' requires a 'type'
+	// object".
+	if n, ok := py.HashValue(obj); ok {
+		return py.Int(n), nil
+	}
 	// An explicit __hash__ wins, and a __hash__ of None makes the object
 	// unhashable.
 	if h, ok := obj.(py.I__hash__); ok {
@@ -89,6 +98,14 @@ func builtin_hash(self, obj py.Object) (py.Object, error) {
 		// no __hash__ and no case here either.  Equal bytes hash equal, which
 		// is what put them in a set or dict key.
 		return py.Int(hashBytes([]byte(v))), nil
+	case py.Tuple:
+		// A TUPLE is hashable and "hash((1, 2))" must work.  It had no case
+		// here, so it fell through to the __hash__ lookup, which found object's
+		// identity descriptor and raised "descriptor '__hash__' requires a 'type'
+		// object" -- while "{(1, 2): 'v'}" worked, because dict keys go through a
+		// different encoder.  CPython's rule is order-sensitive: tuples with the
+		// same items in a different order hash differently.
+		return py.Int(hashObjects(v)), nil
 	}
 
 	if obj.Type().Lookup("__hash__") == nil {
@@ -101,6 +118,23 @@ func builtin_hash(self, obj py.Object) (py.Object, error) {
 		return nil, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", obj.Type().Name)
 	}
 	return py.Call(h, py.Tuple{}, py.StringDict{})
+}
+
+// hashObjects hashes a sequence of objects in order, as CPython's tuple hash
+// does - ("a", "b") and ("b", "a") must not collide.
+//
+// Each element is hashed through hashOf, the same encoder a dict key uses, so
+// an element hashes here exactly as it does as a key.
+func hashObjects(items py.Tuple) int64 {
+	var h int64 = 0x345678
+	for _, it := range items {
+		k, ok := py.HashValue(it)
+		if !ok {
+			return 0
+		}
+		h = (h ^ k) * 1000003
+	}
+	return h ^ int64(len(items))
 }
 
 const issubclass_doc = `Return whether class is a derived class of another class or of any of

@@ -33,6 +33,24 @@ func ObjectIsTrue(o Object) (cmp bool, err error) {
 		return false, nil
 	}
 
+	// A payload-carrying instance is truthy exactly when its container is:
+	// "bool(T())" on an empty tuple subclass must be False, and it answered True
+	// because the lookup found the identity __bool__ every object has.
+	//
+	// Checked before the type dispatch, and only when the CLASS defines no
+	// __bool__ of its own - a Python override still wins.
+	if payload, ok := payloadOf(o); ok {
+		println("DBG bool payload:", ok, "lookupPython bool nil:", func() bool {
+			if ty, i := o.(*Type); i {
+				return ty.lookupPython("__bool__") == nil
+			}
+			return true
+		}())
+		if ty, isInst := o.(*Type); isInst && ty.lookupPython("__bool__") == nil {
+			return ObjectIsTrue(payload)
+		}
+	}
+
 	var res Object
 	switch t := o.(type) {
 	case I__bool__:

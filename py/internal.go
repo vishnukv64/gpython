@@ -34,6 +34,18 @@ func MakeBool(a Object) (Object, error) {
 		return a, nil
 	}
 
+	// A payload-carrying instance is truthy exactly when its container is:
+	// "bool(T())" on an empty tuple subclass must be False.  It answered True
+	// because the lookup below found the identity __bool__ every object has.
+	//
+	// A __bool__ the CLASS defines still wins, because that is a *Function and
+	// is checked first.
+	if payload, ok := payloadOf(a); ok {
+		if ty, isInst := a.(*Type); isInst && ty.lookupPython("__bool__") == nil {
+			return MakeBool(payload)
+		}
+	}
+
 	if A, ok := a.(I__bool__); ok {
 		res, err := A.M__bool__()
 		if err != nil {
@@ -145,6 +157,13 @@ func IndexIntCheck(a Object, max int) (int, error) {
 
 // Returns the number of items of a sequence or mapping
 func Len(self Object) (Object, error) {
+	// An instance of a Python subclass of a builtin container carries its value
+	// in Payload, and the length is the VALUE's.  Unwrapping here covers every
+	// caller - the Go path and the method path alike - because this is the one
+	// place both route through.
+	if payload, ok := payloadOf(self); ok {
+		return Len(payload)
+	}
 	if I, ok := self.(I__len__); ok {
 		return I.M__len__()
 	} else if res, ok, err := TypeCall0(self, "__len__"); ok {
@@ -197,6 +216,11 @@ func Call(fn Object, args Tuple, kwargs StringDict) (Object, error) {
 
 // GetItem
 func GetItem(self Object, key Object) (Object, error) {
+	// The payload first, so "class L(list); L([1,2])[0]" is the element the list
+	// holds rather than an item lookup on the instance's namespace.
+	if payload, ok := payloadOf(self); ok {
+		return GetItem(payload, key)
+	}
 	// "X[params]" on a class is __class_getitem__ in Python 3.7 and later.
 	// The classes that define it accept any parameters - the abstract base
 	// classes do, and the parameters only matter to a type checker - so the
@@ -248,6 +272,11 @@ func GetItem(self Object, key Object) (Object, error) {
 
 // SetItem
 func SetItem(self Object, key Object, value Object) (Object, error) {
+	// The payload's element is the one assigned: "L([1])[0] = 9" is
+	// list.__setitem__ on the list the instance carries.
+	if payload, ok := payloadOf(self); ok {
+		return SetItem(payload, key, value)
+	}
 	if I, ok := self.(I__setitem__); ok {
 		return I.M__setitem__(key, value)
 	} else if res, ok, err := TypeCall2(self, "__setitem__", key, value); ok {
@@ -259,6 +288,9 @@ func SetItem(self Object, key Object, value Object) (Object, error) {
 
 // Delitem
 func DelItem(self Object, key Object) (Object, error) {
+	if payload, ok := payloadOf(self); ok {
+		return DelItem(payload, key)
+	}
 	if I, ok := self.(I__delitem__); ok {
 		return I.M__delitem__(key)
 	} else if res, ok, err := TypeCall1(self, "__delitem__", key); ok {
@@ -565,6 +597,9 @@ func ReprAsString(self Object) (string, error) {
 //
 // If object is sequence object, create an iterator
 func Iter(self Object) (res Object, err error) {
+	if payload, ok := payloadOf(self); ok {
+		return Iter(payload)
+	}
 	if I, ok := self.(I__iter__); ok {
 		return I.M__iter__()
 	} else if res, ok, err = TypeCall0(self, "__iter__"); ok {

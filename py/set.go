@@ -84,13 +84,9 @@ func NewSetFromItemsErr(items []Object) (*Set, error) {
 }
 
 func init() {
-	// set REFUSES subclasses, for the same reason list does: an instance of a
-	// python-level class here is a *Type whose namespace is a dict, and a set
-	// has unordered positional members with nowhere to store them.  A
-	// subclass would be a class that cannot hold anything, so the base is
-	// refused rather than silently accepted.  See the note in py/list.go.
-	SetType.NoSubclass = true
-	FrozenSetType.NoSubclass = true
+	// set is subclassable, as list now is: an instance of a subclass carries its
+	// members in Payload, and the container protocols read them.  See the note
+	// in py/list.go.
 	SetType.Dict.Set("add", MustNewMethod("add", func(self Object, args Tuple) (Object, error) {
 		setSelf := self.(*Set)
 		if len(args) != 1 {

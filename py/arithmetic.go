@@ -151,6 +151,29 @@ func MakeFloat(a Object) (Object, error) {
 //
 // Will raise TypeError if can't be add can't be run on these objects
 func Add(a, b Object) (Object, error) {
+	// An instance of a Python subclass of a builtin carries its value in
+	// Payload, and it is the VALUE that adds: "self + (val,)" on pygments' Token
+	// builds a child token from a tuple subclass.  The instance is a *Type and
+	// satisfies no arithmetic Go interface, so without this the operation raised
+	// "unsupported operand type(s) for +" before reaching the payload.
+	// The result is an instance of the SAME subclass, not of the payload's type:
+	// "a + (val,)" on a tuple subclass is another instance of that subclass, and
+	// returning a plain tuple left pygments' child token without its class - its
+	// __getattr__ and __repr__ then could not be found.
+	if payload, ok := payloadOf(a); ok {
+		res, err := Add(payload, b)
+		if err != nil || res == NotImplemented {
+			return res, err
+		}
+		return rewrapPayload(a.(*Type).ObjectType, res), nil
+	}
+	if payload, ok := payloadOf(b); ok {
+		res, err := Add(a, payload)
+		if err != nil || res == NotImplemented {
+			return res, err
+		}
+		return rewrapPayload(b.(*Type).ObjectType, res), nil
+	}
 	// Try using a to add
 	if A, ok := a.(I__add__); ok {
 		res, err := A.M__add__(b)
@@ -891,6 +914,18 @@ func Le(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Eq can't be run on this object
 func Eq(a Object, b Object) (Object, error) {
+	// Compare the VALUES of payload-carrying instances: "L([1,2]) == L([1,2])"
+	// is list equality, and comparing the instances themselves asked their
+	// class for __eq__ instead.
+	if pa, ok := payloadOf(a); ok {
+		if pb, ok2 := payloadOf(b); ok2 {
+			return Eq(pa, pb)
+		}
+		return Eq(pa, b)
+	}
+	if pb, ok := payloadOf(b); ok {
+		return Eq(a, pb)
+	}
 	// Try using a to eq
 	if A, ok := a.(I__eq__); ok {
 		res, err := A.M__eq__(b)

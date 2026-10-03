@@ -141,6 +141,19 @@ func (m *Method) Internal() InternalMethod {
 
 // Call the method with the given arguments
 func (m *Method) Call(self Object, args Tuple) (Object, error) {
+	// A native method on an instance of a Python subclass of a builtin container
+	// receives the CONTAINER, not the wrapper.  "L([1,2]).append(3)" is
+	// list.append, and the list it appends to is the value the instance carries;
+	// without this the method asserted *List on a *Type and PANICKED with
+	// "interface conversion: py.Object is *py.Type, not *py.List".
+	//
+	// This is the one place a native receiver is bound, so unwrapping here
+	// covers every container method at once.  A method written in PYTHON is a
+	// *Function rather than a *Method and never reaches this, so an override
+	// still sees the instance it was written for.
+	if payload, ok := payloadOf(self); ok {
+		self = payload
+	}
 	switch f := m.method.(type) {
 	case func(self Object, args Tuple) (Object, error):
 		return f(self, args)
