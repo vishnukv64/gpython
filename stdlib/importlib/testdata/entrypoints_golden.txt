@@ -1,0 +1,10 @@
+EntryPoints has select: True
+select returns a collection: True
+every entry point has the fields: True
+select by group equals keyword form: True
+repr names the type: True
+a group with no members is empty: True
+module __dict__ is a mapping: True
+it holds __name__: True
+writes are visible on the module: True
+ModuleType subclass __dict__ is writable: True

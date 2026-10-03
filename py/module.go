@@ -157,6 +157,38 @@ type Module struct {
 
 var ModuleType = NewType("module", "module object")
 
+// A module's __dict__ IS its global namespace, and it must be a real, writable
+// mapping: "mod.__dict__['x'] = 1" and "mod.__dict__.update(other)" are how a
+// module rewrites itself at run time.
+//
+// pygments does exactly that - it builds a replacement module and does
+//
+//	newmod.__dict__.update(oldmod.__dict__)
+//	sys.modules[__name__] = newmod
+//
+// so without __dict__ the lexer package raised "'module' object has no
+// attribute '__dict__'" and pip could not import pygments.
+func init() {
+	ModuleType.Dict.Set("__dict__", &Property{
+		Fget: func(self Object) (Object, error) {
+			// A *Module carries its globals directly.  A SUBCLASS of
+			// types.ModuleType - "class _automodule(types.ModuleType)", which
+			// pygments defines - is a *Type instance instead, and its namespace
+			// is the dict an instance carries.  Answering None for that case
+			// made "newmod.__dict__.update(...)" fail with "'NoneType' has no
+			// attribute 'update'".
+			if m, ok := self.(*Module); ok {
+				return m.Globals, nil
+			}
+			if I, ok := self.(IGetDict); ok {
+				return I.GetDict(), nil
+			}
+			return None, nil
+		},
+		Doc: "The module's namespace: its globals, as a live mapping.",
+	})
+}
+
 // Type of this object
 func (o *Module) Type() *Type {
 	return ModuleType

@@ -435,6 +435,7 @@ var metadataModule = &py.ModuleImpl{
 	},
 	Methods: []*py.Method{
 		py.MustNewMethod("version", metadataVersion, 0, "version(distribution_name) -> version string"),
+		py.MustNewMethod("entry_points", metadataEntryPoints, 0, "entry_points(**params) -> EntryPoints\n\nReturn the entry points declared by the distributions on sys.path."),
 	},
 }
 
