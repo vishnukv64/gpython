@@ -1,0 +1,7 @@
+files: ['r.log']
+lines: 12
+first line: 'message 0'
+buffered: 1
+after close: 0
+exports parent classes: False
+SysLogHandler present: True

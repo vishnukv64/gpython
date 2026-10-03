@@ -91,6 +91,10 @@ type Handler struct {
 	stream py.Object
 	// emit is the output function; a subclass replaces it.
 	emit func(h *Handler, record *LogRecord) error
+	// owner is the Python object this Handler is embedded in, when it is a
+	// handler from another module.  callHandlers uses it to reach the
+	// subclass's own emit rather than the base one.
+	owner py.Object
 }
 
 var HandlerType = py.NewTypeX("logging.Handler",
@@ -326,6 +330,20 @@ func (l *Logger) callHandlers(record *LogRecord) error {
 			if record.LevelNo < h.level {
 				continue
 			}
+			// The handler's OWN emit is called, looked up on the object it was
+			// reached through.  Calling the embedded Handler's emit function
+			// directly ran the base implementation for every subclass, so a
+			// handler from another module - RotatingFileHandler, MemoryHandler
+			// - wrote nothing at all and the log line vanished silently.
+			if owner := h.owner; owner != nil {
+				emit, err := py.GetAttrString(owner, "emit")
+				if err == nil {
+					if _, cerr := py.Call(emit, py.Tuple{record}, py.NewStringDict()); cerr != nil {
+						return cerr
+					}
+					continue
+				}
+			}
 			if err := h.emit(h, record); err != nil {
 				return err
 			}
@@ -509,7 +527,7 @@ func loggerAddHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 	if err := checkArgs(args, kwargs, "addHandler", 1, 1); err != nil {
 		return nil, err
 	}
-	h, ok := args[0].(*Handler)
+	h, ok := HandlerOf(args[0])
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "addHandler() argument must be a Handler")
 	}
@@ -561,6 +579,33 @@ func handlerSetLevel(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	return py.None, nil
 }
 
+const handlerHandle_doc = `handle(record)
+
+Call the handlers for the record, honouring this handler's level.`
+
+func handlerHandle(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if err := checkArgs(args, kwargs, "handle", 1, 1); err != nil {
+		return nil, err
+	}
+	h, ok := HandlerOf(self)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "not a Handler")
+	}
+	rec, ok := args[0].(*LogRecord)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "a LogRecord is required")
+	}
+	if rec.LevelNo < h.level {
+		return py.None, nil
+	}
+	// The object's OWN emit, so a subclass's emit runs - see callHandlers.
+	emit, err := py.GetAttrString(self, "emit")
+	if err != nil {
+		return nil, err
+	}
+	return py.Call(emit, py.Tuple{rec}, py.NewStringDict())
+}
+
 const handlerSetFormatter_doc = `setFormatter(fmt)
 
 Set the formatter for this handler.`
@@ -586,11 +631,11 @@ func defaultFormat() *Formatter {
 // "LEVEL:name:message".
 func (f *Formatter) format(record *LogRecord) (string, error) {
 	if f == nil || f.defaultFmt {
-		msg, err := record.getMessage()
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s:%s:%s", effectiveLevelName(record.LevelNo), record.Name, msg), nil
+		// A handler with NO formatter writes the bare message - "hello", not
+		// "WARNING:t:hello".  That module-level shape belongs to basicConfig,
+		// and applying it here changed the output of every handler that did
+		// not set one, including the rotating ones.
+		return record.getMessage()
 	}
 	return expandFormat(f.fmt, record)
 }
@@ -768,6 +813,63 @@ func (h *Handler) formatterFor() *Formatter {
 		return h.formatter
 	}
 	return defaultFormat()
+}
+
+// HandlerOf returns the *Handler behind any handler object.
+//
+// A logger stores *Handler, and logging.handlers' handlers EMBED one rather
+// than being one - a Go embedding is not a subtype.  They expose their embedded
+// pointer through this interface so a logger can hold and drive them, which is
+// what makes "logger.addHandler(RotatingFileHandler(...))" work.
+type HandlerProvider interface {
+	LoggedHandler() *Handler
+}
+
+// HandlerOf unwraps a handler object: a *Handler is returned as-is, and
+// anything implementing HandlerProvider yields the Handler it embeds.
+// SetHandlerOwner records the object a Handler is embedded in, so the logger
+// can call that object's own emit.  logging.handlers calls it at construction.
+func SetHandlerOwner(h *Handler, owner py.Object) {
+	h.owner = owner
+}
+
+func HandlerOf(o py.Object) (*Handler, bool) {
+	if h, ok := o.(*Handler); ok {
+		return h, true
+	}
+	if p, ok := o.(HandlerProvider); ok {
+		return p.LoggedHandler(), true
+	}
+	return nil, false
+}
+
+// NewHandler builds a base Handler, which writes nowhere until a subclass
+// supplies a destination.
+//
+// It is exported for logging.handlers, whose handlers EMBED a Handler so that
+// handle(), setLevel(), setFormatter() and close() behave exactly as the parent
+// module's do.  Constructing the struct directly from another package is not
+// possible - its fields are unexported - so this is the way in.
+func NewHandler() *Handler {
+	return &Handler{level: NOTSET, emit: streamEmit}
+}
+
+// FormatRecord formats one record the way this handler would, including the
+// trailing newline.
+//
+// It is exported for logging.handlers, so a rotating handler writes exactly
+// what StreamHandler or FileHandler would - the same formatter, the same
+// format string.  Duplicating the formatting there would let the two drift.
+func FormatRecord(h *Handler, record py.Object) (string, error) {
+	rec, ok := record.(*LogRecord)
+	if !ok {
+		return "", py.ExceptionNewf(py.TypeError, "a LogRecord is required, not %s", record.Type().Name)
+	}
+	text, err := h.formatterFor().format(rec)
+	if err != nil {
+		return "", err
+	}
+	return text + "\n", nil
 }
 
 // StreamHandler writes to a stream; FileHandler to a file it opens.
@@ -1007,6 +1109,7 @@ func init() {
 	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
 	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
 	HandlerType.Dict.Set("emit", py.MustNewMethod("emit", handlerEmit, 0, emit_doc))
+	HandlerType.Dict.Set("handle", py.MustNewMethod("handle", handlerHandle, 0, handlerHandle_doc))
 	HandlerType.Dict.Set("level", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*Handler).level), nil },
 		Doc:  "the handler's level",
