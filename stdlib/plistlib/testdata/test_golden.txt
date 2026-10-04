@@ -1,0 +1,11 @@
+starts with header: True
+has plist tag: True
+round trip: True
+types: int bool float
+via file: gpython {'a': [1, 2]}
+data round trip: True bytes
+ProductVersion: 14.5
+BuildVersion: 23F79
+version split: ['14', '5']
+malformed value raises ValueError
+FMT_XML is str: False

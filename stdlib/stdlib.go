@@ -73,6 +73,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/pickle"
 	_ "github.com/vishnukv64/gpython/stdlib/pkgutil"
 	_ "github.com/vishnukv64/gpython/stdlib/platform"
+	_ "github.com/vishnukv64/gpython/stdlib/plistlib"
 	_ "github.com/vishnukv64/gpython/stdlib/pprint"
 	_ "github.com/vishnukv64/gpython/stdlib/queue"
 	_ "github.com/vishnukv64/gpython/stdlib/random"
