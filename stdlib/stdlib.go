@@ -101,6 +101,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/weakref"
 	_ "github.com/vishnukv64/gpython/stdlib/yaml"
 	_ "github.com/vishnukv64/gpython/stdlib/zipfile"
+	_ "github.com/vishnukv64/gpython/stdlib/zipimport"
 	_ "github.com/vishnukv64/gpython/stdlib/zlib"
 
 	_ "github.com/vishnukv64/gpython/stdlib/atexit"

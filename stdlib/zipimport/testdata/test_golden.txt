@@ -1,0 +1,14 @@
+archive exists: True
+archive basename: probe.zip
+prefix: ''
+is_package mod: False
+is_package pkg: True
+missing raises: can't find module 'nope'
+source is str: True
+source: 'VALUE = 42\n'
+data is bytes: True
+get_data: b'hello\n'
+is ImportError: True
+has find_module: False
+has load_module: True
+not a zip raises: True
