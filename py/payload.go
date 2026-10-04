@@ -28,6 +28,13 @@ package py
 // and Type.Alloc - which builds a class - leaves it nil.  That is what keeps
 // "the class has a payload" from being indistinguishable from "an instance has
 // one".
+// PayloadOf returns the native value a python-level instance of a subclass
+// carries, which is how a derived type's own Go value is reached from a shared
+// helper that knows only the base.
+func PayloadOf(self Object) (Object, bool) {
+	return payloadOf(self)
+}
+
 func payloadOf(self Object) (Object, bool) {
 	t, ok := self.(*Type)
 	if !ok || t.Payload == nil {

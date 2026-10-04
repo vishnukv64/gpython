@@ -83,6 +83,13 @@ var timedRotatingFileHandlerType = py.NewTypeX("logging.handlers.TimedRotatingFi
 var memoryHandlerType = py.NewTypeX("logging.handlers.MemoryHandler",
 	"A handler that buffers records and flushes them to a target.", newMemoryHandler, nil)
 
+// AsHandler exposes the embedded handler, so a shared helper in the logging
+// package can reach a derived handler's level and formatter without asserting
+// the derived Go type - which it cannot know.
+func (h *rotatingFileHandler) AsHandler() *logging.Handler      { return h.Handler }
+func (h *timedRotatingFileHandler) AsHandler() *logging.Handler { return h.Handler }
+func (h *memoryHandler) AsHandler() *logging.Handler            { return h.Handler }
+
 func (h *rotatingFileHandler) Type() *py.Type      { return rotatingFileHandlerType }
 func (h *timedRotatingFileHandler) Type() *py.Type { return timedRotatingFileHandlerType }
 func (h *memoryHandler) Type() *py.Type            { return memoryHandlerType }
@@ -330,6 +337,25 @@ func flush(h *memoryHandler) (py.Object, error) {
 }
 
 func init() {
+	// These handlers must DERIVE from logging.Handler, so that the methods
+	// registered there - setLevel, setFormatter, addFilter, filter, handle,
+	// close, flush and the level property - are inherited.
+	//
+	// They were separate types with no base at all, and pip's setup_logging
+	// calls handler.setLevel: "'RotatingFileHandler' object has no attribute
+	// 'setLevel'".
+	for _, t := range []*py.Type{
+		rotatingFileHandlerType, timedRotatingFileHandlerType, memoryHandlerType,
+	} {
+		if t != nil && t.Base == nil && logging.HandlerType != nil {
+			t.Base = logging.HandlerType
+			t.Bases = py.Tuple{logging.HandlerType}
+			if err := t.Ready(); err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	globals := py.NewStringDict()
 	globals.Set("__doc__", py.String(module_doc))
 

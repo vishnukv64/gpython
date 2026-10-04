@@ -229,8 +229,24 @@ var HandlerType = py.NewTypeX("logging.Handler",
 		// supplies the destination.  Constructing it directly is legal, as
 		// in CPython.
 		h := &Handler{level: NOTSET, emit: streamEmit}
+		registerHandler(h)
 		return h, nil
 	}, nil)
+
+// gHandlerList holds every handler created, so that shutdown() can flush and
+// close them.  CPython keeps weak references; a direct list is close enough
+// here and cannot lose an entry to collection mid-run.
+//
+// The entries are the handler objects, so that a Python-level close() on a
+// subclass is what shutdown calls.
+var gHandlerList []py.Object
+
+// registerHandler records a handler for shutdown().  Called from every
+// constructor, since a handler that shutdown cannot see is a handler whose
+// buffered output is lost.
+func registerHandler(h py.Object) {
+	gHandlerList = append(gHandlerList, h)
+}
 
 func (h *Handler) Type() *py.Type { return HandlerType }
 
@@ -303,6 +319,40 @@ func (l *Logger) Type() *py.Type {
 // Logger attributes.  A logger's name is how code refers to it - a library
 // reads logger.name to label its own output - and it was reachable only from
 // __repr__ before.
+const shutdown_doc = `Perform any cleanup actions in the logging system (e.g. flushing
+buffers).
+
+Should be called at application exit.`
+
+// loggingShutdown flushes and closes every handler, newest first.
+//
+// It NEVER raises: it runs while a program is exiting, where an error would
+// replace whatever the program was doing with a traceback about the logging
+// system.  CPython swallows those errors for the same reason, and pip calls
+// this on its way out.
+func loggingShutdown(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	handlers := make([]py.Object, len(gHandlerList))
+	copy(handlers, gHandlerList)
+	for i := len(handlers) - 1; i >= 0; i-- {
+		h := handlers[i]
+		if h == nil {
+			continue
+		}
+		// flushOnClose defaults to true; MemoryHandler sets it false so that
+		// its buffered records are not written on the way out.
+		if v, err := py.GetAttrString(h, "flushOnClose"); err == nil && v == py.False {
+			continue
+		}
+		if flush, err := py.GetAttrString(h, "flush"); err == nil {
+			_, _ = py.Call(flush, py.Tuple{}, py.NewStringDict())
+		}
+		if close, err := py.GetAttrString(h, "close"); err == nil {
+			_, _ = py.Call(close, py.Tuple{}, py.NewStringDict())
+		}
+	}
+	return py.None, nil
+}
+
 func init() {
 	LoggerType.Dict.Set("name", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
@@ -727,6 +777,44 @@ const handlerSetLevel_doc = `setLevel(level)
 
 Set the logging level of this handler.`
 
+// asHandler returns the Handler behind an object, which is NOT the object
+// itself for a handler defined in another package or in Python.
+//
+// RotatingFileHandler and its siblings embed a *Handler and derive from
+// logging.Handler, but their Go type is their own - so the bare type assertion
+// panicked the host process with
+// "interface conversion: py.Object is *handlers.rotatingFileHandler, not
+// *logging.Handler" on an ordinary handler.setLevel(level) call.
+func asHandler(self py.Object) (*Handler, bool) {
+	switch h := self.(type) {
+	case *Handler:
+		return h, true
+	case interface{ AsHandler() *Handler }:
+		return h.AsHandler(), true
+	}
+	if payload, ok := py.PayloadOf(self); ok {
+		return asHandler(payload)
+	}
+	return nil, false
+}
+
+// asHandlerOrNil returns the Handler behind an object, or nil when it is not
+// one.  Returning the POINTER matters: callers assign through it.
+func asHandlerOrNil(self py.Object) *Handler {
+	h, _ := asHandler(self)
+	return h
+}
+
+// handlerOf is asHandlerOrNil for the paths that cannot sensibly be reached
+// without a handler, such as a handler's own property.
+func handlerOf(self py.Object) *Handler {
+	h, ok := asHandler(self)
+	if !ok {
+		panic(py.ExceptionNewf(py.TypeError, "not a Handler: %s", self.Type().Name))
+	}
+	return h
+}
+
 func handlerSetLevel(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if err := checkArgs(args, kwargs, "setLevel", 1, 1); err != nil {
 		return nil, err
@@ -735,7 +823,11 @@ func handlerSetLevel(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	if err != nil {
 		return nil, err
 	}
-	self.(*Handler).level = n
+	h, ok := asHandler(self)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "not a Handler: %s", self.Type().Name)
+	}
+	h.level = n
 	return py.None, nil
 }
 
@@ -778,7 +870,7 @@ func handlerSetFormatter(self py.Object, args py.Tuple, kwargs py.StringDict) (p
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "setFormatter() argument must be a Formatter")
 	}
-	self.(*Handler).formatter = f
+	asHandlerOrNil(self).formatter = f
 	return py.None, nil
 }
 
@@ -940,7 +1032,7 @@ func handlerEmit(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "emit() argument must be a LogRecord")
 	}
-	h := self.(*Handler)
+	h := asHandlerOrNil(self)
 	if err := h.emit(h, record); err != nil {
 		return nil, err
 	}
@@ -1419,6 +1511,31 @@ func init() {
 		return py.True, nil
 	}, 0, "Run every filter; a record is dropped when any returns false."))
 
+	// A handler's close() and flush() are what logging.shutdown calls, and what
+	// a program calls to release a file early.  They were absent entirely, so
+	// "logging.shutdown()" - which pip calls on the way out - raised
+	// AttributeError on the module.
+	HandlerType.Dict.Set("close", py.MustNewMethod("close", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if c, ok := self.(interface{ Close() error }); ok {
+			if err := c.Close(); err != nil {
+				return nil, err
+			}
+			return py.None, nil
+		}
+		// A handler with no Go close, or a Python subclass whose close() has
+		// already run: nothing to release.
+		return py.None, nil
+	}, 0, "Tidy up any resources used by the handler."))
+
+	HandlerType.Dict.Set("flush", py.MustNewMethod("flush", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if f, ok := self.(interface{ Flush() error }); ok {
+			if err := f.Flush(); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
+	}, 0, "Ensure all logging output has been flushed."))
+
 	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
 	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
 	HandlerType.Dict.Set("emit", py.MustNewMethod("emit", handlerEmit, 0, emit_doc))
@@ -1535,12 +1652,12 @@ func init() {
 
 	HandlerType.Dict.Set("handle", py.MustNewMethod("handle", handlerHandle, 0, handlerHandle_doc))
 	HandlerType.Dict.Set("level", &py.Property{
-		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*Handler).level), nil },
+		Fget: func(self py.Object) (py.Object, error) { return py.Int(handlerOf(self).level), nil },
 		Doc:  "the handler's level",
 	})
 	// The stream an output handler writes to, as a read-only attribute.
 	streamProp := &py.Property{
-		Fget: func(self py.Object) (py.Object, error) { return self.(*Handler).stream, nil },
+		Fget: func(self py.Object) (py.Object, error) { return handlerOf(self).stream, nil },
 		Doc:  "the stream this handler writes to",
 	}
 	HandlerType.Dict.Set("stream", streamProp)
@@ -1617,6 +1734,7 @@ define __init__ such that it requires only a name argument.`),
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "DEBUG", Value: py.Int(DEBUG)},
+			py.DictEntry{Key: "shutdown", Value: py.MustNewMethod("shutdown", loggingShutdown, 0, shutdown_doc)},
 			py.DictEntry{Key: "INFO", Value: py.Int(INFO)},
 			py.DictEntry{Key: "WARNING", Value: py.Int(WARNING)},
 			py.DictEntry{Key: "WARN", Value: py.Int(WARNING)},

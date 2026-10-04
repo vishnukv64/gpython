@@ -56,6 +56,7 @@ var pathImpl = &py.ModuleImpl{
 		py.MustNewMethod("normcase", pathNormcase, 0, "normcase(s) -> Normalize case of pathname."),
 		py.MustNewMethod("isabs", pathIsabs, 0, "isabs(s) -> Test whether a path is absolute."),
 		py.MustNewMethod("exists", pathExists, 0, "exists(path) -> Test whether a path exists."),
+		py.MustNewMethod("lexists", pathLexists, 0, "lexists(path) -> Test whether a path exists, without following a final symlink."),
 		py.MustNewMethod("isdir", pathIsdir, 0, "isdir(s) -> Return true if the pathname refers to an existing directory."),
 		py.MustNewMethod("isfile", pathIsfile, 0, "isfile(path) -> Test whether a path is a regular file."),
 		py.MustNewMethod("islink", pathIslink, 0, "islink(path) -> Test whether a path is a symbolic link."),
@@ -283,6 +284,18 @@ func pathExists(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, err
 	}
 	return py.NewBool(fileExists(parts[0])), nil
+}
+
+// pathLexists reports whether a path exists WITHOUT following a final symlink,
+// which is the difference from exists(): a dangling link is lexists-true and
+// exists-false.  pip calls it to decide whether it may write somewhere.
+func pathLexists(self py.Object, args py.Tuple) (py.Object, error) {
+	parts, err := argsToStrings("lexists", args, 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	_, lerr := os.Lstat(parts[0])
+	return py.NewBool(lerr == nil), nil
 }
 
 func pathIsdir(self py.Object, args py.Tuple) (py.Object, error) {

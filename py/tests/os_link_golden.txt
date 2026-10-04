@@ -1,0 +1,9 @@
+lexists link: True
+exists link: True
+readlink: _link_target.txt
+read through link: contents
+hard link contents: contents
+after unlink: False False False
+flags: 0 1 2 4
+access dir: True
+access missing: False

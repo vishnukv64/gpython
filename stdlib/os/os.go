@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -60,6 +61,10 @@ func init() {
 		py.MustNewMethod("putenv", putenv, 0, "Set the environment variable named key to the string value."),
 		py.MustNewMethod("remove", remove, 0, remove_doc),
 		py.MustNewMethod("rename", rename, 0, rename_doc),
+		py.MustNewMethod("access", access, 0, access_doc),
+		py.MustNewMethod("symlink", symlink, 0, "symlink(src, dst, target_is_directory=False) -> create a symbolic link."),
+		py.MustNewMethod("readlink", readlink, 0, "readlink(path) -> the path a symbolic link points to."),
+		py.MustNewMethod("link", link, 0, "link(src, dst) -> create a hard link."),
 		py.MustNewMethod("getuid", osGetuid, 0, "Return the current process's user id."),
 		py.MustNewMethod("geteuid", osGeteuid, 0, "Return the current process's effective user id."),
 		py.MustNewMethod("getgid", osGetgid, 0, "Return the current process's group id."),
@@ -96,6 +101,12 @@ func init() {
 	// reach the functions registered there, and "os.path is posixpath" holds.
 	globals.Set("path", PathModule())
 	// The separator constants, which code joins paths with.
+	// The os.access mode flags are part of the module's interface: a program
+	// passes os.W_OK, so they must be there and must have CPython's values.
+	globals.Set("F_OK", py.Int(F_OK))
+	globals.Set("X_OK", py.Int(X_OK))
+	globals.Set("W_OK", py.Int(W_OK))
+	globals.Set("R_OK", py.Int(R_OK))
 	globals.Set("pathsep", osPathsep)
 	globals.Set("linesep", osLinesep)
 	globals.Set("altsep", osAltsep)
@@ -752,6 +763,131 @@ func osGetgid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 
 func osGetegid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	return py.Int(os.Getegid()), nil
+}
+
+// symlink creates a symbolic link.  On Windows the third argument says whether
+// the target is a directory; on a POSIX system it is ignored, which is what
+// CPython does too.
+func symlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var (
+		src, dst py.Object
+		isdir    py.Object = py.False
+	)
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|O:symlink",
+		[]string{"src", "dst", "target_is_directory"}, &src, &dst, &isdir); err != nil {
+		return nil, err
+	}
+	s, err := py.StrAsString(src)
+	if err != nil {
+		return nil, err
+	}
+	d, err := py.StrAsString(dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Symlink(s, d); err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.None, nil
+}
+
+// The mode flags os.access takes.  They are part of the module's interface -
+// a program passes os.W_OK - and were absent along with access itself.
+const (
+	F_OK = 0
+	X_OK = 1
+	W_OK = 2
+	R_OK = 4
+)
+
+const access_doc = `access(path, mode, *, dir_fd=None, effective_ids=False, follow_symlinks=True)
+
+Use the real uid/gid to test for access to a path.`
+
+// unixAccess asks the operating system whether the real uid may use a path with
+// the given mask.  It is a syscall rather than a stat, because the mode bits on
+// their own do not account for group membership or a read-only filesystem.
+func unixAccess(path string, mask uint32) error {
+	return syscall.Access(path, mask)
+}
+
+// access tests the REAL user's permission to a path, which os.access uses to
+// decide whether it may write somewhere.  A missing path is False rather than
+// an error, as CPython has it.
+func access(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var path, mode py.Object
+	if err := py.UnpackTuple(args, kwargs, "access", 2, 2, &path, &mode); err != nil {
+		return nil, err
+	}
+	p, err := py.StrAsString(path)
+	if err != nil {
+		return nil, err
+	}
+	n, err := py.IndexInt(mode)
+	if err != nil {
+		return nil, err
+	}
+	if mode == py.Int(F_OK) {
+		if _, err := os.Stat(p); err != nil {
+			return py.False, nil
+		}
+		return py.True, nil
+	}
+	var mask uint32
+	if n&R_OK != 0 {
+		mask |= 4 // R_OK
+	}
+	if n&W_OK != 0 {
+		mask |= 2 // W_OK
+	}
+	if n&X_OK != 0 {
+		mask |= 1 // X_OK
+	}
+	if err := unixAccess(p, mask); err != nil {
+		return py.False, nil
+	}
+	return py.True, nil
+}
+
+const readlink_doc = `readlink(path) -> the path a symbolic link points to.`
+
+// readlink returns the target of a symbolic link, and raises OSError when the
+// path is not one - the same as CPython.
+func readlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var path py.Object
+	if err := py.UnpackTuple(args, kwargs, "readlink", 1, 1, &path); err != nil {
+		return nil, err
+	}
+	p, err := py.StrAsString(path)
+	if err != nil {
+		return nil, err
+	}
+	target, err := os.Readlink(p)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.String(target), nil
+}
+
+const link_doc = `link(src, dst) -> create a hard link.`
+
+func link(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var src, dst py.Object
+	if err := py.UnpackTuple(args, kwargs, "link", 2, 2, &src, &dst); err != nil {
+		return nil, err
+	}
+	s, err := py.StrAsString(src)
+	if err != nil {
+		return nil, err
+	}
+	d, err := py.StrAsString(dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Link(s, d); err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.None, nil
 }
 
 const rename_doc = `rename(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
