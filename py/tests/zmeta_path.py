@@ -63,11 +63,17 @@ class BadFinder:
         raise RuntimeError("finder broke")
 
 
-sys.meta_path.insert(0, BadFinder())
+bad = BadFinder()
+sys.meta_path.insert(0, bad)
 try:
     import netrc
     print("no error from the bad finder")
 except RuntimeError as e:
     print("finder error surfaces:", e)
+
+# The finder is REMOVED again: the meta_path list belongs to the interpreter,
+# and the test harness shares one across every script it runs - leaving a
+# raiser on it made the NEXT test fail with this finder's error.
+sys.meta_path.remove(bad)
 
 doc = "finished"

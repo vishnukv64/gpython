@@ -1,0 +1,7 @@
+imported: module
+has __file__: None
+__path__ length: 2
+submodule X: 1
+sibling Y: 2
+fromlist Y: 2
+bound on parent: 2

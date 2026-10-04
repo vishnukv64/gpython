@@ -71,6 +71,12 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		searchPaths = packagePaths(parent)
 	}
 
+	// Namespace package directories found so far, across all search paths.
+	// PEP 420 collects EVERY directory that matches, so a package split over
+	// several sys.path entries contributes all of them - which is the feature:
+	// two distributions can each add to the same namespace.
+	var nsDirs []string
+
 	for _, dir := range searchPaths {
 		// A package directory wins over a module of the same name
 		candidates := []struct {
@@ -88,6 +94,28 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 				return c.file, c.isPkg, nil
 			}
 		}
+		// NAMESPACE PACKAGE: a directory with no __init__.py is still a
+		// package, whose __path__ is that directory.  CPython has had these
+		// since PEP 420 and modern packaging uses them, so a tree split across
+		// several directories imports without any __init__.py at all.
+		//
+		// It is reported with an EMPTY path, which initModuleFromPath reads as
+		// "a package with no code to run".
+		// collected below, across EVERY search path entry
+		nsDir := filepath.Join(dir, base)
+		if stat, err := os.Stat(nsDir); err == nil && stat.IsDir() {
+			nsDirs = append(nsDirs, nsDir)
+		}
+	}
+
+	if len(nsDirs) > 0 {
+		// Every matching directory, joined so that initModuleFromPath sees the
+		// whole path.  A single directory is passed as itself, which keeps the
+		// common case unchanged.
+		if len(nsDirs) == 1 {
+			return nsDirs[0], true, nil
+		}
+		return strings.Join(nsDirs, string(os.PathListSeparator)), true, nil
 	}
 
 	return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
@@ -99,6 +127,55 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 // __package__ and (for packages) __path__ are installed before the module body
 // runs so that the body's own relative imports and submodule imports resolve.
 func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, error) {
+	// A NAMESPACE PACKAGE is a directory, not a file: there is no code to
+	// compile, and the module is a package whose __path__ is that directory.
+	// Its body cannot fail, and its submodules resolve through __path__ as any
+	// package's do.
+	if isPkg {
+		// A namespace path may be SEVERAL directories separated by the path
+		// list separator, collected from every matching sys.path entry.
+		if strings.Contains(path, string(os.PathListSeparator)) {
+			var dirs []string
+			for _, d := range strings.Split(path, string(os.PathListSeparator)) {
+				if abs, err := filepath.Abs(d); err == nil {
+					dirs = append(dirs, abs)
+				} else {
+					dirs = append(dirs, d)
+				}
+			}
+			mod, err := ctx.ModuleInit(&ModuleImpl{
+				Info: ModuleInfo{Name: name, FileDesc: "<namespace>"},
+			})
+			if err != nil {
+				return nil, err
+			}
+			mod.Globals.Set("__path__", NewListFromStrings(dirs))
+			mod.Globals.Set("__package__", String(name))
+			mod.Globals.Set("__file__", None)
+			return mod, nil
+		}
+		if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+			mod, err := ctx.ModuleInit(&ModuleImpl{
+				Info: ModuleInfo{Name: name, FileDesc: path},
+			})
+			if err != nil {
+				return nil, err
+			}
+			// The path is made ABSOLUTE, which is what CPython's
+			// _NamespacePath holds: a relative entry would resolve against
+			// whatever the current directory is when a submodule is imported
+			// later, which is not where the package was found.
+			absPath := path
+			if abs, err := filepath.Abs(path); err == nil {
+				absPath = abs
+			}
+			mod.Globals.Set("__path__", NewListFromStrings([]string{absPath}))
+			mod.Globals.Set("__package__", String(name))
+			mod.Globals.Set("__file__", None)
+			return mod, nil
+		}
+	}
+
 	out, err := ctx.ResolveAndCompile(path, CompileOpts{})
 	if err != nil {
 		return nil, err

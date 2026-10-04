@@ -81,7 +81,9 @@ This is honest about where the interpreter stands:
     is no plan to change that.  Packages with compiled dependencies are
     therefore out of reach, which is the barrier the upstream README
     describes.
-  * Namespace packages (directories without `__init__.py`) are not supported.
+  * Namespace packages (PEP 420: directories without `__init__.py`) work, and
+    `__path__` collects every matching `sys.path` entry, which is what lets two
+    distributions contribute to one namespace.
   * `sys.meta_path` exists and a program may install its own finder, but this
     interpreter's own file finder is built in rather than expressed as an
     entry on it.
