@@ -1,0 +1,11 @@
+IndexError IndexError
+ZeroDivision ZeroDivisionError
+KeyError KeyError
+AttributeError AttributeError
+ValueError ValueError
+FileNotFound FileNotFoundError
+outside: (None, None, None)
+format_exc last line: IndexError: list index out of range
+inner: KeyError
+after inner: IndexError
+after all: (None, None, None)
