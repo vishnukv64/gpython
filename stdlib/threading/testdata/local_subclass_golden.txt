@@ -1,0 +1,6 @@
+type: Holder
+default: 0 default
+after set: 7 class: 0
+fresh: 0
+plain: 1 {'x': 1}
+isinstance: True

@@ -41,13 +41,26 @@ does not create Python threads, so Thread.start() raises.`
 type Local struct {
 	mu   sync.Mutex
 	data py.StringDict
+	// cls is the class this holder was created as, which is the SUBCLASS when
+	// one is used - "class ConsoleThreadLocals(threading.local)" is how rich
+	// keeps its per-thread console buffer, and every such instance used to
+	// report LocalType, so the subclass's own class attributes were
+	// unreachable and "type(holder)" named the base.
+	cls *py.Type
 }
 
 var LocalType = py.NewTypeX("threading.local", "A class that represents thread-local data.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return &Local{data: py.NewStringDict()}, nil
+	// metatype is the class being instantiated, so a subclass instance records
+	// itself rather than the base it was declared against.
+	return &Local{data: py.NewStringDict(), cls: metatype}, nil
 }, nil)
 
-func (l *Local) Type() *py.Type { return LocalType }
+func (l *Local) Type() *py.Type {
+	if l.cls != nil {
+		return l.cls
+	}
+	return LocalType
+}
 
 // Lock is a mutual exclusion lock.
 type Lock struct {
@@ -180,7 +193,19 @@ func init() {
 		if v, ok := l.data.Get(text); ok {
 			return v, nil
 		}
-		return nil, py.ExceptionNewf(py.AttributeError, "'threading.local' object has no attribute '%s'", text)
+		// The CLASS is consulted next: a subclass declaring "x = 0" in its
+		// body leaves x readable on every holder until an instance assigns to
+		// it, which is exactly CPython's rule and what rich relies on for the
+		// defaults on ConsoleThreadLocals.
+		if cls := l.Type(); cls != nil {
+			if v := cls.Lookup(text); v != nil {
+				if getter, ok := v.(py.I__get__); ok {
+					return getter.M__get__(l, cls)
+				}
+				return v, nil
+			}
+		}
+		return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", l.Type().Name, text)
 	}, 0, "Return the thread-local attribute."))
 	LocalType.Dict.Set("__setattr__", py.MustNewMethod("__setattr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var name, value py.Object
@@ -445,7 +470,20 @@ func (l *Local) M__getattribute__(name string) (py.Object, error) {
 	if v, ok := l.data.Get(name); ok {
 		return v, nil
 	}
-	return nil, py.ExceptionNewf(py.AttributeError, "'threading.local' object has no attribute '%s'", name)
+	// The CLASS is consulted next, so a subclass declaring defaults in its body
+	// can read them until an instance assigns to the name.  rich's
+	// ConsoleThreadLocals declares "buffer_index: int = 0" that way and is how
+	// pip's console reaches it; without this the attribute was an
+	// AttributeError.
+	if cls := l.Type(); cls != nil {
+		if v := cls.Lookup(name); v != nil {
+			if getter, ok := v.(py.I__get__); ok {
+				return getter.M__get__(l, cls)
+			}
+			return v, nil
+		}
+	}
+	return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", l.Type().Name, name)
 }
 
 // M__setattr__ on the Local type itself is only reached for a plain
