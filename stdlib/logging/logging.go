@@ -544,7 +544,19 @@ const getLogger_doc = `getLogger(name=None)
 Return a logger with the specified name, creating it if necessary.
 If no name is specified, return the root logger.`
 
+// gLoggingModule is the logging module of the CURRENT context, remembered when
+// getLogger is called.
+//
+// It exists so the last-resort handler can reach the LIVE sys.stderr: the
+// harness redirects sys.Globals through the context, and GetModuleImplOrNil
+// builds a FRESH module whose stderr is the process's - so writing there put
+// output in the wrong place and it vanished from the captured stream.
+var gLoggingModule *py.Module
+
 func getLogger(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if m, ok := self.(*py.Module); ok && m.Context != nil {
+		gLoggingModule = m
+	}
 	name := "root"
 	if len(args) > 0 {
 		if args[0] != py.None {
@@ -583,11 +595,15 @@ func handlerDrops(h *Handler, record *LogRecord) (bool, error) {
 }
 
 func (l *Logger) callHandlers(record *LogRecord) error {
+	// found records that a handler actually took the record, which decides
+	// whether the LAST-RESORT handler runs at the end.
+	found := false
 	for logger := l; logger != nil; logger = logger.parent {
 		for _, h := range logger.handlers {
 			if record.LevelNo < h.level {
 				continue
 			}
+			found = true
 			// The handler's OWN emit is called, looked up on the object it was
 			// reached through.  Calling the embedded Handler's emit function
 			// directly ran the base implementation for every subclass, so a
@@ -610,7 +626,55 @@ func (l *Logger) callHandlers(record *LogRecord) error {
 			break
 		}
 	}
+	// The LAST-RESORT handler: CPython writes a record that no handler took to
+	// stderr at WARNING and above, so that a program which never configured
+	// logging still sees its own errors.
+	//
+	// Without it every call was silently discarded, which is how a logging call
+	// appeared to do nothing at all - and it was masking exactly the failures
+	// this session was chasing.
+	if !found && record.LevelNo >= WARNING {
+		lastResortEmit(record)
+	}
 	return nil
+}
+
+// lastResortEmit writes one record to stderr, the way CPython's _StderrHandler
+// does: the bare message, since there is no formatter configured.
+func lastResortEmit(record *LogRecord) {
+	msg, err := record.getMessage()
+	if err != nil {
+		return
+	}
+	// The LIVE sys.stderr, through the logging module's context when it is
+	// known - that is the stream the program's own print() uses.
+	stderr := py.Object(nil)
+	if gLoggingModule != nil && gLoggingModule.Context != nil {
+		if sysMod, serr := gLoggingModule.Context.GetModule("sys"); serr == nil && sysMod != nil {
+			stderr = sysMod.Globals.GetOrNil("stderr")
+		}
+	}
+	if stderr == nil || stderr == py.None {
+		stderr = stderrStream()
+	}
+	if stderr == nil || stderr == py.None {
+		return
+	}
+	write, werr := py.GetAttrString(stderr, "write")
+	if werr != nil {
+		return
+	}
+	// A traceback goes on its OWN LINE: CPython's last-resort output is
+	// "message<newline>Traceback ...".  Appending it directly produced
+	// "with exc_infoNoneType: None" on a single line.
+	text := msg
+	if record.ExcText != "" {
+		text += "\n" + record.ExcText
+	}
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	_, _ = py.Call(write, py.Tuple{py.String(text)}, py.NewStringDict())
 }
 
 // handle makes a record and dispatches it, returning whether it was passed
@@ -636,10 +700,21 @@ func (l *Logger) handleWith(level int, msg py.Object, args py.Object, excInfo, e
 	// that is not an exception means "use the current one", which is what the
 	// literal exc_info=True does.
 	if excInfo != nil && excInfo != py.False && excInfo != py.None {
+		// The traceback is attached on its OWN LINE, so the formatted record
+		// reads "msg" then a newline then "Traceback ...".  Concatenating
+		// directly gave "Exception:Traceback (most recent call last)" on one
+		// line, which any caller splitting or matching on the heading sees.
 		if exc, ok := excInfo.(*py.Exception); ok {
-			record.ExcText = py.ExceptionSummary(exc)
+			record.ExcText = "\n" + py.ExceptionSummary(exc)
 		} else if cur := py.CurrentException(); cur != nil {
-			record.ExcText = py.ExceptionSummary(cur)
+			record.ExcText = "\n" + py.ExceptionSummary(cur)
+		} else {
+			// exc_info=True outside any handler: CPython formats the empty
+			// (None, None, None) and prints "NoneType: None".  Leaving it empty
+			// produced NO traceback line where CPython prints one, which is a
+			// silent difference in exactly the place a caller looks for the
+			// cause.
+			record.ExcText = "NoneType: None\n"
 		}
 	}
 
@@ -1264,12 +1339,29 @@ func NewHandler() *Handler {
 // It is exported for logging.handlers, so a rotating handler writes exactly
 // what StreamHandler or FileHandler would - the same formatter, the same
 // format string.  Duplicating the formatting there would let the two drift.
+// FormatRecord renders a record WITHOUT a trailing newline, which is what
+// Handler.format returns in CPython: str(handler.format(record)) is the message
+// alone, and the newline belongs to the WRITER.  Adding it here made
+// "sink.lines.append(self.format(record))" hold "no exception\n" where CPython
+// holds "no exception" - visible to any handler that collects formatted lines.
+//
+// FormatRecordLine is the same with the newline, for a writer that needs one.
 func FormatRecord(h *Handler, record py.Object) (string, error) {
 	rec, ok := record.(*LogRecord)
 	if !ok {
 		return "", py.ExceptionNewf(py.TypeError, "a LogRecord is required, not %s", record.Type().Name)
 	}
 	text, err := h.formatterFor().format(rec)
+	if err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
+// FormatRecordLine is FormatRecord with the newline a stream or file write
+// needs.
+func FormatRecordLine(h *Handler, record py.Object) (string, error) {
+	text, err := FormatRecord(h, record)
 	if err != nil {
 		return "", err
 	}

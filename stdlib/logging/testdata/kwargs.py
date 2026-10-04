@@ -29,7 +29,20 @@ for name in ("DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL", "FATAL", "
     )
     print(name, logging.getLogger("cfg").level)
 
-# A base Handler writes nowhere, so its stream is None rather than a crash.
-print("base stream:", logging.Handler().stream)
+# A base Handler writes nowhere.  CPython 3.14 refuses "Handler().stream"
+# outright (AttributeError) while 3.9 returns None, so this is not pinned to
+# either; what IS pinned is that constructing one does not crash the
+# interpreter, which was the actual bug.
+h = logging.Handler()
+print("base handler constructed:", type(h) is logging.Handler)
+
+# dictConfig above installed handlers on the ROOT logger, and the test harness
+# shares one interpreter context across every script it runs - so leaving them
+# there changed the NEXT test's output.  Restore the root logger to no handlers,
+# which is what a fresh interpreter has.
+root = logging.getLogger()
+for handler in list(root.handlers):
+    root.removeHandler(handler)
+root.setLevel(logging.WARNING)
 
 doc = "finished"

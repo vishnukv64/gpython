@@ -1,0 +1,16 @@
+with exc_info
+NoneType: None
+with stacklevel
+with stack_info
+level name: VERBOSE
+level number: 15
+configured level: 15
+DEBUG 10
+INFO 20
+WARNING 30
+WARN 30
+ERROR 40
+CRITICAL 50
+FATAL 50
+NOTSET 0
+base handler constructed: True

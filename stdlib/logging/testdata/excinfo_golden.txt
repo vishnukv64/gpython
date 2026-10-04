@@ -1,0 +1,6 @@
+handler type: Sink
+isinstance: True
+own attribute kept: True
+plain line: 'no exception'
+has heading: False
+names the exception: True

@@ -11,7 +11,11 @@ import nspkg
 
 print("imported:", type(nspkg).__name__)
 print("has __file__:", getattr(nspkg, "__file__", None))
-print("__path__ length:", len(nspkg.__path__))
+# The LENGTH depends on how many sys.path entries match, which differs between
+# a run from the repository root and one from this directory - so what is pinned
+# is that the path is non-empty and absolute, not its arity.
+print("__path__ non-empty:", len(nspkg.__path__) > 0)
+print("__path__ absolute:", all(p.startswith("/") for p in nspkg.__path__))
 
 # Its submodules resolve, both by dotted import and through fromlist.
 from nspkg.inner import mod

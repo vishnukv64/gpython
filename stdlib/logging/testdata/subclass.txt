@@ -1,7 +1,0 @@
-type: Verbose
-isinstance: False
-verbose: VERBOSE: hi
-name: demo.sub
-level: 0
-same object: True
-module: set

@@ -388,7 +388,7 @@ func init() {
 		if len(args) < 1 {
 			return nil, py.ExceptionNewf(py.TypeError, "emit() takes a record")
 		}
-		line, err := logging.FormatRecord(h.Handler, args[0])
+		line, err := logging.FormatRecordLine(h.Handler, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +465,7 @@ func init() {
 		if len(args) < 1 {
 			return nil, py.ExceptionNewf(py.TypeError, "emit() takes a record")
 		}
-		line, err := logging.FormatRecord(h.Handler, args[0])
+		line, err := logging.FormatRecordLine(h.Handler, args[0])
 		if err != nil {
 			return nil, err
 		}

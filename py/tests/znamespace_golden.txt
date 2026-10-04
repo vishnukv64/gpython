@@ -1,6 +1,7 @@
 imported: module
 has __file__: None
-__path__ length: 2
+__path__ non-empty: True
+__path__ absolute: True
 submodule X: 1
 sibling Y: 2
 fromlist Y: 2
