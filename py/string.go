@@ -1160,7 +1160,7 @@ func (s String) M__getitem__(key Object) (Object, error) {
 		}
 		return String(newString), nil
 	}
-	i, err := IndexIntCheck(key, length)
+	i, err := IndexIntCheckNamed(key, length, "string")
 	if err != nil {
 		return nil, err
 	}

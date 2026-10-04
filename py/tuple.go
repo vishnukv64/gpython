@@ -113,7 +113,7 @@ func (t Tuple) M__getitem__(key Object) (Object, error) {
 		}
 		return newTuple, nil
 	}
-	i, err := IndexIntCheck(key, len(t))
+	i, err := IndexIntCheckNamed(key, len(t), "tuple")
 	if err != nil {
 		return nil, err
 	}

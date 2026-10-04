@@ -516,7 +516,7 @@ func (l *List) M__getitem__(key Object) (Object, error) {
 		}
 		return newList, nil
 	}
-	i, err := IndexIntCheck(key, len(l.Items))
+	i, err := IndexIntCheckNamed(key, len(l.Items), "list")
 	if err != nil {
 		return nil, err
 	}
@@ -555,7 +555,7 @@ func (l *List) M__setitem__(key, value Object) (Object, error) {
 			}
 		}
 	} else {
-		i, err := IndexIntCheck(key, len(l.Items))
+		i, err := IndexIntCheckNamed(key, len(l.Items), "list")
 		if err != nil {
 			return nil, err
 		}

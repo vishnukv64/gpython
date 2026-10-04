@@ -110,6 +110,18 @@ func (vm *Vm) SetException(exception py.Object) {
 	vm.curexc.Traceback = nil
 	vm.AddTraceback(&vm.curexc)
 	vm.why = whyException
+	// Publish it as the exception now being handled, so that sys.exc_info()
+	// and traceback.format_exc() work inside an except block even when the
+	// exception came from a Go-level method rather than a Python "raise".
+	//
+	// SetCurrentException was called ONLY on the raise statement, so
+	// "try: [][5] / except IndexError: sys.exc_info()" gave None - and with it
+	// traceback.format_exc() returned "NoneType: None" for every error raised
+	// by the interpreter itself.  That is how pip reported its own failures,
+	// so a broken run looked like no error at all.
+	if exc, ok := exception.(*py.Exception); ok {
+		py.SetCurrentException(exc)
+	}
 }
 
 // Check for an exception (panic)
@@ -850,9 +862,19 @@ func do_POP_EXCEPT(vm *Vm, arg int32) error {
 	frame.PopBlock()
 	if b.Type != py.TryBlockExceptHandler {
 		return py.ExceptionNewf(py.SystemError, "popped block is not an except handler")
-	} else {
-		vm.UnwindExceptHandler(frame, b)
 	}
+	// Leaving the handler restores the exception that was being handled
+	// OUTSIDE it, which is the one saved on entry - or nothing at all when
+	// this was the outermost handler.  Without this sys.exc_info() kept
+	// reporting a handler that had already finished.
+	if n := len(vm.excStack); n > 0 {
+		vm.exc = vm.excStack[n-1]
+		vm.excStack = vm.excStack[:n-1]
+	} else {
+		vm.exc = py.ExceptionInfo{}
+	}
+	py.SetCurrentExceptionFromValue(vm.exc.Value)
+	vm.UnwindExceptHandler(frame, b)
 	return nil
 }
 
@@ -2490,9 +2512,13 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 				// Python main loop.
 				// FIXME PyErr_NormalizeException(exc, &val, &tb)
 				// FIXME PyException_SetTraceback(val, tb)
+				// Entering a handler SAVES the state of the one that was
+				// active outside it, so leaving this one can put it back.
+				vm.excStack = append(vm.excStack, vm.exc)
 				vm.exc.Type = exc
 				vm.exc.Value = val
 				vm.exc.Traceback = tb
+				py.SetCurrentExceptionFromValue(val)
 				vm.PUSH(tb)
 				vm.PUSH(val)
 				if exc == nil {

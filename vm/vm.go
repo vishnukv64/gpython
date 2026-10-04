@@ -41,6 +41,15 @@ type Vm struct {
 	curexc py.ExceptionInfo
 	// Previous exception type, value and traceback
 	exc py.ExceptionInfo
+	// excStack remembers the exception being handled by each ENCLOSING
+	// except block, so that leaving an inner handler restores the outer one.
+	//
+	// There was no such record: POP_EXCEPT only unwound the value stack, so
+	// after a nested handler finished, sys.exc_info() still reported the INNER
+	// exception - and outside every handler it never cleared at all.  CPython
+	// restores the previous state on handler exit and reports (None, None,
+	// None) once no handler is active.
+	excStack []py.ExceptionInfo
 	// VM access to state / modules
 	context py.Context
 }

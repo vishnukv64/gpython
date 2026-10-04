@@ -155,6 +155,23 @@ func IndexIntCheck(a Object, max int) (int, error) {
 	return i, nil
 }
 
+// IndexIntCheckNamed is IndexIntCheck, but names the sequence in the error the
+// way CPython does: "list index out of range", "tuple index out of range",
+// "string index out of range".
+//
+// A bare "index out of range" is what a program sees in a traceback, and it
+// does not say which object was subscripted.
+func IndexIntCheckNamed(a Object, max int, what string) (int, error) {
+	i, err := IndexIntCheck(a, max)
+	if err != nil {
+		if e, ok := err.(*Exception); ok && e.Base == IndexError && what != "" {
+			return 0, ExceptionNewf(IndexError, "%s index out of range", what)
+		}
+		return 0, err
+	}
+	return i, nil
+}
+
 // Returns the number of items of a sequence or mapping
 func Len(self Object) (Object, error) {
 	// An instance of a Python subclass of a builtin container carries its value

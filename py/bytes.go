@@ -1914,6 +1914,13 @@ func indexForContainer(key Object, length int, what string) (int, error) {
 		n += length
 	}
 	if n < 0 || n >= length {
+		// CPython names the container for a str/list/tuple subscript but
+		// leaves bytes and bytearray unqualified - measured, not assumed:
+		// b"a"[5] is "index out of range" while "a"[5] is "string index out
+		// of range".
+		if what == "bytes" || what == "bytearray" {
+			return 0, ExceptionNewf(IndexError, "index out of range")
+		}
 		return 0, ExceptionNewf(IndexError, "%s index out of range", what)
 	}
 	return n, nil
