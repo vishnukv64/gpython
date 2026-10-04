@@ -1,0 +1,20 @@
+zfill: '00042' '-0042' '+0042' 'abc' 'abc'
+center: '--ab--' '  ab ' 'ab' '***ab**'
+ljust: 'ab***' 'ab' 'ab  '
+expandtabs: 'a   b' 'ab  c' 'ab' '    '
+removeprefix: 'bar' 'foobar' 'foobar'
+removesuffix: 'foo' 'foobar'
+rfind: 4 1 -1 3
+index: 1 4
+rindex: 4
+index err: substring not found
+rindex err: substring not found
+partition: ('a', '=', 'b') ('a=b', '', '') ('', '', '') ('', '=', 'x')
+rpartition: ('a=b', '=', 'c') ('', '', 'a=b') ('x', '=', '')
+casefold: 'strasse' 'ss' 'abc' 'i̇'
+swapcase: 'aBc' 'ABC' 'AbC'
+maketrans: {97: 120, 98: 121} {97: 'x'} {97: None, 98: 121}
+translate: 'Xbc' 'bc' 'Abc'
+translate table: xyc
+fillchar err: The fill character must be exactly one character long
+sep err: empty separator

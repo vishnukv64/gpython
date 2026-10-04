@@ -209,6 +209,64 @@ replaced.`))
 		return self.(String).Lower()
 	}, 0, "lower() -> a copy of the string converted to lowercase"))
 
+	StringType.Dict.Set("zfill", MustNewMethod("zfill", func(self Object, args Tuple) (Object, error) {
+		return self.(String).ZFill(args)
+	}, 0, "zfill(width) -> pad a numeric string with zeros on the left."))
+
+	StringType.Dict.Set("center", MustNewMethod("center", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Justify(args, 0)
+	}, 0, "center(width[, fillchar]) -> centred in a string of the given width."))
+
+	StringType.Dict.Set("ljust", MustNewMethod("ljust", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Justify(args, -1)
+	}, 0, "ljust(width[, fillchar]) -> left-justified in a string of the given width."))
+
+	StringType.Dict.Set("expandtabs", MustNewMethod("expandtabs", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return self.(String).ExpandTabs(args, kwargs)
+	}, 0, "expandtabs(tabsize=8) -> expand tabs, honouring column position."))
+
+	StringType.Dict.Set("removeprefix", MustNewMethod("removeprefix", func(self Object, args Tuple) (Object, error) {
+		return self.(String).RemoveAffix(args, true)
+	}, 0, "removeprefix(prefix) -> the string without that prefix, if present."))
+
+	StringType.Dict.Set("removesuffix", MustNewMethod("removesuffix", func(self Object, args Tuple) (Object, error) {
+		return self.(String).RemoveAffix(args, false)
+	}, 0, "removesuffix(suffix) -> the string without that suffix, if present."))
+
+	StringType.Dict.Set("rfind", MustNewMethod("rfind", func(self Object, args Tuple) (Object, error) {
+		return self.(String).FindMethod(args, "rfind", true, false)
+	}, 0, "rfind(sub[, start[, end]]) -> the highest index, or -1."))
+
+	StringType.Dict.Set("index", MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
+		return self.(String).FindMethod(args, "index", false, true)
+	}, 0, "index(sub[, start[, end]]) -> the lowest index, or ValueError."))
+
+	StringType.Dict.Set("rindex", MustNewMethod("rindex", func(self Object, args Tuple) (Object, error) {
+		return self.(String).FindMethod(args, "rindex", true, true)
+	}, 0, "rindex(sub[, start[, end]]) -> the highest index, or ValueError."))
+
+	StringType.Dict.Set("partition", MustNewMethod("partition", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Partition(args, false)
+	}, 0, "partition(sep) -> (before, sep, after), or (self, '', '')."))
+
+	StringType.Dict.Set("rpartition", MustNewMethod("rpartition", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Partition(args, true)
+	}, 0, "rpartition(sep) -> the same, splitting at the LAST occurrence."))
+
+	StringType.Dict.Set("maketrans", MustNewMethod("maketrans", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return strMakeTrans(args)
+	}, METH_CLASS, `maketrans(x, y=None, z=None) -> dict
+
+Return a translation table usable by str.translate.
+
+If there is only one argument, it must be a mapping of Unicode ordinals to
+Unicode ordinals, strings or None.  If there are two arguments, they must be
+strings of equal length.  With three arguments, the third must be a string of
+characters to map to None.`))
+
+	StringType.Dict.Set("translate", MustNewMethod("translate", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Translate(args)
+	}, 0, "translate(table) -> the string with each character mapped through table."))
 	StringType.Dict.Set("join", MustNewMethod("join", func(self Object, args Tuple) (Object, error) {
 		return self.(String).Join(args)
 	}, 0, "join(iterable) -> return a string which is the concatenation of the strings in iterable"))
@@ -298,16 +356,16 @@ replaced.`))
 	}, 0, "splitlines(keepends=False) -> a list of the lines, breaking at line boundaries"))
 
 	StringType.Dict.Set("casefold", MustNewMethod("casefold", func(self Object, args Tuple) (Object, error) {
-		// Full case folding is an extra table beyond lower(); this uses the
-		// Unicode lowercase mapping, which agrees with casefold() for every
-		// character whose fold is a single rune.  The two differ for a
-		// handful - most visibly "ß" (sharp s), which folds to "ss"
-		// and is handled below.
-		s := string(self.(String))
+		// Full case folding is lower() plus the extra folds.  lowerString is the
+		// one that EXPANDS where Go cannot - Go's strings.ToLower maps rune to
+		// rune, so it silently drops the combining dot that the dotted capital
+		// I folds to.  The sharp s needs the extra pass because it is a fold
+		// rather than a lower-case mapping.
+		s := lowerString(string(self.(String)))
 		if strings.ContainsRune(s, 'ß') {
 			s = strings.ReplaceAll(s, "ß", "ss")
 		}
-		return String(strings.ToLower(s)), nil
+		return String(s), nil
 	}, 0, "casefold() -> a casefolded copy, for caseless matching"))
 
 	StringType.Dict.Set("title", MustNewMethod("title", func(self Object, args Tuple) (Object, error) {
@@ -1440,11 +1498,11 @@ func (s String) RStrip(args Tuple) (Object, error) {
 }
 
 func (s String) Upper() (Object, error) {
-	return String(strings.ToUpper(string(s))), nil
+	return String(upperString(string(s))), nil
 }
 
 func (s String) Lower() (Object, error) {
-	return String(strings.ToLower(string(s))), nil
+	return String(lowerString(string(s))), nil
 }
 
 func (s String) Join(args Tuple) (Object, error) {
@@ -1695,4 +1753,528 @@ func isDigits(s string) bool {
 		}
 	}
 	return true
+}
+
+// ZFill pads a numeric string with zeros on the left: "42".zfill(5) is "00042".
+// A leading sign stays at the front, which is the whole point of the method and
+// what makes it different from a plain left-pad.
+func (s String) ZFill(args Tuple) (Object, error) {
+	var pywidth Object
+	if err := ParseTuple(args, "i:zfill", &pywidth); err != nil {
+		return nil, err
+	}
+	width := int(pywidth.(Int))
+	if width <= s.len() {
+		return s, nil
+	}
+	pad := width - s.len()
+	text := string(s)
+	if len(text) > 0 && (text[0] == '-' || text[0] == '+') {
+		return String(text[:1] + strings.Repeat("0", pad) + text[1:]), nil
+	}
+	return String(strings.Repeat("0", pad) + text), nil
+}
+
+// Justify returns the string padded to a width: mode -1 is left-justified,
+// 0 is centred, and mode 1 would be right-justified.  The fill character must
+// be exactly one character, which is CPython's rule and its message.
+//
+// Centring puts the ODD extra character on the RIGHT, so "ab".center(5) is
+// "  ab " - measured, not assumed.
+func (s String) Justify(args Tuple, mode int) (Object, error) {
+	var (
+		pywidth Object
+		pyfill  Object = String(" ")
+		name    string
+	)
+	switch mode {
+	case 0:
+		name = "center"
+	case -1:
+		name = "ljust"
+	default:
+		name = "rjust"
+	}
+	if err := ParseTuple(args, "i|O:"+name, &pywidth, &pyfill); err != nil {
+		return nil, err
+	}
+	width := int(pywidth.(Int))
+	fillStr, err := StrAsString(pyfill)
+	if err != nil {
+		return nil, ExceptionNewf(TypeError, "The fill character must be a unicode character, not %s", pyfill.Type().Name)
+	}
+	if fillStr == "" {
+		fillStr = " "
+	}
+	fill := []rune(fillStr)
+	if len(fill) != 1 {
+		return nil, ExceptionNewf(TypeError, "The fill character must be exactly one character long")
+	}
+	if width <= s.len() {
+		return s, nil
+	}
+	pad := width - s.len()
+	switch mode {
+	case -1:
+		return String(string(s) + strings.Repeat(fillStr, pad)), nil
+	case 1:
+		return String(strings.Repeat(fillStr, pad) + string(s)), nil
+	default:
+		// The odd extra character goes on the RIGHT: "ab".center(5) is
+		// "  ab " and "ab".center(4) is " ab " - measured against CPython.
+		right := pad / 2
+		left := pad - right
+		return String(strings.Repeat(fillStr, left) + string(s) + strings.Repeat(fillStr, right)), nil
+	}
+}
+
+// ExpandTabs expands tabs against the column position, and a newline or
+// carriage return RESETS that column: "ab\tc".expandtabs(4) is "ab  c", not
+// "ab  c" from a fixed replacement.
+func (s String) ExpandTabs(args Tuple, kwargs StringDict) (Object, error) {
+	var (
+		pytabsize Object = Int(8)
+	)
+	if err := ParseTupleAndKeywords(args, kwargs, "|i:expandtabs", []string{"tabsize"}, &pytabsize); err != nil {
+		return nil, err
+	}
+	tabSize := int(pytabsize.(Int))
+	var out strings.Builder
+	column := 0
+	for _, r := range string(s) {
+		switch r {
+		case '\t':
+			if tabSize <= 0 {
+				// A non-positive tab size removes the tab entirely.
+				continue
+			}
+			spaces := tabSize - (column % tabSize)
+			out.WriteString(strings.Repeat(" ", spaces))
+			column += spaces
+		case '\n', '\r':
+			out.WriteRune(r)
+			column = 0
+		default:
+			out.WriteRune(r)
+			column++
+		}
+	}
+	return String(out.String()), nil
+}
+
+// RemoveAffix removes a prefix (or a suffix) when present, and returns the
+// string unchanged when it is not.
+func (s String) RemoveAffix(args Tuple, prefix bool) (Object, error) {
+	var pyaffix Object
+	name := "removesuffix"
+	if prefix {
+		name = "removeprefix"
+	}
+	if err := ParseTuple(args, "O:"+name, &pyaffix); err != nil {
+		return nil, err
+	}
+	affix, err := StrAsString(pyaffix)
+	if err != nil {
+		return nil, err
+	}
+	text := string(s)
+	if prefix {
+		if strings.HasPrefix(text, affix) {
+			return String(text[len(affix):]), nil
+		}
+	} else if affix != "" && strings.HasSuffix(text, affix) {
+		return String(text[:len(text)-len(affix)]), nil
+	}
+	return s, nil
+}
+
+// FindMethod implements find, index, rfind and rindex.  A reverse search
+// takes the HIGHEST index; raiseMissing turns the -1 into a ValueError, which
+// is the only difference between find and index.
+func (s String) FindMethod(args Tuple, name string, reverse, raiseMissing bool) (Object, error) {
+	var (
+		pysub Object
+		pybeg Object = Int(0)
+		pyend Object = Int(s.len())
+	)
+	if err := ParseTuple(args, "s|ii:"+name, &pysub, &pybeg, &pyend); err != nil {
+		return nil, err
+	}
+	sub := string(pysub.(String))
+	beg, end := adjustIndices(int(pybeg.(Int)), int(pyend.(Int)), s.len())
+	haystack := string(s.slice(beg, end, s.len()))
+
+	idx := -1
+	if sub == "" {
+		// An empty needle matches at the START for a forward search and at the
+		// END for a reverse one: "abc".find("") is 0 and "abc".rfind("") is 3.
+		if reverse {
+			idx = len(haystack)
+		} else {
+			idx = 0
+		}
+	} else if reverse {
+		idx = strings.LastIndex(haystack, sub)
+	} else {
+		idx = strings.Index(haystack, sub)
+	}
+	if idx < 0 {
+		if raiseMissing {
+			return nil, ExceptionNewf(ValueError, "substring not found")
+		}
+		return Int(-1), nil
+	}
+	return Int(beg + idx), nil
+}
+
+// Partition splits at the first (or the last) occurrence of sep, returning the
+// three pieces.  A separator that is not found gives the whole string in the
+// FIRST position for partition and in the LAST for rpartition, and an empty
+// separator is a ValueError.
+//
+// Unlike split, the separator is KEPT, which is the point of the method.
+func (s String) Partition(args Tuple, reverse bool) (Object, error) {
+	name := "partition"
+	if reverse {
+		name = "rpartition"
+	}
+	var pysep Object
+	if err := ParseTuple(args, "O:"+name, &pysep); err != nil {
+		return nil, err
+	}
+	sep, err := StrAsString(pysep)
+	if err != nil {
+		return nil, err
+	}
+	if sep == "" {
+		return nil, ExceptionNewf(ValueError, "empty separator")
+	}
+	text := string(s)
+	idx := strings.Index(text, sep)
+	if reverse {
+		idx = strings.LastIndex(text, sep)
+	}
+	if idx < 0 {
+		if reverse {
+			return Tuple{String(""), String(""), s}, nil
+		}
+		return Tuple{s, String(""), String("")}, nil
+	}
+	return Tuple{String(text[:idx]), String(sep), String(text[idx+len(sep):])}, nil
+}
+
+// CaseFold is lower() plus the full case folds, of which the sharp s is the
+
+// strMakeTrans builds a translation table, in the three forms CPython allows:
+// a single mapping, two equal-length strings, or two strings plus a set of
+// characters to delete.
+func strMakeTrans(args Tuple) (Object, error) {
+	if len(args) == 0 || len(args) > 3 {
+		return nil, ExceptionNewf(TypeError, "maketrans() takes from 1 to 3 positional arguments but %d were given", len(args))
+	}
+	if len(args) == 1 {
+		// A mapping, or an object with __getitem__ that yields the entries.
+		table := NewStringDict()
+		if d, ok := args[0].(IGetDict); ok {
+			for _, e := range d.GetDict().Items() {
+				key, err := DictKeyDecode(e.Key)
+				if err != nil {
+					return nil, err
+				}
+				// A single-character STRING key is cast to its ordinal -
+				// maketrans({"a": "x"}) is {97: "x"} - and a longer one is
+				// CPython's ValueError.
+				var k int
+				if str, ok := key.(String); ok {
+					rs := []rune(string(str))
+					if len(rs) != 1 {
+						return nil, ExceptionNewf(ValueError,
+							"string keys in translate table must be of length 1")
+					}
+					k = int(rs[0])
+				} else {
+					k, err = IndexInt(key)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if err := setTransEntry(table, Int(k), e.Value); err != nil {
+					return nil, err
+				}
+			}
+			return table, nil
+		}
+		return nil, ExceptionNewf(TypeError, "maketrans() argument must be a dict mapping")
+	}
+
+	x, err := StrAsString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	y, err := StrAsString(args[1])
+	if err != nil {
+		return nil, err
+	}
+	xs, ys := []rune(x), []rune(y)
+	if len(xs) != len(ys) {
+		return nil, ExceptionNewf(ValueError, "the first two maketrans arguments must have equal length")
+	}
+	table := NewStringDict()
+	for i, r := range xs {
+		// The value is the other string's ORDINAL, not the character:
+		// str.maketrans("ab", "xy") is {97: 120, 98: 121}.
+		if err := setTransEntry(table, Int(r), Int(ys[i])); err != nil {
+			return nil, err
+		}
+	}
+	if len(args) == 3 {
+		z, err := StrAsString(args[2])
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range z {
+			if err := setTransEntry(table, Int(r), None); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return table, nil
+}
+
+// setTransEntry files one table entry, validating the value the way CPython
+// does: a string replacement must be exactly one character, and anything that
+// is neither a string, an int nor None is refused.
+func setTransEntry(table StringDict, key Int, value Object) error {
+	// The MAPPING form keeps whatever it was given - a string stays a string,
+	// an int stays an int - so only the validity is checked here.  The
+	// two-string form builds its own ordinals, above.
+	if v, ok := value.(String); ok {
+		if utf8.RuneCountInString(string(v)) != 1 {
+			return ExceptionNewf(ValueError, "string keys in translate table must be of length 1")
+		}
+	}
+	var buf []byte
+	if err := appendKey(&buf, Int(key)); err != nil {
+		return err
+	}
+	table.Set(string(buf), value)
+	return nil
+}
+
+// Translate maps every character through a table: a value of None DELETES the
+// character, a string replaces it, and an int is an ordinal to substitute.
+//
+// The table may be a mapping or any object with __getitem__, which rich relies
+// on - its control-code stripper is a dict of ordinals to None.
+func (s String) Translate(args Tuple) (Object, error) {
+	var pytable Object
+	if err := ParseTuple(args, "O:translate", &pytable); err != nil {
+		return nil, err
+	}
+	var out strings.Builder
+	for _, r := range string(s) {
+		repl, err := transLookup(pytable, r)
+		if err != nil {
+			return nil, err
+		}
+		if repl == None {
+			// None DELETES the character, which is a deliberate entry.
+			continue
+		}
+		if repl == nil {
+			// No entry at all keeps the character as it is.  Treating this
+			// like None deleted every character the table did not mention.
+			out.WriteRune(r)
+			continue
+		}
+		if n, ok := repl.(Int); ok {
+			// An int entry is an ordinal to substitute.
+			out.WriteRune(rune(n))
+			continue
+		}
+		text, err := StrAsString(repl)
+		if err != nil {
+			return nil, err
+		}
+		out.WriteString(text)
+	}
+	return String(out.String()), nil
+}
+
+// lookupTransKey reads an entry using the dict's own key encoding.
+func lookupTransKey(d StringDict, key Object) (Object, bool) {
+	var buf []byte
+	if err := appendKey(&buf, key); err != nil {
+		return nil, false
+	}
+	return d.Get(string(buf))
+}
+
+// transLookup finds the replacement for a rune, or nil when the table has no
+// entry for it.  A table key that is a string is accepted too, because
+// translate accepts a dict keyed by either the ordinal or the character.
+func transLookup(table Object, r rune) (Object, error) {
+	if d, ok := table.(IGetDict); ok {
+		if v, ok := lookupTransKey(d.GetDict(), Int(r)); ok {
+			return v, nil
+		}
+		if v, ok := lookupTransKey(d.GetDict(), String(string(r))); ok {
+			return v, nil
+		}
+		return nil, nil
+	}
+	// An object with __getitem__: look the ordinal up and treat a KeyError as
+	// "no entry".
+	v, err := GetItem(table, Int(r))
+	if err != nil {
+		if IsException(KeyError, err) || IsException(LookupError, err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return v, nil
+}
+
+// The case mappings that are NOT one character to one character.  Go's
+// strings.ToLower/ToUpper can only map rune to rune, so these expand: the
+// sharp s upper-cases to "SS", and the dotted capital I lower-cases to "i"
+// PLUS a combining dot above, which is two characters.
+//
+// The tables are generated from CPython's own str.lower()/str.upper() over the
+// whole codepoint range - every codepoint whose result is not a single
+// character - rather than hand-picked, so the set is complete rather than the
+// few that came to mind.
+var specialUpper = map[rune][]rune{
+	0xDF:   {83, 83},
+	0x149:  {700, 78},
+	0x1F0:  {74, 780},
+	0x390:  {921, 776, 769},
+	0x3B0:  {933, 776, 769},
+	0x587:  {1333, 1362},
+	0x1E96: {72, 817},
+	0x1E97: {84, 776},
+	0x1E98: {87, 778},
+	0x1E99: {89, 778},
+	0x1E9A: {65, 702},
+	0x1F50: {933, 787},
+	0x1F52: {933, 787, 768},
+	0x1F54: {933, 787, 769},
+	0x1F56: {933, 787, 834},
+	0x1F80: {7944, 921},
+	0x1F81: {7945, 921},
+	0x1F82: {7946, 921},
+	0x1F83: {7947, 921},
+	0x1F84: {7948, 921},
+	0x1F85: {7949, 921},
+	0x1F86: {7950, 921},
+	0x1F87: {7951, 921},
+	0x1F88: {7944, 921},
+	0x1F89: {7945, 921},
+	0x1F8A: {7946, 921},
+	0x1F8B: {7947, 921},
+	0x1F8C: {7948, 921},
+	0x1F8D: {7949, 921},
+	0x1F8E: {7950, 921},
+	0x1F8F: {7951, 921},
+	0x1F90: {7976, 921},
+	0x1F91: {7977, 921},
+	0x1F92: {7978, 921},
+	0x1F93: {7979, 921},
+	0x1F94: {7980, 921},
+	0x1F95: {7981, 921},
+	0x1F96: {7982, 921},
+	0x1F97: {7983, 921},
+	0x1F98: {7976, 921},
+	0x1F99: {7977, 921},
+	0x1F9A: {7978, 921},
+	0x1F9B: {7979, 921},
+	0x1F9C: {7980, 921},
+	0x1F9D: {7981, 921},
+	0x1F9E: {7982, 921},
+	0x1F9F: {7983, 921},
+	0x1FA0: {8040, 921},
+	0x1FA1: {8041, 921},
+	0x1FA2: {8042, 921},
+	0x1FA3: {8043, 921},
+	0x1FA4: {8044, 921},
+	0x1FA5: {8045, 921},
+	0x1FA6: {8046, 921},
+	0x1FA7: {8047, 921},
+	0x1FA8: {8040, 921},
+	0x1FA9: {8041, 921},
+	0x1FAA: {8042, 921},
+	0x1FAB: {8043, 921},
+	0x1FAC: {8044, 921},
+	0x1FAD: {8045, 921},
+	0x1FAE: {8046, 921},
+	0x1FAF: {8047, 921},
+	0x1FB2: {8122, 921},
+	0x1FB3: {913, 921},
+	0x1FB4: {902, 921},
+	0x1FB6: {913, 834},
+	0x1FB7: {913, 834, 921},
+	0x1FBC: {913, 921},
+	0x1FC2: {8138, 921},
+	0x1FC3: {919, 921},
+	0x1FC4: {905, 921},
+	0x1FC6: {919, 834},
+	0x1FC7: {919, 834, 921},
+	0x1FCC: {919, 921},
+	0x1FD2: {921, 776, 768},
+	0x1FD3: {921, 776, 769},
+	0x1FD6: {921, 834},
+	0x1FD7: {921, 776, 834},
+	0x1FE2: {933, 776, 768},
+	0x1FE3: {933, 776, 769},
+	0x1FE4: {929, 787},
+	0x1FE6: {933, 834},
+	0x1FE7: {933, 776, 834},
+	0x1FF2: {8186, 921},
+	0x1FF3: {937, 921},
+	0x1FF4: {911, 921},
+	0x1FF6: {937, 834},
+	0x1FF7: {937, 834, 921},
+	0x1FFC: {937, 921},
+	0xFB00: {70, 70},
+	0xFB01: {70, 73},
+	0xFB02: {70, 76},
+	0xFB03: {70, 70, 73},
+	0xFB04: {70, 70, 76},
+	0xFB05: {83, 84},
+	0xFB06: {83, 84},
+	0xFB13: {1348, 1350},
+	0xFB14: {1348, 1333},
+	0xFB15: {1348, 1339},
+	0xFB16: {1358, 1350},
+	0xFB17: {1348, 1341},
+}
+
+var specialLower = map[rune][]rune{
+	0x130: {105, 775},
+}
+
+// lowerString maps a string through lower(), expanding where CPython does.
+func lowerString(s string) string {
+	var out strings.Builder
+	for _, r := range s {
+		if repl, ok := specialLower[r]; ok {
+			out.WriteString(string(repl))
+			continue
+		}
+		out.WriteRune(unicode.ToLower(r))
+	}
+	return out.String()
+}
+
+// upperString maps a string through upper(), expanding where CPython does.
+func upperString(s string) string {
+	var out strings.Builder
+	for _, r := range s {
+		if repl, ok := specialUpper[r]; ok {
+			out.WriteString(string(repl))
+			continue
+		}
+		out.WriteRune(unicode.ToUpper(r))
+	}
+	return out.String()
 }
