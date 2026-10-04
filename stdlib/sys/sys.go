@@ -683,6 +683,16 @@ func init() {
 		py.DictEntry{Key: "float_info", Value: floatInfo()},
 		py.DictEntry{Key: "hexversion", Value: py.Int(0x030A00F0)},
 		py.DictEntry{Key: "argv", Value: py.NewListFromStrings(os.Args[1:])},
+		// sys.meta_path is the list of finders consulted before built-in
+		// resolution.  It is EMPTY here, and that is honest: this interpreter's
+		// own finder is built in rather than expressed as an object of this
+		// protocol, so listing it would be a fiction.  A program can append its
+		// own finder and it WILL be consulted (see py.import's metaPathFind).
+		py.DictEntry{Key: "meta_path", Value: py.NewListFromItems(nil)},
+		// sys.path_hooks and sys.path_importer_cache are part of the same
+		// protocol; empty for the same reason.
+		py.DictEntry{Key: "path_hooks", Value: py.NewListFromItems(nil)},
+		py.DictEntry{Key: "path_importer_cache", Value: py.NewStringDict()},
 		py.DictEntry{Key: "stdin", Value: stdin},
 		py.DictEntry{Key: "stdout", Value: stdout},
 		py.DictEntry{Key: "stderr", Value: stderr},

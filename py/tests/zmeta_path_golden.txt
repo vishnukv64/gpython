@@ -1,0 +1,8 @@
+meta_path is a list: True
+path_hooks is a list: True
+VALUE: 42
+NAME: virtual_mod
+in sys.modules: True
+the finder was asked: True
+colorsys still imports: True
+finder error surfaces: finder broke

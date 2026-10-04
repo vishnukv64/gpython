@@ -132,10 +132,206 @@ func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDic
 
 // importOne imports the module with the given absolute dotted name, returning
 // an already loaded instance when there is one.
+// metaPathFind consults sys.meta_path, in order, for a finder that can supply
+// the named module.
+//
+// A finder is any object with find_spec(name, path, target) - the PEP 451
+// protocol - or the older find_module(name, path).  An error raised INSIDE a
+// finder is returned rather than turned into "module not found": a broken
+// finder must be visible, not silently skipped.
+//
+// A loader that supplies code is executed and the module returned.  A finder
+// that only identifies the module - a namespace package - leaves an empty
+// module recorded under that name, which is what CPython does with no source to
+// run.
+func metaPathFind(ctx Context, name string) (*Module, error) {
+	metaPath := metaPathList(ctx)
+	if metaPath == nil {
+		return nil, nil
+	}
+	iter, err := Iter(metaPath)
+	if err != nil {
+		return nil, nil
+	}
+	for {
+		finder, err := Next(iter)
+		if err != nil {
+			if IsException(StopIteration, err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		spec, err := callFinder(finder, name)
+		if err != nil {
+			return nil, err
+		}
+		if spec == nil || spec == None {
+			continue
+		}
+		return moduleFromSpec(ctx, name, spec)
+	}
+}
+
+// attrOrNil reads an attribute, giving nil when the object does not have one.
+//
+// A finder or loader implements SOME of the protocol, not all of it: a finder
+// may have find_spec but no find_module, and a loader may have get_source but
+// no get_code.  The absent method is the signal to try the other.
+func attrOrNil(o Object, name string) Object {
+	v, err := GetAttrString(o, name)
+	if err != nil || v == nil {
+		return nil
+	}
+	return v
+}
+
+// metaPathList reads sys.meta_path, or nil when there is none.
+func metaPathList(ctx Context) Object {
+	// DURING STARTUP sys is not registered yet, and the first imports run
+	// before it is - so a missing sys means "no user finders", not an error.
+	// MustGetModule PANICS in that case, which took the whole process down
+	// before a single line of the program ran.
+	sysMod, err := ctx.GetModule("sys")
+	if err != nil || sysMod == nil {
+		return nil
+	}
+	list, ok := sysMod.Globals.Get("meta_path")
+	if !ok {
+		return nil
+	}
+	return list
+}
+
+// callFinder asks one finder for a spec, trying find_spec then find_module.
+func callFinder(finder Object, name string) (Object, error) {
+	if findSpec := attrOrNil(finder, "find_spec"); findSpec != nil {
+		return Call(findSpec, Tuple{String(name), None, None}, NewStringDict())
+	}
+	findModule := attrOrNil(finder, "find_module")
+	if findModule == nil {
+		return nil, nil
+	}
+	res, err := Call(findModule, Tuple{String(name), None}, NewStringDict())
+	if err != nil {
+		return nil, err
+	}
+	if res == None || res == nil {
+		return nil, nil
+	}
+	// The older protocol answers with a LOADER, which stands in for the spec.
+	return res, nil
+}
+
+// moduleFromSpec turns what a finder returned into a module.
+func moduleFromSpec(ctx Context, name string, spec Object) (*Module, error) {
+	loader := attrOrNil(spec, "loader")
+	if loader == nil {
+		// find_module's answer IS the loader.
+		loader = spec
+	}
+	codeDesc := "<meta_path:" + name + ">"
+	if o := attrOrNil(spec, "origin"); o != nil {
+		if s, err := StrAsString(o); err == nil && s != "" {
+			codeDesc = s
+		}
+	}
+
+	// A PEP 451 loader with exec_module fills the module in itself, which is
+	// the modern protocol and the one a finder written today implements.
+	if execModule := attrOrNil(loader, "exec_module"); execModule != nil {
+		if module, err := moduleFromSpecAttrs(ctx, name, spec, codeDesc); err == nil {
+			if _, err := Call(execModule, Tuple{module}, NewStringDict()); err != nil {
+				return nil, err
+			}
+			return module, nil
+		}
+	}
+
+	// Otherwise a loader with get_code or get_source, whose code is compiled
+	// and run here.
+	code, err := loadCodeFrom(loader, name)
+	if err != nil {
+		return nil, err
+	}
+	if code == nil {
+		// No code to run, so the module is recorded as an empty one.  A later
+		// import of the same name then finds it rather than searching again.
+		return moduleFromSpecAttrs(ctx, name, spec, codeDesc)
+	}
+	return RunCode(ctx, code, codeDesc, name)
+}
+
+// moduleFromSpecAttrs builds the module a spec describes, applying the spec's
+// own attributes the way CPython's _init_module_attrs does.
+//
+// The attributes matter to the loader: exec_module reads module.__name__, and a
+// loader that looks at __spec__ or __path__ must find them.
+func moduleFromSpecAttrs(ctx Context, name string, spec Object, codeDesc string) (*Module, error) {
+	mod, err := ctx.Store().NewModule(ctx, &ModuleImpl{
+		Info: ModuleInfo{Name: name, FileDesc: codeDesc},
+	})
+	if err != nil {
+		return nil, err
+	}
+	mod.Globals.Set("__name__", String(name))
+	if spec != nil {
+		mod.Globals.Set("__spec__", spec)
+	}
+	if origin := attrOrNil(spec, "origin"); origin != nil && origin != None {
+		mod.Globals.Set("__file__", origin)
+	}
+	// submodule_search_locations makes the module a PACKAGE; without it a
+	// loader that imports its own submodules cannot.
+	if locs := attrOrNil(spec, "submodule_search_locations"); locs != nil && locs != None {
+		mod.Globals.Set("__path__", locs)
+	}
+	return mod, nil
+}
+
+// loadCodeFrom asks a loader for a code object, by either protocol method.
+func loadCodeFrom(loader Object, name string) (*Code, error) {
+	if getCode := attrOrNil(loader, "get_code"); getCode != nil {
+		res, err := Call(getCode, Tuple{String(name)}, NewStringDict())
+		if err != nil {
+			return nil, err
+		}
+		if res == nil || res == None {
+			return nil, nil
+		}
+		if code, ok := res.(*Code); ok {
+			return code, nil
+		}
+	}
+	getSource := attrOrNil(loader, "get_source")
+	if getSource == nil {
+		return nil, nil
+	}
+	res, err := Call(getSource, Tuple{String(name)}, NewStringDict())
+	if err != nil {
+		return nil, err
+	}
+	src, err := StrAsString(res)
+	if err != nil || src == "" {
+		return nil, nil
+	}
+	return Compile(src, "<meta_path:"+name+">", ExecMode, 0, true)
+}
+
 func importOne(ctx Context, name string) (*Module, error) {
 	// Module already loaded - return that
 	if module, err := ctx.GetModule(name); err == nil {
 		return module, nil
+	}
+
+	// sys.meta_path comes BEFORE the built-in resolution, which is CPython's
+	// order: its own builtin and file finders are entries IN meta_path, so a
+	// program that inserts a finder at the front gets first refusal.  A finder
+	// that raises surfaces its error here rather than being passed over - the
+	// point of inserting one is to be believed.
+	if m, err := metaPathFind(ctx, name); err != nil {
+		return nil, err
+	} else if m != nil {
+		return m, nil
 	}
 
 	// Registered embedded module that has not been loaded into this ctx yet
@@ -160,6 +356,18 @@ func importOne(ctx Context, name string) (*Module, error) {
 func importDotted(ctx Context, name string) (*Module, error) {
 	if module, err := ctx.GetModule(name); err == nil {
 		return module, nil
+	}
+	// sys.meta_path is consulted BEFORE the embedded modules, which is
+	// CPython's order: its builtin finder is an entry ON meta_path, so a
+	// program that inserts its own finder gets first refusal - including over
+	// a name this interpreter has an embedded module for.  Putting the
+	// embedded check first made an inserted finder unable to override one, so
+	// "import netrc" resolved the embedded module and a finder that was
+	// supposed to raise was never reached.
+	if m, err := metaPathFind(ctx, name); err != nil {
+		return nil, err
+	} else if m != nil {
+		return m, nil
 	}
 	if impl := GetModuleImpl(name); impl != nil {
 		return ctx.ModuleInit(impl)
