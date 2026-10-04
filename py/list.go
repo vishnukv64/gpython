@@ -62,10 +62,17 @@ func init() {
 	ListType.Dict.Set("extend", MustNewMethod("extend", func(self Object, args Tuple) (Object, error) {
 		listSelf := self.(*List)
 		if len(args) != 1 {
-			return nil, ExceptionNewf(TypeError, "append() takes exactly one argument (%d given)", len(args))
+			return nil, ExceptionNewf(TypeError, "extend() takes exactly one argument (%d given)", len(args))
 		}
-		if oList, ok := args[0].(*List); ok {
-			listSelf.Items = append(listSelf.Items, oList.Items...)
+		// ANY iterable, not just a list.  The fast path copies a list's items
+		// directly; everything else - a tuple, a generator, a python-level
+		// object with __iter__ - is walked with the iterator protocol.
+		//
+		// Before this, anything that was not a *List was SILENTLY IGNORED, so
+		// "lines.extend(other_lines)" added nothing and returned None.  That
+		// broke rich's text wrapping, which is extend over a Lines object.
+		if err := appendIterable(listSelf, args[0]); err != nil {
+			return nil, err
 		}
 		return NoneType{}, nil
 	}, 0, "extend([item])"))
@@ -502,6 +509,33 @@ func (l *List) M__bool__() (Object, error) {
 
 func (l *List) M__iter__() (Object, error) {
 	return NewIterator(Tuple(l.Items)), nil
+}
+
+// appendIterable appends every item of an arbitrary iterable to a list.
+//
+// The iterator protocol is the definition of "iterable" - an object is one
+// because it has __iter__, not because it is a particular Go type - so a
+// generator and a python-level sequence both work here.
+func appendIterable(l *List, source Object) error {
+	if oList, ok := source.(*List); ok {
+		// A list is the common case and its items need no iteration.
+		l.Items = append(l.Items, oList.Items...)
+		return nil
+	}
+	iter, err := Iter(source)
+	if err != nil {
+		return err
+	}
+	for {
+		item, err := Next(iter)
+		if err != nil {
+			if IsException(StopIteration, err) {
+				return nil
+			}
+			return err
+		}
+		l.Items = append(l.Items, item)
+	}
 }
 
 func (l *List) M__getitem__(key Object) (Object, error) {

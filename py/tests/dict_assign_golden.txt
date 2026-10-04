@@ -1,0 +1,5 @@
+x: 1 dict: {'x': 1}
+y: 2
+empty: {}
+copy: s 3 None
+independent: 3 9

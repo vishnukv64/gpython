@@ -453,6 +453,12 @@ func GetAttr(self Object, keyObj Object) (res Object, err error) {
 	return GetAttrString(self, key)
 }
 
+// IDictSetter is implemented by an object whose instance namespace can be
+// replaced wholesale, which is what "obj.__dict__ = other" does.
+type IDictSetter interface {
+	SetDict(StringDict)
+}
+
 // SetAttrString
 func SetAttrString(self Object, key string, value Object) (Object, error) {
 	// First look in type's dictionary etc for a property that could
@@ -478,6 +484,23 @@ func SetAttrString(self Object, key string, value Object) (Object, error) {
 		dict := I.GetDict()
 		if dict.IsNil() {
 			return nil, ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
+		}
+		// Assigning __dict__ REPLACES the instance's namespace; it is not an
+		// attribute named "__dict__".  Treated as an ordinary key it made the
+		// namespace itself invisible: "a.__dict__ = {...}" then showed the
+		// mapping but "a.x" still raised, because lookup reads the namespace
+		// and the mapping had been filed inside it.  rich copies
+		// ConsoleOptions exactly this way - __new__ then __dict__ = ... - so
+		// every copied options object was empty of its fields.
+		if key == "__dict__" {
+			newDict, ok := value.(StringDict)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "__dict__ must be set to a dict, not %s", value.Type().Name)
+			}
+			if setter, ok := self.(IDictSetter); ok {
+				setter.SetDict(newDict)
+				return None, nil
+			}
 		}
 		dict.Set(key, value)
 		return None, nil

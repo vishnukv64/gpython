@@ -260,6 +260,20 @@ func (t *Type) GetDict() StringDict {
 	return t.Dict
 }
 
+// SetDict replaces an instance's namespace, which is what assigning to
+// __dict__ does.  A Type that is a CLASS must not be re-pointed at another
+// dict this way - its Dict IS its class namespace - so this refuses for a
+// named type and is only reached for an instance (an empty Name).
+func (t *Type) SetDict(d StringDict) {
+	if t.Name != "" {
+		// A class's namespace is replaced through the class, not by
+		// assigning to an instance's __dict__; leave it alone rather than
+		// silently swapping a class's own dict out from under it.
+		return
+	}
+	t.Dict = d
+}
+
 // delayedReady holds types waiting to be intialised
 var delayedReady = []*Type{}
 
