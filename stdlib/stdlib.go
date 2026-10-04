@@ -109,6 +109,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/bisect"
 	_ "github.com/vishnukv64/gpython/stdlib/dataclasses"
 	_ "github.com/vishnukv64/gpython/stdlib/importlib"
+	_ "github.com/vishnukv64/gpython/stdlib/importlibabc"
 	_ "github.com/vishnukv64/gpython/stdlib/logging"
 	_ "github.com/vishnukv64/gpython/stdlib/pathlib"
 	_ "github.com/vishnukv64/gpython/stdlib/socket"

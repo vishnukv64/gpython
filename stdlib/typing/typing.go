@@ -111,9 +111,23 @@ var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted ty
 // and for a typing alias that is the runtime class it stands for: the bases of
 // "class NullFile(IO[str])" are IO and Generic.  Without this, every such class
 // statement failed with "bases must be types".
+// ProtocolType is typing.Protocol, at package level because importlib.abc
+// re-exports the SAME class.  CPython's
+// "importlib.abc.Protocol is typing.Protocol" is True, and a second class with
+// that name would make the identity check fail.
+var ProtocolType = func() *py.Type {
+	t := py.NewType("typing.Protocol", "Base class for protocol classes.")
+	t.Flags |= py.TPFLAGS_BASETYPE
+	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters."))
+	return t
+}()
+
 func runtimeOrigin(name string) py.Object {
 	switch name {
 	case "Generic", "Protocol":
+
 		// Generic and Protocol have no runtime class of their own; CPython
 		// yields object for the protocol case and Generic itself otherwise.
 		return py.ObjectType
@@ -507,12 +521,7 @@ func init() {
 		return py.NewListFromItems(nil), nil
 	}, 0, "Return the overloads of a function."))
 
-	protocolType := py.NewType("typing.Protocol", "Base class for protocol classes.")
-	protocolType.Flags |= py.TPFLAGS_BASETYPE
-	protocolType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters."))
-	globals.Set("Protocol", protocolType)
+	globals.Set("Protocol", ProtocolType)
 
 	globals.Set("get_type_hints", py.MustNewMethod("get_type_hints", getTypeHints, 0, "Return the annotations of an object."))
 	globals.Set("get_args", py.MustNewMethod("get_args", getArgs, 0, "Return the arguments of a subscripted type, as far as they are kept."))

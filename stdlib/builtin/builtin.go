@@ -1116,10 +1116,13 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 			return false, py.ExceptionNewf(py.TypeError, "isinstance() arg 2 must be a type or tuple of types")
 		}
 
-		// Walk the base chain: isinstance must accept a subclass, which is
-		// what makes the abstract base classes usable as isinstance targets.
-		for t := obj.Type(); t != nil; t = t.Base {
-			if t == class {
+		// Walk the MRO, which is what issubclass does and what isinstance must
+		// do to agree with it.  Following Base alone missed a GRANDPARENT of a
+		// type built in Go: importlib.abc.MetaPathFinder derives from Finder,
+		// and "isinstance(a.MetaPathFinder(), a.Finder)" was False while
+		// issubclass of the same two said True.
+		if t := obj.Type(); t != nil {
+			if t == class || t.IsSubtype(class) {
 				return true, nil
 			}
 		}

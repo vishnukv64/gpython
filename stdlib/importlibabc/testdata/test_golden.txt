@@ -1,0 +1,12 @@
+all present: True
+Protocol is typing.Protocol: True
+module doc is a str: True
+object is a Loader: False
+object is a Finder: False
+subclass instance: MyFinder
+isinstance own subclass: True
+isinstance of base: True
+isinstance of Finder: True
+SourceLoader is a Loader: True
+MetaPathFinder is a Finder: True
+Loader is not a Finder: False
