@@ -207,3 +207,59 @@ func TestImportMissingModuleRaises(t *testing.T) {
 		t.Errorf("got %T (%v), want ImportError", err, err)
 	}
 }
+
+// TestResolveModulePathResolvesSubmoduleBeforeImport covers "-m pkg.mod": the
+// dotted name is resolved BEFORE anything is imported, so the parent cannot be
+// read out of the module store - it is not there yet.  Requiring it raised
+// "No module named pkg.mod" for a file that plainly exists.
+func TestResolveModulePathResolvesSubmoduleBeforeImport(t *testing.T) {
+	ctx := newImportTestContext(t)
+	defer ctx.Close()
+
+	path, isPkg, err := ResolveModulePath(ctx, "pkg2.mod")
+	if err != nil {
+		t.Fatalf("ResolveModulePath(pkg2.mod): %v", err)
+	}
+	if isPkg {
+		t.Errorf("pkg2.mod reported as a package")
+	}
+	if filepath.Base(path) != "mod.py" {
+		t.Errorf("resolved to %q, want a path ending in mod.py", path)
+	}
+
+	// A submodule that is itself a package resolves too, and reports isPkg.
+	path, isPkg, err = ResolveModulePath(ctx, "pkg.sub")
+	if err != nil {
+		t.Fatalf("ResolveModulePath(pkg.sub): %v", err)
+	}
+	if isPkg {
+		t.Errorf("pkg.sub is a module, not a package")
+	}
+	if filepath.Base(path) != "sub.py" {
+		t.Errorf("resolved to %q, want a path ending in sub.py", path)
+	}
+}
+
+// TestRunFileAsNamedSetsPackage covers the globals "-m" must provide before the
+// body runs: __package__ is the module's PARENT package, which a relative
+// import resolves against (PEP 328).  It was None, so "gpython -m pkg.mod"
+// could not run a file whose first statement is "from .sub import helper".
+func TestRunFileAsNamedSetsPackage(t *testing.T) {
+	ctx := newImportTestContext(t)
+	defer ctx.Close()
+
+	path, _, err := ResolveModulePath(ctx, "pkg2.mod")
+	if err != nil {
+		t.Fatalf("ResolveModulePath: %v", err)
+	}
+	mod, err := RunFileAsNamed(ctx, path, CompileOpts{}, "__main__", "pkg2.mod")
+	if err != nil {
+		t.Fatalf("RunFileAsNamed: %v", err)
+	}
+	if got := string(mod.Globals.GetOrNil("__package__").(String)); got != "pkg2" {
+		t.Errorf("__package__ = %q, want \"pkg2\"", got)
+	}
+	if got := string(mod.Globals.GetOrNil("__name__").(String)); got != "__main__" {
+		t.Errorf("__name__ = %q, want \"__main__\"", got)
+	}
+}

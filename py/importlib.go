@@ -52,6 +52,34 @@ func packagePaths(parent *Module) []string {
 	return paths
 }
 
+// packageSearchPaths is the __path__ a package's submodules are searched in.
+//
+// An ALREADY IMPORTED package is read from the module store, which is the fast
+// path and honours any __path__ the package set at runtime.  A package that has
+// NOT been imported is located on the filesystem instead: "-m pkg.sub" resolves
+// its dotted name before importing anything, and requiring the parent to be in
+// the store made it raise "No module named pkg.sub" for a file that plainly
+// exists.
+func packageSearchPaths(ctx Context, name string) ([]string, error) {
+	if parent, err := ctx.GetModule(name); err == nil && parent != nil {
+		return packagePaths(parent), nil
+	}
+
+	path, isPkg, err := findModule(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if !isPkg {
+		return nil, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
+	}
+	// A namespace package is reported as its DIRECTORY; a regular one as its
+	// __init__.py, so the directory holding it is that file's parent.
+	if strings.HasSuffix(path, "__init__.py") || strings.HasSuffix(path, "__init__.pyc") {
+		return []string{filepath.Dir(path)}, nil
+	}
+	return strings.Split(path, string(os.PathListSeparator)), nil
+}
+
 // findModule locates the source of the fully qualified dotted name, returning
 // the path of the module file and whether it is a package (__init__.py).
 //
@@ -64,11 +92,10 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		searchPaths = sysPaths(ctx)
 	} else {
 		base = name[i+1:]
-		parent, err := ctx.GetModule(name[:i])
+		searchPaths, err = packageSearchPaths(ctx, name[:i])
 		if err != nil {
 			return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
 		}
-		searchPaths = packagePaths(parent)
 	}
 
 	// Namespace package directories found so far, across all search paths.

@@ -7,6 +7,7 @@ package py
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type CompileMode string
@@ -229,6 +230,18 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 	}
 
 	if err == nil && createNew {
+		// __package__ is the module's PARENT package, which is what a relative
+		// import resolves against (PEP 328).  It was left as None, so
+		// "python -m pkg.mod" could not run a file whose first statement is
+		// "from .sub import helper" - CPython sets it to "pkg".  The rule is
+		// the same as for an ordinary import: the dotted name minus its last
+		// component.
+		pkg := specName
+		if i := strings.LastIndex(pkg, "."); i >= 0 {
+			pkg = pkg[:i]
+		} else {
+			pkg = ""
+		}
 		moduleImpl := ModuleImpl{
 			Info: ModuleInfo{
 				Name:     moduleName,
@@ -240,6 +253,7 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 			// afterwards is too late.
 			PreSetGlobals: func(g StringDict) {
 				g.Set("__spec__", NewModuleSpec(specName, String(codeDesc), false))
+				g.Set("__package__", String(pkg))
 			},
 		}
 		module, err = ctx.ModuleInit(&moduleImpl)
