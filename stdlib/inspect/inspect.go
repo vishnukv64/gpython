@@ -34,7 +34,11 @@ func init() {
 		py.DictEntry{Key: "isbuiltin", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
 		py.DictEntry{Key: "ismethod", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
 		py.DictEntry{Key: "ismodule", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Module); return ok })},
-		py.DictEntry{Key: "isclass", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Type); return ok })},
+		// A python-level INSTANCE is also a *py.Type here (an empty Name is
+		// what distinguishes it), so the bare type assertion reported every
+		// instance as a class.  rich checks isclass before calling an object's
+		// __rich_console__, so every Text was "not renderable".
+		py.DictEntry{Key: "isclass", Value: predicate(py.IsClassObject)},
 		py.DictEntry{Key: "isdatadescriptor", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Property); return ok })},
 		py.DictEntry{Key: "getdoc", Value: py.MustNewMethod("getdoc", getdoc, 0, getdoc_doc)},
 		py.DictEntry{Key: "signature", Value: py.MustNewMethod("signature", notImplemented, 0, signature_doc)},

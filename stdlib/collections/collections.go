@@ -1431,11 +1431,23 @@ type NamedTuple struct {
 	values []py.Object
 	fields []string
 	name   string
+	// cls is the class this record was made as - the one namedtuple()
+	// generated, or a subclass of it.  Every record used to report
+	// NamedTupleType, so "type(Color.RED).__name__" was "collections.namedtuple"
+	// rather than the class, "isinstance(seg, Segment)" was False, and rich
+	// rejected its own Segment as "not renderable" because no branch of its
+	// dispatch matched.
+	cls *py.Type
 }
 
 var NamedTupleType = py.NewTypeX("collections.namedtuple", namedtuple_doc, nil, nil)
 
-func (n *NamedTuple) Type() *py.Type { return NamedTupleType }
+func (n *NamedTuple) Type() *py.Type {
+	if n.cls != nil {
+		return n.cls
+	}
+	return NamedTupleType
+}
 
 func init() {
 	NamedTupleType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -1693,7 +1705,7 @@ func (f *namedtupleFactory) M__call__(args py.Tuple, kwargs py.StringDict) (py.O
 		}
 		return nil, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: %q", f.name, f.fields[i])
 	}
-	return &NamedTuple{values: values, fields: f.fields, name: f.name}, nil
+	return &NamedTuple{values: values, fields: f.fields, name: f.name, cls: f.cls}, nil
 }
 
 // namedtupleMethod is the module-level function form of namedtupleNew.
@@ -2216,14 +2228,27 @@ func (n *NamedTuple) M__getattribute__(name string) (py.Object, error) {
 			return n.values[i], nil
 		}
 	}
-	res := NamedTupleType.NativeGetAttrOrNil(name)
-	if res == nil {
-		return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", n.name, name)
+	// The attribute is looked up on the record's OWN class, through its MRO,
+	// not on the shared base.  A namedtuple subclass carries methods and
+	// properties of its own - rich's Segment declares cell_length as a
+	// property - and consulting only NamedTupleType made every such attribute
+	// an AttributeError, which is what stopped rich rendering anything.
+	cls := n.Type()
+	if cls != nil {
+		if res := cls.Lookup(name); res != nil {
+			if I, ok := res.(py.I__get__); ok {
+				return I.M__get__(n, cls)
+			}
+			return res, nil
+		}
 	}
-	if I, ok := res.(py.I__get__); ok {
-		return I.M__get__(n, NamedTupleType)
+	if res := NamedTupleType.NativeGetAttrOrNil(name); res != nil {
+		if I, ok := res.(py.I__get__); ok {
+			return I.M__get__(n, NamedTupleType)
+		}
+		return res, nil
 	}
-	return res, nil
+	return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", n.name, name)
 }
 
 var _ py.I__getattribute__ = (*NamedTuple)(nil)

@@ -678,6 +678,18 @@ func (n *nativeNew) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 // instances read the Payload.
 var payloadContainers = []*Type{TupleType, ListType, SetType}
 
+// IsClassObject reports whether an object is a CLASS rather than an instance.
+//
+// This interpreter represents a python-level instance as a *Type with an empty
+// Name, so "obj.(*Type)" is TRUE for ordinary instances - which made
+// inspect.isclass(x) true for every python-level object, and rich's render
+// therefore refused to call x.__rich_console__ and reported that a Text was
+// "not renderable".  The Name is what tells the two apart.
+func IsClassObject(obj Object) bool {
+	t, ok := obj.(*Type)
+	return ok && t.Name != ""
+}
+
 // isUserContainerSubclass reports whether t is a class the program declared that
 // derives from a builtin container, and value is that container's own value.
 func isUserContainerSubclass(t *Type, value Object) bool {
