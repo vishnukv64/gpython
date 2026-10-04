@@ -252,9 +252,16 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 		types = []py.Object{}
 		order := annotationOrder(cls, decoFrame)
 		if len(order) == 0 {
-			// No source to read: fall back to the map's own order, which is
-			// arbitrary but at least keeps every name.
-			order = sortedKeys(d.GetDict())
+			// No source to read - "-c" and anything compiled from a string
+			// have no file to scan.  The annotation DICT is the authority:
+			// a StringDict keeps insertion order, which for a class body is
+			// declaration order.  This used to SORT the names, which is not
+			// the same thing at all and threw away the very ordering the
+			// source scan exists to recover - so a class with a defaulted
+			// field declined before a required one raised "non-default
+			// argument follows default argument" under "-c" while working
+			// from a file.
+			order = d.GetDict().Keys()
 		}
 		seen := map[string]bool{}
 		for _, k := range order {
@@ -820,9 +827,37 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 			return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() takes %d positional argument%s but %d %s given",
 				cls.Name, positionalMax, plural(positionalMax), n, wasWere(n))
 		}
-		if n < minPositional {
-			return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() missing %d required positional argument%s",
-				cls.Name, minPositional-n, plural(minPositional-n))
+		// A required field may be supplied BY KEYWORD instead of by position -
+		// rich constructs ConsoleThreadLocals(theme_stack=...) - so counting
+		// the positional arguments alone reported "missing 1 required
+		// positional argument" for a call that supplied it.
+		//
+		// The default ordering rule means the required fields are exactly the
+		// first minPositional of them, so each is satisfied by its position or
+		// by its name; collect the ones that are satisfied by neither.
+		var missingNames []string
+		idx := 0
+		for _, f := range positional {
+			if b, ok := f.kwOnly.(py.Bool); ok && bool(b) {
+				continue
+			}
+			if f.defaultVal != missing || f.defaultFactory != missing {
+				break
+			}
+			if idx >= n {
+				if _, ok := kwargs.Get(f.name); !ok {
+					missingNames = append(missingNames, f.name)
+				}
+			}
+			idx++
+		}
+		if len(missingNames) > 0 {
+			quoted := make([]string, len(missingNames))
+			for i, nm := range missingNames {
+				quoted[i] = "'" + nm + "'"
+			}
+			return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() missing %d required positional argument%s: %s",
+				cls.Name, len(missingNames), plural(len(missingNames)), joinAnd(quoted))
 		}
 
 		i := 0
@@ -843,7 +878,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 			if v, ok := kwargs.Get(f.name); ok {
 				if value != missing {
 					return nil, py.ExceptionNewf(py.TypeError,
-						"%s.__init__() got multiple values for argument %q", cls.Name, f.name)
+						"%s.__init__() got multiple values for argument '%s'", cls.Name, f.name)
 				}
 				value = v
 				seen[f.name] = true
@@ -858,7 +893,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 				} else if f.defaultVal != missing {
 					value = f.defaultVal
 				} else {
-					return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() missing 1 required keyword-only argument: %q",
+					return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() missing 1 required keyword-only argument: '%s'",
 						cls.Name, f.name)
 				}
 			}
@@ -875,7 +910,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 		}
 		for _, k := range kwargs.Keys() {
 			if !known[k] {
-				return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() got an unexpected keyword argument %q", cls.Name, k)
+				return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() got an unexpected keyword argument '%s'", cls.Name, k)
 			}
 		}
 
@@ -888,6 +923,18 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 		}
 		return py.None, nil
 	}
+}
+
+// joinAnd joins with ", " and a final " and ", which is how CPython lists the
+// names of missing arguments: "'a' and 'b'".
+func joinAnd(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	}
+	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }
 
 func plural(n int) string {
@@ -1709,6 +1756,11 @@ type dataclassMethod = func(self py.Object, args py.Tuple, kwargs py.StringDict)
 // reprOrEmpty is ReprAsString with the error dropped, for building a Field
 // repr where a failure to render one part should not raise.
 func reprOrEmpty(o py.Object) string {
+	// A field's type is unset until the decorator reads its annotation, and
+	// "None" is what CPython's own Field repr shows for that state.
+	if o == nil {
+		return "None"
+	}
 	s, err := py.ReprAsString(o)
 	if err != nil {
 		return "?"

@@ -2244,21 +2244,34 @@ func ObjectInit(self Object, args Tuple, kwargs StringDict) error {
 
 	// Call the __init__ method if it exists
 	// FIXME this isn't the way cpython does it - it adjusts the function pointers
-	// Only do this for non built in types
-	if _, ok := self.(*Type); ok {
-		init := t.GetAttrOrNil("__init__")
-		// fmt.Printf("init = %v\n", init)
-		if init != nil {
-			newArgs := make(Tuple, len(args)+1)
-			newArgs[0] = self
-			copy(newArgs[1:], args)
-			_, err := Call(init, newArgs, kwargs)
-			if err != nil {
-				return err
-			}
+	//
+	// The guard used to be "self is a *Type", which is the PYTHON-level instance
+	// representation - and every instance of a native type (a threading.local, a
+	// list, a logging.Logger) is a Go struct instead.  So a Python __init__ on a
+	// subclass of a native type never ran at all: the instance was built by the
+	// native constructor and its fields were never set.
+	//
+	// The real question is whether the object's CLASS defines an __init__ that
+	// is not object's own, so ask that instead.
+	if init := t.GetAttrOrNil("__init__"); init != nil && !isObjectInit(init) {
+		newArgs := make(Tuple, len(args)+1)
+		newArgs[0] = self
+		copy(newArgs[1:], args)
+		if _, err := Call(init, newArgs, kwargs); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// isObjectInit reports whether an __init__ is object's own, which must not be
+// re-entered from here.
+//
+// Compared by IDENTITY against the attribute on object: a class that does not
+// define __init__ looks it up and finds object's, and calling it from here
+// would recurse.
+func isObjectInit(init Object) bool {
+	return init == ObjectType.GetAttrOrNil("__init__")
 }
 
 func ObjectNew(t *Type, args Tuple, kwargs StringDict) (Object, error) {

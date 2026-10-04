@@ -530,6 +530,13 @@ func DeleteAttr(self Object, keyObj Object) error {
 //
 // Calls __repr__ on the object or returns a sensible default
 func Repr(self Object) (Object, error) {
+	// A nil Object is an internal error, not a Python-level mistake, but it
+	// must still not SEGFAULT the host process: the panic below came from a
+	// nil field read on a dataclasses.Field, whose type is unset until the
+	// decorator fills it in.
+	if self == nil {
+		return nil, ExceptionNewf(RuntimeError, "Repr called with a nil object")
+	}
 	if I, ok := self.(I__repr__); ok {
 		return I.M__repr__()
 	} else if res, ok, err := TypeCall0(self, "__repr__"); ok {
