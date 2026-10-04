@@ -451,6 +451,19 @@ func asSetOf(o Object) (*Set, bool) {
 		return v, true
 	case *FrozenSet:
 		return &v.Set, true
+	case *dictView:
+		// A KEYS view is set-like, which is what makes "d.keys() & other" and
+		// "set & d.keys()" work from EITHER side.  Converting it here rather
+		// than leaning on a reflected method is what CPython's C implementation
+		// does, and it avoids depending on which operand the dispatcher tries
+		// first.
+		if v.kind == viewKeys {
+			s, err := v.asSet()
+			if err != nil {
+				return nil, false
+			}
+			return s, true
+		}
 	}
 	return nil, false
 }
@@ -459,7 +472,12 @@ func (s *Set) M__and__(other Object) (Object, error) {
 	ret := NewSet()
 	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		// NotImplemented, NOT an error: the operand may be a set-LIKE object
+		// that only knows how to answer from its own side - a dict keys view
+		// defines __rand__, and returning an error here stopped the interpreter
+		// ever trying it, so "d2.keys() & d.keys()" raised unsupported-operand
+		// while the reflected method was sitting there unused.
+		return NotImplemented, nil
 	}
 	// Through the member OBJECTS, not their items keys: a member whose type
 	// defines __hash__ is stored under a code private to its own set, so the
@@ -477,7 +495,10 @@ func (s *Set) M__and__(other Object) (Object, error) {
 func (s *Set) M__or__(other Object) (Object, error) {
 	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for |: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		// NotImplemented, NOT an error: a set-LIKE operand - a dict keys
+		// view - answers from its own reflected method, and raising here
+		// stopped the interpreter ever trying it.
+		return NotImplemented, nil
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {
@@ -491,7 +512,10 @@ func (s *Set) M__or__(other Object) (Object, error) {
 func (s *Set) M__sub__(other Object) (Object, error) {
 	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for -: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		// NotImplemented, NOT an error: a set-LIKE operand - a dict keys
+		// view - answers from its own reflected method, and raising here
+		// stopped the interpreter ever trying it.
+		return NotImplemented, nil
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {
@@ -503,7 +527,10 @@ func (s *Set) M__sub__(other Object) (Object, error) {
 func (s *Set) M__xor__(other Object) (Object, error) {
 	b, ok := asSetOf(other)
 	if !ok {
-		return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ^: '%s' and '%s'", s.Type().Name, other.Type().Name)
+		// NotImplemented, NOT an error: a set-LIKE operand - a dict keys
+		// view - answers from its own reflected method, and raising here
+		// stopped the interpreter ever trying it.
+		return NotImplemented, nil
 	}
 	ret := s.Copy()
 	for _, item := range b.setItems() {

@@ -588,6 +588,16 @@ func And(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// A method written in PYTHON, or registered for a type whose Go struct does
+	// not carry it, lives in the type's Dict and matches no Go interface - so it
+	// is looked up by name too.  Without this "d2.keys() & d.keys()" raised
+	// unsupported-operand: the keys view defines __and__ in its Dict, and the
+	// interface assertion never saw it.
+	if res, ok, err := callPyBinary(a, "__and__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
 	// Now using b to rand if different in type to a
 	if a.Type() != b.Type() {
@@ -600,8 +610,28 @@ func And(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+		if res, ok, err := callPyBinary(b, "__rand__", a); err != nil {
+			return nil, err
+		} else if ok {
+			return res, nil
+		}
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", a.Type().Name, b.Type().Name)
+}
+
+// callPyBinary looks a binary method up BY NAME on an object, which reaches a
+// method registered in the type's Dict as well as one written in Python.
+func callPyBinary(o Object, name string, arg Object) (Object, bool, error) {
+	// CallMethod wants the receiver IN the argument tuple, because a method
+	// registered in a type's Dict must be given its self explicitly.
+	res, found, err := o.Type().CallMethod(name, Tuple{o, arg}, NewStringDict())
+	if err != nil {
+		return nil, false, err
+	}
+	if !found || res == NotImplemented || res == nil {
+		return nil, false, nil
+	}
+	return res, true, nil
 }
 
 // Inplace and

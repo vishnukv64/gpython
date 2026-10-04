@@ -179,57 +179,26 @@ func init() {
 	}, 0, "Implement iter(self)."))
 
 	StringDictType.Dict.Set("items", MustNewMethod("items", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, NewStringDict(), "items", 0, 0)
-		if err != nil {
+		if err := UnpackTuple(args, NewStringDict(), "items", 0, 0); err != nil {
 			return nil, err
 		}
-		sMap, _ := dictStorage(self)
-		o := make(Tuple, 0, sMap.Len())
-		var itemsErr error
-		sMap.Range(func(k string, v Object) bool {
-			key, err := sMap.DecodeKey(k)
-			if err != nil {
-				itemsErr = err
-				return true
-			}
-			o = append(o, Tuple{key, v})
-			return false
-		})
-		if itemsErr != nil {
-			return nil, itemsErr
-		}
-		return NewIterator(o), nil
-	}, 0, "items() -> list of D's (key, value) pairs, as 2-tuples"))
+		return &dictView{d: storageOf(self), kind: viewItems}, nil
+	}, 0, "items() -> a view of D's (key, value) pairs"))
 
 	StringDictType.Dict.Set("keys", MustNewMethod("keys", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, NewStringDict(), "keys", 0, 0)
-		if err != nil {
+		if err := UnpackTuple(args, NewStringDict(), "keys", 0, 0); err != nil {
 			return nil, err
 		}
-		sMap, _ := dictStorage(self)
-		o := make(Tuple, 0, sMap.Len())
-		for _, k := range sMap.Keys() {
-			key, err := sMap.DecodeKey(k)
-			if err != nil {
-				return nil, err
-			}
-			o = append(o, key)
-		}
-		return NewIterator(o), nil
-	}, 0, "keys() -> list of D's keys, as a list"))
+		// A VIEW, not an iterator: it supports len() and "in", and it is live.
+		return &dictView{d: storageOf(self), kind: viewKeys}, nil
+	}, 0, "keys() -> a set-like view of D's keys"))
 
 	StringDictType.Dict.Set("values", MustNewMethod("values", func(self Object, args Tuple) (Object, error) {
-		err := UnpackTuple(args, NewStringDict(), "values", 0, 0)
-		if err != nil {
+		if err := UnpackTuple(args, NewStringDict(), "values", 0, 0); err != nil {
 			return nil, err
 		}
-		sMap, _ := dictStorage(self)
-		o := make(Tuple, 0, sMap.Len())
-		for _, v := range sMap.Values() {
-			o = append(o, v)
-		}
-		return NewIterator(o), nil
-	}, 0, "values() -> list of D's values, as a list"))
+		return &dictView{d: storageOf(self), kind: viewValues}, nil
+	}, 0, "values() -> a view of D's values"))
 
 	StringDictType.Dict.Set("get", MustNewMethod("get", func(self Object, args Tuple) (Object, error) {
 		sMap, _ := dictStorage(self)

@@ -1,0 +1,17 @@
+keys type: dict_keys
+values type: dict_values
+items type: dict_items
+len k v i: 2 2 2
+key membership: True False
+value membership: True False
+item membership: True False False
+after insert: 3 True ['a', 'b', 'c']
+after delete: 2 False ['b', 'c']
+repr keys: dict_keys(['b', 'c'])
+repr values: dict_values([2, 3])
+keys &: sorted ['b', 'c']
+keys |: sorted ['b', 'c', 'x']
+keys -: sorted ['x']
+keys ==: False
+keys == set: True
+twice: ['b', 'c'] ['b', 'c']

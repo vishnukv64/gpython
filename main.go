@@ -176,6 +176,11 @@ func runModule(args []string) error {
 	name := args[0]
 	opts := py.DefaultContextOpts()
 	opts.SysPaths = append([]string{"."}, opts.SysPaths...)
+	// sys.argv[0] is set AFTER the module is located, because -m puts the
+	// RESOLVED FILE PATH there and not the module name: CPython runs
+	// "python -m m" with argv[0] == "/abs/path/m.py".  Setting it to the bare
+	// name made the two disagree, which is visible in any program that prints
+	// its own invocation - pip names itself from argv[0] in its usage line.
 	opts.SysArgs = args
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
@@ -183,6 +188,18 @@ func runModule(args []string) error {
 	path, isPkg, err := py.ResolveModulePath(ctx, name)
 	if err != nil {
 		return py.ExceptionNewf(py.ImportError, "No module named %q", name)
+	}
+	// Resolved: argv[0] is the path, with the program's own arguments after it.
+	// sys.argv is rewritten on the live sys module, because the context has
+	// already been built and its sys.argv is what the program reads.
+	// CPython puts an ABSOLUTE path there, so it is made absolute here.
+	argvPath := path
+	if abs, err := filepath.Abs(path); err == nil {
+		argvPath = abs
+	}
+	sysArgv := append([]string{argvPath}, args[1:]...)
+	if sysMod, err := ctx.GetModule("sys"); err == nil && sysMod != nil {
+		sysMod.Globals.Set("argv", py.NewListFromStrings(sysArgv))
 	}
 
 	if !isPkg {
