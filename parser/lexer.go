@@ -239,6 +239,8 @@ var tokens = map[string]int{
 	"and":      AND,
 	"as":       AS,
 	"assert":   ASSERT,
+	"async":    ASYNC,
+	"await":    AWAIT,
 	"break":    BREAK,
 	"class":    CLASS,
 	"continue": CONTINUE,

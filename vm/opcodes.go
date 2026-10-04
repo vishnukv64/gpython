@@ -163,6 +163,24 @@ const (
 	// pairs of the mapping at TOS, flattened as [k1, v1, k2, v2, ...].  It
 	// builds the keyword list of a call whose argument is a "**mapping".
 	LIST_EXTEND_MAPPING OpCode = 153
+
+	// Async (PEP 492).  CPython put these at 50-52; those slots are taken
+	// here, so the next free numbers are used instead.
+	BEFORE_ASYNC_WITH OpCode = 154 // __aexit__ lookup + __aenter__ call, exits wrapped awaitable
+	BEFORE_AWAIT      OpCode = 155 // wraps await's operand as a driving iterator
+	GET_AITER         OpCode = 156 // __aiter__
+	GET_ANEXT         OpCode = 157 // __anext__
+	SETUP_ASYNC_WITH  OpCode = 158 // pushes the async-with finally block
+	WITH_CLEANUP_ASYNC OpCode = 159 // calls __aexit__ (awaitable) instead of __exit__
+	// FOR_ITER_AEXPR is FOR_ITER for "async for": drives __anext__() to a
+	// value, StopAsyncIteration exiting the loop like FOR_ITER's
+	// StopIteration does.
+	FOR_ITER_AEXPR OpCode = 160
+	// WITH_CLEANUP_FINISH_ASYNC decides, from the awaited __aexit__ result
+	// and the exception-in-flight marker WITH_CLEANUP_ASYNC left, whether
+	// the exception is silenced (it pushes Int(whySilenced) instead of the
+	// exc-type END_FINALLY would see).
+	WITH_CLEANUP_FINISH_ASYNC OpCode = 161
 )
 
 // Rich comparison opcodes

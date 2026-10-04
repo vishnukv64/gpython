@@ -1,0 +1,27 @@
+coroutine
+True
+True
+('ok', 30)
+('ok', 99)
+non-none first send: can't send non-None value to a just-started coroutine
+('ok', 7)
+reuse: cannot reuse already awaited coroutine
+next: 'coroutine' object is not an iterator
+iter: 'coroutine' object is not iterable
+for over coroutine: 'coroutine' object is not iterable
+('ok', 'innerinner')
+aenter
+body 42
+aexit None
+after
+finally
+('ok', None)
+quiet-exit RuntimeError
+('ok', 'ok')
+aenter
+aexit <class 'ValueError'>
+propagated: prop
+('ok', 12)
+('ok', ['else'])
+closed-finally
+send after close: cannot reuse already awaited coroutine

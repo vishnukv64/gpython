@@ -282,6 +282,11 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 		code.Kwonlyargcount = int32(len(node.Args.Kwonlyargs))
 		code.Posonlyargcount = int32(len(node.Args.Posonlyargs))
 		code.Name = string(node.Name)
+		if node.IsAsync {
+			// An "async def" is a coroutine even with no await inside:
+			// calling it must return a coroutine object, not run the body.
+			code.Flags |= py.CO_COROUTINE
+		}
 		c.setQualname()
 		c.Stmts(c.docString(node.Body, true))
 	case *ast.ClassDef:
@@ -470,6 +475,12 @@ func (c *compiler) Op(op vm.OpCode) {
 	c.OpCodes.Add(instr)
 }
 
+// Op without arg, used for the WITH cleanup opcodes, which are >= HAVE_ARGUMENT
+func (c *compiler) OpNoArg(op vm.OpCode) {
+	instr := &OpArg{Op: op, Arg: 0}
+	instr.SetLineno(c.Lineno)
+	c.OpCodes.Add(instr)
+}
 // Inserts an existing label
 func (c *compiler) Label(Dest *Label) {
 	c.OpCodes.Add(Dest)
@@ -488,7 +499,7 @@ func (c *compiler) Jump(Op vm.OpCode, Dest *Label) {
 	switch Op {
 	case vm.JUMP_IF_FALSE_OR_POP, vm.JUMP_IF_TRUE_OR_POP, vm.JUMP_ABSOLUTE, vm.POP_JUMP_IF_FALSE, vm.POP_JUMP_IF_TRUE, vm.CONTINUE_LOOP: // Absolute
 		instr = &JumpAbs{OpArg: OpArg{Op: Op}, Dest: Dest}
-	case vm.JUMP_FORWARD, vm.SETUP_WITH, vm.FOR_ITER, vm.SETUP_LOOP, vm.SETUP_EXCEPT, vm.SETUP_FINALLY:
+	case vm.JUMP_FORWARD, vm.SETUP_WITH, vm.FOR_ITER, vm.FOR_ITER_AEXPR, vm.SETUP_LOOP, vm.SETUP_EXCEPT, vm.SETUP_FINALLY, vm.SETUP_ASYNC_WITH:
 		instr = &JumpRel{OpArg: OpArg{Op: Op}, Dest: Dest}
 	default:
 		panic("Jump called with non jump instruction")
@@ -813,6 +824,61 @@ func (c *compiler) with(node *ast.With, pos int) {
 	   opcode. */
 	c.Label(finally)
 	c.Op(vm.WITH_CLEANUP)
+
+	/* Finally block ends. */
+	c.Op(vm.END_FINALLY)
+}
+
+// asyncWith compiles "async with" (PEP 492): same shape as with(), but the
+// manager is entered and exited through await.  __aexit__ is kept under the
+// async __exit__-awaitable on the stack, driven by YIELD_FROM at the end -
+// which is exactly where WITH_CLEANUP ends up expecting it.
+func (c *compiler) asyncWith(node *ast.With, pos int) {
+	item := node.Items[pos]
+	finally := new(Label)
+
+	/* Evaluate EXPR */
+	c.Expr(item.ContextExpr)
+	c.Jump(vm.SETUP_ASYNC_WITH, finally)
+
+	/* SETUP_ASYNC_WITH leaves the __aenter__() awaitable on TOS (and the
+	   stashed __aexit__ under it); drive it like an "await". */
+	c.OpArg(vm.BEFORE_AWAIT, 0)
+	c.LoadConst(py.None)
+	c.Op(vm.YIELD_FROM)
+
+	/* Now drive the __aenter__ result as the with-item's value would be. */
+	c.loops.Push(loop{Type: finallyTryLoop})
+	if item.OptionalVars != nil {
+		c.Expr(item.OptionalVars)
+	} else {
+		/* Discard result from (await context.__aenter__()) */
+		c.Op(vm.POP_TOP)
+	}
+
+	pos++
+	if pos == len(node.Items) {
+		/* BLOCK code */
+		c.Stmts(node.Body)
+	} else {
+		c.asyncWith(node, pos)
+	}
+
+	/* End of try block; start the finally block */
+	c.Op(vm.POP_BLOCK)
+	c.loops.Pop()
+	c.LoadConst(py.None)
+
+	/* Finally block starts; __aexit__ is on the stack under the why.  It is
+	   awaitable, so WITH_CLEANUP_ASYNC drives it through YIELD_FROM. */
+	c.Label(finally)
+	c.OpNoArg(vm.WITH_CLEANUP_ASYNC)
+	c.OpArg(vm.BEFORE_AWAIT, 0)
+	c.LoadConst(py.None)
+	c.Op(vm.YIELD_FROM)
+	/* YIELD_FROM leaves the awaited __aexit__ result on TOS above the
+	   exception-in-flight marker; FINISH decides suppression. */
+	c.OpNoArg(vm.WITH_CLEANUP_FINISH_ASYNC)
 
 	/* Finally block ends. */
 	c.Op(vm.END_FINALLY)
@@ -1218,10 +1284,27 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		endpopblock := new(Label)
 		c.Jump(vm.SETUP_LOOP, endpopblock)
 		c.Expr(node.Iter)
-		c.Op(vm.GET_ITER)
+		if node.IsAsync {
+			// "async for": TOS becomes the async iterator; each step
+			// awaits __anext__() through the YIELD_FROM machinery, then
+			// FOR_ITER picks the value up.  StopAsyncIteration must end
+			// the loop like StopIteration does for "for", which the
+			// FOR_ITER handler below converts.
+			c.OpArg(vm.GET_AITER, 0)
+		} else {
+			c.Op(vm.GET_ITER)
+		}
 		forloop := c.NewLabel()
 		c.loops.Push(loop{Start: forloop, End: endpopblock, Type: loopLoop})
-		c.Jump(vm.FOR_ITER, endfor)
+		if node.IsAsync {
+			c.OpArg(vm.GET_ANEXT, 0)
+			c.OpArg(vm.BEFORE_AWAIT, 0)
+		}
+		if node.IsAsync {
+			c.Jump(vm.FOR_ITER_AEXPR, endfor)
+		} else {
+			c.Jump(vm.FOR_ITER, endfor)
+		}
 		c.Expr(node.Target)
 		c.Stmts(node.Body)
 		c.Jump(vm.JUMP_ABSOLUTE, forloop)
@@ -1274,7 +1357,11 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 	case *ast.With:
 		// Items []*WithItem
 		// Body  []Stmt
-		c.with(node, 0)
+		if node.IsAsync {
+			c.asyncWith(node, 0)
+		} else {
+			c.with(node, 0)
+		}
 	case *ast.Raise:
 		// Exc   Expr
 		// Cause Expr
@@ -2102,6 +2189,15 @@ func (c *compiler) Expr(expr ast.Expr) {
 		}
 		c.Expr(node.Value)
 		c.Op(vm.GET_ITER)
+		c.LoadConst(py.None)
+		c.Op(vm.YIELD_FROM)
+	case *ast.Await:
+		// Value Expr
+		if c.SymTable.Type != symtable.FunctionBlock {
+			c.panicSyntaxErrorf(node, "'await' outside function")
+		}
+		c.Expr(node.Value)
+		c.OpArg(vm.BEFORE_AWAIT, 0)
 		c.LoadConst(py.None)
 		c.Op(vm.YIELD_FROM)
 	case *ast.Compare:

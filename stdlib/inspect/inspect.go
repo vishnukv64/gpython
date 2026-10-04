@@ -31,6 +31,7 @@ func init() {
 		py.DictEntry{Key: "isfunction", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Function); return ok })},
 		py.DictEntry{Key: "isgeneratorfunction", Value: py.MustNewMethod("isgeneratorfunction", inspectIsGeneratorFunction, 0, isgeneratorfunction_doc)},
 		py.DictEntry{Key: "isgenerator", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Generator); return ok })},
+		py.DictEntry{Key: "iscoroutine", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Coroutine); return ok })},
 		py.DictEntry{Key: "isbuiltin", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
 		py.DictEntry{Key: "ismethod", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
 		py.DictEntry{Key: "ismodule", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Module); return ok })},

@@ -73,6 +73,7 @@ func init() {
 		py.DictEntry{Key: "BuiltinMethodType", Value: py.MethodType},
 		py.DictEntry{Key: "MethodType", Value: py.MethodType},
 		py.DictEntry{Key: "GeneratorType", Value: py.GeneratorType},
+		py.DictEntry{Key: "CoroutineType", Value: py.CoroutineType},
 		py.DictEntry{Key: "CodeType", Value: py.CodeType},
 		py.DictEntry{Key: "FrameType", Value: py.FrameType},
 		py.DictEntry{Key: "TracebackType", Value: py.TracebackType},

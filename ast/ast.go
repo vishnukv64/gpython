@@ -432,6 +432,10 @@ type For struct {
 	Iter   Expr
 	Body   []Stmt
 	Orelse []Stmt
+	// IsAsync is true for "async for".  CPython models this as a
+	// distinct AsyncFor node; here it is a flag, as FunctionDef.IsAsync
+	// is, so existing consumers keep working.
+	IsAsync bool
 }
 
 type While struct {
@@ -452,6 +456,8 @@ type With struct {
 	StmtBase
 	Items []*WithItem
 	Body  []Stmt
+	// IsAsync is true for "async with" - see For.IsAsync.
+	IsAsync bool
 }
 
 type Raise struct {

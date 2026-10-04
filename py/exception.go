@@ -43,6 +43,7 @@ var (
 	GeneratorExit      = BaseException.NewType("GeneratorExit", "Request that a generator exit.", nil, nil)
 	ExceptionType      = BaseException.NewType("Exception", "Common base class for all non-exit exceptions.", nil, nil)
 	StopIteration      = ExceptionType.NewType("StopIteration", "Signal the end from iterator.__next__().", nil, nil)
+	StopAsyncIteration = ExceptionType.NewType("StopAsyncIteration", "Signal the end from iterator.__anext__().", nil, nil)
 	ArithmeticError    = ExceptionType.NewType("ArithmeticError", "Base class for arithmetic errors.", nil, nil)
 	FloatingPointError = ArithmeticError.NewType("FloatingPointError", "Floating point operation failed.", nil, nil)
 	OverflowError      = ArithmeticError.NewType("OverflowError", "Result too large to be represented.", nil, nil)
@@ -120,6 +121,24 @@ func (e *Exception) Type() *Type {
 	return e.Base
 }
 
+// GetDict exposes the instance namespace, so an arbitrary attribute can be set
+// on an exception.
+//
+// *Exception carries a Dict, but nothing exposed it, so SetAttrString found no
+// IGetDict and fell through to AttributeError: "e.x = 1" was silently
+// discarded and reading it back raised "'E' object has no attribute 'x'" - on
+// every exception subclass, which is how the stdlib and ordinary code attach
+// detail to an error.  pip's ParserSyntaxError sets .message/.source/.span in
+// its __init__ and reads them in __str__, so its own error could not be raised.
+func (e *Exception) GetDict() StringDict {
+	if e.Dict.IsNil() {
+		e.Dict = NewStringDict()
+	}
+	return e.Dict
+}
+
+var _ IGetDict = (*Exception)(nil)
+
 // Go error interface
 func (e *Exception) Error() string {
 	// FIXME is this really how exceptions get their message stored?
@@ -196,12 +215,25 @@ func exceptionNew(metatype *Type, args Tuple) *Exception {
 }
 
 // ExceptionNew
+//
+// It IGNORES keyword arguments rather than rejecting them, which is what
+// CPython's BaseException.__new__ does: the arguments tuple holds the
+// positional ones and the keywords are simply not its business.  The rejection
+// belongs to BaseException.__init__, which is where CPython raises
+// "Exception() takes no keyword arguments" for a class that does not define
+// its own __init__.
+//
+// Rejecting them here broke the opposite case - a Python subclass with a
+// keyword-only __init__, which CPython runs happily:
+//
+//	class E(Exception):
+//	    def __init__(self, message, *, source, span): ...
+//	E("m", source="s", span=(0, 1))
+//
+// pip's own ParserSyntaxError is written exactly that way, so the tokenizer
+// could not raise its own error and "pip show" died with
+// "ParserSyntaxError does not take keyword arguments".
 func ExceptionNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
-	if kwargs.Len() != 0 {
-		// FIXME this causes an initialization loop
-		// return nil, ExceptionNewf(TypeError, "%s does not take keyword arguments", metatype.Name)
-		return nil, fmt.Errorf("TypeError: %s does not take keyword arguments", metatype.Name)
-	}
 	return exceptionNew(metatype, args), nil
 }
 
@@ -215,8 +247,18 @@ func init() {
 		if kwargs.Len() != 0 {
 			return nil, ExceptionNewf(TypeError, "%s does not take keyword arguments", self.Type().Name)
 		}
+		// The arguments are COPIED, never stored by reference.
+		//
+		// The tuple arrives as the caller's argument slice, and for a call made
+		// from the VM that slice is the frame's stack region, which is reused as
+		// the frame continues.  Storing it meant "e.args" returned whatever the
+		// stack held LATER: "e = MyErr('custom'); print(e.args)" printed the
+		// ('args:',) label of the next statement, and repr() of it recursed
+		// until the stack overflowed.  exceptionNew has always copied its
+		// arguments for this reason; this path did not.
+		copied := args.Copy()
 		if e, ok := self.(*Exception); ok {
-			e.Args = args
+			e.Args = copied
 			return None, nil
 		}
 		// An instance of a python subclass of Exception is a *Type here
@@ -225,7 +267,7 @@ func init() {
 		if d, ok := self.(IGetDict); ok && !reflect.ValueOf(d).IsNil() {
 			dict := d.GetDict()
 			if !dict.IsNil() {
-				dict.Set("args", args)
+				dict.Set("args", copied)
 			}
 		}
 		return None, nil
@@ -607,6 +649,19 @@ func init() {
 				return nil
 			}
 			return nil
+		},
+	})
+
+	// __dict__ is the instance namespace.  An exception subclass instance reads
+	// its own attributes through it, so "class F(Exception); f = F(); f.x = 3;
+	// f.__dict__" is {'x': 3} in CPython - and was AttributeError here, even
+	// once GetDict had made the write possible.
+	BaseException.Dict.Set("__dict__", &Property{
+		Fget: func(self Object) (Object, error) {
+			if d, ok := self.(IGetDict); ok {
+				return d.GetDict(), nil
+			}
+			return None, nil
 		},
 	})
 

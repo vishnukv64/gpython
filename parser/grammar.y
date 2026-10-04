@@ -282,7 +282,7 @@ func finishArglist(items []argItem) *ast.Call {
 %type <obj> strings
 %type <mod> inputs file_input single_input eval_input
 %type <stmts> simple_stmt stmt nl_or_stmt small_stmts stmts suite optional_else
-%type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated
+%type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated async_stmt async_funcdef
 %type <op> augassign
 %type <posonly> posonly_prefix
 %type <dictexpr> dictentries
@@ -382,6 +382,8 @@ func finishArglist(items []argItem) *ast.Call {
 %token WHILE // while
 %token WITH // with
 %token YIELD // yield
+%token ASYNC // async
+%token AWAIT // await
 
 %token '(' ')' '[' ']' ':' ',' ';' '+' '-' '*' '/' '|' '&' '<' '>' '=' '.' '%' '{' '}' '^' '~' '@'
 
@@ -523,6 +525,17 @@ classdef_or_funcdef:
 |	funcdef
 	{
 		$$ = $1
+	}
+|async_funcdef
+	{
+		$$ = $1
+	}
+
+async_funcdef:
+	ASYNC funcdef
+	{
+		($2).(*ast.FunctionDef).IsAsync = true
+		$$ = $2
 	}
 
 decorated:
@@ -1359,6 +1372,27 @@ compound_stmt:
 	{
 		$$ = $1
 	}
+|async_stmt
+	{
+		$$ = $1
+	}
+
+async_stmt:
+	ASYNC funcdef
+	{
+		($2).(*ast.FunctionDef).IsAsync = true
+		$$ = $2
+	}
+|ASYNC with_stmt
+	{
+		($2).(*ast.With).IsAsync = true
+		$$ = $2
+	}
+|ASYNC for_stmt
+	{
+		($2).(*ast.For).IsAsync = true
+		$$ = $2
+	}
 
 elifs:
 	{
@@ -2022,6 +2056,10 @@ factor:
 |	power
 	{
 		$$ = $1
+	}
+|AWAIT power
+	{
+		$$ = &ast.Await{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $2}
 	}
 
 power:

@@ -119,6 +119,25 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return 0
 	case vm.SETUP_WITH:
 		return 7
+	case vm.SETUP_ASYNC_WITH:
+		// Pushes the finally block, the stashed __aexit__ and the
+		// __aenter__ awaitable: same headroom as SETUP_WITH.
+		return 7
+	case vm.WITH_CLEANUP_ASYNC:
+		// Same as WITH_CLEANUP plus the marker and the awaitable left to drive.
+		return 1
+	case vm.WITH_CLEANUP_FINISH_ASYNC:
+		// Pops the awaited result and the marker; (rarely) replaces the exc
+		// type by the whySilenced sentinel.
+		return -2
+	case vm.BEFORE_AWAIT:
+		return 0
+	case vm.GET_AITER:
+		return 0
+	case vm.GET_ANEXT:
+		return 1
+	case vm.FOR_ITER_AEXPR:
+		return 0 /* -2 if the iterator ended */
 	case vm.WITH_CLEANUP:
 		return -1 /* XXX Sometimes more */
 	case vm.RETURN_VALUE:

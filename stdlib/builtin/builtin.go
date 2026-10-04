@@ -163,6 +163,7 @@ func init() {
 		py.DictEntry{Key: "RuntimeError", Value: py.RuntimeError},
 		py.DictEntry{Key: "RuntimeWarning", Value: py.RuntimeWarning},
 		py.DictEntry{Key: "StopIteration", Value: py.StopIteration},
+		py.DictEntry{Key: "StopAsyncIteration", Value: py.StopAsyncIteration},
 		py.DictEntry{Key: "SyntaxError", Value: py.SyntaxError},
 		py.DictEntry{Key: "SyntaxWarning", Value: py.SyntaxWarning},
 		py.DictEntry{Key: "SystemError", Value: py.SystemError},

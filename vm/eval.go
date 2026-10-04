@@ -772,7 +772,14 @@ func do_YIELD_FROM(vm *Vm, arg int32) error {
 	x := vm.TOP()
 	// send u to x
 	if u == py.None {
-		retval, err = py.Next(x)
+		if c, isCoroutine := x.(*py.Coroutine); isCoroutine {
+			// Coroutines answer send() (NOT __next__: "next(coro)" is a
+			// TypeError in CPython), so the none-send goes through Send
+			// directly rather than py.Next would.
+			retval, err = c.Send(py.None)
+		} else {
+			retval, err = py.Next(x)
+		}
 	} else {
 		retval, err = py.Send(x, u)
 
@@ -1066,6 +1073,78 @@ func do_WITH_CLEANUP(vm *Vm, arg int32) error {
 		/* There was an exception and a True return */
 		vm.PUSH(py.Int(whySilenced))
 	}
+	return nil
+}
+
+// do_WITH_CLEANUP_ASYNC is WITH_CLEANUP for "async with": the stack layout is
+// identical, but the context manager's exit is __aexit__ and its result is an
+// awaitable.  The awaitable is left where the sync __exit__ result used to
+// be, and the compiler's BEFORE_AWAIT/YIELD_FROM pair right after drives it
+// to completion.
+func do_WITH_CLEANUP_ASYNC(vm *Vm, arg int32) error {
+	mgr := vm.TOP() // not used; keeps symmetry with do_WITH_CLEANUP
+	_ = mgr
+	var exit_func py.Object
+
+	exc := vm.TOP()
+	var val py.Object = py.None
+	var tb py.Object = py.None
+	excInFlight := false
+	if exc == py.None {
+		vm.DROP()
+		exit_func = vm.TOP()
+		vm.SET_TOP(exc)
+	} else if excInt, ok := exc.(py.Int); ok {
+		vm.DROP()
+		switch vmStatus(excInt) {
+		case whyReturn, whyContinue:
+			/* Retval in TOP. */
+			exit_func = vm.SECOND()
+			vm.SET_SECOND(vm.TOP())
+			vm.SET_TOP(exc)
+		default:
+			exit_func = vm.TOP()
+			vm.SET_TOP(exc)
+		}
+		exc = py.None
+	} else {
+		excInFlight = true
+		val = vm.SECOND()
+		tb = vm.THIRD()
+		tp2 := vm.FOURTH()
+		exc2 := vm.PEEK(5)
+		tb2 := vm.PEEK(6)
+		exit_func = vm.PEEK(7)
+		vm.SET_VALUE(7, tb2)
+		vm.SET_VALUE(6, exc2)
+		vm.SET_VALUE(5, tp2)
+		/* UNWIND_EXCEPT_HANDLER will pop this off. */
+		vm.SET_FOURTH(nil)
+		/* We just shifted the stack down, so we have
+		   to tell the except handler block that the
+		   values are lower than it expects. */
+		block := vm.frame.Block
+		if block.Type != py.TryBlockExceptHandler {
+			panic("vm: WITH_CLEANUP_ASYNC expecting TryBlockExceptHandler")
+		}
+		block.Level--
+	}
+	res, err := py.Call(exit_func, []py.Object{exc, val, tb}, py.StringDict{})
+	if err != nil {
+		return err
+	}
+	// res is an awaitable (__aexit__ is async).  The compiler drives it with
+	// BEFORE_AWAIT / YIELD_FROM next, then WITH_CLEANUP_FINISH_ASYNC reads
+	// the marker pushed under it: True when an exception was in flight (the
+	// exc-type/val/tb triple is intact underneath), False otherwise.  That
+	// mirrors how WITH_CLEANUP's wasErr defers END_FINALLY's decision to the
+	// awaited __aexit__ result.
+	if excInFlight {
+		vm.PUSH(py.True)
+	} else {
+		vm.PUSH(py.False)
+	}
+	vm.PUSH(res)
 	return nil
 }
 
@@ -1395,6 +1474,168 @@ func do_FOR_ITER(vm *Vm, delta int32) error {
 	return nil
 }
 
+// do_FOR_ITER is shared by "async for": the async-iterator protocol drives
+// it the same way once __anext__ has been called (the awaited driver still
+// delivers StopAsyncIteration through the unwinding path, which converts it
+// below).  GET_AITER replaces TOS with TOS.__aiter__(); GET_ANEXT wraps
+// TOS.__anext__() into the driveable iterator BEFORE_AWAIT yields.
+func do_GET_AITER(vm *Vm, arg int32) error {
+	obj := vm.TOP()
+	aiter, err := py.GetAttrString(obj, "__aiter__")
+	if err != nil {
+		return err
+	}
+	res, err := py.Call(aiter, nil, py.StringDict{})
+	if err != nil {
+		return err
+	}
+	vm.SET_TOP(res)
+	// The TOS slot above is reused by FOR_ITER_AEXPR for the value, so the
+	// frame stack must have been sized for 2 entries here even though only
+	// 1 is live for a moment.  (StackEffect counts GET_ANEXT's push.)
+	vm.PUSH(py.None)
+	return nil
+}
+
+func do_GET_ANEXT(vm *Vm, arg int32) error {
+	awaitSlot := vm.TOP() // placeholder pushed by GET_AITER
+	_ = awaitSlot
+	obj := vm.SECOND()
+	anext, err := py.GetAttrString(obj, "__anext__")
+	if err != nil {
+		return err
+	}
+	res, err := py.Call(anext, nil, py.StringDict{})
+	if err != nil {
+		return err
+	}
+	vm.PUSH(res)
+	return nil
+}
+
+// TOS is the awaitable from __anext__ (already BEFORE_AWAIT-wrapped so it
+// answers the generator-driving protocol), the async iterator below it.
+// Drive the awaitable: value -> stack as a normal FOR_ITER would;
+// StopAsyncIteration -> drop iterator and jump to loop end (FOR_ITER's
+// StopIteration case, async-style).  Anything else propagates.
+func do_FOR_ITER_AEXPR(vm *Vm, delta int32) error {
+	awaitable := vm.TOP()
+	var res py.Object
+	var err error
+	if c, isCoroutine := awaitable.(*py.Coroutine); isCoroutine {
+		res, err = c.Send(py.None)
+	} else {
+		res, err = py.Next(awaitable)
+	}
+	if err != nil {
+		switch {
+		case py.IsException(py.StopAsyncIteration, err):
+			// Loop is over: drop both the awaitable and the iterator.
+			vm.DROP()
+			vm.DROP()
+			vm.frame.Lasti += delta
+			return nil
+		case py.IsException(py.StopIteration, err):
+			// The awaited __anext__ RETURNED: StopIteration's first arg is
+			// the iteration value.  (py.Next returns the StopIteration as
+			// the error; note it may be the bare type when the generator
+			// returned None.)
+			value := py.Object(py.None)
+			if e, ok := err.(*py.Exception); ok {
+				if args, ok := e.Args.(py.Tuple); ok && len(args) > 0 {
+					value = args[0]
+				}
+			} else if ei, ok := err.(py.ExceptionInfo); ok && ei.Value != nil {
+				if args, ok2 := ei.Value.(*py.Exception); ok2 {
+					if t, ok3 := args.Args.(py.Tuple); ok3 && len(t) > 0 {
+						value = t[0]
+					}
+				}
+			}
+			vm.DROP()
+			vm.PUSH(value)
+			return nil
+		}
+		return err
+	}
+	// The awaitable yielded (it is an iterator, not a finished coroutine).
+	vm.SET_TOP(res)
+	return nil
+}
+
+// do_BEFORE_AWAIT turns the awaitable (and the __aenter__/__aexit__ call
+// results of "async with") into the driving iterator that this VM yields
+// through the YIELD_FROM machinery.
+//
+// A coroutine answers its protocol directly, so the wrapper is the object
+// itself - it answers send/throw plus the __next__ the YIELD_FROM driver
+// uses.  Any other awaitable goes through __await__() and must produce an
+// iterator.  A plain generator is also accepted (CPython deprecated that
+// in 3.8 and raises TypeError in modern releases, but this interpreter's
+// own async-with machinery yields through a wrapping generator, so
+// accepting a generator here is what lets "async with" work; it is the
+// conservative permissive case).
+func do_BEFORE_AWAIT(vm *Vm, arg int32) error {
+	obj := vm.TOP()
+	switch obj.(type) {
+	case *py.Coroutine, *py.Generator:
+		// already a driving iterator for the YIELD_FROM machinery
+		return nil
+	}
+	if awaitMethod, err := py.GetAttrString(obj, "__await__"); err == nil {
+		iter, err := py.Call(awaitMethod, nil, py.StringDict{})
+		if err != nil {
+			return err
+		}
+		vm.SET_TOP(iter)
+		return nil
+	}
+	if obj == py.None {
+		// "await None" is convenient in test doubles; CPython raises
+		// TypeError, so do that rather than silently driving it.
+		return py.ExceptionNewf(py.TypeError, "object NoneType can't be used in 'await' expression")
+	}
+	return py.ExceptionNewf(py.TypeError, "object %s can't be used in 'await' expression", obj.Type().Name)
+}
+
+// do_SETUP_ASYNC_WITH mirrors SETUP_WITH for "async with": __aexit__ is
+// stashed, __aenter__() is awaited (its result driven by BEFORE_AWAIT and
+// YIELD_FROM), and the finally block is pushed before the result lands.
+func do_SETUP_ASYNC_WITH(vm *Vm, delta int32) error {
+	mgr := vm.TOP()
+	aexit, err := py.GetAttrString(mgr, "__aexit__")
+	if err != nil {
+		return err
+	}
+	vm.SET_TOP(aexit)
+	aenter, err := py.GetAttrString(mgr, "__aenter__")
+	if err != nil {
+		return err
+	}
+	res, err := py.Call(aenter, nil, py.StringDict{})
+	if err != nil {
+		return err
+	}
+	// res is an awaitable; __aenter__ is async, so res must be driven.
+	if _, ok := res.(*py.Coroutine); !ok {
+		if _, ok := res.(*py.Generator); !ok {
+			if awaitMethod, gerr := py.GetAttrString(res, "__await__"); gerr == nil {
+				res, err = py.Call(awaitMethod, nil, py.StringDict{})
+				if err != nil {
+					return err
+				}
+			} else {
+				return py.ExceptionNewf(py.TypeError, "object %s can't be used in 'await' expression", res.Type().Name)
+			}
+		}
+	}
+	// The awaitable is the TOS the following GET_ITER/YIELD_FROM drives.
+	vm.frame.PushBlock(py.TryBlockSetupFinally, vm.frame.Lasti+delta, vm.STACK_LEVEL())
+	vm.PUSH(res)
+	return nil
+}
+
+
 // Loads the global named co_names[namei] onto the stack.
 func do_LOAD_GLOBAL(vm *Vm, namei int32) error {
 	name := vm.frame.Code.Names[namei]
@@ -1537,6 +1778,32 @@ func do_LOAD_CLASSDEREF(vm *Vm, i int32) error {
 		return unboundDeref(vm, i)
 	} else {
 		vm.PUSH(res)
+	}
+	return nil
+}
+
+// do_WITH_CLEANUP_FINISH_ASYNC runs after the __aexit__ awaitable has been
+// driven: TOS is the awaited result, under it the True/False marker
+// WITH_CLEANUP_ASYNC pushed, and under that the same finally inputs
+// END_FINALLY expects (None, Int(why) + retval, or the exc triple).
+func do_WITH_CLEANUP_FINISH_ASYNC(vm *Vm, arg int32) error {
+	res := vm.POP()
+	marker := vm.POP()
+	if marker != py.True {
+		// No exception was in flight: nothing for END_FINALLY to reconsider,
+		// the awaited result is discarded as in sync "with".
+		return nil
+	}
+	truthy := res == py.True // identity, matching WITH_CLEANUP's wasErr
+	if truthy {
+		// __aexit__ suppressed the exception: drop the exc triple (the
+		// ExceptHandler block unwinding accounts for the rest) and hand
+		// END_FINALLY an Int(whySilenced), exactly what sync WITH_CLEANUP
+		// pushes when "wasErr".
+		vm.DROP() // exc type
+		vm.DROP() // value
+		vm.DROP() // traceback
+		vm.PUSH(py.Int(whySilenced))
 	}
 	return nil
 }
@@ -2454,6 +2721,20 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 			err = do_CALL_FUNCTION_EX(&vm, arg)
 		case SETUP_WITH:
 			err = do_SETUP_WITH(&vm, arg)
+		case BEFORE_AWAIT:
+			err = do_BEFORE_AWAIT(&vm, arg)
+		case GET_AITER:
+			err = do_GET_AITER(&vm, arg)
+		case GET_ANEXT:
+			err = do_GET_ANEXT(&vm, arg)
+		case FOR_ITER_AEXPR:
+			err = do_FOR_ITER_AEXPR(&vm, arg)
+		case SETUP_ASYNC_WITH:
+			err = do_SETUP_ASYNC_WITH(&vm, arg)
+		case WITH_CLEANUP_ASYNC:
+			err = do_WITH_CLEANUP_ASYNC(&vm, arg)
+		case WITH_CLEANUP_FINISH_ASYNC:
+			err = do_WITH_CLEANUP_FINISH_ASYNC(&vm, arg)
 		case EXTENDED_ARG:
 			err = do_EXTENDED_ARG(&vm, arg)
 		case LIST_APPEND:
@@ -2875,6 +3156,14 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 	}
 	for i := 0; i < len(co.Freevars); i++ {
 		freevars[len(co.Cellvars)+i] = closure[i]
+	}
+
+	if co.Flags&py.CO_COROUTINE != 0 {
+		/* Create a new coroutine that owns the ready to run frame and
+		 * return that as the value.  Checked before CO_GENERATOR: an
+		 * "async def" with a yield in it (an async generator, not yet
+		 * implemented) would otherwise masquerade as a sync generator. */
+		return py.NewCoroutine(f), nil
 	}
 
 	if co.Flags&py.CO_GENERATOR != 0 {

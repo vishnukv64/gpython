@@ -107,6 +107,7 @@ type SymTable struct {
 	Free              bool      // true if block has free variables
 	ChildFree         bool      // true if a child block has free vars, including free refs to globals
 	Generator         bool      // true if namespace is a generator
+	Coroutine         bool      // true if namespace is a coroutine (contains await)
 	Varargs           bool      // true if block has varargs
 	Varkeywords       bool      // true if block has varkeywords
 	ReturnsValue      bool      // true if namespace uses return with an argument
@@ -441,6 +442,10 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			}
 		case *ast.Yield, *ast.YieldFrom:
 			st.Generator = true
+		case *ast.Await:
+			// Await is only legal inside an async def; symtable only sees
+			// FunctionBlocks from async or generator bodies here.
+			st.Coroutine = true
 		}
 		return true
 	})
