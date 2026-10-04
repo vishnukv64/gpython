@@ -1099,6 +1099,27 @@ func appendKey(b *[]byte, key Object) error {
 	return nil
 }
 
+// identityKeyPlaceholder is what a key stored by IDENTITY decodes to.
+//
+// It exists so that iteration and repr of such a dict WORK rather than raising,
+// and it says plainly what it stands for - a program reading it back gets
+// something it can test rather than a silently wrong object.
+func identityKeyPlaceholder(marker byte, addr string) Object {
+	kind := "object"
+	switch marker {
+	case 'm':
+		kind = "module"
+	case 'F':
+		kind = "function"
+	}
+	return String("<" + kind + " key " + addr + ">")
+}
+
+// hashKeyPlaceholder is what a key stored through its own __hash__ decodes to.
+func hashKeyPlaceholder(typeName, hash string) Object {
+	return String("<" + typeName + " key " + hash + ">")
+}
+
 // hashOf renders an object's __hash__ as a string, or reports that it has
 // none.  A __hash__ that is None means explicitly unhashable, which is how a
 // class says "do not use me as a key" - a list is the builtin example.
@@ -1313,6 +1334,28 @@ func readKey(s string) (Object, string, error) {
 			rest2 = rest3[size:]
 		}
 		return items, rest2, nil
+	case 'm', 'F':
+		// A marker for an object stored by IDENTITY: a module, a function or a
+		// method.  It cannot be decoded back to the object from the encoding
+		// alone - the address is all that is stored - so it decodes to a
+		// placeholder that reports what it is.  Iteration over a dict holding
+		// one therefore yields this object, where CPython yields the module
+		// itself; the KEY LOOKUP is unaffected, because a lookup encodes the
+		// key it was given and never decodes.
+		//
+		// Without the branch, keys()/items()/repr() of such a dict raised
+		// KeyError: 'corrupt dict key' - which is how this was found: pkg_resources
+		// keys a table by a function, and listing its keys failed.
+		return identityKeyPlaceholder(marker, rest), "", nil
+	case 'H':
+		// An object keyed through its own __hash__: the encoding holds the
+		// TYPE NAME and the hash, not the object.  It decodes to a placeholder
+		// for the same reason, and the lookup is unaffected.
+		colon := strings.LastIndexByte(rest, ':')
+		if colon < 0 {
+			return nil, "", ExceptionNewf(KeyError, "corrupt dict key")
+		}
+		return hashKeyPlaceholder(rest[:colon], rest[colon+1:]), "", nil
 	case 'S':
 		n, rest2, err := readPrefixInt(rest)
 		if err != nil {

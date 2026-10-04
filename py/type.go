@@ -365,6 +365,23 @@ func init() {
 	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object { return String(t.Name) })
 	typeMeta("__doc__", "The documentation string of the type.", func(t *Type) Object { return String(t.Doc) })
 	typeMeta("__bases__", "The base classes of the type.", func(t *Type) Object { return t.Bases })
+	// __mro__ is a standard attribute of every class, and inspect.getmro is
+	// literally "cls.__mro__".  It was absent, so a program walking a class's
+	// MRO - pkg_resources' _find_adapter does exactly that - could not.
+	typeMeta("__mro__", "The method resolution order of the type.", func(t *Type) Object {
+		// A type declared by a stdlib module is queued rather than readied at
+		// init time, so the queue is drained here before the MRO is read - and
+		// the single-parent fallback below is never the answer when a
+		// grandparent exists.
+		if len(t.Mro) == 0 {
+			_ = TypeEnsureReady()
+		}
+		if len(t.Mro) != 0 {
+			return t.Mro
+		}
+		// A type whose MRO was never built still has itself in it.
+		return Tuple{Object(t)}
+	})
 	typeMeta("__dict__", "The namespace of the type.", func(t *Type) Object { return t.Dict })
 
 	// __class__ is a descriptor registered on both metatypes for the same

@@ -40,6 +40,7 @@ func init() {
 		// __rich_console__, so every Text was "not renderable".
 		py.DictEntry{Key: "isclass", Value: predicate(py.IsClassObject)},
 		py.DictEntry{Key: "isdatadescriptor", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Property); return ok })},
+		py.DictEntry{Key: "getmro", Value: py.MustNewMethod("getmro", getmro, 0, getmro_doc)},
 		py.DictEntry{Key: "getdoc", Value: py.MustNewMethod("getdoc", getdoc, 0, getdoc_doc)},
 		py.DictEntry{Key: "signature", Value: py.MustNewMethod("signature", notImplemented, 0, signature_doc)},
 	)
@@ -167,6 +168,22 @@ func inspectIsGeneratorFunction(self py.Object, args py.Tuple) (py.Object, error
 const getdoc_doc = `getdoc(object) -> string
 
 Get the documentation string for an object, cleaned up with cleandoc().`
+
+const getmro_doc = `getmro(cls) -> tuple
+
+Return a tuple of the method resolution order for cls, which is cls.__mro__.`
+
+// getmro returns a class's method resolution order.
+//
+// It is cls.__mro__ and nothing more, which is why pkg_resources' _find_adapter
+// - which looks an adapter up by walking a class's MRO - depends on it.  A
+// non-class raises AttributeError, as CPython's does.
+func getmro(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "getmro() takes exactly one argument")
+	}
+	return py.GetAttrString(args[0], "__mro__")
+}
 
 func getdoc(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object

@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/importlibmachinery"
 )
 
 const module_doc = `Utilities for the import system.`
@@ -211,7 +212,21 @@ type finder struct {
 	path string
 }
 
-var finderType = py.NewTypeX("pkgutil.FileFinder", "A finder for a directory on the search path.", finderNew, nil)
+// finderType DERIVES from importlib.machinery.FileFinder, because that identity
+// is what makes the object usable: pkg_resources registers a distribution
+// finder against importlib.machinery.FileFinder and dispatches on the importer
+// pkgutil hands it.  A private class of its own made the registration miss, so
+// pip found ZERO installed distributions and 'pip list' printed nothing and
+// exited 0 - a silent wrong answer rather than an error.
+var finderType = func() *py.Type {
+	t := py.NewTypeX("pkgutil.FileFinder", "A finder for a directory on the search path.", finderNew, nil)
+	t.Base = importlibmachinery.FileFinderType
+	t.Bases = py.Tuple{importlibmachinery.FileFinderType}
+	if err := t.Ready(); err != nil {
+		panic(err)
+	}
+	return t
+}()
 
 func (f *finder) Type() *py.Type { return finderType }
 

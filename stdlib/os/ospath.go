@@ -197,7 +197,44 @@ func pathJoin(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return py.String(filepath.Join(parts...)), nil
+	return py.String(posixJoin(parts)), nil
+}
+
+// posixJoin joins path components by POSIX's rule, which filepath.Join does
+// not follow.
+//
+// The rule that matters: an ABSOLUTE component DISCARDS everything before it,
+// so join("/base", "/opt/x") is "/opt/x".  filepath.Join keeps the first part
+// and appends, giving "/base/opt/x" - which is an entirely different path, and
+// a path that does not exist.  pkg_resources joins a directory onto an entry it
+// has already made absolute, so every distribution it looked for was reported
+// missing: 'pip list' found ZERO installed packages and printed nothing.
+//
+// An empty component is ignored, and if the result is empty the answer is ".",
+// both of which are CPython's rules as well.
+func posixJoin(parts []string) string {
+	var b strings.Builder
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if strings.HasPrefix(p, "/") {
+			// Absolute: it replaces everything gathered so far.
+			b.Reset()
+		} else if b.Len() > 0 {
+			if !strings.HasSuffix(b.String(), "/") {
+				b.WriteByte('/')
+			}
+		}
+		b.WriteString(p)
+	}
+	if b.Len() == 0 {
+		// Every component was empty, and an empty RESULT stays empty - CPython
+		// gives "" for join("") and "." only for join() with no arguments at
+		// all, which this function cannot be reached with.
+		return ""
+	}
+	return b.String()
 }
 
 func pathSplit(self py.Object, args py.Tuple) (py.Object, error) {

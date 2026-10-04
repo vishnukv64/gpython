@@ -1,0 +1,11 @@
+two absolute: /opt/x
+mixed: /opt/x
+relative: a/b/c
+trailing slash: a/b
+empty ignored: a/b
+all empty: ''
+single: only
+absolute first: /a/b
+leading slashes collapsed: /b/c
+dot path: ./a/b
+rejoin is identity: True
