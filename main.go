@@ -128,7 +128,7 @@ func runREPL(args []string) error {
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
 
-	fmt.Printf("Python 3.4.0 (%s, %s)\n", commit, date)
+	fmt.Printf("Python 3.10.0 (%s, %s)\n", commit, date)
 	fmt.Printf("[Gpython %s]\n", version)
 	fmt.Printf("- os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("- go version: %s\n", runtime.Version())

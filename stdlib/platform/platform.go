@@ -186,7 +186,7 @@ func pythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
 	if err := noArgs("python_version", args); err != nil {
 		return nil, err
 	}
-	return py.String("3.4.0"), nil
+	return py.String("3.10.0"), nil
 }
 
 func pythonVersionTuple(self py.Object, args py.Tuple) (py.Object, error) {

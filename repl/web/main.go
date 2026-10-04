@@ -82,7 +82,7 @@ func main() {
 
 	// Create a jquery terminal instance
 	opts := js.ValueOf(map[string]interface{}{
-		"greetings": "Gpython 3.4.0 running in your browser with " + tech,
+		"greetings": "Gpython 3.10.0 running in your browser with " + tech,
 		"name":      "gpython",
 		"prompt":    repl.NormalPrompt,
 	})

@@ -116,7 +116,7 @@ func allConfigVars() []py.DictEntry {
 		{Key: "SOABI", Value: py.String(soabi)},
 		{Key: "SO", Value: py.String(".so")},
 		{Key: "MULTIARCH", Value: py.String("")},
-		{Key: "py_version", Value: py.String("3.4.0")},
+		{Key: "py_version", Value: py.String("3.10.0")},
 		{Key: "py_version_short", Value: py.String("3.4")},
 		{Key: "py_version_nodot", Value: py.String("34")},
 		{Key: "prefix", Value: py.String(prefix())},

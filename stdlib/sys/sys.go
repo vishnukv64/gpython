@@ -681,7 +681,7 @@ func init() {
 		py.DictEntry{Key: "maxsize", Value: py.Int(math.MaxInt64)},
 		py.DictEntry{Key: "maxunicode", Value: py.Int(0x10FFFF)},
 		py.DictEntry{Key: "float_info", Value: floatInfo()},
-		py.DictEntry{Key: "hexversion", Value: py.Int(0x030400F0)},
+		py.DictEntry{Key: "hexversion", Value: py.Int(0x030A00F0)},
 		py.DictEntry{Key: "argv", Value: py.NewListFromStrings(os.Args[1:])},
 		py.DictEntry{Key: "stdin", Value: stdin},
 		py.DictEntry{Key: "stdout", Value: stdout},
@@ -693,8 +693,8 @@ func init() {
 		// The platform and version attributes, which code branches on.
 		py.DictEntry{Key: "platform", Value: py.String(runtime.GOOS)},
 		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
-		py.DictEntry{Key: "version", Value: py.String("3.4.0 (gpython)")},
-		py.DictEntry{Key: "version_info", Value: py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)}},
+		py.DictEntry{Key: "version", Value: py.String("3.10.0 (gpython)")},
+		py.DictEntry{Key: "version_info", Value: py.Tuple{py.Int(3), py.Int(10), py.Int(0), py.String("final"), py.Int(0)}},
 		py.DictEntry{Key: "prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "exec_prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "base_prefix", Value: py.String(prefix())},
@@ -881,9 +881,9 @@ func prefix() string {
 func implementationInfo() py.Object {
 	d := py.NewStringDict()
 	d.Set("name", py.String("gpython"))
-	d.Set("version", py.Tuple{py.Int(3), py.Int(4), py.Int(0), py.String("final"), py.Int(0)})
-	d.Set("hexversion", py.Int(0x030400F0))
-	d.Set("cache_tag", py.String("gpython-34"))
+	d.Set("version", py.Tuple{py.Int(3), py.Int(10), py.Int(0), py.String("final"), py.Int(0)})
+	d.Set("hexversion", py.Int(0x030A00F0))
+	d.Set("cache_tag", py.String("gpython-310"))
 	return d
 }
 
