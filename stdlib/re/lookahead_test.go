@@ -96,8 +96,12 @@ func TestUnsupportedLookaroundRefuses(t *testing.T) {
 		`\d+(?!%)`,     // quantified prefix: needs backtracking
 		`[a-z]+(?=\.)`, // positive lookahead
 		`a(?=b)`,       // positive lookahead
-		`(?<=a)b`,      // lookbehind
 		`a(?(1)b|c)`,   // conditional
+		// A lookbehind IS supported now (see lookbehind_test.go), but only
+		// where its position in the match is determined: leading, or followed
+		// by a FIXED-width tail.  A variable tail cannot be anchored.
+		`x(?<!a)y.*`,   // lookbehind whose TAIL is variable width
+		`(?<=(a|bc))d`, // lookbehind whose BODY is not fixed width
 	} {
 		if _, err := compile(pattern, 0); err == nil {
 			t.Errorf("compile(%q) succeeded, but this shape cannot be checked exactly", pattern)

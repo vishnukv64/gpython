@@ -1,0 +1,14 @@
+neg: True False
+pos: True False
+word: True False
+findall: ['12']
+escaped: ['"', '"', '"']
+span: (1, 2)
+start: True
+group: a
+pos0: True False
+pos0 findall: ['y', 'y']
+mid: ['"x"', '"y"']
+mid esc: []
+mid none: []
+alt: ['c', 'd']

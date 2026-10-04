@@ -173,10 +173,10 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 		}
 		i++
 	}
-	// Lookbehind, conditionals and backreferences still have no equivalent in
-	// Go's engine and are refused by name.  NEGATIVE lookahead is handled now -
-	// see lookahead.go - because pip cannot start without it.
-	for _, unsupported := range []string{"(?<=", "(?<!", "(?(", "(?P="} {
+	// Conditionals and named backreferences still have no equivalent in Go's
+	// engine and are refused by name.  Lookaround is handled now - see
+	// lookahead.go - because pip's rich cannot print a line without it.
+	for _, unsupported := range []string{"(?(", "(?P="} {
 		if strings.Contains(pattern, unsupported) {
 			return "", nil, nil, 0, py.ExceptionNewf(ErrorType, "lookaround and conditionals are not supported: Go's regexp engine has no equivalent (%s)", unsupported)
 		}
@@ -1003,12 +1003,33 @@ func (p *Pattern) wrapped() string {
 func (p *Pattern) nextMatch(text string, from int, lastEnd int, lastWasEmpty bool) (*Match, int, bool) {
 	runes := []rune(text)
 	for start := from; start <= len(runes); start++ {
+		// The search runs against the whole remaining text, NOT a slice
+		// beginning at start: a lifted lookbehind examines the text BEFORE the
+		// match, and slicing it away made the assertion see the string start
+		// instead of the real preceding character.
 		sub := string(runes[start:])
-		idx := p.re.FindStringSubmatchIndex(sub)
+		var idx []int
+		if p.lifted != nil {
+			// The whole remaining text goes in with the offset, so a lifted
+			// lookbehind can read the characters BEFORE the match.
+			abs := p.matchWithAssertionsIn(*p.lifted, string(runes[:]), start)
+			if abs == nil {
+				return nil, 0, false
+			}
+			idx = make([]int, len(abs))
+			for i, v := range abs {
+				if v < 0 {
+					idx[i] = -1
+				} else {
+					idx[i] = charOffset(string(runes[:]), v) - start
+				}
+			}
+		} else {
+			idx = p.re.FindStringSubmatchIndex(sub)
+		}
 		if idx == nil {
 			return nil, 0, false
 		}
-		// The match is relative to the slice: shift it back.
 		absolute := make([]int, len(idx))
 		for i, v := range idx {
 			if v < 0 {
