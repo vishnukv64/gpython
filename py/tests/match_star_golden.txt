@@ -1,0 +1,5 @@
+4 elems: (1, [2, 3, 4])
+2 elems: (1, [2])
+1 elem: (1, [])
+string: no
+empty: no

@@ -46,6 +46,7 @@ func init() {
 		py.MustNewMethod("format", builtin_format, 0, format_doc),
 		py.MustNewMethod("getattr", builtin_getattr, 0, getattr_doc),
 		py.MustNewMethod("globals", py.InternalMethodGlobals, 0, globals_doc),
+		py.MustNewMethod("__match_is_sequence__", matchIsSequence, 0, "Whether a value is a sequence for a match statement."),
 		py.MustNewMethod("hasattr", builtin_hasattr, 0, hasattr_doc),
 		// py.MustNewMethod("hash", builtin_hash, 0, hash_doc),
 		py.MustNewMethod("hash", builtin_hash, 0, hash_doc),
@@ -850,6 +851,41 @@ func builtin_hasattr(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	_, err = py.GetAttr(v, name)
 	return py.NewBool(err == nil), nil
+}
+
+// matchIsSequence is the test a SEQUENCE PATTERN applies to its subject, which
+// the match compiler calls.
+//
+// CPython's rule is not "has a length": a list, a tuple, a range and anything
+// registered as a collections.abc.Sequence qualify, while str, bytes, bytearray,
+// dict and set do NOT.  Testing hasattr(subject, "__len__") accepted a string,
+// so "case [x, y]" matched "ab" where CPython falls through to the next case.
+func matchIsSequence(self py.Object, args py.Tuple) (py.Object, error) {
+	var v py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "__match_is_sequence__", 1, 1, &v); err != nil {
+		return nil, err
+	}
+	// The types CPython REFUSES.  Listed first because refusing is the
+	// interesting case: a string is the one a program is most likely to try.
+	switch v.(type) {
+	case py.String, py.Bytes, *py.ByteArray:
+		return py.False, nil
+	}
+	// The types CPython accepts.
+	switch v.(type) {
+	case *py.List, py.Tuple, *py.Range:
+		return py.True, nil
+	}
+	// Any other object is a match subject only if it declares itself a list or
+	// tuple subclass, which covers a user class deriving from one.
+	t := v.Type()
+	for t != nil {
+		if t == py.ListType || t == py.TupleType {
+			return py.True, nil
+		}
+		t = t.Base
+	}
+	return py.False, nil
 }
 
 const setattr_doc = `setattr(object, name, value)

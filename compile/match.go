@@ -183,14 +183,20 @@ func (c *compiler) matchSequence(p *ast.MatchSequence, subject string, fail *Lab
 	c.loadTemp(subject)
 	c.StoreVar(subjectType)
 
-	// A sequence pattern only applies to a sequence: an int has no len(),
-	// so the length check below would raise rather than fail the case.
-	// CPython tests the same thing before looking at the length.
+	// A sequence pattern applies only to a SEQUENCE, and it is not "has a
+	// length": CPython accepts a list, a tuple, a range and anything registered
+	// through collections.abc.Sequence - and REFUSES a str, bytes, dict or set.
+	//
+	// Testing hasattr(subject, "__len__") accepted a string, so
+	// "case [x, y]" matched "ab" and bound x='a', y='b' where CPython falls
+	// through to the next case.
+	// The test is a helper rather than inline bytecode: "is a sequence for
+	// pattern matching" is CPython's rule (list, tuple, range, or a registered
+	// Sequence - but NOT str, bytes, dict or set) and expressing it as a single
+	// well-named call keeps this compiler readable.
+	c.NameOp("__match_is_sequence__", ast.Load)
 	c.loadTemp(subjectType)
-	c.NameOp("hasattr", ast.Load)
-	c.loadTemp(subjectType)
-	c.LoadConst(py.String("__len__"))
-	c.OpArg(vm.CALL_FUNCTION, 2)
+	c.OpArg(vm.CALL_FUNCTION, 1)
 	c.Jump(vm.POP_JUMP_IF_FALSE, fail)
 
 	// len(subject) == len(patterns), or >= the minimum with a star.
@@ -229,9 +235,30 @@ func (c *compiler) matchSequence(p *ast.MatchSequence, subject string, fail *Lab
 	if hasStar {
 		star := p.Patterns[starIndex].(*ast.MatchStar)
 		if star.Name != "" {
+			// The star takes everything between the patterns before it and the
+			// patterns after it, so its slice runs from starIndex to
+			// "len(subject) - (patterns after the star)".
+			//
+			// Writing that stop as a NEGATIVE index - "starIndex + 1 -
+			// len(patterns)" - is wrong when the star is LAST: the stop is
+			// then "1 - len(patterns)", which is a negative index the slice
+			// resolves differently from "end of sequence".  Computing it from
+			// len(subject) is what CPython's star does, and it is the same
+			// arithmetic for both cases.
+			after := len(p.Patterns) - starIndex - 1
 			c.loadTemp(subjectType)
 			c.LoadConst(py.Int(starIndex))
-			c.LoadConst(py.Int(starIndex - len(p.Patterns)))
+			if after == 0 {
+				// To the end: an explicit None, which is what a slice stop of
+				// "end" means.
+				c.LoadConst(py.None)
+			} else {
+				c.NameOp("len", ast.Load)
+				c.loadTemp(subjectType)
+				c.OpArg(vm.CALL_FUNCTION, 1)
+				c.LoadConst(py.Int(after))
+				c.Op(vm.BINARY_SUBTRACT)
+			}
 			c.OpArg(vm.BUILD_SLICE, 2)
 			c.Op(vm.BINARY_SUBSCR)
 			c.NameOp(string(star.Name), ast.Store)
