@@ -15,21 +15,23 @@ not a reference that disagrees.
 
 ### Language
 
-- **`async def` / `await` are not implemented.** No lexer keyword, no grammar
-  rule, no opcode, no coroutine type. This is the largest remaining gap.
 - **PEP 695 type syntax is not implemented** — `type X = int` and
   `class C[T]:` are SyntaxErrors. That is consistent with the 3.10 the
   interpreter reports (both are 3.12 features).
+- **`async` is a hard keyword**, as it is in CPython 3.7+, and **async
+  generators are not supported** (`async def` containing `yield`).
+  `async def`, `await`, `async with` and `async for` all work; there is no
+  event loop, so a coroutine is driven by hand (`coro.send(None)`).
 
 ### Standard library
 
-- **`threading.Condition` is absent.** `RLock`, `Semaphore` and `Event` work.
+- **`mmap` is absent.** This is what stops `pip install`: the network path
+  imports it through `pip._vendor.cachecontrol`, so the failure is a
+  `ModuleNotFoundError` at import rather than anything about downloading.
 - **`csv.register_dialect` takes no keyword arguments** — it accepts a name
   only, so `csv.register_dialect("x", delimiter=";")` is a TypeError.
-- **`str.rsplit` is missing** (the rest of the `str` family is present:
-  `zfill`, `center`, `ljust`, `rjust`, `expandtabs`, `translate`, `maketrans`,
-  `removeprefix`, `removesuffix`, `rfind`, `rindex`, `partition`, `rpartition`,
-  `casefold`, `swapcase`).
+- **`asyncio` is absent**, and so is every event loop. It is not merely
+  unimplemented: it needs `selectors` and a socket layer that is not there.
 
 ### Not attempted
 
@@ -51,6 +53,23 @@ not a reference that disagrees.
 - **Memory addresses** in any repr, and **timing** in any benchmark.
 
 ## Fixed since the previous revision of this file
+
+- **`async def`, `await`, `async with` and `async for`** now parse and run, with
+  a real coroutine type (`types.CoroutineType`, `inspect.iscoroutine`) and
+  `StopAsyncIteration`.  There is still no event loop.
+- **`str.rsplit`** works.
+- **`threading.Condition`** exists, alongside `Event`, `Semaphore` and
+  `Barrier`, which are now real primitives rather than aliases of `Lock`.
+- **`sys.version_info` and `sys.implementation.version`** are real struct
+  sequences, so `.major`/`.minor` work as 3.9+ code spells them; and
+  `platform.python_version_tuple()` returns strings read from the live sys
+  rather than hardcoded ints that had drifted to 3.4.0.
+- **`\b`, `\B` and `\A`** in a regex are word/string boundaries.  The
+  translator used to write the letter without the backslash, so `"\bnumpy"`
+  became the literal `"bnumpy"` — every boundary in every pattern, silently.
+- **A Python subclass of an exception can hold attributes**, and an
+  `Exception.__init__` may take keyword-only arguments.
+
 
 Everything that used to be listed here and no longer is. Each was re-verified by
 running it:
