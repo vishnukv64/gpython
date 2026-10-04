@@ -406,8 +406,17 @@ func (a Int) M__imul__(other Object) (Object, error) {
 }
 
 func (a Int) M__truediv__(other Object) (Object, error) {
+	// An operand that cannot be made a float is NOT this method's error to
+	// report: returning NotImplemented lets the dispatcher try the other
+	// operand's reflected method and then raise the right message - "unsupported
+	// operand type(s) for /: 'str' and 'int'".  Propagating MakeFloat's error
+	// instead produced "unsupported operand type(s) for float: 'str'", which
+	// names the wrong operation and only one operand.
 	b, err := MakeFloat(other)
 	if err != nil {
+		if IsException(TypeError, err) {
+			return NotImplemented, nil
+		}
 		return nil, err
 	}
 	fa := Float(a)
@@ -419,8 +428,14 @@ func (a Int) M__truediv__(other Object) (Object, error) {
 }
 
 func (a Int) M__rtruediv__(other Object) (Object, error) {
+	// As M__truediv__: an operand that is not a number is not THIS method's
+	// error, so NotImplemented goes back to the dispatcher, which raises
+	// "unsupported operand type(s) for /: 'str' and 'int'".
 	b, err := MakeFloat(other)
 	if err != nil {
+		if IsException(TypeError, err) {
+			return NotImplemented, nil
+		}
 		return nil, err
 	}
 	fa := Float(a)

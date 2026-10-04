@@ -1,0 +1,5 @@
+str / int -> unsupported operand type(s) for /: 'str' and 'int'
+int / str -> unsupported operand type(s) for /: 'int' and 'str'
+list / int -> unsupported operand type(s) for /: 'list' and 'int'
+int / None -> unsupported operand type(s) for /: 'int' and 'NoneType'
+sub -> unsupported operand type(s) for -: 'str' and 'int'
