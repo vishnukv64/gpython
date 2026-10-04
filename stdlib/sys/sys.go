@@ -704,7 +704,7 @@ func init() {
 		py.DictEntry{Key: "platform", Value: py.String(runtime.GOOS)},
 		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
 		py.DictEntry{Key: "version", Value: py.String("3.10.0 (gpython)")},
-		py.DictEntry{Key: "version_info", Value: py.Tuple{py.Int(3), py.Int(10), py.Int(0), py.String("final"), py.Int(0)}},
+		py.DictEntry{Key: "version_info", Value: currentVersionInfo()},
 		py.DictEntry{Key: "prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "exec_prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "base_prefix", Value: py.String(prefix())},

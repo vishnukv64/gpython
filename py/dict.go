@@ -1203,6 +1203,27 @@ func HashValue(o Object) (int64, bool) {
 	//
 	// This deliberately does NOT call hashOf: hashOf routes back here, and the
 	// two together recursed until the process died.
+	//
+	// The GO interface is checked FIRST, as Len does: a type implemented in Go
+	// registers its methods in the type's Dict only for some of them, so
+	// CallMethod alone finds nothing and a perfectly hashable object reports
+	// "unhashable".  time.struct_time and sys.version_info are both Go structs
+	// with an M__hash__, and both raised "descriptor '__hash__' requires a 'type'
+	// object" - hash() looked up the DESCRIPTOR rather than calling the method.
+	if h, ok := o.(I__hash__); ok {
+		res, err := h.M__hash__()
+		if err != nil {
+			return 0, false
+		}
+		if _, isNone := res.(NoneType); isNone {
+			return 0, false
+		}
+		n, err := Index(res)
+		if err != nil {
+			return 0, false
+		}
+		return int64(n), true
+	}
 	target := o.Type()
 	if t, isType := o.(*Type); isType && t.ObjectType != nil {
 		target = t.ObjectType

@@ -77,22 +77,76 @@ func (s *StructTime) M__getitem__(key py.Object) (py.Object, error) {
 	return py.Int(vals[n]), nil
 }
 
+// M__eq__ compares the nine fields, and against a PLAIN tuple as well:
+// time.struct_time IS a tuple in CPython, so "localtime() == tuple(localtime())"
+// is True.  Comparing only against another struct_time made it False, and left
+// the object unusable as a set member or dict key.
 func (s *StructTime) M__eq__(other py.Object) (py.Object, error) {
-	o, ok := other.(*StructTime)
-	if !ok {
+	seq, err := py.SequenceTuple(other)
+	if err != nil {
 		return py.NotImplemented, nil
 	}
-	return py.Bool(equalFields(s, o)), nil
+	return py.Bool(equalFields(s, seq)), nil
 }
 
-func equalFields(a, b *StructTime) bool {
-	fa, fb := a.fields(), b.fields()
+func equalFields(a *StructTime, b py.Tuple) bool {
+	fa := a.fields()
+	if len(fa) != len(b) {
+		return false
+	}
 	for i := range fa {
-		if fa[i] != fb[i] {
+		eq, err := py.Eq(py.Int(fa[i]), b[i])
+		if err != nil || eq != py.True {
 			return false
 		}
 	}
 	return true
+}
+
+// M__lt__/le/gt/ge delegate to the tuple of values, as CPython's does: a
+// struct_time IS a tuple, so sorted() over a list of them works.  Without these
+// "sorted([localtime(), localtime()])" raised
+// "'<' not supported between instances of 'time.struct_time' and
+// 'time.struct_time'".
+func (s *StructTime) M__lt__(other py.Object) (py.Object, error) {
+	return compareTime(s, other, py.Lt)
+}
+func (s *StructTime) M__le__(other py.Object) (py.Object, error) {
+	return compareTime(s, other, py.Le)
+}
+func (s *StructTime) M__gt__(other py.Object) (py.Object, error) {
+	return compareTime(s, other, py.Gt)
+}
+func (s *StructTime) M__ge__(other py.Object) (py.Object, error) {
+	return compareTime(s, other, py.Ge)
+}
+
+func compareTime(s *StructTime, other py.Object, op func(a, b py.Object) (py.Object, error)) (py.Object, error) {
+	seq, err := py.SequenceTuple(other)
+	if err != nil {
+		return py.NotImplemented, nil
+	}
+	fields := s.fields()
+	items := make(py.Tuple, len(fields))
+	for i, v := range fields {
+		items[i] = py.Int(v)
+	}
+	return op(items, seq)
+}
+
+// M__hash__ hashes the tuple of values, as CPython's does.  Without it
+// hash(localtime()) raised "descriptor '__hash__' requires a 'type' object",
+// which also made a struct_time unusable as a dict key or set member.
+func (s *StructTime) M__hash__() (py.Object, error) {
+	fields := s.fields()
+	items := make(py.Tuple, len(fields))
+	for i, v := range fields {
+		items[i] = py.Int(v)
+	}
+	if h, ok := py.HashValue(items); ok {
+		return py.Int(h), nil
+	}
+	return py.NotImplemented, nil
 }
 
 func (s *StructTime) M__repr__() (py.Object, error) {

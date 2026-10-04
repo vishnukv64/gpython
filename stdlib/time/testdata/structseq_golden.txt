@@ -1,0 +1,21 @@
+vi len: 5
+vi index is int: True
+vi names: True True True True True
+vi slice: 3 True
+vi iter: True
+vi n_fields: 5 5 0
+vi eq tuple: True
+vi ge: True
+vi lt: True
+vi hashable: True
+vi as key: found
+st len: 9
+st named: True True
+st index matches name: True
+st slice: 3
+st eq tuple: True
+st eq self: True
+st hashable: True
+st in set: True
+st as key: True
+OK
