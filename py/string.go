@@ -323,7 +323,12 @@ characters to map to None.`))
 	StringType.Dict.Set("splitlines", MustNewMethod("splitlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		s := string(self.(String))
 		var keepends Object = False
-		if err := UnpackTuple(args, kwargs, "splitlines", 0, 1, &keepends); err != nil {
+		// keepends is accepted BY NAME as well as positionally, which is what
+		// CPython does: pip calls "text.splitlines(keepends=False)" while
+		// reading a distribution's entry_points.txt, and UnpackTuple accepts no
+		// keyword at all, so "pip show" died with "splitlines() does not take
+		// keyword arguments".
+		if err := ParseTupleAndKeywords(args, kwargs, "|O:splitlines", []string{"keepends"}, &keepends); err != nil {
 			return nil, err
 		}
 		keep, _ := MakeBool(keepends)

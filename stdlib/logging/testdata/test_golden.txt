@@ -6,6 +6,6 @@ other: False
 empty name admits all: True
 name attribute: x
 unbound override runs: OVERRIDE
-instance type name is the native base here: True
+instance type name is the subclass: True
 base filter keeps its own: 'kept\n'
 a non-matching filter drops: 'kept\n'

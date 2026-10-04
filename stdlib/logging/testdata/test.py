@@ -33,10 +33,12 @@ class Derived(Filter):
 
 d = Derived("x")
 print("unbound override runs:", Derived.filter(d, rec("x")))
-# CPython reports "Derived" here.  This interpreter reports the native base,
-# because an instance of a Python subclass of a native type does not carry its
-# subclass - the limitation above, pinned so a change to it is visible.
-print("instance type name is the native base here:", type(d).__name__ == "logging.Filter")
+# CPython reports "Derived" here, and now so does this interpreter: an instance
+# of a Python subclass of a native type carries its subclass.  This used to pin
+# the OPPOSITE - the native base - as a known limitation, and pinning a bug as
+# expected behaviour makes fixing it look like a regression, which is exactly
+# how it surfaced.
+print("instance type name is the subclass:", type(d).__name__ == "Derived")
 
 # A filter attached to a logger runs before dispatch: a base Filter naming that
 # logger PASSES its records, so it writes; naming another drops them.

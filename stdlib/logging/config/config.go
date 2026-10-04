@@ -151,7 +151,7 @@ func resolveDotted(ctx py.Context, name string) (py.Object, error) {
 }
 
 // makeHandler builds a handler and applies its level, formatter and filters.
-func makeHandler(ctx py.Context, class py.Object, spec py.StringDict, formatters py.StringDict) (py.Object, error) {
+func makeHandler(ctx py.Context, class py.Object, spec py.StringDict, formatters py.StringDict, filters py.StringDict) (py.Object, error) {
 	// A "()" key names the factory explicitly, which is the documented way to
 	// use a callable rather than a class.
 	factory := class
@@ -234,6 +234,38 @@ func makeHandler(ctx py.Context, class py.Object, spec py.StringDict, formatters
 			return nil, cerr
 		}
 	}
+	// The handler's filters are applied here, by NAME from the config's filters
+	// section.  They were skipped entirely - makeHandler's own comment said they
+	// were applied and nothing did it - so every handler ran UNFILTERED.
+	//
+	// pip's config gives its stderr handler a MaxLevelFilter(WARNING) so that
+	// only warnings and above go there, while the stdout handler takes the rest.
+	// With the filter ignored, both handlers took every record and every line of
+	// "pip show" was written TWICE, once per stream.
+	if v, ok := spec.Get("filters"); ok {
+		names, isSeq := v.(py.Tuple)
+		if !isSeq {
+			if l, isList := v.(*py.List); isList {
+				names = py.Tuple((*l).Items)
+			} else {
+				return nil, py.ExceptionNewf(py.ValueError, "Unable to configure handler %q: filters must be a sequence", strOf(spec.GetOrNil("class")))
+			}
+		}
+		add, aerr := py.GetAttrString(h, "addFilter")
+		if aerr != nil {
+			return nil, aerr
+		}
+		for _, n := range names {
+			name := strOf(n)
+			f, ok := filters.Get(name)
+			if !ok {
+				return nil, py.ExceptionNewf(py.ValueError, "Unable to configure handler %q: no filter named %q", strOf(spec.GetOrNil("class")), name)
+			}
+			if _, cerr := py.Call(add, py.Tuple{f}, py.NewStringDict()); cerr != nil {
+				return nil, cerr
+			}
+		}
+	}
 	return h, nil
 }
 
@@ -286,7 +318,51 @@ func dictConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 		}
 	}
 
-	// Then handlers, which may name a formatter.
+	// Filters before handlers, which refer to them by name.  Each entry is
+	// built by CALLING its "()" factory with the remaining keys as keyword
+	// arguments, which is how CPython's own config does it.
+	filters := py.NewStringDict()
+	if v, ok := cfg.Get("filters"); ok {
+		defs, merr := asMapping(v, "filters")
+		if merr != nil {
+			return nil, merr
+		}
+		for _, ent := range defs.Items() {
+			spec, ok := ent.Value.(py.StringDict)
+			if !ok {
+				continue
+			}
+			factory, hasFactory := spec.Get("()")
+			if !hasFactory {
+				return nil, py.ExceptionNewf(py.ValueError, "Unable to configure filter %q: no '()'", ent.Key)
+			}
+			// The factory may be a DOTTED STRING naming the class, which is how
+			// a config written for CPython names it - pip's own config does.
+			// Calling the string raised "'str' object is not callable" and took
+			// down pip's setup_logging.
+			if name, isStr := factory.(py.String); isStr {
+				resolved, rerr := resolveDotted(ctx, string(name))
+				if rerr != nil {
+					return nil, rerr
+				}
+				factory = resolved
+			}
+			kwargs := py.NewStringDict()
+			for _, e := range spec.Items() {
+				if e.Key == "()" {
+					continue
+				}
+				kwargs.Set(e.Key, e.Value)
+			}
+			f, ferr := py.Call(factory, py.Tuple{}, kwargs)
+			if ferr != nil {
+				return nil, ferr
+			}
+			filters.Set(ent.Key, f)
+		}
+	}
+
+	// Then handlers, which may name a formatter and filters.
 	handlers := py.NewStringDict()
 	if v, ok := cfg.Get("handlers"); ok {
 		defs, merr := asMapping(v, "handlers")
@@ -306,7 +382,7 @@ func dictConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 						"Unable to configure handler %q: no 'class' or '()'", ent.Key)
 				}
 			}
-			h, herr := makeHandler(ctx, class, spec, formatters)
+			h, herr := makeHandler(ctx, class, spec, formatters, filters)
 			if herr != nil {
 				return nil, herr
 			}

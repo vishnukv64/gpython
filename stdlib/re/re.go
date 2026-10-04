@@ -297,6 +297,16 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 				// Python's \Z is Go's \z.
 				b.WriteString(`\z`)
 			case 'A', 'b', 'B':
+				// The backslash has to be written TOO: Go's regexp has the same
+				// \b, \B and \A as Python's, but writing only the letter turned
+				// the boundary assertion into the literal character - "\bnumpy"
+				// became "bnumpy", so it matched an "numpy" preceded by a literal
+				// "b" and nothing else.  Every word boundary in every pattern was
+				// silently broken, which is what stopped packaging from parsing any
+				// requirement: its tokenizer matches IDENTIFIER with
+				// "\b[a-zA-Z0-9][a-zA-Z0-9._-]*\b", so no requirement name ever
+				// tokenized and Requirement() raised InvalidRequirement.
+				b.WriteByte('\\')
 				b.WriteByte(next)
 			case 'u', 'U', 'N':
 				return "", nil, nil, 0, py.ExceptionNewf(ErrorType, `\%c escapes are not supported`, next)

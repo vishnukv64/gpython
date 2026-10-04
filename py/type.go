@@ -2386,6 +2386,20 @@ func ObjectInit(self Object, args Tuple, kwargs StringDict) error {
 	// The real question is whether the object's CLASS defines an __init__ that
 	// is not object's own, so ask that instead.
 	if init := t.GetAttrOrNil("__init__"); init != nil && !isObjectInit(init) {
+		// A native method taken straight from the type's Dict is UNBOUND, so
+		// calling it with self among the arguments did not bind it: the
+		// implementation was handed the method's MODULE as self instead.  A
+		// subclass of a native type that INHERITS __init__ therefore could not
+		// be constructed at all - "class E(logging.Filter): pass; E()" raised
+		// "not a Filter", because the base __init__ got a *py.Module where it
+		// asserted its own type.  A method reached through the instance (the
+		// Python-level __init__ case) is already bound and keeps the old path.
+		if m, isMethod := init.(*Method); isMethod && !m.Unbound {
+			if _, err := m.CallWithKeywords(self, args, kwargs); err != nil {
+				return err
+			}
+			return nil
+		}
 		newArgs := make(Tuple, len(args)+1)
 		newArgs[0] = self
 		copy(newArgs[1:], args)

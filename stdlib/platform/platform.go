@@ -182,18 +182,58 @@ func hostName() string {
 	return strings.TrimSpace(string(out))
 }
 
-func pythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
-	if err := noArgs("python_version", args); err != nil {
-		return nil, err
-	}
-	return py.String("3.10.0"), nil
-}
-
+// pythonVersionTuple is (major, minor, micro).
+//
+// Its elements are STRINGS, which is what CPython returns and what code
+// joining them expects: packaging does ".".join(platform.python_version_tuple()[:2])
+// to build the python_version marker, and returning ints made that raise
+// "sequence item 0: expected str instance, int found".
 func pythonVersionTuple(self py.Object, args py.Tuple) (py.Object, error) {
 	if err := noArgs("python_version_tuple", args); err != nil {
 		return nil, err
 	}
-	return py.Tuple{py.Int(3), py.Int(4), py.Int(0)}, nil
+	major, minor, micro := pyVersionTriple(self)
+	return py.Tuple{py.String(major), py.String(minor), py.String(micro)}, nil
+}
+
+// pythonVersion is "major.minor.micro".
+func pythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
+	if err := noArgs("python_version", args); err != nil {
+		return nil, err
+	}
+	major, minor, micro := pyVersionTriple(self)
+	return py.String(major + "." + minor + "." + micro), nil
+}
+
+// pyVersionTriple reads the interpreter's version from the LIVE sys module, so
+// these cannot drift from sys.version the way a hardcoded copy does - they said
+// "3.4.0" long after sys had moved to 3.10, and packaging read the 3.4.
+func pyVersionTriple(self py.Object) (string, string, string) {
+	selfMod, ok := self.(*py.Module)
+	if !ok || selfMod.Context == nil {
+		return "3", "10", "0"
+	}
+	sysMod, err := selfMod.Context.GetModule("sys")
+	if err != nil || sysMod == nil {
+		return "3", "10", "0"
+	}
+	vi := sysMod.Globals.GetOrNil("version_info")
+	field := func(name string, i int) string {
+		if d, ok := vi.(py.IGetDict); ok {
+			if v, ok := d.GetDict().Get(name); ok {
+				if s, err := py.StrAsString(v); err == nil {
+					return s
+				}
+			}
+		}
+		if t, ok := vi.(py.Tuple); ok && i < len(t) {
+			if s, err := py.StrAsString(t[i]); err == nil {
+				return s
+			}
+		}
+		return ""
+	}
+	return field("major", 0), field("minor", 1), field("micro", 2)
 }
 
 func pythonBuild(self py.Object, args py.Tuple) (py.Object, error) {

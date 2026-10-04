@@ -148,12 +148,24 @@ func (r *LogRecord) getMessage() (string, error) {
 // filterObj is the Go value behind logging.Filter.
 type filterObj struct {
 	name string
+	// attrs is the instance namespace, so a Python subclass can store its own
+	// attributes - "class MaxLevel(Filter): def __init__(self, level=0):
+	// self.level = level" raised "'MaxLevel' object has no attribute 'level'".
+	// Same as Handler.attrs.
+	attrs py.StringDict
+	// cls is the class this filter was made AS, which is the SUBCLASS when one
+	// was defined in Python.  Without it Type() answered logging.Filter for
+	// every filter, so "type(MaxLevel(1))" was logging.Filter and the
+	// subclass's own filter() was never the one looked up: pip's
+	// MaxLevelFilter(WARNING) silently passed everything it should have
+	// dropped.  Same shape as Handler.cls and Logger.cls.
+	cls *py.Type
 }
 
 var filterType = py.NewTypeX("logging.Filter",
 	"Filter instances are used to perform arbitrary filtering of LogRecords.",
 	func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-		f := &filterObj{}
+		f := &filterObj{cls: metatype, attrs: py.NewStringDict()}
 		// __init__ is not run for a NewTypeX-built type, so the name is applied
 		// here - the same reason logging.handlers applies its arguments in its
 		// constructor.
@@ -166,7 +178,23 @@ var filterType = py.NewTypeX("logging.Filter",
 		return f, nil
 	}, nil)
 
-func (f *filterObj) Type() *py.Type { return filterType }
+func (f *filterObj) Type() *py.Type {
+	if f.cls != nil {
+		return f.cls
+	}
+	return filterType
+}
+
+// GetDict exposes the instance namespace, so a Python subclass of Filter can
+// keep its own attributes.
+func (f *filterObj) GetDict() py.StringDict {
+	if f.attrs.IsNil() {
+		f.attrs = py.NewStringDict()
+	}
+	return f.attrs
+}
+
+var _ py.IGetDict = (*filterObj)(nil)
 
 // filterMatches is the filtering rule itself, CPython's Filter.filter: a record
 // from the named logger OR ANY OF ITS CHILDREN passes.
@@ -601,6 +629,18 @@ func (l *Logger) callHandlers(record *LogRecord) error {
 	for logger := l; logger != nil; logger = logger.parent {
 		for _, h := range logger.handlers {
 			if record.LevelNo < h.level {
+				continue
+			}
+			// The handler's own filters decide, before anything is emitted.
+			// handlerDrops existed for exactly this and was never called, so
+			// every filter in a dictConfig was constructed and then ignored -
+			// pip's MaxLevelFilter(WARNING) on the stderr handler, for one,
+			// which is why "pip show" wrote every line to both streams.
+			drops, derr := handlerDrops(h, record)
+			if derr != nil {
+				return derr
+			}
+			if drops {
 				continue
 			}
 			found = true

@@ -891,7 +891,12 @@ func prefix() string {
 func implementationInfo() py.Object {
 	d := py.NewStringDict()
 	d.Set("name", py.String("gpython"))
-	d.Set("version", py.Tuple{py.Int(3), py.Int(10), py.Int(0), py.String("final"), py.Int(0)})
+	// A version_info, not a bare tuple: packaging reads
+	// "sys.implementation.version.major" in _format_full_version, which every
+	// marker evaluation goes through.  As a plain tuple that raised
+	// "'tuple' object has no attribute 'major'", so pip could not evaluate an
+	// environment marker and "pip show" reported every distribution missing.
+	d.Set("version", currentVersionInfo())
 	d.Set("hexversion", py.Int(0x030A00F0))
 	d.Set("cache_tag", py.String("gpython-310"))
 	return d
