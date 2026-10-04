@@ -6,12 +6,14 @@
 package os
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -62,6 +64,8 @@ func init() {
 		py.MustNewMethod("remove", remove, 0, remove_doc),
 		py.MustNewMethod("rename", rename, 0, rename_doc),
 		py.MustNewMethod("access", access, 0, access_doc),
+		py.MustNewMethod("utime", utime, 0, utime_doc),
+		py.MustNewMethod("open", osOpen, 0, open_doc),
 		py.MustNewMethod("symlink", symlink, 0, "symlink(src, dst, target_is_directory=False) -> create a symbolic link."),
 		py.MustNewMethod("readlink", readlink, 0, "readlink(path) -> the path a symbolic link points to."),
 		py.MustNewMethod("link", link, 0, "link(src, dst) -> create a hard link."),
@@ -799,6 +803,141 @@ const (
 	W_OK = 2
 	R_OK = 4
 )
+
+const utime_doc = `utime(path, times=None, *, ns=None, dir_fd=None, follow_symlinks=True)
+
+Set the access and modified time of the file at path.  With times=None the
+current time is used.`
+
+// utime sets a file's access and modification times.
+//
+// "times" is an (atime, mtime) pair of floats in seconds; CPython's "ns"
+// keyword takes the same pair in nanoseconds and takes precedence, which is the
+// form a caller uses when it wants to avoid a round trip through a float.
+func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) < 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "utime() missing required argument: 'path'")
+	}
+	path, err := py.StrAsString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	var times py.Object = py.None
+	if len(args) > 1 {
+		times = args[1]
+	}
+	ns, hasNS := kwargs.Get("ns")
+
+	now := time.Now()
+	if hasNS && ns != py.None {
+		pair, ok := ns.(py.Tuple)
+		if !ok || len(pair) != 2 {
+			return nil, py.ExceptionNewf(py.TypeError, "utime: ns must be a 2-tuple")
+		}
+		atime, err := py.MakeGoInt(pair[0])
+		if err != nil {
+			return nil, err
+		}
+		mtime, err := py.MakeGoInt(pair[1])
+		if err != nil {
+			return nil, err
+		}
+		if err := os.Chtimes(path,
+			time.Unix(0, int64(atime)), time.Unix(0, int64(mtime))); err != nil {
+			return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		}
+		return py.None, nil
+	}
+	atime, mtime := now, now
+	if times != py.None {
+		pair, ok := times.(py.Tuple)
+		if !ok || len(pair) != 2 {
+			return nil, py.ExceptionNewf(py.TypeError, "utime: times must be a 2-tuple")
+		}
+		a, err := py.FloatAsFloat64(pair[0])
+		if err != nil {
+			return nil, err
+		}
+		m, err := py.FloatAsFloat64(pair[1])
+		if err != nil {
+			return nil, err
+		}
+		atime, mtime = secondsToTime(a), secondsToTime(m)
+	}
+	if err := os.Chtimes(path, atime, mtime); err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.None, nil
+}
+
+// secondsToTime converts CPython's float seconds into a time.Time, splitting
+// the fractional part so that a value before 1970 works too.
+func secondsToTime(sec float64) time.Time {
+	whole := math.Floor(sec)
+	nsec := int64((sec - whole) * 1e9)
+	return time.Unix(int64(whole), nsec)
+}
+
+const open_doc = `open(path, flags, mode=0o777, *, dir_fd=None)
+
+Open a file for low-level I/O.`
+
+// osOpen is the low-level open, returning a file descriptor.  pkg_resources
+// imports it (as os_open) to bypass a sandbox on os.open; the descriptor comes
+// back as a plain int, which is what a caller passes to read/write/close.
+func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) < 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "open() missing required arguments")
+	}
+	path, err := py.StrAsString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	flags, err := py.IndexInt(args[1])
+	if err != nil {
+		return nil, err
+	}
+	mode := 0o777
+	if len(args) > 2 {
+		m, err := py.IndexInt(args[2])
+		if err != nil {
+			return nil, err
+		}
+		mode = m
+	}
+	fd, err := os.OpenFile(path, flagsFor(flags), os.FileMode(mode))
+	if err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.Int(fd.Fd()), nil
+}
+
+// flagsFor translates the POSIX open flags a program passes into the Go ones.
+func flagsFor(flags int) int {
+	mode := 0
+	// The access mode is the low two bits: O_RDONLY 0, O_WRONLY 1, O_RDWR 2.
+	switch flags & 3 {
+	case 1:
+		mode |= os.O_WRONLY
+	case 2:
+		mode |= os.O_RDWR
+	default:
+		mode |= os.O_RDONLY
+	}
+	if flags&0x40 != 0 { // O_CREAT
+		mode |= os.O_CREATE
+	}
+	if flags&0x80 != 0 { // O_EXCL
+		mode |= os.O_EXCL
+	}
+	if flags&0x200 != 0 { // O_TRUNC
+		mode |= os.O_TRUNC
+	}
+	if flags&0x400 != 0 { // O_APPEND
+		mode |= os.O_APPEND
+	}
+	return mode
+}
 
 const access_doc = `access(path, mode, *, dir_fd=None, effective_ids=False, follow_symlinks=True)
 

@@ -1,0 +1,7 @@
+starts unlocked: True
+the three names are callable: True
+locked after one acquire: True
+still locked after two acquires: True
+still locked after one release: True
+unlocked after two releases: True
+releasing unheld raises: not holding the import lock

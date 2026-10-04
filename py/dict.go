@@ -1025,6 +1025,21 @@ func appendKey(b *[]byte, key Object) error {
 			*b = append(*b, ':')
 			*b = append(*b, sub...)
 		}
+	case *Module:
+		// A module encodes as its identity - the address of its own globals -
+		// which is how it HASHES, so the stored key and the looked-up key agree.
+		// Leaving it to the __hash__ fallback made the two disagree, because
+		// the encoding there prefixes the type name to the hash and the two
+		// forms did not match: "d[sys] = 1; d[sys]" raised KeyError.
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'm')
+		*b = strconv.AppendUint(*b, uint64(k.Globals.Ptr()), 16)
+	case *Function, *Method:
+		// A function and a method encode as their identity, for the same
+		// reason: two distinct functions are two distinct keys.
+		*b = append(*b, keyTag...)
+		*b = append(*b, 'F')
+		*b = strconv.AppendUint(*b, uint64(identityHash(k)), 16)
 	case *FrozenSet:
 		// Sets have no order, so sort the member encodings to give equal
 		// sets the same key.
@@ -1120,6 +1135,13 @@ func hashOf(key Object) (string, bool) {
 	return strconv.FormatInt(int64(n), 10), true
 }
 
+// identityHash hashes an object by its address, which is what CPython's
+// default object hash does: two distinct functions are two distinct keys, and
+// a function is the same key as long as it is alive.
+func identityHash(o Object) int64 {
+	return int64(uintptr(reflect.ValueOf(o).Pointer()))
+}
+
 // HashValue returns an object's hash as an int64, the way hash() reports it.
 //
 // This is the value hash() returns for the concrete types that have a natural
@@ -1160,6 +1182,20 @@ func HashValue(o Object) (int64, bool) {
 			h = (h ^ ih) * 1000003
 		}
 		return h ^ int64(len(v)), true
+	case *Function, *Method:
+		// A function and a method hash by IDENTITY, which makes them usable as
+		// dict keys and set members.
+		//
+		// Without this a function was UNHASHABLE, and the import system keys a
+		// table by one: pkg_resources' "register_loader_type(loaders.FileLoader,
+		// ...)" reported "unhashable type: 'function'", which is how pip's
+		// metadata backend stopped loading.
+		return identityHash(o), true
+	case *Module:
+		// A module hashes by identity.  Its Globals holds the module's own
+		// storage, and Ptr reports that storage's address - reflecting into the
+		// field directly panicked, because the map is unexported.
+		return int64(uintptr(v.Globals.Ptr())), true
 	}
 	// Anything else answers through its own __hash__, looked up on its TYPE - the
 	// metatype for a class, the class for an instance.

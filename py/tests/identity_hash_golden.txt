@@ -1,0 +1,10 @@
+keys: 4
+function lookup: function
+method lookup: method
+class lookup: class
+module lookup: module
+distinct functions distinct: 2
+same function same key: 1
+two modules distinct: 2
+module membership: True False
+hash types: True True

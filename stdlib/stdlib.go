@@ -108,6 +108,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/atexit"
 	_ "github.com/vishnukv64/gpython/stdlib/bisect"
 	_ "github.com/vishnukv64/gpython/stdlib/dataclasses"
+	_ "github.com/vishnukv64/gpython/stdlib/imp"
 	_ "github.com/vishnukv64/gpython/stdlib/importlib"
 	_ "github.com/vishnukv64/gpython/stdlib/importlibabc"
 	_ "github.com/vishnukv64/gpython/stdlib/logging"
