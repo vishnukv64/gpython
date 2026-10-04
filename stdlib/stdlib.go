@@ -80,6 +80,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/select"
 	_ "github.com/vishnukv64/gpython/stdlib/shlex"
 	_ "github.com/vishnukv64/gpython/stdlib/shutil"
+	_ "github.com/vishnukv64/gpython/stdlib/site"
 	_ "github.com/vishnukv64/gpython/stdlib/ssl"
 	_ "github.com/vishnukv64/gpython/stdlib/stat"
 	_ "github.com/vishnukv64/gpython/stdlib/string"
