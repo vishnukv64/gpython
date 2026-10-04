@@ -606,7 +606,10 @@ func Repr(self Object) (Object, error) {
 	} else if res, ok, err := TypeCall0(self, "__repr__"); ok {
 		return res, err
 	}
-	return String(fmt.Sprintf("<%s instance at %p>", self.Type().Name, self)), nil
+	// CPython's fallback shape is "<name object at 0x...>", not "<name instance
+	// at ...>".  The word matters: a program that scrapes or asserts on a repr
+	// - a test framework, a doctest - reads it.
+	return String(fmt.Sprintf("<%s object at %p>", self.Type().Name, self)), nil
 }
 
 // DebugRepr - see Repr but returns the repr or error as a string

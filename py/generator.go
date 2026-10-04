@@ -6,6 +6,8 @@
 
 package py
 
+import "fmt"
+
 // A python Generator object
 type Generator struct {
 	// Note: gi_frame can be NULL if the generator is "finished"
@@ -39,6 +41,21 @@ func init() {
 // Type of this object
 func (o *Generator) Type() *Type {
 	return GeneratorType
+}
+
+// M__repr__ names the generator's FUNCTION, which is what CPython's does and
+// what makes a repr useful when several generators are alive: "<generator object
+// countdown at 0x...>".  A comprehension's generator has no function name and
+// prints "<generator object <genexpr> at 0x...>", which is CPython's own form.
+func (o *Generator) M__repr__() (Object, error) {
+	name := ""
+	if o.Frame != nil && o.Frame.Code != nil {
+		name = o.Frame.Code.Name
+	}
+	if name == "" {
+		name = "<genexpr>"
+	}
+	return String(fmt.Sprintf("<generator object %s at %p>", name, o)), nil
 }
 
 // Define a new generator
