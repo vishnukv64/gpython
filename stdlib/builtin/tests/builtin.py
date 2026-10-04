@@ -376,7 +376,8 @@ assert ok, "TypeError not raised"
 try:
     print("hello", sep=",", end="!", file=1)
 except AttributeError as e:
-    if e.args[0] != "'int' has no attribute 'write'":
+    # CPython's wording, which names the object: "'int' object has no attribute".
+    if e.args[0] != "'int' object has no attribute 'write'":
        raise
     ok = True
 assert ok, "AttributeError not raised"

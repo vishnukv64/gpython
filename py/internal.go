@@ -172,6 +172,27 @@ func IndexIntCheckNamed(a Object, max int, what string) (int, error) {
 	return i, nil
 }
 
+// attributeOwner names the object an AttributeError is about, in CPython's
+// form: an instance is "'V' object", a class is "type object 'V'", and a module
+// is "module 'os'".
+func attributeOwner(self Object) string {
+	if self == nil {
+		return "NoneType object"
+	}
+	name := self.Type().Name
+	// A python-level CLASS is a *Type whose Name is set; an instance of one is
+	// a *Type whose Name is empty.  The two must not read alike.
+	if t, ok := self.(*Type); ok {
+		if t.Name != "" {
+			return "type object '" + t.Name + "'"
+		}
+	}
+	if _, ok := self.(*Module); ok {
+		return "module '" + name + "'"
+	}
+	return "'" + name + "' object"
+}
+
 // Returns the number of items of a sequence or mapping
 func Len(self Object) (Object, error) {
 	// An instance of a Python subclass of a builtin container carries its value
@@ -439,7 +460,10 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	}
 
 	// Not found - return nil
-	return nil, ExceptionNewf(AttributeError, "'%s' has no attribute '%s'", self.Type().Name, key)
+	// The name of the CLASS, not the metatype: for a class this prints
+	// "type object 'V' has no attribute 'x'", which is CPython's wording and
+	// says WHICH class - "type has no attribute 'x'" names nothing useful.
+	return nil, ExceptionNewf(AttributeError, "%s has no attribute '%s'", attributeOwner(self), key)
 }
 
 // GetAttrErr - returns the result or an err to be raised if not found

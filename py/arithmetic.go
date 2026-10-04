@@ -859,7 +859,7 @@ func Gt(a Object, b Object) (Object, error) {
 		return res, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for >: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	return nil, ExceptionNewf(TypeError, "'>' not supported between instances of '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
 // Ge two python objects returning a boolean result
@@ -898,7 +898,7 @@ func Ge(a Object, b Object) (Object, error) {
 		return res, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for >=: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	return nil, ExceptionNewf(TypeError, "'>=' not supported between instances of '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
 // Lt two python objects returning a boolean result
@@ -937,7 +937,7 @@ func Lt(a Object, b Object) (Object, error) {
 		return res, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for <: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	return nil, ExceptionNewf(TypeError, "'<' not supported between instances of '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
 // Le two python objects returning a boolean result
@@ -976,7 +976,7 @@ func Le(a Object, b Object) (Object, error) {
 		return res, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for <=: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	return nil, ExceptionNewf(TypeError, "'<=' not supported between instances of '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
 // Eq two python objects returning a boolean result
