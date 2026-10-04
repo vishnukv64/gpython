@@ -122,7 +122,9 @@ func xmain(args []string) {
 // runREPL starts the interactive interpreter.
 func runREPL(args []string) error {
 	opts := py.DefaultContextOpts()
-	opts.SysArgs = args
+	// CPython's sys.argv[0] is "" in the interactive interpreter, and never
+	// absent - a program may index it unconditionally.
+	opts.SysArgs = append([]string{""}, args...)
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
 
@@ -156,7 +158,11 @@ func runScript(args []string) error {
 func runCode(src string, args []string) error {
 	opts := py.DefaultContextOpts()
 	opts.SysPaths = append([]string{"."}, opts.SysPaths...)
-	opts.SysArgs = args
+	// sys.argv[0] is "-c" under -c, exactly as CPython has it.  Passing only
+	// the program's own arguments left argv EMPTY, and pip reads argv[0] to
+	// name the program in its usage line: "pip --help" died with
+	// "IndexError: list index out of range" inside optparse's get_prog_name.
+	opts.SysArgs = append([]string{"-c"}, args...)
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
 

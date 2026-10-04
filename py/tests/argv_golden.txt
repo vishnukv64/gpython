@@ -1,0 +1,3 @@
+has at least one entry: True
+argv[0] is a string: True
+argv is a list: True

@@ -35,7 +35,15 @@ func containsString(items []py.Object, want string) bool {
 	return false
 }
 
-var gContext = py.NewContext(py.DefaultContextOpts())
+// gContext is the shared context the tests run their scripts in.  Its SysArgs
+// is the test binary's own name rather than empty, so that a script reading
+// sys.argv[0] sees an ordinary string and not an IndexError - a program may
+// index argv[0] unconditionally, and CPython always provides one.
+var gContext = py.NewContext(func() py.ContextOpts {
+	opts := py.DefaultContextOpts()
+	opts.SysArgs = []string{"gpython-test"}
+	return opts
+}())
 
 // Compile the program in the file prog to code in the module that is returned
 func compileProgram(t testing.TB, prog string) (*py.Module, *py.Code) {
