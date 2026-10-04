@@ -73,6 +73,11 @@ func dump(ast interface{}, name string) string {
 		switch fname {
 		case "stmtbase", "exprbase", "modbase", "slicebase", "pos":
 			continue
+		case "isasync":
+			// Not part of the AST shape CPython's ast.dump prints (it uses a
+			// distinct AsyncFunctionDef node), so it is left out of the dump
+			// to keep every existing FunctionDef expectation byte-identical.
+			continue
 		case "exprtype":
 			fname = "type"
 		case "contextexpr":

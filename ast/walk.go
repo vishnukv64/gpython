@@ -371,6 +371,10 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		// Value Expr
 		walk(node.Value)
 
+	case *Await:
+		// Value Expr
+		walk(node.Value)
+
 	case *Compare:
 		// Left        Expr
 		// Ops         []CmpOp

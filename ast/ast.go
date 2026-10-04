@@ -286,6 +286,11 @@ type FunctionDef struct {
 	Body          []Stmt
 	DecoratorList []Expr
 	Returns       Expr
+	// IsAsync is true for "async def".  CPython models this as a distinct
+	// AsyncFunctionDef node; here it is a flag on the one function node, so
+	// every existing consumer of FunctionDef keeps working and only the
+	// compiler, which must set CO_COROUTINE and allow await, looks at it.
+	IsAsync bool
 }
 
 type ClassDef struct {
@@ -603,6 +608,13 @@ type YieldFrom struct {
 	Value Expr
 }
 
+// Await is "await value".  It is an expression, not a statement, because its
+// result is the value the awaited object returns (see the __await__ protocol).
+type Await struct {
+	ExprBase
+	Value Expr
+}
+
 // need sequences for compare to distinguish between
 type Compare struct {
 	ExprBase
@@ -871,6 +883,7 @@ var _ Expr = (*DictComp)(nil)
 var _ Expr = (*GeneratorExp)(nil)
 var _ Expr = (*Yield)(nil)
 var _ Expr = (*YieldFrom)(nil)
+var _ Expr = (*Await)(nil)
 var _ Expr = (*Compare)(nil)
 var _ Expr = (*Call)(nil)
 var _ Expr = (*Num)(nil)
@@ -948,6 +961,7 @@ var DictCompType = ExprBaseType.NewType("DictComp", "DictComp Node", nil, nil)
 var GeneratorExpType = ExprBaseType.NewType("GeneratorExp", "GeneratorExp Node", nil, nil)
 var YieldType = ExprBaseType.NewType("Yield", "Yield Node", nil, nil)
 var YieldFromType = ExprBaseType.NewType("YieldFrom", "YieldFrom Node", nil, nil)
+var AwaitType = ExprBaseType.NewType("Await", "Await Node", nil, nil)
 var CompareType = ExprBaseType.NewType("Compare", "Compare Node", nil, nil)
 var CallType = ExprBaseType.NewType("Call", "Call Node", nil, nil)
 var NumType = ExprBaseType.NewType("Num", "Num Node", nil, nil)
@@ -1019,6 +1033,7 @@ func (o *DictComp) Type() *py.Type      { return DictCompType }
 func (o *GeneratorExp) Type() *py.Type  { return GeneratorExpType }
 func (o *Yield) Type() *py.Type         { return YieldType }
 func (o *YieldFrom) Type() *py.Type     { return YieldFromType }
+func (o *Await) Type() *py.Type         { return AwaitType }
 func (o *Compare) Type() *py.Type       { return CompareType }
 func (o *Call) Type() *py.Type          { return CallType }
 func (o *Num) Type() *py.Type           { return NumType }

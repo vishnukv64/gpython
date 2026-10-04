@@ -59,6 +59,7 @@ const (
 	CO_VARKEYWORDS = 0x0008
 	CO_NESTED      = 0x0010
 	CO_GENERATOR   = 0x0020
+	CO_COROUTINE   = 0x0080 // function is a coroutine (async def), not a generator
 
 	// The CO_NOFREE flag is set if there are no free or cell
 	// variables.  This information is redundant, but it allows a
