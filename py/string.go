@@ -781,7 +781,6 @@ func (a String) M__mod__(other Object) (Object, error) {
 		}
 
 		// Collect the flags, width and precision, then the conversion.
-		start := i - 1
 		// A mapping key, "%(name)s", draws its value from a dict argument
 		// instead of taking the next positional one.
 		var mappingKey string
@@ -800,25 +799,78 @@ func (a String) M__mod__(other Object) (Object, error) {
 			hasMappingKey = true
 			i = j + 1
 		}
+		flagsStart := i
 		for i < len(format) && strings.ContainsRune("-+ #0", rune(format[i])) {
 			i++
 		}
-		for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+		flags := format[flagsStart:i]
+
+		// A '*' means the width - or the precision - is taken from the next
+		// argument instead of the format string: "%*s" % (4, "hi").  It is
+		// what pip's option formatter writes, and without it "pip --help"
+		// died with 'unsupported format character \'*\''.
+		//
+		// The argument is consumed here, in the order it appears, and its value
+		// is written back as literal digits so that everything downstream -
+		// specWidth, specPrecision, the padding - is unchanged.  A NEGATIVE
+		// width means left-justify with the absolute value, so a '-' joins the
+		// flags; a negative PRECISION means no precision at all, which is
+		// CPython's rule and is not symmetric with width.
+		width := ""
+		if i < len(format) && format[i] == '*' {
 			i++
+			w, err := starArg(values, &valueIdx, hasMappingKey)
+			if err != nil {
+				return nil, err
+			}
+			if w < 0 {
+				w = -w
+				flags += "-"
+			}
+			width = strconv.Itoa(w)
+		} else {
+			widthStart := i
+			for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+				i++
+			}
+			width = format[widthStart:i]
 		}
+		precision := ""
 		precisionAfterDot := false
 		if i < len(format) && format[i] == '.' {
 			precisionAfterDot = true
+			dotStart := i
 			i++
-			for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+			if i < len(format) && format[i] == '*' {
 				i++
+				p, err := starArg(values, &valueIdx, hasMappingKey)
+				if err != nil {
+					return nil, err
+				}
+				if p < 0 {
+					// A negative PRECISION is precision ZERO, not "no
+					// precision": "%.*f" % (-2, 3.14159) is "3",
+					// whereas leaving the precision off gives 3.141590.
+					precision = ".0"
+				} else {
+					precision = "." + strconv.Itoa(p)
+				}
+			} else {
+				for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+					i++
+				}
+				// The dot is kept even with no digits after it: "%.f" is
+				// precision ZERO, which is not the same as no precision.
+				precision = format[dotStart:i]
 			}
 		}
 		if i >= len(format) {
 			return nil, ExceptionNewf(ValueError, "incomplete format")
 		}
 		verb := format[i]
-		spec := format[start : i+1]
+		// Rebuild the specifier from its parts, so a star-derived width or
+		// precision reads exactly as if it had been written literally.
+		spec := "%" + flags + width + precision + string(verb)
 
 		var value Object
 		if hasMappingKey {
@@ -898,6 +950,20 @@ func (a String) M__mod__(other Object) (Object, error) {
 			return nil, ExceptionNewf(ValueError, "unsupported format character '%c'", verb)
 		}
 
+		// Precision TRUNCATES a string: "%.2s" % "abcdef" is "ab" and
+		// "%.0s" is "".  It was applied only to the float verbs, so the
+		// precision in an ordinary "%.2s" was silently ignored and the whole
+		// string came through - measured against CPython, where %.0s gives
+		// "" and %.2s gives "ab".
+		if precisionAfterDot {
+			switch verb {
+			case 's', 'r', 'a':
+				if prec := specPrecision(spec); prec < len(text) {
+					text = text[:prec]
+				}
+			}
+		}
+
 		// Width, the '-' flag and the '0' flag apply to the finished text for
 		// every conversion, so they are handled once here rather than per
 		// verb.  '0' pads with zeros AFTER any sign, which is what makes
@@ -933,6 +999,28 @@ func (a String) M__mod__(other Object) (Object, error) {
 		return nil, ExceptionNewf(TypeError, "not all arguments converted during string formatting")
 	}
 	return String(out.String()), nil
+}
+
+// starArg consumes the next positional argument as the width or precision of a
+// "*" in a conversion specifier, and returns it.
+//
+// A "*" cannot be combined with a mapping key in CPython ("%*s" % {"a": 1} is a
+// TypeError), and the value must be an integer - a float is refused rather than
+// truncated.
+func starArg(values Tuple, valueIdx *int, hasMappingKey bool) (int, error) {
+	if hasMappingKey {
+		return 0, ExceptionNewf(ValueError, "* wants int, not a mapping")
+	}
+	if *valueIdx >= len(values) {
+		return 0, ExceptionNewf(TypeError, "not enough arguments for format string")
+	}
+	v := values[*valueIdx]
+	*valueIdx++
+	n, err := MakeGoInt(v)
+	if err != nil {
+		return 0, ExceptionNewf(TypeError, "* wants int, not %s", v.Type().Name)
+	}
+	return n, nil
 }
 
 // specWidth reads the width out of a conversion specifier such as "%-8.3f".
