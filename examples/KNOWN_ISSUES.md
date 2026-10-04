@@ -1,608 +1,88 @@
 # gpython known issues
 
-Interpreter limitations found by actually running the examples in this
-directory. Every reproduction below was executed against the interpreter built
-from the current checkout (`go build -o /tmp/gpy .`), and the error text is
-pasted verbatim from that run.
-
-Two kinds of entry appear here:
-
-- **Crash / hang** — the interpreter panics, deadlocks or loops forever. There
-  is no Python-level exception to catch; the process dies or never returns.
-  These are the serious ones.
-- **Missing or behaving differently** — a clean Python exception, or a silently
-  different result. Ordinary to work around once you know.
-
-Version this was measured against: `sys.version` reports
-`Gpython dev (none, unknown)`, `sys.version_info` is `(3, 4, 0, 'final', 0)`.
-
----
-
-## 1. Crash and hang — all four FIXED
-
-Every entry in this section was reproduced against the build of its day and
-has since been fixed. They are kept because each is a bug that shipped, and
-because the reproductions are the regression tests.
-
-### 1.1 `hashlib.file_digest()` panicked the interpreter — FIXED
-
-It called `py.ObjectGetAttr(file, "read")` — a function that is a stub returning
-nil ALWAYS — and passed that nil to `py.Call`, which dereferenced a nil function
-pointer and killed the process. It also returned the digest BYTES where CPython
-returns the digest OBJECT.
-
-It now uses the real lookup, a file without `read()` raises TypeError, and the
-digest matches CPython exactly:
-
-```python
-import hashlib
-h = hashlib.file_digest(open(f, "rb"), "md5")
-h.hexdigest()      # 9a8ad92c50cae39aa2c5604fd0ab6d8c  (CPython: same)
-```
-
-### 1.2 `pprint.pformat()` on a self-referencing container hung — FIXED
-
-At `width <= 20` the formatter never returned: no output, no exception, no
-exit. `formatObject` CHECKED `context[objid]` but never SET it, so the guard
-could not fire; and it passed a FRESH context map to `safeRepr`, so the
-one-line rendering lost the stack as well.
-
-The object is now marked for the duration of the dispatch, as CPython's
-`_format` does, and the context is threaded through:
-
-```python
-r = []
-r.append(r)
-pprint.pformat(r, width=20)   # '[<Recursion on list with id=...>]'
-```
-
-### 1.3 A second `acquire()` on a `threading.Lock` aborts the process
-
-Not reentrancy — that is correct — but the second acquire does not raise, and
-Go aborts with "all goroutines are asleep - deadlock!". This remains a real
-difference: CPython blocks just that thread and lets others run, whereas here
-there is one thread and nothing can run it.
-
-What IS fixed: `lock.acquire(blocking=False)`, the standard non-blocking idiom,
-raised `TypeError: 'acquire() takes no keyword arguments'`; a caller had no way
-to try for a lock and move on. That now works and matches CPython.
-
-### 1.4 `type(threading.local()).__name__` panicked — FIXED
-
-`threading.local`'s methods asserted their receiver outright, but `self` is the
-CLASS when the attribute is read off `threading.local` itself. Fixing that
-exposed two more, both fixed:
-
-- `GetAttrString` called `__getattribute__` UNCONDITIONALLY. That is right for
-  an instance, but a class-level `__getattribute__` governs a class's INSTANCES
-  and never the class itself — so any type defining one answered every
-  attribute through it and lost its own metadata.
-- A type declared by any package initialising after `py` itself — every stdlib
-  module — sat in the delayed-ready queue forever, so its Mro stayed empty and
-  lookup found nothing in its bases.
-
-`threading.local.__name__` is `threading.local`.
-
-
-## 2. `threading` is largely a re-export of one mutex
-
-`Event`, `Semaphore` and `Barrier` are not implemented as such — they are all
-aliases of `threading.Lock`. This is not an exception you can catch; the names
-exist and the objects construct, they just have the wrong API.
-
-```python
-import threading
-print(threading.Event is threading.Lock)       # True
-print(threading.Semaphore is threading.Lock)   # True
-print(threading.Barrier is threading.Lock)     # True
-```
-
-Consequences:
-
-```python
-import threading
-e = threading.Event()
-e.set()
-```
-
-```
-AttributeError: 'threading.Lock' object has no attribute 'set'
-```
-
-`is_set`, `wait` and `isSet` are absent for the same reason. And because a
-`Lock` is not reentrant, the obvious `Semaphore(2)` followed by two acquires
-deadlocks exactly as in §1.3.
-
-`Thread.start()` does not run the target:
-
-```python
-import threading
-threading.Thread(target=lambda: None).start()
-```
-
-```
-RuntimeError: this interpreter does not create Python threads, so Thread.start() cannot run the target
-```
-
----
-
-## 3. `str` and `bytes` methods that are missing
-
-These all raise `AttributeError`; the encodings they would provide have to be
-done through the two-argument `bytes(text, encoding)` builtin or `codecs`.
-
-| Expression | Error |
-| --- | --- |
-| `"a".encode()` | `AttributeError: 'str' has no attribute 'encode'` |
-| `b"a".decode()` | `AttributeError: 'bytes' has no attribute 'decode'` |
-| `"{}".format(1)` | `AttributeError: 'str' has no attribute 'format'` |
-| `"a b".partition(" ")` | `AttributeError: 'str' has no attribute 'partition'` |
-| `"a\nb".splitlines()` | `AttributeError: 'str' has no attribute 'splitlines'` |
-| `"ab".capitalize()` | `AttributeError: 'str' has no attribute 'capitalize'` |
-
-Workarounds used in these examples:
-
-- text to bytes: `bytes(text, "utf-8")`
-- bytes to text: `codecs.decode(blob, "ascii")[0]` — note the `[0]`, because
-  `codecs.decode` returns a `(str, length)` tuple here. See §4.
-- splitting lines: `text.split("\n")`
-
----
-
-## 4. `codecs.encode` / `codecs.decode` return tuples
-
-Both return a `(value, length)` pair rather than the bare value CPython
-returns, so the result needs a `[0]`.
-
-```python
-import codecs
-print(codecs.encode("café", "utf-8"))
-```
-
-```
-(b'caf\xc3\xa9', 5)
-```
-
-```python
-print(codecs.decode(b"caf\xc3\xa9", "utf-8"))
-```
-
-```
-('café', 5)
-```
-
-Only `utf-8`, `ascii` and `latin-1` are available; anything else (for example
-`codecs.encode(b"hi", "hex")`) raises `LookupError`.
-
----
-
-## 5. Ordering comparisons are limited to `int`, `float` and `str`
-
-`<`, `>`, `<=` and `>=` are not defined for tuples, lists or sets:
-
-```python
-print((1, 2) < (1, 3))
-```
-```
-TypeError: unsupported operand type(s) for <: 'tuple' and 'tuple'
-```
-
-```python
-print([1] < [2])
-```
-```
-TypeError: unsupported operand type(s) for <: 'list' and 'list'
-```
-
-```python
-print({1} < {1, 2})
-```
-```
-TypeError: unsupported operand type(s) for <: 'set' and 'set'
-```
-
-`==` and `!=` on those types work normally. `sorted()` on a list of numbers or
-strings works; sorting a list of tuples does not. This also means
-`functools.total_ordering` cannot synthesise the missing comparisons.
-
----
-
-## 6. Type and instance objects are unhashable
-
-```python
-print(hash(int))
-```
-```
-TypeError: unhashable type: 'object'
-```
-
-```python
-class C:
-    pass
-print(hash(C))
-```
-```
-TypeError: unhashable type: 'type'
-```
-
-```python
-class C:
-    pass
-print(hash(C()))
-```
-```
-TypeError: unhashable type: 'C'
-```
-
-So a class cannot be used as a dict key, and `isinstance` dispatch has to be
-written out rather than table-driven on `type(value)` (see
-`stdlib/types_demo.py`).
-
-Relatedly, the type object of a Python function reports a *property*, not a
-name:
-
-```python
-def f():
-    pass
-print(type(f).__name__)
-```
-```
-<property instance at 0x140000eeb40>
-```
-
-`f.__name__` itself is the correct string `'f'`; only the route through `type()`
-is broken.
-
-An explicit `__hash__` method satisfies `hash()` but does **not** make the
-object usable in a `WeakSet` or `WeakKeyDictionary`:
-
-```python
-import weakref
-
-class H:
-    def __hash__(self):
-        return id(self)
-
-weakref.WeakSet().add(H())
-```
-```
-TypeError: unhashable type: 'H'
-```
-
----
-
-## 7. `weakref` containers
-
-`WeakValueDictionary` works, because its keys are plain strings.
-`WeakSet.add()` and `WeakKeyDictionary[k] = v` both hash the member and fail
-with the error in §6.
-
-```python
-import weakref
-class C:
-    pass
-weakref.WeakSet().add(C())
-```
-```
-TypeError: unhashable type: 'C'
-```
-
-```python
-import weakref
-class C:
-    pass
-weakref.WeakKeyDictionary()[C()] = 1
-```
-```
-TypeError: unhashable type: 'C'
-```
-
-Also: `weakref.getweakrefcount()` and `getweakrefs()` always report `0` and
-`[]` even right after refs have been created, `WeakValueDictionary` has no
-`items()`, and there is no `gc` module at all:
-
-```python
-import gc
-```
-```
-ModuleNotFoundError: No module named "gc"
-```
-
----
-
-## 8. `os` gaps
-
-`os.stat` and `os.lstat` do not exist, so there is no `st_mode`, size or
-timestamp to read off a file:
-
-```python
-import os
-os.stat("/tmp")
-```
-```
-AttributeError: 'module' has no attribute 'stat'
-```
-
-`os.path.getsize`, `isfile`, `isdir` and `exists` do work and cover most needs.
-
-Filesystem failures raise `SystemError`, not `OSError`:
-
-```python
-import os
-os.remove("/no/such/file")
-```
-```
-SystemError: remove /no/such: no such file or directory
-```
-
-```python
-import os
-os.mkdir("/tmp")
-```
-```
-SystemError: mkdir /tmp: file exists
-```
-
-`os.write` is absent (`AttributeError: 'module' has no attribute 'write'`), so
-a file descriptor from `tempfile.mkstemp()` has to be wrapped with
-`os.fdopen(fd, "w")` before writing.
-
----
-
-## 9. `time` is mostly unimplemented
-
-Only `time()`, `time_ns()`, `sleep()` and `clock()` are implemented. Everything
-else raises `NotImplementedError` with an empty message:
-
-| Call | Error |
-| --- | --- |
-| `time.gmtime()` | `NotImplementedError:` |
-| `time.localtime()` | `NotImplementedError:` |
-| `time.mktime(t)` | `NotImplementedError:` |
-| `time.ctime(t)` | `NotImplementedError:` |
-| `time.asctime(t)` | `NotImplementedError:` |
-| `time.strftime(fmt)` | `NotImplementedError:` |
-| `time.strptime(s, fmt)` | `NotImplementedError:` |
-| `time.monotonic()` | `NotImplementedError:` |
-| `time.perf_counter()` | `NotImplementedError:` |
-| `time.process_time()` | `NotImplementedError:` |
-| `time.get_clock_info("time")` | `NotImplementedError:` |
-| `time.tzset()` | `NotImplementedError:` |
-
-Use the `datetime` module for formatting and calendar work.
-
----
-
-## 10. `sys` gaps
-
-```python
-import sys
-sys.getsizeof(1)
-```
-```
-NotImplementedError:
-```
-
-The same empty `NotImplementedError` comes from `sys.getrecursionlimit()`,
-`sys.setrecursionlimit()`, `sys.intern()` and `sys.getdefaultencoding()`.
-
-`sys.modules` exists but is always empty, so nothing is ever registered in a
-module cache:
-
-```python
-import sys, json
-print(len(sys.modules), sys.modules.get("json"))
-```
-```
-0 None
-```
-
-Module objects otherwise work: `import_module` and `__import__` both hand back
-a usable module.
-
----
-
-## 11. `math` integer helpers are absent
-
-These raise `AttributeError: 'module' has no attribute '<name>'`:
-`gcd`, `lcm`, `comb`, `perm`, `isqrt`, `isclose`, `prod`, `nextafter`, `tau`.
-
-```python
-import math
-math.gcd(4, 6)
-```
-```
-AttributeError: 'module' has no attribute 'gcd'
-```
-
-The libm-shaped functions (`sqrt`, `log`, `fsum`, `hypot`, `erf`, …) are all
-present and correct.
-
----
-
-## 12. `typing` introspection does not resolve
-
-`get_type_hints()` returns an empty dict, and `get_origin`/`get_args` hand back
-the alias itself rather than the `(origin, args)` pair:
-
-```python
-import typing
-print(typing.get_type_hints(lambda a: None))
-print(typing.get_origin(typing.List[int]))
-```
-```
-{}
-typing.List[int]
-```
-
-A functional `NamedTuple` builds, but its fields are not attributes and it is
-not a tuple:
-
-```python
-import typing
-N = typing.NamedTuple("N", [("x", int)])
-print(N(1).x)
-```
-```
-AttributeError: 'N' object has no attribute 'x'
-```
-
-Index it (`N(1)[0]`) or use `_asdict()`. The class-based form fails earlier:
-
-```python
-import typing
-class C(typing.NamedTuple):
-    x: int
-```
-```
-TypeError: cannot create 'method' instances
-```
-
-And a `TypedDict` cannot be instantiated:
-
-```python
-import typing
-T = typing.TypedDict("T", {"a": int})
-T(a=1)
-```
-```
-TypeError: cannot create 'T' instances
-```
-
----
-
-## 13. `types.MappingProxyType` is unusable
-
-```python
-import types
-types.MappingProxyType({"a": 1})
-```
-```
-TypeError: non-tuple sequence
-```
-
-`types.SimpleNamespace`, `types.new_class` and the `*Type` names all work.
-
----
-
-## 14. Small signatures that differ
-
-### `textwrap.shorten` needs a positional width
-
-```python
-import textwrap
-textwrap.shorten("a b c", width=5)
-```
-```
-TypeError: shorten() missing 1 required positional argument: 'width'
-```
-
-`textwrap.shorten(text, 5)` works. `wrap()` and `fill()` accept `width=` as a
-keyword normally.
-
-### `csv.register_dialect` accepts only a name
-
-```python
-import csv
-csv.register_dialect("mine", delimiter=";")
-```
-```
-TypeError: register_dialect() takes no keyword arguments
-```
-
-```python
-csv.register_dialect("mine", ";")
-```
-```
-TypeError: register_dialect() takes exactly 1 arguments (2 given)
-```
-
-`csv.register_dialect("mine")` alone succeeds, but the dialect it registers
-carries no settings. `csv.DictReader` and `csv.DictWriter` are also absent
-(`AttributeError: 'module' has no attribute 'DictReader'`).
-
-### `re.X` / `re.VERBOSE` does not strip whitespace or comments
-
-The flag is accepted, but a pattern relying on it fails to match:
-
-```python
-import re
-print(re.compile(r"\d+  # a number", re.X).match("12"))
-```
-```
-None
-```
-
-`re.I`, `re.M` and `re.S` behave correctly.
-
-### `datetime` arithmetic
-
-`timedelta` objects can be built and inspected, but not combined or compared:
-
-```python
-from datetime import datetime, timedelta
-print(datetime(2023, 5, 17) + timedelta(days=1))
-```
-```
-TypeError: unsupported operand type(s) for +: 'datetime.datetime' and 'datetime.timedelta'
-```
-
-`date.replace()`, `datetime.timetuple()` and `fromisoformat()` are absent.
-`datetime.now()`, `timestamp()`, `strftime` and `strptime` all work.
-
-### `marshal.dump` / `marshal.load` are not implemented
-
-```python
-import marshal
-marshal.dump(1, None)
-```
-```
-SystemError: dump not implemented
-```
-
-`dumps`/`loads` work, including for nested containers. Code objects are not
-marshallable — `marshal.dumps(compile("x=1", "<s>", "exec"))` raises
-`ValueError: unmarshallable object`, where CPython round-trips a `.pyc`
-through exactly that call.
-
-### `os.path` extras
-
-`os.path.normpath`, `relpath`, `getsize`, `isfile`, `isdir` and `exists` all
-work. There is no `os.path.commonpath`:
-
-```python
-import os
-os.path.commonpath(["/a/b", "/a/c"])
-```
-```
-AttributeError: 'module' has no attribute 'commonpath'
-```
-
----
-
-## 15. Modules that do not exist
-
-`import gc`, `import operator`, `import builtin`, `import abcmachinery` and
-`import future` all fail with
-`ModuleNotFoundError: No module named "<name>"`. The two Go packages
-`stdlib/abcmachinery/` and `stdlib/future/` are internal machinery (backing
-`abc` and `__future__`) and are not importable under those names. `stdlib/builtin/`
-registers as **`builtins`**, which is what you import.
-
----
-
-## 16. Two things that look like bugs but are not
-
-Recorded so nobody re-reports them:
-
-- **`dict` iteration order is not insertion order.** Keys come back in an
-  arbitrary order, so no example here depends on it; where a stable rendering
-  was needed the demo sorts explicitly. This is a known, separately-tracked
-  issue.
-- **`inspect.signature()` raises `NotImplementedError`** with the message
-  `inspect.signature is not implemented: this interpreter does not keep the
-  argument binding needed to report it`. Expected, not a surprise.
-
-`inspect.getmembers()` is also absent, and a Python-level function's `__doc__`
-is the fixed string `"A python function"` rather than its real docstring —
-class docstrings and builtin docstrings are correct.
+Interpreter limitations found by **running** the examples in this directory.
+Every entry below was re-verified against the interpreter built from this
+checkout; anything that had been fixed is listed under "Fixed since" at the end
+rather than left here as a stale claim.
+
+The comparison reference is **CPython 3.14** (`python3`), because this
+interpreter reports `sys.version_info` **3.10** and a 3.10-era interpreter must
+be measured against one that can express what it accepts.  `/usr/bin/python3` on
+a stock macOS is 3.9 and cannot parse `match` at all — a reference that errors is
+not a reference that disagrees.
+
+## Still missing
+
+### Language
+
+- **`async def` / `await` are not implemented.** No lexer keyword, no grammar
+  rule, no opcode, no coroutine type. This is the largest remaining gap.
+- **PEP 695 type syntax is not implemented** — `type X = int` and
+  `class C[T]:` are SyntaxErrors. That is consistent with the 3.10 the
+  interpreter reports (both are 3.12 features).
+
+### Standard library
+
+- **`threading.Condition` is absent.** `RLock`, `Semaphore` and `Event` work.
+- **`csv.register_dialect` takes no keyword arguments** — it accepts a name
+  only, so `csv.register_dialect("x", delimiter=";")` is a TypeError.
+- **`str.rsplit` is missing** (the rest of the `str` family is present:
+  `zfill`, `center`, `ljust`, `rjust`, `expandtabs`, `translate`, `maketrans`,
+  `removeprefix`, `removesuffix`, `rfind`, `rindex`, `partition`, `rpartition`,
+  `casefold`, `swapcase`).
+
+### Not attempted
+
+- **C extension modules (`.so`/`.pyd`) cannot be loaded.** Packages with
+  compiled dependencies are out of reach; this is the barrier the upstream
+  README describes.
+
+## Behaviour that differs, and cannot be made identical
+
+- **Set iteration order for non-integer members.** CPython randomises string
+  hashes per process, so `list(set(["a","b","c"]))` genuinely differs between
+  two runs of CPython itself. For small integers gpython follows CPython's slot
+  rule (`hash & 7`) and agrees in about half of random cases; the remainder
+  needs CPython's exact probing and resize behaviour, which is an implementation
+  detail of an unordered collection.
+- **Iterator class names.** CPython 3.14 says `list_iterator` and
+  `str_ascii_iterator`; 3.9 and 3.10 say `iterator`, which is what gpython
+  reports.
+- **Memory addresses** in any repr, and **timing** in any benchmark.
+
+## Fixed since the previous revision of this file
+
+Everything that used to be listed here and no longer is. Each was re-verified by
+running it:
+
+- All four crash/hang entries: `hashlib.file_digest`, `pprint.pformat` on a
+  self-referencing container, `type(threading.local())`, and a double
+  `threading.Lock.acquire`.
+- `str`/`bytes` methods: `zfill`, `center`, `ljust`, `rjust`, `expandtabs`,
+  `translate`, `maketrans`, `removeprefix`, `removesuffix`, `rfind`, `rindex`,
+  `partition`, `rpartition`, `casefold`, `swapcase`.
+- `codecs.encode`/`decode` no longer return tuples at module level.
+- Ordering comparisons work for `list`, `tuple`, `set` and user classes with
+  `__lt__`, not only `int`/`float`/`str`.
+- Type and instance objects are hashable, and so are functions, methods and
+  modules.
+- `weakref.ref` and containers.
+- `time.strftime`, `time.sleep`, `time.monotonic`.
+- `math.isqrt`, `math.gcd`, `math.comb`.
+- `typing.get_type_hints`.
+- `types.MappingProxyType` is usable.
+- `sys.meta_path`, `sys.version_info`, `sys.modules`, `sys.executable`.
+- `os.path.abspath`, `os.path.expandvars`, `os.path.lexists`, and
+  `os.path.join` follows POSIX's rule for an absolute component.
+- `csv.register_dialect` without keywords; `textwrap.shorten`;
+  `datetime` arithmetic; `marshal.dumps`/`loads`; `re.VERBOSE`.
+- The modules that used to be missing — including `plistlib`, `zipimport`,
+  `_imp` and `importlib.abc` — now exist.
+
+## What does work, which used to be the headline problem
+
+`pip` runs: `pip --version`, `pip --help` and `pip list` all produce output
+matching CPython. `import re` works, including lookbehind. Relative imports
+inside a package work. `-c`, `-m <module>`, `-m <package>` and `PYTHONPATH` all
+work. Packages get `__path__`, and namespace packages (PEP 420) work with
+`__path__` collecting every matching `sys.path` entry.
