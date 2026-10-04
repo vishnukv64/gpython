@@ -62,6 +62,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/keyword"
 	_ "github.com/vishnukv64/gpython/stdlib/linecache"
 	_ "github.com/vishnukv64/gpython/stdlib/locale"
+	_ "github.com/vishnukv64/gpython/stdlib/logging/config"
 	_ "github.com/vishnukv64/gpython/stdlib/logging/handlers"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
 	_ "github.com/vishnukv64/gpython/stdlib/mimetypes"

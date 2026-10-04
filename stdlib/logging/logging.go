@@ -833,7 +833,13 @@ func expandFormat(format string, record *LogRecord) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			rendered, err := convertOne(value, conv, format[i:j+1])
+			// Only the CONVERSION goes to py.Mod - "%" plus flags, width and
+			// the conversion character.  Passing the whole "%(field)s" asked
+			// Python's % to format a plain value with a mapping spec, which
+			// raised "format requires a mapping" instead of rendering the
+			// field.
+			convSpec := "%" + format[i+2+end+1:j+1]
+			rendered, err := convertOne(value, conv, convSpec)
 			if err != nil {
 				return "", err
 			}
@@ -1414,6 +1420,117 @@ func init() {
 	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
 	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
 	HandlerType.Dict.Set("emit", py.MustNewMethod("emit", handlerEmit, 0, emit_doc))
+	// A LogRecord's attributes are read directly - "record.levelno",
+	// "record.name", "record.msg" - by formatters, filters and handlers, and
+	// none of them existed: only the Go struct had them.  pygments' logging
+	// filter reads record.levelno, and "%(levelname)s" resolution needs the
+	// rest.
+	LogRecordType.Dict.Set("name", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.String(r.Name), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The name of the logger that created this record.",
+	})
+	LogRecordType.Dict.Set("levelno", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.Int(r.LevelNo), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The numeric level of this record.",
+	})
+	LogRecordType.Dict.Set("levelname", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.String(effectiveLevelName(r.LevelNo)), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The text name of this record's level.",
+	})
+	LogRecordType.Dict.Set("msg", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok && r.Msg != nil {
+				return r.Msg, nil
+			}
+			return py.None, nil
+		},
+		Doc: "The format string, before its arguments are applied.",
+	})
+	LogRecordType.Dict.Set("args", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok && r.Args != nil {
+				return r.Args, nil
+			}
+			return py.None, nil
+		},
+		Doc: "The arguments to apply to the format string.",
+	})
+	LogRecordType.Dict.Set("pathname", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.String(r.Pathname), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The full path of the source file.",
+	})
+	LogRecordType.Dict.Set("lineno", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.Int(r.Lineno), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The line number in the source file.",
+	})
+	LogRecordType.Dict.Set("funcName", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if r, ok := self.(*LogRecord); ok {
+				return py.String(r.FuncName), nil
+			}
+			return py.None, nil
+		},
+		Doc: "The name of the function that logged this.",
+	})
+	LogRecordType.Dict.Set("getMessage", py.MustNewMethod("getMessage", func(self py.Object, args py.Tuple) (py.Object, error) {
+		r, ok := self.(*LogRecord)
+		if !ok {
+			return py.None, nil
+		}
+		msg, err := r.getMessage()
+		if err != nil {
+			return nil, err
+		}
+		return py.String(msg), nil
+	}, 0, "Return the message after applying the record's arguments."))
+
+	// Formatter.format is public API - a config sets a format string and a
+	// program calls format(record) - and it was reachable only from Go, so
+	// "logging.Formatter(...).format(rec)" raised AttributeError.
+	FormatterType.Dict.Set("format", py.MustNewMethod("format", func(self py.Object, args py.Tuple) (py.Object, error) {
+		f, ok := self.(*Formatter)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "not a Formatter")
+		}
+		if len(args) < 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "format() takes a record")
+		}
+		rec, ok := args[0].(*LogRecord)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "a LogRecord is required")
+		}
+		text, err := f.format(rec)
+		if err != nil {
+			return nil, err
+		}
+		return py.String(text), nil
+	}, 0, "Format a record, returning the formatted string."))
+
 	HandlerType.Dict.Set("handle", py.MustNewMethod("handle", handlerHandle, 0, handlerHandle_doc))
 	HandlerType.Dict.Set("level", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*Handler).level), nil },
