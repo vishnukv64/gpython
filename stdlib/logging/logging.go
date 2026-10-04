@@ -49,11 +49,16 @@ var levelNames = map[int]string{
 
 // LogRecord carries one event through the handler chain.
 type LogRecord struct {
-	Name     string
-	LevelNo  int
-	Msg      py.Object
-	Args     py.Object
-	ExcInfo  py.Object
+	Name    string
+	LevelNo int
+	Msg     py.Object
+	Args    py.Object
+	ExcInfo py.Object
+	// ExcText is the formatted traceback, present when the call passed
+	// exc_info=True AND an exception is being handled.  It is appended after
+	// the message, which is how "logger.critical('Exception:', exc_info=True)"
+	// reports a failure - and pip relies on exactly that to say why it stopped.
+	ExcText  string
 	Pathname string
 	Filename string
 	Module   string
@@ -217,6 +222,17 @@ type Handler struct {
 	// handler from another module.  callHandlers uses it to reach the
 	// subclass's own emit rather than the base one.
 	owner py.Object
+	// cls is the class this handler was made AS, which is the SUBCLASS when one
+	// is used.  Type() reported HandlerType for every handler, so pip's
+	// RichPipStreamHandler was a plain logging.Handler: isinstance was False,
+	// its own emit was unreachable, and pip's logging output went nowhere -
+	// which is why 'pip list' failed in total silence.
+	cls *py.Type
+	// attrs is the handler's own namespace, which a Python SUBCLASS needs: it
+	// sets instance attributes in __init__ ("self.console = ..." in rich's
+	// RichHandler), and without one every such assignment raised
+	// "'RichPipStreamHandler' object has no attribute 'console'".
+	attrs py.StringDict
 	// filters are run before a record is emitted; one returning false
 	// suppresses it.
 	filters []py.Object
@@ -228,7 +244,17 @@ var HandlerType = py.NewTypeX("logging.Handler",
 		// The base Handler writes nowhere; a subclass such as StreamHandler
 		// supplies the destination.  Constructing it directly is legal, as
 		// in CPython.
-		h := &Handler{level: NOTSET, emit: streamEmit}
+		// metatype is the class being instantiated, so a subclass records
+		// itself rather than the base it was declared against.
+		h := &Handler{level: NOTSET, emit: streamEmit, cls: metatype, attrs: py.NewStringDict()}
+		// A class defined IN PYTHON owns an emit of its own, and the logger
+		// must call THAT one: the Go struct's emit is the base implementation,
+		// so a Python subclass's emit never ran and its records vanished.
+		// The handler IS the Python object here - its Type() is the subclass -
+		// so it is its own owner, and GetAttrString finds the subclass's emit.
+		if metatype != nil && metatype.LookupPython("emit") != nil {
+			h.owner = h
+		}
 		registerHandler(h)
 		return h, nil
 	}, nil)
@@ -248,7 +274,21 @@ func registerHandler(h py.Object) {
 	gHandlerList = append(gHandlerList, h)
 }
 
-func (h *Handler) Type() *py.Type { return HandlerType }
+// GetDict gives a handler an instance namespace, which is what a Python
+// subclass's own attributes live in.
+func (h *Handler) GetDict() py.StringDict {
+	if h.attrs.IsNil() {
+		h.attrs = py.NewStringDict()
+	}
+	return h.attrs
+}
+
+func (h *Handler) Type() *py.Type {
+	if h.cls != nil {
+		return h.cls
+	}
+	return HandlerType
+}
 
 // A stream handler and a file handler are the base handler with a different
 // destination, so they are types of their own that share the Go struct.
@@ -591,6 +631,18 @@ func (l *Logger) handleWith(level int, msg py.Object, args py.Object, excInfo, e
 		Msg:     msg,
 		Args:    args,
 	}
+	// exc_info=True attaches the traceback of the exception being handled, so
+	// that a logger call made from an except block reports it.  A truthy value
+	// that is not an exception means "use the current one", which is what the
+	// literal exc_info=True does.
+	if excInfo != nil && excInfo != py.False && excInfo != py.None {
+		if exc, ok := excInfo.(*py.Exception); ok {
+			record.ExcText = py.ExceptionSummary(exc)
+		} else if cur := py.CurrentException(); cur != nil {
+			record.ExcText = py.ExceptionSummary(cur)
+		}
+	}
+
 	// This logger's filters, and every ancestor's, run BEFORE dispatch - a
 	// record dropped here never reaches a handler.  pip's ExcludeLoggerFilter
 	// depends on it: it suppresses a whole logger's output, and without this the
@@ -951,9 +1003,17 @@ func (f *Formatter) format(record *LogRecord) (string, error) {
 		// "WARNING:t:hello".  That module-level shape belongs to basicConfig,
 		// and applying it here changed the output of every handler that did
 		// not set one, including the rotating ones.
-		return record.getMessage()
+		msg, err := record.getMessage()
+		if err != nil {
+			return "", err
+		}
+		return msg + record.ExcText, nil
 	}
-	return expandFormat(f.fmt, record)
+	text, err := expandFormat(f.fmt, record)
+	if err != nil {
+		return "", err
+	}
+	return text + record.ExcText, nil
 }
 
 // expandFormat renders a "%(field)s" style format string.  A literal "%%" is
@@ -1130,6 +1190,28 @@ func streamEmit(h *Handler, record *LogRecord) error {
 }
 
 // formatterFor picks the handler's formatter or the default one.
+// handlerFormat renders a record through this handler's formatter, or through
+// the module's default formatter when it has none - which is what CPython's
+// Handler.format does.
+func handlerFormat(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "format() takes exactly one argument")
+	}
+	h, ok := asHandler(self)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "not a Handler: %s", self.Type().Name)
+	}
+	rec, ok := args[0].(*LogRecord)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "format() argument must be a LogRecord")
+	}
+	text, err := FormatRecord(h, rec)
+	if err != nil {
+		return nil, err
+	}
+	return py.String(text), nil
+}
+
 func (h *Handler) formatterFor() *Formatter {
 	if h.formatter != nil {
 		return h.formatter
@@ -1603,6 +1685,10 @@ func init() {
 	HandlerType.Dict.Set("setLevel", py.MustNewMethod("setLevel", handlerSetLevel, 0, handlerSetLevel_doc))
 	HandlerType.Dict.Set("setFormatter", py.MustNewMethod("setFormatter", handlerSetFormatter, 0, handlerSetFormatter_doc))
 	HandlerType.Dict.Set("emit", py.MustNewMethod("emit", handlerEmit, 0, emit_doc))
+	// Handler.format is what a handler's emit calls to turn a record into text,
+	// and what a Python emit - pip's RichPipStreamHandler - reads.  Only
+	// Formatter.format existed, so "self.format(record)" inside emit raised.
+	HandlerType.Dict.Set("format", py.MustNewMethod("format", handlerFormat, 0, "Format a record."))
 	// A LogRecord's attributes are read directly - "record.levelno",
 	// "record.name", "record.msg" - by formatters, filters and handlers, and
 	// none of them existed: only the Go struct had them.  pygments' logging

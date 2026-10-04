@@ -17,6 +17,11 @@
 
 package py
 
+import (
+	"fmt"
+	"strings"
+)
+
 // CaptureTraceback builds the traceback for a raise happening now.
 //
 // The frames are walked with Back, which goes from the frame executing now out
@@ -180,4 +185,45 @@ func init() {
 		},
 		Doc: "The line number this traceback entry was on.",
 	})
+}
+
+// ExceptionSummary renders an exception the way a traceback is printed: the
+// "Traceback (most recent call last):" header, one line per frame, and the
+// "ValueError: boom" line.
+//
+// It lives here rather than in the traceback module because logging needs it
+// and logging is a stdlib module that the traceback module itself may use -
+// importing one from the other would be a cycle.  The frame walk runs
+// inner-to-outer, so the chain is reversed, and the result ends with a newline
+// so that a caller can append it to a message.
+func ExceptionSummary(e *Exception) string {
+	if e == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Traceback (most recent call last):\n")
+	for tb := TracebackOf(e); tb != nil; tb = tb.Next {
+		code := tb.Frame.Code
+		if code == nil {
+			continue
+		}
+		fmt.Fprintf(&b, "  File %q, line %d, in %s\n", code.Filename, tb.Lineno, code.Name)
+	}
+	b.WriteString(exceptionLine(e))
+	b.WriteString("\n")
+	return b.String()
+}
+
+// exceptionLine is the "ValueError: boom" line, and just the name when the
+// exception has no arguments - str() already knows that rule.
+func exceptionLine(e *Exception) string {
+	name := "Exception"
+	if t := e.Type(); t != nil {
+		name = t.Name
+	}
+	s, err := StrAsString(e)
+	if err != nil || s == "" {
+		return name
+	}
+	return name + ": " + s
 }
