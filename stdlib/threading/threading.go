@@ -387,9 +387,14 @@ func init() {
 		py.DictEntry{Key: "RLock", Value: RLockType},
 		py.DictEntry{Key: "Thread", Value: ThreadType},
 		py.DictEntry{Key: "ThreadError", Value: py.ExceptionType.NewType("threading.ThreadError", "Raised for threading errors.", nil, nil)},
-		py.DictEntry{Key: "Event", Value: LockType},
-		py.DictEntry{Key: "Semaphore", Value: LockType},
-		py.DictEntry{Key: "Barrier", Value: LockType},
+		// These used to be ALIASES of LockType, which is worse than missing:
+		// the name existed and the object constructed, so hasattr said yes and
+		// try/except said yes, but there was no set(), no is_set(), no wait().
+		py.DictEntry{Key: "Event", Value: EventType},
+		py.DictEntry{Key: "Semaphore", Value: SemaphoreType},
+		py.DictEntry{Key: "Barrier", Value: BarrierType},
+		py.DictEntry{Key: "BoundedSemaphore", Value: SemaphoreType},
+		py.DictEntry{Key: "Condition", Value: ConditionType},
 		py.DictEntry{Key: "get_ident", Value: py.MustNewMethod("get_ident", func(self py.Object, args py.Tuple) (py.Object, error) {
 			return py.Int(1), nil
 		}, 0, "Return the identifier of the current thread.")},

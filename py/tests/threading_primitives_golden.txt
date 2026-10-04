@@ -1,0 +1,11 @@
+unset: False
+set: True
+wait when set: True
+cleared: False
+sem acquire: True True
+released, acquire again: True
+context manager works
+condition context works
+has notify: True True
+barrier parties: 2
+Event is Lock: False
