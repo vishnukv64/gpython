@@ -431,6 +431,25 @@ func (c *CachedFunction) M__call__(args py.Tuple, kwargs py.StringDict) (py.Obje
 
 var _ py.I__call__ = (*CachedFunction)(nil)
 
+// M__get__ is the descriptor protocol, and it is what makes a cached function
+// usable as a METHOD: without it the wrapper was found on the class and called
+// with the arguments only, so "obj.cached(x)" reported "missing 1 required
+// positional argument: 'x'" - self had been taken as the first argument.
+//
+// rich's Style._add is decorated with lru_cache, and Style.__add__ calls it, so
+// this is what stopped "Style + Style" and with it pip's entire help output.
+func (c *CachedFunction) M__get__(instance, owner py.Object) (py.Object, error) {
+	if instance == nil || instance == py.None {
+		return c, nil
+	}
+	// A bound callable: the same wrapper, called with the instance prepended.
+	// Building the Method that way keeps the cache shared with the unbound
+	// wrapper, which is what CPython does.
+	return py.NewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		return c.M__call__(append(py.Tuple{instance}, args...), kwargs)
+	}, py.METH_CLASS, "A cached method.")
+}
+
 func init() {
 	invalidate := func(self py.Object, args py.Tuple) (py.Object, error) {
 		c := self.(*CachedFunction)

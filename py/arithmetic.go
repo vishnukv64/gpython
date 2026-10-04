@@ -184,8 +184,25 @@ func Add(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// A __add__ written in PYTHON lives in the class's Dict and matches no Go
+	// interface, so it is looked up by name.  Without this "Style + Style" -
+	// where rich defines __add__ in Python - raised instead of combining, and
+	// pip's help never rendered.
+	if res, ok, err := callPyReflected(a, "__add__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 
-	// Now using b to radd if different in type to a
+	// Then the REFLECTED method on b, which is what "0 + obj" needs: sum()
+	// starts from 0 and adds each item, so a type that defines only __radd__
+	// had no way to take part - and rich's Style.combine, which is
+	// "sum(styles, first)", died on it with "unsupported operand type(s) for +:
+	// 'Style' and 'Style'" instead of printing pip's help.
+	//
+	// A python-level method is looked up by name as well as through the Go
+	// interface, because a class defined in Python keeps its methods in a Dict
+	// and matches no Go interface.
 	if a.Type() != b.Type() {
 		if B, ok := b.(I__radd__); ok {
 			res, err := B.M__radd__(a)
@@ -195,6 +212,11 @@ func Add(a, b Object) (Object, error) {
 			if res != NotImplemented {
 				return res, nil
 			}
+		}
+		if res, ok, err := callPyReflected(b, "__radd__", a); err != nil {
+			return nil, err
+		} else if ok {
+			return res, nil
 		}
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for +: '%s' and '%s'", a.Type().Name, b.Type().Name)
@@ -744,6 +766,23 @@ func IPow(a, b, c Object) (Object, error) {
 // four ordering operators needed this.  A method returning NotImplemented
 // means "try the other operand", so the caller falls through as before.
 func callPyOrdering(o Object, name string, arg Object) (Object, bool, error) {
+	res, found, err := o.Type().CallMethod(name, Tuple{o, arg}, NewStringDict())
+	if err != nil {
+		return nil, false, err
+	}
+	if !found || res == NotImplemented {
+		return nil, false, nil
+	}
+	return res, true, nil
+}
+
+// callPyReflected looks up a reflected binary method (__radd__, __rsub__, ...)
+// on the RIGHT operand, by name.
+//
+// The Go interfaces match methods written in GO only; a class defined in Python
+// keeps its methods in a Dict, so "0 + obj" matched nothing even though obj
+// defined __radd__.
+func callPyReflected(o Object, name string, arg Object) (Object, bool, error) {
 	res, found, err := o.Type().CallMethod(name, Tuple{o, arg}, NewStringDict())
 	if err != nil {
 		return nil, false, err

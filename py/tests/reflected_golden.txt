@@ -1,0 +1,6 @@
+radd: Summable(3)
+sum: Summable(5)
+add: Adder(3)
+cached method: 21
+again: 21
+plain cached fn: 42
