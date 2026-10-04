@@ -69,8 +69,8 @@ print(f"left:      [{name:<10}]")
 print(f"center:    [{name:^10}]")
 print(f"fill:      [{name:*>10}]")
 print(f"fill all:  [{name:*^11}]")
-# `.precision` on a string is IGNORED here (CPython truncates to 2 chars).
-print(f"truncate:  [{name:.2}]  <- .precision on a string is ignored")
+# `.precision` on a string TRUNCATES it, as CPython does.
+print(f"truncate:  [{name:.2}]  <- .precision truncates a string")
 
 print()
 print("--- format specs: integers ---")

@@ -43,6 +43,10 @@ func Format(value Object, spec string) (Object, error) {
 type formatSpec struct {
 	fill      rune
 	align     byte
+	plus      bool // '+' - a sign for positive numbers too
+	space     bool // ' ' - a space where a positive number's sign would be
+	alt       bool // '#' - the alternate form
+	zeroPad   bool // '0' - pad with zeros after the sign
 	width     int
 	comma     bool
 	precision int // -1 when absent
@@ -52,6 +56,28 @@ type formatSpec struct {
 func parseFormatSpec(spec string) (formatSpec, error) {
 	out := formatSpec{fill: ' ', precision: -1}
 	rest := spec
+
+	// The SIGN and ALTERNATE flags come first, before alignment.  They were not
+	// parsed at all, so f"{36:+d}" raised "Invalid format specifier '+d'" and
+	// f"{255:#x}" lost its 0x prefix - both ordinary format strings.
+	for len(rest) > 0 {
+		switch rest[0] {
+		case '+':
+			out.plus = true
+		case ' ':
+			out.space = true
+		case '#':
+			out.alt = true
+		case '-':
+			// '-' means left-align, which is the default for strings but not
+			// for numbers; it sets the alignment rather than a flag.
+			out.align = '<'
+		default:
+			goto flagsDone
+		}
+		rest = rest[1:]
+	}
+flagsDone:
 
 	if len(rest) >= 2 {
 		switch rest[1] {
@@ -72,6 +98,12 @@ func parseFormatSpec(spec string) (formatSpec, error) {
 		out.comma = true
 		rest = rest[1:]
 	}
+	// ',' may also appear AFTER the width or the precision - "f"{1234567:.2,}""
+	// and "f"{1234567:,.2f}"" are both legal, so every occurrence is taken.
+	for strings.Contains(rest, ",") {
+		out.comma = true
+		rest = strings.Replace(rest, ",", "", 1)
+	}
 	if dot := strings.IndexByte(rest, '.'); dot >= 0 {
 		prec := rest[dot+1:]
 		rest = rest[:dot]
@@ -91,6 +123,7 @@ func parseFormatSpec(spec string) (formatSpec, error) {
 	// A leading '0' before the width requests zero padding.
 	if out.align == 0 && len(rest) >= 2 && rest[0] == '0' && rest[1] >= '0' && rest[1] <= '9' {
 		out.fill = '0'
+		out.zeroPad = true
 		rest = rest[1:]
 	}
 	// width: leading digits
@@ -126,6 +159,16 @@ func formatString(value, spec string) (Object, error) {
 	}
 	if f.align == 0 {
 		f.align = '<' // strings are left aligned by default
+	}
+	// A PRECISION on a string TRUNCATES it: f"{'Ada':.2}" is "Ad".  It was
+	// parsed and then never applied, so the precision was silently ignored -
+	// the width still worked, which is what made it look like a formatting
+	// quirk rather than a missing feature.
+	if f.precision >= 0 {
+		runes := []rune(value)
+		if f.precision < len(runes) {
+			value = string(runes[:f.precision])
+		}
 	}
 	return String(pad(value, f)), nil
 }
@@ -244,16 +287,26 @@ func formatFloat(value Float, spec string) (Object, error) {
 	if f.precision >= 0 {
 		format += "." + itoa(f.precision)
 	}
+	number := float64(value)
 	switch verb {
 	case 'f', 'F', 'e', 'E', 'g', 'G':
 		format += string(verb)
 	case '%':
-		format += "%"
+		// The '%' conversion is 'f' on the value TIMES ONE HUNDRED, with a
+		// literal sign appended.  Emitting Go's "%%" instead produced the
+		// literal text "%%!(EXTRA float64=25.6)" - Go's printf error for a
+		// verb it does not have - which is what appeared in an ordinary
+		// f-string such as f"{25.6:.1%}".
+		number *= 100
+		format += "f"
 	default:
 		return nil, ExceptionNewf(ValueError, "Unknown format code %q for object of type 'float'", string(verb))
 	}
 
-	body := fmt.Sprintf(format, float64(value))
+	body := fmt.Sprintf(format, number)
+	if verb == '%' {
+		body += "%"
+	}
 	if f.comma {
 		if dot := strings.IndexByte(body, '.'); dot >= 0 {
 			body = groupThousands(body[:dot]) + body[dot:]
@@ -269,6 +322,30 @@ func formatFloat(value Float, spec string) (Object, error) {
 
 // pad applies filling, alignment and width to an already rendered value.
 func pad(body string, f formatSpec) string {
+	// The SIGN flags are applied here, at the one place every numeric formatter
+	// funnels through - so "+d", " .2f" and their like work for every verb
+	// rather than for the handful that remembered to handle them.
+	if body != "" && body[0] != '-' {
+		switch {
+		case f.plus:
+			body = "+" + body
+		case f.space:
+			body = " " + body
+		}
+	}
+	// Zero padding goes AFTER the sign, not before it: "-0042", not "00-42".
+	if f.zeroPad && f.align == 0 {
+		neg := strings.HasPrefix(body, "-") || strings.HasPrefix(body, "+") || strings.HasPrefix(body, " ")
+		sign := ""
+		digits := body
+		if neg {
+			sign, digits = body[:1], body[1:]
+		}
+		if f.width > len([]rune(body)) {
+			digits = strings.Repeat("0", f.width-len([]rune(body))) + digits
+			body = sign + digits
+		}
+	}
 	width := len([]rune(body))
 	if f.width <= width {
 		return body
