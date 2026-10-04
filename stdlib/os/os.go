@@ -59,6 +59,12 @@ func init() {
 		py.MustNewMethod("mkdir", mkdir, 0, mkdir_doc),
 		py.MustNewMethod("putenv", putenv, 0, "Set the environment variable named key to the string value."),
 		py.MustNewMethod("remove", remove, 0, remove_doc),
+		py.MustNewMethod("rename", rename, 0, rename_doc),
+		py.MustNewMethod("replace", replace, 0, replace_doc),
+		// unlink is the same operation under CPython's other name for it, and
+		// code uses both.  Registered as its own method rather than an alias so
+		// its docstring says which is which.
+		py.MustNewMethod("unlink", remove, 0, "Remove a file (same as remove())."),
 		py.MustNewMethod("removedirs", removedirs, 0, removedirs_doc),
 		py.MustNewMethod("rmdir", rmdir, 0, rmdir_doc),
 		py.MustNewMethod("system", system, 0, "Run shell commands, prints stdout directly to default"),
@@ -721,6 +727,43 @@ If dir_fd is not None, it should be a file descriptor open to a directory,
   and path should be relative; path will then be relative to that directory.
 dir_fd may not be implemented on your platform.
   If it is unavailable, using it will raise a NotImplementedError.`
+
+const rename_doc = `rename(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
+
+Rename a file or directory.  On POSIX, if dst names an existing file it is
+replaced silently; os.replace does the same everywhere, which is why it exists.`
+
+func rename(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var src, dst py.Object
+	if err := py.UnpackTuple(args, kwargs, "rename", 2, 2, &src, &dst); err != nil {
+		return nil, err
+	}
+	s, err := py.StrAsString(src)
+	if err != nil {
+		return nil, err
+	}
+	d, err := py.StrAsString(dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Rename(s, d); err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	return py.None, nil
+}
+
+const replace_doc = `replace(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
+
+Rename a file or directory, SILENTLY replacing dst if it exists.  It differs
+from rename only on Windows, where rename refuses an existing destination;
+this is the one to use when the replacement is intended.`
+
+// replace is os.rename here: Go's os.Rename replaces an existing destination on
+// every platform this interpreter runs on, which is exactly what os.replace
+// promises.  Registered separately because names are the API.
+func replace(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return rename(self, args, kwargs)
+}
 
 func remove(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (

@@ -201,6 +201,20 @@ var ContextDecoratorType = py.NewType("contextlib.ContextDecorator", "A base cla
 func init() {
 	AbstractContextManagerType.Flags |= py.TPFLAGS_BASETYPE
 	ContextDecoratorType.Flags |= py.TPFLAGS_BASETYPE
+
+	// These are Generic in CPython, so they accept a subscript in an
+	// annotation: pip writes "AbstractContextManager[_T]" in a signature and
+	// got "'type' object is not subscriptable", which stopped pip at
+	// pip/_internal/commands.
+	//
+	// The class itself is the result, as it is for every other ABC - the
+	// parameter only matters to a type checker.
+	for _, t := range []*py.Type{AbstractContextManagerType, ContextDecoratorType} {
+		t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__",
+			func(self py.Object, args py.Tuple) (py.Object, error) {
+				return self, nil
+			}, 0, "Return the class, ignoring the subscription parameters."))
+	}
 }
 
 // ---------------------------------------------------------------------------

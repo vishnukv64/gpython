@@ -57,6 +57,101 @@ func init() {
 		return line, nil
 	}, 0, "__next__() -> the next line, or StopIteration at the end."))
 
+	// seek, tell, fileno and the capability predicates.  A file object is
+	// expected to carry them - tempfile.NamedTemporaryFile returns one and pip
+	// calls seek on it, which raised "'file' has no attribute 'seek'".
+	FileType.Dict.Set("seek", MustNewMethod("seek", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		off := int64(0)
+		var whence int = 0
+		if len(args) > 0 {
+			n, ok := args[0].(Int)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "an integer is required")
+			}
+			off, _ = n.GoInt64()
+		}
+		if len(args) > 1 {
+			w, ok := args[1].(Int)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "an integer is required")
+			}
+			whence = int(w)
+		}
+		pos, err := f.File.Seek(off, whence)
+		if err != nil {
+			return nil, ExceptionNewf(OSError, "%s", err.Error())
+		}
+		return Int(pos), nil
+	}, 0, "seek(offset[, whence]) -> the new absolute position."))
+
+	FileType.Dict.Set("tell", MustNewMethod("tell", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		pos, err := f.File.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return nil, ExceptionNewf(OSError, "%s", err.Error())
+		}
+		return Int(pos), nil
+	}, 0, "The current stream position."))
+
+	FileType.Dict.Set("fileno", MustNewMethod("fileno", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		return Int(f.File.Fd()), nil
+	}, 0, "The underlying file descriptor."))
+
+	FileType.Dict.Set("readable", MustNewMethod("readable", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		return NewBool(f.Can(FileRead)), nil
+	}, 0, "True when the file was opened for reading."))
+
+	FileType.Dict.Set("writable", MustNewMethod("writable", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		return NewBool(f.Can(FileWrite)), nil
+	}, 0, "True when the file was opened for writing."))
+
+	FileType.Dict.Set("seekable", MustNewMethod("seekable", func(self Object, args Tuple) (Object, error) {
+		return True, nil
+	}, 0, "True when the stream supports random access."))
+
+	// "closed" is an attribute, and a file that has been closed must say so -
+	// code checks it before deciding whether to close again.
+	FileType.Dict.Set("closed", &Property{
+		Fget: func(self Object) (Object, error) {
+			f, ok := self.(*File)
+			if !ok {
+				return True, nil
+			}
+			return NewBool(f.File == nil || f.File.Fd() == ^uintptr(0)), nil
+		},
+		Doc: "Whether the file has been closed.",
+	})
+
+	FileType.Dict.Set("name", &Property{
+		Fget: func(self Object) (Object, error) {
+			f, ok := self.(*File)
+			if !ok || f.File == nil {
+				return None, nil
+			}
+			return String(f.File.Name()), nil
+		},
+		Doc: "The name of the file.",
+	})
+
 	FileType.Dict.Set("readlines", MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		f := self.(*File)
 		lines := &List{}
