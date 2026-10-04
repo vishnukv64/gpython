@@ -1,0 +1,9 @@
+first arg: 42
+bare is None: None
+args still set: (42,)
+two args take the first: 1
+writable: 5
+first yield: 1
+value after return: returned
+via return: R
+bare: None

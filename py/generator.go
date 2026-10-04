@@ -122,7 +122,24 @@ func (it *Generator) Send(arg Object) (Object, error) {
 	if it.Frame.Yielded {
 		return res, nil
 	}
-	return nil, StopIteration
+	// The generator RETURNED, and PEP 380 says its return value is delivered as
+	// StopIteration.value - which is what "yield from" reads and what a "for"
+	// loop discards.  Returning the bare StopIteration TYPE lost it, so
+	// "r = yield from sub()" bound None instead of the value sub() returned.
+	return nil, stopIterationWith(res)
+}
+
+// stopIterationWith builds the StopIteration a finished generator raises, with
+// the generator's return value as its first argument.
+//
+// A generator with NO return value raises the BARE type rather than an
+// instance: an instance with no arguments would make str(e) empty where CPython
+// gives "StopIteration", and many sites compare the error to the type.
+func stopIterationWith(value Object) error {
+	if value == nil || value == None {
+		return StopIteration
+	}
+	return exceptionNew(StopIteration, Tuple{value})
 }
 
 // generator.throw(type[, value[, traceback]])
@@ -199,7 +216,7 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 	res, err := VmRunFrame(it.Frame)
 	it.Running = false
 	it.Frame.PendingException = nil
-	if isGeneratorExit(err) || err == StopIteration {
+	if isGeneratorExit(err) || IsException(StopIteration, err) {
 		return nil, StopIteration
 	}
 	if err != nil {
@@ -298,7 +315,7 @@ func (it *Generator) Close() (Object, error) {
 	if it.Frame.Yielded {
 		return nil, ExceptionNewf(RuntimeError, "generator ignored GeneratorExit")
 	}
-	if isGeneratorExit(err) || err == StopIteration {
+	if isGeneratorExit(err) || IsException(StopIteration, err) {
 		return None, nil
 	}
 	if err != nil {

@@ -781,6 +781,21 @@ func do_YIELD_FROM(vm *Vm, arg int32) error {
 		if !py.IsException(py.StopIteration, err) {
 			return err
 		}
+		// The sub-iterator FINISHED, and "yield from" evaluates to its RETURN
+		// VALUE: the sub-iterator is dropped and StopIteration.value takes its
+		// place on the stack.
+		//
+		// Returning nil here left the sub-iterator itself on the stack, so
+		// "r = yield from sub()" bound the GENERATOR - losing PEP 380's whole
+		// return-value protocol.
+		vm.POP() // drop the exhausted sub-iterator
+		value := py.Object(py.None)
+		if e, ok := err.(*py.Exception); ok {
+			if args, ok := e.Args.(py.Tuple); ok && len(args) > 0 {
+				value = args[0]
+			}
+		}
+		vm.PUSH(value)
 		return nil
 	}
 	// x remains on stack, retval is value to be yielded

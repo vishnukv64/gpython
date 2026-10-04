@@ -1,0 +1,5 @@
+sub returned: 'RETURNED'
+outer: [1, 2, 99]
+bare returned: None
+wrap: [1]
+forwarded: ['a', 'b']

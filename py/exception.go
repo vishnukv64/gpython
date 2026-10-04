@@ -634,6 +634,30 @@ uses this to CLEAR a traceback with None.`))
 		}
 		return None, nil
 	}
+	// StopIteration.value is the generator's RETURN value: the first argument,
+	// or None when there is none.  "return x" inside a generator raises
+	// StopIteration(x), and "yield from" is defined to read .value - so without
+	// this the return value of a sub-generator is unreachable, and "r = yield
+	// from sub()" binds the generator object instead.
+	//
+	// It is WRITABLE in CPython, which the PEP 380 algorithm relies on.
+	StopIteration.Dict.Set("value", &Property{
+		Fget: func(self Object) (Object, error) {
+			if e, ok := self.(*Exception); ok {
+				if args, ok := e.Args.(Tuple); ok && len(args) > 0 {
+					return args[0], nil
+				}
+			}
+			return None, nil
+		},
+		Fset: func(self, value Object) error {
+			if e, ok := self.(*Exception); ok {
+				e.Args = Tuple{value}
+			}
+			return nil
+		},
+	})
+
 	// SystemExit.code is the status the program asks to exit with: the first
 	// argument, or None when there is none.  It is a plain attribute - pip
 	// catches SystemExit and reads .code - and it was missing, so
