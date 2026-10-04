@@ -1655,6 +1655,23 @@ func (f *namedtupleFactory) M__repr__() (py.Object, error) {
 	return py.String("<namedtuple " + f.name + ">"), nil
 }
 
+// callAs builds a record of the class the constructor was called on, which is
+// the subclass when one is used.  "class Sub(Base)" inherits Base's __new__,
+// and Sub(1, 2) must be a Sub.
+func (f *namedtupleFactory) callAs(cls *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	obj, err := f.M__call__(args, kwargs)
+	if err != nil {
+		return nil, err
+	}
+	if nt, ok := obj.(*NamedTuple); ok {
+		nt.cls = cls
+		if cls.Name != "" {
+			nt.name = cls.Name
+		}
+	}
+	return obj, nil
+}
+
 func (f *namedtupleFactory) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	// A namedtuple is constructed by POSITION or by FIELD NAME, and CPython
 	// allows a mix: "P(1, y=2)" is ordinary.  Every keyword argument used to
@@ -1772,7 +1789,16 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 	// The field list lives on the class as _fields, and the constructor builds
 	// the instance carrying the values.
 	factory := &namedtupleFactory{name: name, fields: fields}
+	// The constructor takes the class it was reached THROUGH, which is a
+	// SUBCLASS when one is used: "class Sub(Base)" inherits Base's New, and
+	// Sub(1, 2) must be a Sub rather than a Base.  The class is read off the
+	// factory rather than closed over, because the factory is filled in after
+	// this constructor is registered.
 	cls := py.NewTypeX(name, "", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if metatype != nil && metatype.Name != "" && factory.cls != nil &&
+			metatype != factory.cls && metatype.IsSubtype(factory.cls) {
+			return factory.callAs(metatype, args, kwargs)
+		}
 		return factory.M__call__(args, kwargs)
 	}, nil)
 	cls.Flags |= py.TPFLAGS_BASETYPE
@@ -1786,7 +1812,14 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		fieldItems[i] = py.String(f)
 	}
 	cls.Dict.Set("_fields", py.NewListFromItems(fieldItems))
+	// __new__ must honour the class it was CALLED ON, not the class it was
+	// defined for: "class Sub(Base)" inherits this __new__ and Sub() must
+	// produce a Sub.  The first argument is the class when __new__ is reached
+	// through the type, which is how Python's own __new__ receives it.
 	cls.Dict.Set("__new__", py.MustNewMethod("__new__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if calledOn, ok := self.(*py.Type); ok && calledOn.Name != "" && calledOn != cls && calledOn.IsSubtype(cls) {
+			return factory.callAs(calledOn, args, kwargs)
+		}
 		return factory.M__call__(args, kwargs)
 	}, 0, "Create a new named tuple instance."))
 	// The named tuple behaviours are inherited from the shared NamedTupleType

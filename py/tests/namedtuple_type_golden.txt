@@ -1,0 +1,12 @@
+type name: Point
+isinstance: True
+type is Point: True
+fields: 1 2
+own property: 3
+isclass(Point): True
+isclass(p): False
+isclass(int): True
+isclass(3): False
+isclass(namedtuple): False
+isclass(C): True isclass(C()): False
+len: 2 index: 1 iter: [1, 2]
