@@ -1,6 +1,6 @@
 # gpython
 
-gpython is a part re-implementation, part port of the Python 3.4
+gpython is a part re-implementation, part port of the Python 3
 interpreter in Go.  Although there are many areas of improvement,
 it stands as an noteworthy achievement in capability and potential.
 
@@ -50,30 +50,45 @@ Several long-standing bugs that broke ordinary Python were fixed along the way:
 
 Numeric literals accept underscores (`1_000`, `0x_FF`, `1_0.5`), and the
 `__future__` module exists so `from __future__ import ...` stops failing.
+Class objects also expose `__mro__`.
+
+Beyond the import system, the interpreter now runs **pip**: `pip --version`,
+`pip --help` and `pip list` all work.  Reaching that required a long list of
+language and library gaps, each found by running real code rather than by
+reading it — among them regular-expression lookbehind, `str.translate` and the
+rest of the missing `str` methods, case mappings that expand (`"ß".upper()` is
+`"SS"`), `sys.exc_info` for exceptions raised by the interpreter itself,
+descriptors and `__set_name__`, `__init_subclass__` with the class keywords,
+the reflected and Python-defined operators, `dict.keys()` as a live set-like
+view, `sys.meta_path`, and `os.path.join` following POSIX's rule for an
+absolute component.
 
 ## Status and limitations
 
 This is honest about where the interpreter stands:
 
-  * The grammar is a Python 3.4-era grammar.  **f-strings are not supported
-    yet** and neither is anything newer; that blocks most modern packages.
-  * `super()` is not implemented (there is no `SuperType`), though the
-    compiler already emits the `__class__` cell it would need.
-  * The standard library is mostly Go ports of the *C* modules that shipped
-    with 3.4.  Beyond the modules registered in `stdlib/`, the pure-Python
-    standard library is not present, so modules such as `itertools`,
-    `functools`, `collections`, `json`, `datetime` and `typing` do not import
-    yet.  This is the largest remaining piece of work.
+  * The grammar accepts the features of **Python 3.10**: f-strings, numeric
+    underscores, the walrus operator, positional-only `/` parameters and
+    `match`/`case` all parse and run.  `except*` (3.11) and PEP 695 type
+    parameters (3.12) are SyntaxErrors, which is what `sys.version_info`
+    reports.  **`async def` and `await` are the one large language feature not
+    implemented.**
+  * The standard library is a mix of Go ports of the C modules and Go
+    implementations of the pure-Python ones.  `itertools`, `functools`,
+    `collections`, `json`, `datetime`, `typing`, `re`, `logging`, `plistlib`,
+    `zipimport` and many more import and work.
   * **C extension modules (`.so`/`.pyd`) cannot be loaded at all**, and there
     is no plan to change that.  Packages with compiled dependencies are
     therefore out of reach, which is the barrier the upstream README
     describes.
   * Namespace packages (directories without `__init__.py`) are not supported.
+  * `sys.meta_path` exists and a program may install its own finder, but this
+    interpreter's own file finder is built in rather than expressed as an
+    entry on it.
 
-So `pip install` does not work yet, and neither does `import re` — no
-pure-Python `re` is on `sys.path` and no native `re` module is registered
-yet.  The import machinery now finds modules correctly; what is missing is
-the modules themselves.
+`pip` runs: `pip --version`, `pip --help` and `pip list` all work, with help and
+list matching CPython's own output.  Installing packages does not, because that
+needs the C extension barrier above to fall.
 
 ## Install
 
