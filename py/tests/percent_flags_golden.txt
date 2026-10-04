@@ -1,0 +1,6 @@
+plus in %: +42
+space flag:  42
+zero pad: 00042
+neg zero pad: -0042
+hash: 0xff
+width and plus:   +42|

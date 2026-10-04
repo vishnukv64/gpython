@@ -1032,9 +1032,31 @@ func (a String) M__mod__(other Object) (Object, error) {
 		// width like %10.3f and in a precision like %.30f, so ordinary padding
 		// came out as "000000.060" instead of "     0.060" and "%10s" rendered
 		// "00000000ab" instead of "        ab".
+		// The SIGN and ALTERNATE flags apply to the finished text too, and must
+		// be added BEFORE the width is measured, or the sign eats into the
+		// padding: "%+5d" % 42 is "  +42", not "   +42" or "+  42".
+		//
+		// They were read from the spec and then never used for the integer and
+		// float verbs, so "%+d" % 42 gave "42" and "%#x" % 255 gave "ff".
+		flags = specFlags(spec)
+		switch {
+		case strings.ContainsRune(flags, '+') && !strings.HasPrefix(text, "-") && !strings.HasPrefix(text, "+"):
+			text = "+" + text
+		case strings.ContainsRune(flags, ' ') && !strings.HasPrefix(text, "-") && !strings.HasPrefix(text, "+"):
+			text = " " + text
+		}
+		if strings.ContainsRune(flags, '#') && !strings.HasPrefix(text, "0x") && !strings.HasPrefix(text, "0o") &&
+			(verb == 'x' || verb == 'X' || verb == 'o') {
+			prefix := "0"
+			if verb == 'x' {
+				prefix = "0x"
+			} else if verb == 'X' {
+				prefix = "0X"
+			}
+			text = prefix + text
+		}
 		if width := specWidth(spec); width > len([]rune(text)) {
 			padLen := width - len([]rune(text))
-			flags := specFlags(spec)
 			leftAlign := strings.ContainsRune(flags, '-')
 			zeroPad := strings.ContainsRune(flags, '0') && !leftAlign
 			switch {
