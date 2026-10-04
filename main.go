@@ -180,9 +180,9 @@ func runModule(args []string) error {
 	}
 
 	if !isPkg {
-		// RunFileAs, so __main__ gets a __spec__ naming the module - pip's
-		// __main__.py reads it on its first statement.
-		_, err = py.RunFileAs(ctx, path, py.CompileOpts{}, "__main__")
+		// Run as __main__ but with a spec naming the real module, which is
+		// what CPython does and what pip's __main__.py reads.
+		_, err = py.RunFileAsNamed(ctx, path, py.CompileOpts{}, "__main__", name)
 		return err
 	}
 
@@ -196,9 +196,12 @@ func runModule(args []string) error {
 	if err != nil {
 		return py.ExceptionNewf(py.ImportError, "No module named %q", mainName)
 	}
-	// The spec names the PACKAGE, not __main__, which is what CPython does and
-	// what pip tests for.
-	_, err = py.RunFileAs(ctx, mainPath, py.CompileOpts{}, name)
+	// __name__ must be "__main__" - that is the whole point of -m, and pip's
+	// __main__.py guards on it: with the package name there, the guard was
+	// false and "gpython -m pip" printed nothing and exited 0.  The SPEC names
+	// the real module, which is a separate thing and is what pip reads to
+	// decide whether it is running from a wheel.
+	_, err = py.RunFileAsNamed(ctx, mainPath, py.CompileOpts{}, "__main__", mainName)
 	return err
 }
 

@@ -126,6 +126,11 @@ var (
 //
 // See RunCode() for description of inModule.
 func RunFile(ctx Context, pathname string, opts CompileOpts, inModule interface{}) (*Module, error) {
+	return runFile(ctx, pathname, opts, inModule)
+}
+
+// runFile is RunFile with the module specification passed through unchanged.
+func runFile(ctx Context, pathname string, opts CompileOpts, inModule interface{}) (*Module, error) {
 	out, err := ctx.ResolveAndCompile(pathname, opts)
 	if err != nil {
 		return nil, err
@@ -141,11 +146,28 @@ func RunFile(ctx Context, pathname string, opts CompileOpts, inModule interface{
 // module a spec naming the PACKAGE - which is how pip's __main__.py decides
 // whether it is running from a wheel.  RunFile alone leaves __spec__ unset.
 func RunFileAs(ctx Context, pathname string, opts CompileOpts, moduleName string) (*Module, error) {
-	mod, err := RunFile(ctx, pathname, opts, moduleName)
+	return RunFileAsNamed(ctx, pathname, opts, moduleName, moduleName)
+}
+
+// runAs carries the two names a "-m" run needs, so that RunCode can give the
+// module a __name__ different from its __spec__.name.
+type runAs struct {
+	RunName  string
+	SpecName string
+}
+
+// RunFileAsNamed runs a file as the module runName, while giving it a spec
+// naming specName.
+//
+// The two differ for "-m pkg": __name__ is "__main__", because that is what
+// the module is being run AS, but __spec__.name is "pkg.__main__", because
+// that is what the module IS.  CPython keeps them separate, and both are
+// observable - pip's __main__.py switches on __name__ and reads the spec.
+func RunFileAsNamed(ctx Context, pathname string, opts CompileOpts, runName, specName string) (*Module, error) {
+	mod, err := runFile(ctx, pathname, opts, runAs{RunName: runName, SpecName: specName})
 	if err != nil {
 		return nil, err
 	}
-	mod.Globals.Set("__spec__", NewModuleSpec(moduleName, String(pathname), false))
 	mod.Globals.Set("__file__", String(pathname))
 	return mod, nil
 }
@@ -181,14 +203,21 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 	var (
 		module     *Module
 		moduleName string
+		specName   string
 		err        error
 	)
 
 	createNew := false
 	switch mod := inModule.(type) {
 
+	case runAs:
+		// "-m pkg": the module is run AS __main__ but IS pkg.__main__.
+		moduleName = mod.RunName
+		specName = mod.SpecName
+		createNew = true
 	case string:
 		moduleName = mod
+		specName = mod
 		createNew = true
 	case nil:
 		createNew = true
@@ -210,7 +239,7 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 			// __main__.py tests it on its first statement, so setting it
 			// afterwards is too late.
 			PreSetGlobals: func(g StringDict) {
-				g.Set("__spec__", NewModuleSpec(moduleName, String(codeDesc), false))
+				g.Set("__spec__", NewModuleSpec(specName, String(codeDesc), false))
 			},
 		}
 		module, err = ctx.ModuleInit(&moduleImpl)

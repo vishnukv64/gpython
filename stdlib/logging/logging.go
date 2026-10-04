@@ -282,11 +282,23 @@ type Logger struct {
 	propagate bool
 	// filters are run before dispatch; one returning false drops the record.
 	filters []py.Object
+	// cls is the class this logger was created as, which is a subclass when
+	// logging.setLoggerClass installed one.  Every logger used to report
+	// LoggerType, so a subclass instance lost its identity: a method the
+	// subclass defined was unreachable and pip's VerboseLogger (installed with
+	// setLoggerClass) was a plain Logger, which is why "logger.verbose()"
+	// raised AttributeError.
+	cls *py.Type
 }
 
 var LoggerType = py.NewType("logging.Logger", "A Logger is a named logging channel.")
 
-func (l *Logger) Type() *py.Type { return LoggerType }
+func (l *Logger) Type() *py.Type {
+	if l.cls != nil {
+		return l.cls
+	}
+	return LoggerType
+}
 
 // Logger attributes.  A logger's name is how code refers to it - a library
 // reads logger.name to label its own output - and it was reachable only from
@@ -344,34 +356,24 @@ var (
 // "'module' has no attribute 'setLoggerClass'".
 var gLoggerClass *py.Type
 
+// newLogger builds a logger whose class is the one setLoggerClass installed.
+//
+// A logger stays the Go value it always was - it is not wrapped - and only its
+// Type() reports the subclass, so the subclass's methods are found by the
+// ordinary MRO walk and a native accessor like ".name" still asserts *Logger
+// successfully.
 func newLogger(name string, level int) *Logger {
-	return &Logger{name: name, level: level, propagate: true}
-}
-
-// newLoggerOf builds a logger, honouring a class installed by
-// setLoggerClass.  A user subclass gets its own type; otherwise the builtin
-// Logger is used.
-func newLoggerOf(name string, level int) *Logger {
+	l := &Logger{name: name, level: level, propagate: true, cls: LoggerType}
 	if gLoggerClass != nil && gLoggerClass != LoggerType {
-		// Build an instance of the user's class, then carry the name and
-		// level onto it.  The class is a *Type standing in for the instance,
-		// which is how this interpreter represents a python-level instance.
-		inst, err := py.Call(gLoggerClass, py.Tuple{py.String(name)}, py.NewStringDict())
-		if err == nil {
-			if t, ok := inst.(*py.Type); ok {
-				if l, ok := t.Dict.Get("_gpython_logger"); ok {
-					if lg, ok := l.(*Logger); ok {
-						lg.level = level
-						return lg
-					}
-				}
-				lg := &Logger{name: name, level: level, propagate: true}
-				t.Dict.Set("_gpython_logger", lg)
-				return lg
-			}
+		l.cls = gLoggerClass
+		// A Python __init__ on the subclass runs with this logger as self,
+		// which is what a user initialiser expects - and what lets
+		// "super().__init__(name)" reach the native one.
+		if initFn := gLoggerClass.LookupPython("__init__"); initFn != nil {
+			_, _ = py.Call(initFn, py.Tuple{l, py.String(name)}, py.NewStringDict())
 		}
 	}
-	return &Logger{name: name, level: level, propagate: true}
+	return l
 }
 
 func init() {

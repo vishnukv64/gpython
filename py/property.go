@@ -82,21 +82,27 @@ func (p *Property) M__get__(instance, owner Object) (Object, error) {
 	if p.Fget == nil {
 		return nil, ExceptionNewf(AttributeError, "can't get attribute")
 	}
-	return p.Fget(instance)
+	// A NATIVE getter - the Go closure a module registers for something like
+	// logging.Logger.name - asserts the receiver to its own Go type, and an
+	// instance of a Python SUBCLASS of that type is a *Type carrying the value
+	// in Payload.  Passing it through panicked the host process
+	// ("interface conversion: py.Object is *py.Type, not *logging.Logger").
+	// The getter wants the value, so it gets the value.
+	return p.Fget(unwrapPayload(instance))
 }
 
 func (p *Property) M__set__(instance, value Object) (Object, error) {
 	if p.Fset == nil {
 		return nil, ExceptionNewf(AttributeError, "can't set attribute")
 	}
-	return None, p.Fset(instance, value)
+	return None, p.Fset(unwrapPayload(instance), value)
 }
 
 func (p *Property) M__delete__(instance Object) (Object, error) {
 	if p.Fdel == nil {
 		return nil, ExceptionNewf(AttributeError, "can't delete attribute")
 	}
-	return None, p.Fdel(instance)
+	return None, p.Fdel(unwrapPayload(instance))
 }
 
 // Properties

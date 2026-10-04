@@ -41,7 +41,7 @@ func MakeBool(a Object) (Object, error) {
 	// A __bool__ the CLASS defines still wins, because that is a *Function and
 	// is checked first.
 	if payload, ok := payloadOf(a); ok {
-		if ty, isInst := a.(*Type); isInst && ty.lookupPython("__bool__") == nil {
+		if ty, isInst := a.(*Type); isInst && ty.LookupPython("__bool__") == nil {
 			return MakeBool(payload)
 		}
 	}

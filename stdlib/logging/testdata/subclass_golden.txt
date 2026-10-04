@@ -1,0 +1,7 @@
+type: Verbose
+isinstance: True
+verbose: VERBOSE: hi
+name: demo.sub
+level: 0
+same object: True
+module: set

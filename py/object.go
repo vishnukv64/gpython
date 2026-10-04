@@ -40,7 +40,7 @@ func ObjectIsTrue(o Object) (cmp bool, err error) {
 	// Checked before the type dispatch, and only when the CLASS defines no
 	// __bool__ of its own - a Python override still wins.
 	if payload, ok := payloadOf(o); ok {
-		if ty, isInst := o.(*Type); isInst && ty.lookupPython("__bool__") == nil {
+		if ty, isInst := o.(*Type); isInst && ty.LookupPython("__bool__") == nil {
 			return ObjectIsTrue(payload)
 		}
 	}

@@ -694,12 +694,12 @@ func unwrapPayload(o Object) Object {
 	return o
 }
 
-// lookupPython returns the named attribute when it is a PYTHON-defined
+// LookupPython returns the named attribute when it is a PYTHON-defined
 // function - a *Function - walking this type's MRO.  nil otherwise.
 //
 // It exists so that a Python override such as __new__ can be told apart from a
 // native one, which is a Go method that the native constructor already calls.
-func (t *Type) lookupPython(name string) Object {
+func (t *Type) LookupPython(name string) Object {
 	if v := t.Lookup(name); v != nil {
 		if _, ok := v.(*Function); ok {
 			return v
@@ -724,7 +724,7 @@ func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	// written in Python - is honoured.  A native __new__ is the Go New the code
 	// below already calls, so consulting it here would recurse.
 	if t.Name != "" {
-		if newFn := t.lookupPython("__new__"); newFn != nil {
+		if newFn := t.LookupPython("__new__"); newFn != nil {
 			obj, err := Call(newFn, append(Tuple{t}, args...), kwargs)
 			if err != nil {
 				return nil, err
@@ -2002,16 +2002,20 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	new_type.Dict = dict
 	// fmt.Printf("New type dict is %v\n", dict)
 
-	// Set __module__ in the dict
+	// Set __module__ in the dict, from the __name__ of the globals the class
+	// statement is executing in.
+	//
+	// This used to print "*** FIXME need to get the current vm globals
+	// somehow" to stderr and set nothing, so every class lacked __module__ -
+	// visible in pip, which printed the line twice on a successful run.  The
+	// frame executing right now is the one running the class body, so its
+	// globals are exactly what CPython reads here.
 	if _, ok := dict.Get("__module__"); !ok {
-		fmt.Printf("*** FIXME need to get the current vm globals somehow\n")
-		// tmp = PyEval_GetGlobals()
-		// if tmp != nil {
-		// 	tmp, ok := tmp["__name__"]
-		// 	if ok {
-		// 		dict["__module__"] = tmp
-		// 	}
-		// }
+		if frame := currentFrame(); frame != nil {
+			if name, ok := frame.Globals.Get("__name__"); ok {
+				dict.Set("__module__", name)
+			}
+		}
 	}
 
 	// Set ht_qualname to dict['__qualname__'] if available, else to
@@ -2386,7 +2390,7 @@ func (ty *Type) M__repr__() (Object, error) {
 		// pygments' Token defines __repr__, and its children print as
 		// "Token.Text" because of this.  A plain subclass with none prints as
 		// its container, which is what "class L(list)" should do.
-		if fn := ty.lookupPython("__repr__"); fn != nil {
+		if fn := ty.LookupPython("__repr__"); fn != nil {
 			if res, err := Call(fn, Tuple{ty}, NewStringDict()); err == nil {
 				return res, nil
 			}
