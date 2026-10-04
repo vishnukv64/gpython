@@ -1,0 +1,13 @@
+repr 1arg: IndexError('whatever')
+repr ValueError: ValueError('v')
+repr KeyError: KeyError('k')
+repr TypeError: TypeError('t')
+repr 2args: Exception('a', 'b')
+repr noargs: ValueError()
+str 1arg: whatever
+str KeyError: 'k'
+str KeyError int: 42
+str 2args: ('a', 'b')
+tuple 1: ('a',)
+tuple 2: ('a', 'b')
+only: 'IndexError: whatever'

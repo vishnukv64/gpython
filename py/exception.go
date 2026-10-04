@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -165,7 +166,19 @@ func (exc *ExceptionInfo) TracebackDump(w io.Writer) {
 	}
 	fmt.Fprintf(w, "Traceback (most recent call last):\n")
 	exc.Traceback.TracebackDump(w)
-	fmt.Fprintf(w, "%v\n", exc.Value)
+	// The final line is "Name: str(value)", rendered the PYTHON way.  Go's
+	// "%v" renders the Go struct instead, which produced
+	// "IndexError: 'whatever'" - the Go value carried quotes that CPython's
+	// str() does not - and it is the last line of every uncaught traceback.
+	name := "Exception"
+	if exc.Type != nil {
+		name = exc.Type.Name
+	}
+	if s, err := StrAsString(exc.Value); err == nil && s != "" {
+		fmt.Fprintf(w, "%s: %s\n", name, s)
+		return
+	}
+	fmt.Fprintf(w, "%s\n", name)
 }
 
 // Test for being set
@@ -516,11 +529,20 @@ func (e *Exception) M__repr__() (Object, error) {
 	if len(args) == 0 {
 		return String(fmt.Sprintf("%s()", typ)), nil
 	}
-	msg, err := args.M__repr__()
-	if err != nil {
-		return nil, err
+	// The representation is "Name(arg, arg)" - the tuple's own repr WITHOUT the
+	// trailing comma a one-element tuple carries.  repr(IndexError('x')) is
+	// "IndexError('x')" in CPython, not "IndexError('x',)"; the comma was
+	// leaking in from the tuple machinery, and it appeared in every traceback
+	// that reported a single-argument exception.
+	parts := make([]string, 0, len(args))
+	for _, a := range args {
+		s, err := ReprAsString(a)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, s)
 	}
-	return String(fmt.Sprintf("%s%s", typ, string(msg.(String)))), nil
+	return String(typ + "(" + strings.Join(parts, ", ") + ")"), nil
 }
 
 // Check Interfaces
