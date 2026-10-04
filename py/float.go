@@ -48,10 +48,64 @@ func FloatNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 }
 
 func (a Float) M__str__() (Object, error) {
-	if i := int64(a); Float(i) == a {
-		return String(fmt.Sprintf("%d.0", i)), nil
+	// The infinities and NaN have their own spelling, and Go's is not it:
+	// "%g" gives "+Inf", "-Inf" and "NaN" where CPython prints "inf", "-inf"
+	// and "nan".  The sign on the positive infinity is the visible one - it
+	// appears in any program that prints a computed infinity.
+	switch {
+	case math.IsInf(float64(a), 1):
+		return String("inf"), nil
+	case math.IsInf(float64(a), -1):
+		return String("-inf"), nil
+	case math.IsNaN(float64(a)):
+		return String("nan"), nil
 	}
-	return String(fmt.Sprintf("%g", a)), nil
+	// The shortest representation that round-trips, in CPython's form: a plain
+	// decimal unless the exponent is below -4 or at least 16.
+	//
+	// Go's "%g" is NOT that.  It switches to exponent form at a different
+	// threshold, so 1e16 printed as 10000000000000000.0 and 123456789.123456
+	// printed as 1.23456789123456e+08, and it cannot represent -0.0 at all.
+	return String(cpythonFloatRepr(float64(a))), nil
+}
+
+// cpythonFloatRepr renders a float the way repr() and str() do.
+func cpythonFloatRepr(f float64) string {
+	if f == 0 {
+		// The SIGN of a zero is observable: repr(-0.0) is "-0.0".
+		if math.Signbit(f) {
+			return "-0.0"
+		}
+		return "0.0"
+	}
+	// %e with no precision gives the shortest round-tripping digits, so its
+	// exponent is what decides the form.
+	e := fmt.Sprintf("%e", f)
+	exp := 0
+	if i := strings.IndexByte(e, 'e'); i >= 0 {
+		exp, _ = strconv.Atoi(e[i+1:])
+	}
+	if exp < -4 || exp >= 16 {
+		// Exponent form, with CPython's two-digit-minimum exponent.
+		mantissa := e[:strings.IndexByte(e, 'e')]
+		mantissa = strings.TrimRight(mantissa, "0")
+		mantissa = strings.TrimSuffix(mantissa, ".")
+		sign := "+"
+		digits := strconv.Itoa(exp)
+		if exp < 0 {
+			sign = "-"
+			digits = strconv.Itoa(-exp)
+		}
+		if len(digits) < 2 {
+			digits = "0" + digits
+		}
+		return mantissa + "e" + sign + digits
+	}
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return s
 }
 
 func (a Float) M__repr__() (Object, error) {

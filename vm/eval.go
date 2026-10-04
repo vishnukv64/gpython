@@ -1644,18 +1644,33 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) error {
 			return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: annotations must be a tuple")
 		}
 		anns := py.NewStringDict()
-		name_ix := int32(len(names))
-		if num_annotations != name_ix+1 {
+		if int32(len(names))+1 != num_annotations {
 			return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: num_annotations wrong - corrupt bytecode?")
 		}
-		for name_ix > 0 {
-			name_ix--
-			name, ok := names[name_ix].(py.String)
+		// The names come off the stack in DECLARATION order, and the values
+		// above the last name in the same order - so both are read forwards.
+		//
+		// Walking the names BACKWARDS (which this did) reversed the insertion
+		// order of an ordered dict, so f.__annotations__ listed "return" first
+		// and the parameters after it: "def f(width: float, height: float) ->
+		// float" gave ['return', 'height', 'width'] where CPython gives
+		// ['width', 'height', 'return'].
+		values := make(py.Tuple, len(names))
+		for i := range names {
+			name, ok := names[i].(py.String)
 			if !ok {
 				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: annotation name must be a string")
 			}
-			value := vm.POP()
-			anns.Set(string(name), value)
+			values[i] = py.Object(name)
+		}
+		// Pop the values, then re-read them in order: the stack gives the LAST
+		// name's value first.
+		popped := make(py.Tuple, len(names))
+		for i := len(names) - 1; i >= 0; i-- {
+			popped[i] = vm.POP()
+		}
+		for i, n := range values {
+			anns.Set(string(n.(py.String)), popped[i])
 		}
 		function.Annotations = anns
 	}
