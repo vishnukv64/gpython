@@ -75,6 +75,7 @@ func (s *Super) lookup(name string) (Object, bool, error) {
 	// Skip everything up to and including the class this proxy was built
 	// for, then take the next class that defines the name.
 	reached := false
+
 	for _, entry := range entries.Items {
 		entryType, ok := entry.(*Type)
 		if !ok {
@@ -204,13 +205,51 @@ func classAndSelf(frame *Frame) (*Type, Object, error) {
 		return nil, nil, ExceptionNewf(RuntimeError, "super(): no arguments and no __class__ cell; super() only works inside a method")
 	}
 
-	// The first argument is self, which is in the first local slot.
+	// The first argument is self, which is the first local slot.
+	//
+	// It may have been MOVED into a cell: a method whose body mentions
+	// __class__ - which is what super() does - has self as a cell variable, and
+	// the frame builder clears the local slot once the cell owns the value.  So
+	// the CELL is consulted when the local is empty, or "super()" reported "no
+	// first argument" in exactly the methods that use it.
 	var self Object
 	if len(frame.LocalVars) > 0 {
 		self = frame.LocalVars[0]
 	}
 	if self == nil {
+		self = cellArg(frame, 0)
+	}
+	if self == nil {
 		return nil, nil, ExceptionNewf(RuntimeError, "super(): no arguments and no first argument; super() only works inside a method")
 	}
 	return typ, self, nil
+}
+
+// cellArg returns the value of an argument that was moved into a cell.
+//
+// Code.Cell2arg records, per cell, which argument it was made from; an argument
+// that is not a cell reports CO_CELL_NOT_AN_ARG.
+//
+// This exists because a method whose body mentions __class__ - which is what
+// super() does - has its arguments as cell variables, and the frame builder
+// CLEARS the local slot once a cell owns the value.  Reading LocalVars alone
+// therefore found nothing in exactly the methods that use super().
+func cellArg(frame *Frame, arg int) Object {
+	if frame.Code.Cell2arg == nil {
+		return nil
+	}
+	for i, a := range frame.Code.Cell2arg {
+		if int(a) != arg {
+			continue
+		}
+		// Cells come first in this storage, indexed by the cell variable's own
+		// position - the same i that LOAD_DEREF uses.
+		if i >= len(frame.CellAndFreeVars) {
+			return nil
+		}
+		if c, ok := frame.CellAndFreeVars[i].(*Cell); ok {
+			return c.Get()
+		}
+	}
+	return nil
 }

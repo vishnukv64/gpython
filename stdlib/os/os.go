@@ -60,6 +60,10 @@ func init() {
 		py.MustNewMethod("putenv", putenv, 0, "Set the environment variable named key to the string value."),
 		py.MustNewMethod("remove", remove, 0, remove_doc),
 		py.MustNewMethod("rename", rename, 0, rename_doc),
+		py.MustNewMethod("getuid", osGetuid, 0, "Return the current process's user id."),
+		py.MustNewMethod("geteuid", osGeteuid, 0, "Return the current process's effective user id."),
+		py.MustNewMethod("getgid", osGetgid, 0, "Return the current process's group id."),
+		py.MustNewMethod("getegid", osGetegid, 0, "Return the current process's effective group id."),
 		py.MustNewMethod("replace", replace, 0, replace_doc),
 		// unlink is the same operation under CPython's other name for it, and
 		// code uses both.  Registered as its own method rather than an alias so
@@ -727,6 +731,28 @@ If dir_fd is not None, it should be a file descriptor open to a directory,
   and path should be relative; path will then be relative to that directory.
 dir_fd may not be implemented on your platform.
   If it is unavailable, using it will raise a NotImplementedError.`
+
+// The POSIX process-identity functions.  They are what a program uses to
+// decide whether it may write to a system location, and platformdirs imports
+// getuid directly.
+//
+// On a platform where the syscall does not exist they raise, rather than
+// returning a plausible-looking 0 that would read as "root".
+func osGetuid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return py.Int(os.Getuid()), nil
+}
+
+func osGeteuid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return py.Int(os.Geteuid()), nil
+}
+
+func osGetgid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return py.Int(os.Getgid()), nil
+}
+
+func osGetegid(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return py.Int(os.Getegid()), nil
+}
 
 const rename_doc = `rename(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
 

@@ -28,6 +28,7 @@ func init() {
 		py.DictEntry{Key: "reduce", Value: py.MustNewMethod("reduce", reduce, 0, "Apply a function of two arguments cumulatively to the items of a sequence.")},
 		py.DictEntry{Key: "lru_cache", Value: py.MustNewMethod("lru_cache", lruCache, 0, "Least-recently-used cache decorator.")},
 		py.DictEntry{Key: "cache", Value: py.MustNewMethod("cache", lruCache, 0, "Simple lightweight unbounded function cache.")},
+		py.DictEntry{Key: "cached_property", Value: cachedPropertyType},
 		py.DictEntry{Key: "total_ordering", Value: py.MustNewMethod("total_ordering", identity, 0, "Class decorator that fills in missing ordering methods.")},
 		py.DictEntry{Key: "cmp_to_key", Value: py.MustNewMethod("cmp_to_key", cmpToKey, 0, "Convert a comparison function into a key function.")},
 		py.DictEntry{Key: "singledispatch", Value: py.MustNewMethod("singledispatch", singledispatch, 0, "Single-dispatch generic function decorator.")},

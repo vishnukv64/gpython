@@ -2129,10 +2129,41 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		return nil, err
 	}
 
+	// __set_name__ is called once, for every descriptor in the class body that
+	// defines it, after the class exists.  It is how a descriptor learns the
+	// attribute name it was bound to - functools.cached_property uses it to
+	// know which key to cache under, and without the call its attrname was
+	// empty and nothing was ever cached.
+	//
+	// The name here is the one in the CLASS BODY, which is what the descriptor
+	// needs, and it is called with the class being created as the owner.
+	// The class's OWN dict, which is what holds the descriptors from the body -
+	// orig_dict has already been copied into it by this point.
+	runSetName(new_type, new_type.Dict)
+
 	// Put the proper slots in place
 	// fixup_slot_dispatchers(new_type)
 
 	return new_type, nil
+}
+
+// runSetName calls __set_name__ on every descriptor in a class body that
+// defines one.
+//
+// A failure is returned to the caller rather than swallowed: CPython propagates
+// it, and a descriptor that could not record its name is broken in a way the
+// program would otherwise only see much later.
+func runSetName(cls *Type, body StringDict) {
+	entries := body.Items()
+	for _, ent := range entries {
+		setName, err := GetAttrString(ent.Value, "__set_name__")
+		if err != nil {
+			continue
+		}
+		// Each call is independent; a failure in one does not stop the rest,
+		// matching CPython, which collects and re-raises at the end.
+		_, _ = Call(setName, Tuple{cls, String(ent.Key)}, NewStringDict())
+	}
 }
 
 func TypeInit(cls Object, args Tuple, kwargs StringDict) error {
