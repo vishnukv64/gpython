@@ -16,6 +16,24 @@ type Property struct {
 	// to a getter) marked this property, which is what __isabstractmethod__
 	// reports.
 	Abstract bool
+	// name and owner are filled by __set_name__ when the property is defined in
+	// a class body, and exist so that an error can NAME the attribute:
+	// CPython says "property 'radius' of 'Circle' object has no setter", where
+	// a bare "can't set attribute" says neither which attribute nor which class.
+	name  string
+	owner *Type
+}
+
+// M__set_name__ is the descriptor hook: it is called once, when the class body
+// is turned into a class, with the class and the name the property was bound to.
+func (p *Property) M__set_name__(owner Object, name Object) (Object, error) {
+	if t, ok := owner.(*Type); ok {
+		p.owner = t
+	}
+	if s, ok := name.(String); ok {
+		p.name = string(s)
+	}
+	return None, nil
 }
 
 var PropertyType = NewTypeX("property", `property(fget=None, fset=None, fdel=None, doc=None)
@@ -93,6 +111,13 @@ func (p *Property) M__get__(instance, owner Object) (Object, error) {
 
 func (p *Property) M__set__(instance, value Object) (Object, error) {
 	if p.Fset == nil {
+		// CPython's wording, which names the property and the class.  A bare
+		// "can't set attribute" tells a reader neither - and this is the error
+		// a program hits when it forgets the @x.setter.
+		if p.name != "" && p.owner != nil {
+			return nil, ExceptionNewf(AttributeError,
+				"property '%s' of '%s' object has no setter", p.name, p.owner.Name)
+		}
 		return nil, ExceptionNewf(AttributeError, "can't set attribute")
 	}
 	return None, p.Fset(unwrapPayload(instance), value)

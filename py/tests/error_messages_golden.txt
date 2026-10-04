@@ -1,0 +1,4 @@
+no setter: property 'radius' of 'Circle' object has no setter
+posonly: divide() got some positional-only arguments passed as keyword arguments: 'a, b'
+posonly one: divide() got some positional-only arguments passed as keyword arguments: 'b'
+unexpected: divide() got an unexpected keyword argument 'nope'

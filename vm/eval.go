@@ -1752,6 +1752,24 @@ func do_BUILD_SLICE(vm *Vm, argc int32) error {
 	return nil
 }
 
+// positionalOnlyPassedByKeyword lists the positional-only parameters that a
+// call supplied by keyword, comma-separated, or "" when none.
+//
+// It lists ALL of them rather than the first, because that is what CPython's
+// message does: calling divide(a=1, b=2) for "def divide(a, b, /)" names both.
+func positionalOnlyPassedByKeyword(co *py.Code, kws py.StringDict) string {
+	if co.Posonlyargcount <= 0 {
+		return ""
+	}
+	var found []string
+	for i := 0; i < int(co.Posonlyargcount) && i < len(co.Varnames); i++ {
+		if _, ok := kws.Get(co.Varnames[i]); ok {
+			found = append(found, co.Varnames[i])
+		}
+	}
+	return strings.Join(found, ", ")
+}
+
 // Prefixes any opcode which has an argument too big to fit into the
 // default two bytes. ext holds two additional bytes which, taken
 // together with the subsequent opcode’s argument, comprise a
@@ -2759,6 +2777,18 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 			}
 		}
 		if j >= total_args && kwdict.IsNil() {
+			// A name that IS a positional-only parameter gets CPython's own
+			// message, which says the argument exists but may not be passed by
+			// keyword - naming all such parameters, not just this one:
+			//   "divide() got some positional-only arguments passed as keyword
+			//    arguments: 'a, b'"
+			// "unexpected keyword argument" is misleading there, because the
+			// name is not unexpected at all.
+			if po := positionalOnlyPassedByKeyword(co, kws); po != "" {
+				return nil, py.ExceptionNewf(py.TypeError,
+					"%s() got some positional-only arguments passed as keyword arguments: '%s'",
+					co.Name, po)
+			}
 			return nil, py.ExceptionNewf(py.TypeError, "%s() got an unexpected keyword argument '%s'", co.Name, keyword)
 		}
 		kwdict.Set(keyword, value)
