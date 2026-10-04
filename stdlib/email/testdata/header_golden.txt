@@ -1,0 +1,84 @@
+str utf-8 => 'café'
+str latin-1 => 'café'
+str iso-8859-1 => 'café'
+str plain => 'hello'
+str empty => ''
+str empty string => ''
+str None => ''
+str bytes utf-8 => 'café'
+str whitespace only => '   '
+str leading ws => '  x'
+append => 'a b c'
+append bytes => 'café'
+append mixed str => 'plain café tail'
+append mixed encode => 'plain =?utf-8?b?Y2Fmw6k=?= tail'
+append mixed decode => [(b'plain', 'us-ascii'), (b'caf\xc3\xa9', 'utf-8'), (b'tail', 'us-ascii')]
+eq str true => True
+eq str false => False
+eq header true => True
+eq header false => False
+eq int => False
+ne int => True
+ne str => False
+str eq header => True
+dh plain => [('the text', None)]
+dh empty => [('', None)]
+dh q utf-8 => [(b'caf\xc3\xa9', 'utf-8')]
+dh b utf-8 => [(b'caf\xc3\xa9', 'utf-8')]
+dh b no padding => [(b'caf\xc3\xa9', 'utf-8')]
+dh b empty => [(b'', 'utf-8')]
+dh q empty => [(b'', 'utf-8')]
+dh q latin-1 => [(b'caf\xe9', 'iso-8859-1')]
+dh q underscore => [(b'a b', 'utf-8')]
+dh q bad escape => [(b'a=zz', 'utf-8')]
+dh b invalid => [(b'', 'utf-8')]
+dh case insensitive => [(b'caf\xc3\xa9', 'utf-8')]
+dh unknown-8bit => [(b'caf\xc3\xa9', 'unknown-8bit')]
+dh us-ascii => [(b'hello', 'us-ascii')]
+dh mixed around => [(b'a ', None), (b'caf\xc3\xa9', 'utf-8'), (b' b', None)]
+dh two words => [(b'caf\xc3\xa9x', 'utf-8')]
+dh three runs => [(b'x ', None), (b'a', 'utf-8'), (b' y ', None), (b'b', 'utf-8'), (b' z', None)]
+dh whitespace run => [(b'ab', 'utf-8')]
+dh newline run => [(b'ab', 'utf-8')]
+dh multiline => [(b'ab', 'utf-8')]
+dh leading ws => [(b'a', 'utf-8')]
+dh newline in text => [('a\nb', None)]
+dh Header utf-8 => [(b'caf\xc3\xa9', 'utf-8')]
+dh Header plain => [(b'hello', 'us-ascii')]
+dh Header latin-1 => [(b'caf\xe9', 'iso-8859-1')]
+dh Header iso-8859-1 => [(b'caf\xe9', 'iso-8859-1')]
+dh Header bytes => [(b'caf\xc3\xa9', 'utf-8')]
+mh roundtrip => 'café'
+mh plain => 'the text'
+mh utf-8 => 'café'
+mh latin1 => 'cafÃ©'
+mh unknown-8bit => 'caf��'
+mh None then utf-8 => 'abc def'
+mh utf-8 then None => 'abc def'
+mh named => '=?utf-8?q?a?='
+mh maxlinelen => '=?utf-8?b?Y2Fmw6ljYWbDqWNh?=\n =?utf-8?b?ZsOpY2Fmw6ljYWY=?=\n =?utf-8?b?w6k=?='
+encode plain => 'x'
+encode utf-8 => '=?utf-8?b?Y2Fmw6k=?='
+encode latin-1 => '=?iso-8859-1?q?caf=E9?='
+encode ascii fallback => '=?utf-8?b?Y2Fmw6k=?='
+encode splitchars => 'a; b, c d\te'
+encode newline => 'line1\nline2'
+encode embedded header => (True, "header value appears to contain an embedded header: 'a\\nb: c'")
+encode long => 'long long long long long long long long long long long long long long long\n long long long long long '
+encode long crlf => 'long long long long long long long long long long long long long long long\r\n long long long long long '
+encode header name => 'Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello\n Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello\n Hello Hello Hello Hello Hello Hello '
+encode maxlinelen 0 => 'a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a '
+encode fold comma => 'a, b;\n c\td e'
+encode fold words => 'one two\n three four\n five six'
+encode fold semicolons => 'a; b; c;\n d; e; f;\n g; h; i;\n j'
+encode fold tabs => 'a\tb\tc\td\te\n\tf'
+encode leading ws => '  hello world'
+encode parens => '(x)'
+encode utf-8 long => '=?utf-8?b?Y2Fmw6ljYWbDqWNhZsOpY2Fmw6ljYWbDqWNhZsOpY2Fmw6ljYWbDqWNhZsOpY2Fm?=\n =?utf-8?b?w6ljYWbDqWNhZsOpY2Fmw6ljYWbDqWNhZsOpY2Fmw6ljYWbDqWNhZsOpY2Fmw6lj?=\n =?utf-8?b?YWbDqQ==?='
+encode utf-8 folded => '=?utf-8?b?eHh4eHh4eHh4eGNh?=\n =?utf-8?b?ZsOpY2Fmw6ljYWY=?=\n =?utf-8?b?w6ljYWbDqWNhZsOp?=\n =?utf-8?b?Y2Fmw6ljYWbDqWNh?=\n =?utf-8?b?ZsOpY2Fmw6ljYWY=?=\n =?utf-8?b?w6k=?='
+encode many => 'a =?utf-8?q?b?= c'
+pip plain => 'hello'
+pip encoded word => '=?utf-8?q?caf=C3=A9?='
+pip Header utf-8 => '=?utf-8?q?caf=C3=A9?='
+pip unknown-8bit => 'ÿ'
+pip unknown-8bit utf-8 => 'café'

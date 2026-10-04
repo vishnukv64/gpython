@@ -22,7 +22,7 @@ func init() {
 	globals.Set("__path__", path)
 	globals.Set("__all__", py.NewListFromItems([]py.Object{
 		py.String("errors"), py.String("utils"), py.String("parser"),
-		py.String("message"),
+		py.String("message"), py.String("header"),
 	}))
 	// CPython defines message_from_* in email/__init__.py rather than in
 	// email.parser, and callers use both spellings; they are registered here
