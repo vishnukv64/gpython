@@ -1,0 +1,9 @@
+registry: ['A', 'B']
+A.kw: {}
+B.kw: {'kind': 'x', 'n': 3}
+Base has no kw: MISSING
+Base not in registry: True
+registry now: ['A', 'B', 'C']
+C.kw: {'tag': 1}
+plain ok: Plain
+TypeError: Bad.__init_subclass__() takes no keyword arguments

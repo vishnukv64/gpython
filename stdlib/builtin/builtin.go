@@ -608,17 +608,11 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		}
 	}
 
-	// A class keyword that type() does not accept - "class X(TypedDict,
-	// total=False)" - belongs to the base's own machinery, and there is no
-	// __init_subclass__ here to receive it.  Passing it on makes the class
-	// statement fail with "type() takes 1 or 3 arguments", so a keyword that
-	// is not "metaclass" is dropped.  It carries no run-time meaning to a
-	// type checker's target anyway.
-	for _, k := range mkw.Keys() {
-		if k != "metaclass" {
-			mkw.Del(k)
-		}
-	}
+	// The class statement's own keywords go to type() with the class, and
+	// type() hands them to the base's __init_subclass__.  They used to be
+	// DROPPED here, so "class Sub(Base, kind='x')" produced a Sub whose
+	// Base.__init_subclass__ saw no kind at all, and a subclass that could
+	// take no configuration.  type() now accepts them.
 
 	if cell != nil {
 		// fmt.Printf("Calling %v\n", meta)

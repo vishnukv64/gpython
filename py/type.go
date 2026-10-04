@@ -382,6 +382,25 @@ func init() {
 	// interpreter calls the MRO's __init__ on every construction, so rejecting
 	// them here would break "class C: pass" when C is instantiated with any
 	// argument the base chain has already consumed.
+	// object.__init_subclass__ is the no-op every class inherits; a base that
+	// defines its own overrides it, and the class statement's keywords reach
+	// whichever one is found.  It was absent entirely, so
+	// "class Bad(Plain, nope=1)" silently accepted a keyword CPython rejects.
+	ObjectType.Dict.Set("__init_subclass__", MustNewMethod("__init_subclass__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		// The first argument is the class being CREATED - that is what this
+		// hook is called with - so the message names it, as CPython's does.
+		if kwargs.Len() > 0 {
+			name := ""
+			if len(args) > 0 {
+				if t, ok := args[0].(*Type); ok {
+					name = t.Name + "."
+				}
+			}
+			return nil, ExceptionNewf(TypeError, "%s__init_subclass__() takes no keyword arguments", name)
+		}
+		return None, nil
+	}, 0, "This method is called when a class is subclassed."))
+
 	ObjectType.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return None, nil
 	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
@@ -1726,6 +1745,22 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		return args[0].Type(), nil
 	}
 
+	// The class statement's own keyword arguments - everything besides
+	// name/bases/dict - are meant for the base's __init_subclass__, and both
+	// the arity check below and ParseTupleAndKeywords reject anything outside
+	// name/bases/dict.  Take them out before either sees them.
+	classKeywords := NewStringDict()
+	if !kwargs.IsNil() {
+		for _, e := range kwargs.Items() {
+			switch e.Key {
+			case "name", "bases", "dict", "metaclass":
+			default:
+				classKeywords.Set(e.Key, e.Value)
+				kwargs.Del(e.Key)
+			}
+		}
+	}
+
 	// SF bug 475327 -- if that didn't trigger, we need 3
 	// arguments. but PyArg_ParseTupleAndKeywords below may give
 	// a msg saying type() needs exactly 3.
@@ -2171,11 +2206,65 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// orig_dict has already been copied into it by this point.
 	runSetName(new_type, new_type.Dict)
 
+	// __init_subclass__ is called on the BASE, once, when a subclass is
+	// created - it is the hook by which a base class learns about and
+	// configures its subclasses, and the counterpart of __set_name__.
+	//
+	// Any keyword arguments the class statement carried besides name/bases/dict
+	// are passed straight through: "class C(Base, kind='x')" reaches
+	// Base.__init_subclass__(kind='x').
+	if err := runInitSubclass(new_type, classKeywords); err != nil {
+		return nil, err
+	}
+
 	// Put the proper slots in place
 	// fixup_slot_dispatchers(new_type)
 
 	return new_type, nil
 }
+
+// runInitSubclass calls __init_subclass__ on the nearest BASE that defines it.
+//
+// It is looked up on the bases, not on the new class: the hook is how a base
+// configures each class derived from it, and CPython does not call it for the
+// class that declares it.  Any keyword arguments in the class statement are
+// passed straight through ("class C(Base, kind='x')").
+func runInitSubclass(cls *Type, classKeywords StringDict) error {
+	// The hook comes from the bases.  Base is not always set - a class whose
+	// only base is object has a nil Base - so the bases themselves are what
+	// this walks, which is also what CPython does.
+	var base *Type
+	for _, b := range cls.Bases {
+		if bt, ok := b.(*Type); ok && bt != cls {
+			base = bt
+			break
+		}
+	}
+	if base == nil {
+		return nil
+	}
+	hook := base.Lookup("__init_subclass__")
+	if hook == nil {
+		return nil
+	}
+	// object.__init_subclass__ is the no-op default.  It is found through the
+	// base's MRO - Plain above inherits it from object - so the test is on the
+	// HOOK, not on the base.  It takes no keyword arguments, and CPython
+	// REJECTS a class keyword that would have to reach it:
+	// "class Bad(Plain, nope=1)" is a TypeError, not an ignored keyword.
+	if hook == objectInitSubclass {
+		if classKeywords.Len() > 0 {
+			return ExceptionNewf(TypeError, "%s.__init_subclass__() takes no keyword arguments", cls.Name)
+		}
+		return nil
+	}
+	_, err := Call(hook, Tuple{cls}, classKeywords)
+	return err
+}
+
+// objectInitSubclass is object's own no-op __init_subclass__, which Python
+// resolves to when no base overrides it.
+var objectInitSubclass = ObjectType.Lookup("__init_subclass__")
 
 // runSetName calls __set_name__ on every descriptor in a class body that
 // defines one.
