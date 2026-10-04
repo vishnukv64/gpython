@@ -181,6 +181,13 @@ Return -1 on failure.`))
 If the optional argument count is given, only the first count occurrences are
 replaced.`))
 
+	StringType.Dict.Set("rsplit", MustNewMethod("rsplit", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return self.(String).RSplit(args, kwargs)
+	}, 0, `rsplit(sep=None, maxsplit=-1) -> list of strings
+
+Return a list of the words in the string, using sep as the delimiter, counting
+from the right; at most maxsplit splits are made.`))
+
 	StringType.Dict.Set("split", MustNewMethod("split", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).Split(args, kwargs)
 	}, 0, "split(sub) -> split string with sub."))
@@ -1441,6 +1448,90 @@ func (s String) Split(args Tuple, kwargs StringDict) (Object, error) {
 		vs = strings.SplitN(string(s), string(v), int(max)+1)
 	case NoneType:
 		vs = fieldsN(string(s), int(max))
+	default:
+		return nil, ExceptionNewf(TypeError, "Can't convert '%s' object to str implicitly", pyval.Type())
+	}
+	o := List{}
+	for _, j := range vs {
+		o.Items = append(o.Items, String(j))
+	}
+	return &o, nil
+}
+
+// RSplit is split() counting from the RIGHT: at most maxsplit splits are made,
+// and the unsplit remainder is the FIRST element of the result.
+//
+// For maxsplit of -1 (the default) the two are the same, which is why the plain
+// case is easy to get right and the limited case is not: "a,b,c".rsplit(",", 1)
+// is ["a,b", "c"] where split(",", 1) is ["a", "b,c"].
+func (s String) RSplit(args Tuple, kwargs StringDict) (Object, error) {
+	var (
+		pyval Object = None
+		pymax Object = Int(-2)
+	)
+	if err := ParseTupleAndKeywords(args, kwargs, "|Oi:rsplit", []string{"sep", "maxsplit"}, &pyval, &pymax); err != nil {
+		return nil, err
+	}
+	max := int(pymax.(Int))
+	var vs []string
+	switch v := pyval.(type) {
+	case String:
+		sep := string(v)
+		if sep == "" {
+			return nil, ExceptionNewf(ValueError, "empty separator")
+		}
+		if max < 0 {
+			vs = strings.Split(string(s), sep)
+			break
+		}
+		// Split from the right, at most max times.
+		rest := string(s)
+		var out []string
+		for len(out) < max {
+			i := strings.LastIndex(rest, sep)
+			if i < 0 {
+				break
+			}
+			out = append([]string{rest[i+len(sep):]}, out...)
+			rest = rest[:i]
+		}
+		vs = append([]string{rest}, out...)
+	case NoneType:
+		// Whitespace mode with a limit: the LAST max fields are split off, and
+		// the remainder is the ORIGINAL text before them, trimmed at its edges.
+		// It is not re-normalised in the middle -
+		// "a  b  c d".rsplit(None, 2) is ["a  b", "c", "d"], with the double
+		// space intact - which is what makes this different from splitting the
+		// field list.
+		if max < 0 {
+			vs = fieldsN(string(s), -1)
+			break
+		}
+		text := string(s)
+		var tail []string
+		end := len(text)
+		for len(tail) < max {
+			// Find the end of a field: skip trailing whitespace, then read
+			// back to the run's start.
+			for end > 0 && unicode.IsSpace(rune(text[end-1])) {
+				end--
+			}
+			if end == 0 {
+				break
+			}
+			start := end
+			for start > 0 && !unicode.IsSpace(rune(text[start-1])) {
+				start--
+			}
+			tail = append([]string{text[start:end]}, tail...)
+			end = start
+		}
+		head := strings.TrimSpace(text[:end])
+		if head == "" {
+			vs = tail
+			break
+		}
+		vs = append([]string{head}, tail...)
 	default:
 		return nil, ExceptionNewf(TypeError, "Can't convert '%s' object to str implicitly", pyval.Type())
 	}
