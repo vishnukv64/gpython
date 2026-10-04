@@ -604,6 +604,30 @@ uses this to CLEAR a traceback with None.`))
 		}
 		return None, nil
 	}
+	// SystemExit.code is the status the program asks to exit with: the first
+	// argument, or None when there is none.  It is a plain attribute - pip
+	// catches SystemExit and reads .code - and it was missing, so
+	// "SystemExit(3).code" raised AttributeError.
+	SystemExit.Dict.Set("code", &Property{Fget: func(self Object) (Object, error) {
+		// The arguments live in the Exception's own Args field, not in its
+		// Dict - reading the Dict found nothing and every code was None.
+		// One argument IS the code; several give the whole argument tuple,
+		// which is CPython's rule ("SystemExit(1, 2).code" is (1, 2)).
+		if e, ok := self.(*Exception); ok {
+			if t, ok := e.Args.(Tuple); ok {
+				switch len(t) {
+				case 0:
+					// fall through to None
+				case 1:
+					return t[0], nil
+				default:
+					return t, nil
+				}
+			}
+		}
+		return None, nil
+	}})
+
 	OSError.Dict.Set("errno", &Property{Fget: setErrno})
 	OSError.Dict.Set("strerror", &Property{Fget: setStrerror})
 	OSError.Dict.Set("filename", &Property{Fget: func(self Object) (Object, error) {
