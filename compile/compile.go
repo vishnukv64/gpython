@@ -640,11 +640,22 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 
 	// KwDefaults: MAKE_FUNCTION pops the default value first and then the
 	// kw-only argument name, so each entry is pushed as (name, value).
+	//
+	// KwDefaults holds only the DEFAULTED kw-only arguments, and CPython aligns
+	// them to the END of Kwonlyargs - the last n of them have defaults, exactly
+	// as a positional default applies to the last n positional parameters.  The
+	// name therefore comes from Kwonlyargs[len(Kwonlyargs)-len(KwDefaults)+i],
+	// not from index i: taking them from the front mislabelled every default
+	// whenever a required kw-only argument preceded a defaulted one, so
+	// "def g(*a, name, k=1)" reported {name: 1} and "g(name='z')" raised
+	// "missing 1 required keyword-only argument: 'k'".  pip's
+	// ConfigOptionParser is written exactly that way.
 	if len(Args.KwDefaults) > len(Args.Kwonlyargs) {
 		panic("compile: more KwDefaults than Kwonlyargs")
 	}
+	firstDefaulted := len(Args.Kwonlyargs) - len(Args.KwDefaults)
 	for i := range Args.KwDefaults {
-		c.LoadConst(py.String(Args.Kwonlyargs[i].Arg))
+		c.LoadConst(py.String(Args.Kwonlyargs[firstDefaulted+i].Arg))
 		c.Expr(Args.KwDefaults[i])
 	}
 

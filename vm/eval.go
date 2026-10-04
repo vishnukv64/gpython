@@ -1639,15 +1639,28 @@ func _make_function(vm *Vm, argc int32, opcode OpCode) error {
 	}
 
 	if kwdefaults > 0 {
-		defs := py.NewStringDict()
-		for kwdefaults--; kwdefaults >= 0; kwdefaults-- {
+		// The stack holds them in SOURCE order - (name, value) per entry, pushed
+		// left to right - so they are popped into a slice and filed in that
+		// order.  Filling the dict as they are popped reversed it, because a
+		// dict is insertion-ordered: "def h(*a, p, q=1, r=2)" reported
+		// {'r': 2, 'q': 1} where CPython reports {'q': 1, 'r': 2}.
+		type kwDefault struct {
+			name  string
+			value py.Object
+		}
+		pairs := make([]kwDefault, kwdefaults)
+		for i := int(kwdefaults) - 1; i >= 0; i-- {
 			v := vm.POP()   // default value
 			key := vm.POP() // kw only arg name
 			keyStr, ok := key.(py.String)
 			if !ok {
 				return py.ExceptionNewf(py.SystemError, "MAKE_FUNCTION: keyword argument name must be a string")
 			}
-			defs.Set(string(keyStr), v)
+			pairs[i] = kwDefault{name: string(keyStr), value: v}
+		}
+		defs := py.NewStringDict()
+		for _, p := range pairs {
+			defs.Set(p.name, p.value)
 		}
 		function.KwDefaults = defs
 	}
