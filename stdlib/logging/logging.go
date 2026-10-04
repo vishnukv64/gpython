@@ -384,6 +384,29 @@ func addLevelName(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.None, nil
 }
 
+// LevelNumberByName returns the level a NAME refers to, including any level a
+// program registered with addLevelName.
+//
+// The lookup is exported because logging.config's dictConfig needs it: it had
+// its own hardcoded table of the five standard names, so a level registered by
+// name - pip's VERBOSE - raised 'unknown level: "VERBOSE"' when a configuration
+// dict referred to it.
+func LevelNumberByName(name string) (int, bool) {
+	upper := strings.ToUpper(name)
+	for n, s := range levelNames {
+		if strings.ToUpper(s) == upper {
+			return n, true
+		}
+	}
+	switch upper {
+	case "WARN":
+		return WARNING, true
+	case "FATAL":
+		return CRITICAL, true
+	}
+	return 0, false
+}
+
 func effectiveLevelName(level int) string {
 	if name, ok := levelNames[level]; ok {
 		return name
@@ -552,7 +575,13 @@ func (l *Logger) callHandlers(record *LogRecord) error {
 
 // handle makes a record and dispatches it, returning whether it was passed
 // to a handler at all.
+// handle is handleWith with no exc_info or extra, which is what the internal
+// callers want.
 func (l *Logger) handle(level int, msg py.Object, args py.Object) (bool, error) {
+	return l.handleWith(level, msg, args, py.False, nil)
+}
+
+func (l *Logger) handleWith(level int, msg py.Object, args py.Object, excInfo, extra py.Object) (bool, error) {
 	if !l.isEnabledFor(level) {
 		return false, nil
 	}
@@ -585,23 +614,58 @@ func (l *Logger) handle(level int, msg py.Object, args py.Object) (bool, error) 
 
 // loggerLog is the body shared by all the level-named methods: the first
 // argument is the message, any others are "%"-style arguments for it.
+// loggerLog implements logging's four keyword arguments.
+//
+// The call is "logger.info(msg, *args, exc_info=, stack_info=, stacklevel=,
+// extra=)".  A bare checkArgs here rejected EVERY keyword - with the message
+// "name() takes no keyword arguments", because the function name was passed as
+// the literal "name" - so "logger.critical(msg, exc_info=True)", which pip uses
+// to report its own failures, raised instead of logging.
 func loggerLog(l *Logger, args py.Tuple, kwargs py.StringDict, level int, name string) (py.Object, error) {
-	if err := checkArgs(args, kwargs, "name", 1, -1); err != nil {
-		return nil, err
+	if len(args) < 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: 'msg'", name)
 	}
+	var (
+		excInfo    py.Object = py.False
+		stackInfo  py.Object = py.False
+		stacklevel py.Object = py.Int(1)
+		extra      py.Object
+	)
+	extraSet := false
+	if !kwargs.IsNil() {
+		for _, e := range kwargs.Items() {
+			switch e.Key {
+			case "exc_info":
+				excInfo = e.Value
+			case "stack_info":
+				stackInfo = e.Value
+			case "stacklevel":
+				stacklevel = e.Value
+			case "extra":
+				extra = e.Value
+				extraSet = true
+			default:
+				return nil, py.ExceptionNewf(py.TypeError,
+					"%s() got an unexpected keyword argument '%s'", name, e.Key)
+			}
+		}
+	}
+	_ = stackInfo
+	_ = stacklevel
+	_ = extraSet
 	if !l.isEnabledFor(level) {
 		return py.None, nil
 	}
 	msg := args[0]
-	var rest py.Object = py.None
+	var msgArgs py.Object = py.None
 	if len(args) > 1 {
 		if len(args) == 2 {
-			rest = args[1]
+			msgArgs = args[1]
 		} else {
-			rest = py.Tuple(args[1:])
+			msgArgs = py.Tuple(args[1:])
 		}
 	}
-	if _, err := l.handle(level, msg, rest); err != nil {
+	if _, err := l.handleWith(level, msg, msgArgs, excInfo, extra); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -1657,8 +1721,18 @@ func init() {
 	})
 	// The stream an output handler writes to, as a read-only attribute.
 	streamProp := &py.Property{
-		Fget: func(self py.Object) (py.Object, error) { return handlerOf(self).stream, nil },
-		Doc:  "the stream this handler writes to",
+		Fget: func(self py.Object) (py.Object, error) {
+			// A base Handler writes nowhere, so its stream is nil - and
+			// returning that nil to Python PANICKED the host process on a
+			// plain "logging.Handler().stream": the nil was treated as an
+			// object and its type dereferenced.  None is the honest answer and
+			// what a caller can test.
+			if st := handlerOf(self).stream; st != nil {
+				return st, nil
+			}
+			return py.None, nil
+		},
+		Doc: "the stream this handler writes to",
 	}
 	HandlerType.Dict.Set("stream", streamProp)
 	HandlerType.Dict.Set("name", &py.Property{

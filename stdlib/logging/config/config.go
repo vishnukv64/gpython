@@ -37,19 +37,16 @@ approximated without silently ignoring part of a configuration.
 
 // levelByName maps a level name to the number, so a config's "INFO" works.
 func levelByName(name string) (int, bool) {
+	// The logging module owns the name table, INCLUDING the levels a program
+	// registered with addLevelName - pip registers VERBOSE that way.  A
+	// hardcoded switch here ignored them and refused a configuration dict that
+	// named one.
+	if n, ok := logging.LevelNumberByName(name); ok {
+		return n, true
+	}
 	switch strings.ToUpper(name) {
-	case "CRITICAL", "FATAL":
+	case "CRITICAL":
 		return logging.CRITICAL, true
-	case "ERROR":
-		return logging.ERROR, true
-	case "WARNING", "WARN":
-		return logging.WARNING, true
-	case "INFO":
-		return logging.INFO, true
-	case "DEBUG":
-		return logging.DEBUG, true
-	case "NOTSET":
-		return logging.NOTSET, true
 	}
 	return 0, false
 }
