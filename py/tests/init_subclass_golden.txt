@@ -7,3 +7,4 @@ registry now: ['A', 'B', 'C']
 C.kw: {'tag': 1}
 plain ok: Plain
 TypeError: Bad.__init_subclass__() takes no keyword arguments
+TD total: False TD2 total: True

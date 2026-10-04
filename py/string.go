@@ -479,7 +479,112 @@ Return True if the string is a valid Python identifier, False otherwise.`))
 			}
 		}
 		return Bool(cased), nil
+
 	}, 0, "istitle() -> bool\n\nReturn True if the string is titlecased and there is at least one cased character."))
+
+	// zfill pads a numeric string on the left with zeros, keeping any leading
+	// sign in front of the padding.
+	StringType.Dict.Set("zfill", MustNewMethod("zfill", func(self Object, args Tuple) (Object, error) {
+		return strZfill(string(self.(String)), args)
+	}, 0, `zfill(width, /) -> str
+
+Pad a numeric string with zeros on the left, to fill the given width.
+
+The string is never truncated.`))
+
+	// center/ljust/rjust all pad to a width; only where the padding goes differs.
+	strJustify := func(name string, mode int) {
+		StringType.Dict.Set(name, MustNewMethod(name, func(self Object, args Tuple) (Object, error) {
+			return strJustifyMethod(string(self.(String)), args, mode, name)
+		}, 0, name+`(width, fillchar=' ', /) -> str
+
+Return a string padded to the given width.`))
+	}
+	strJustify("ljust", strJustifyLeft)
+	strJustify("rjust", strJustifyRight)
+	strJustify("center", strJustifyCenter)
+
+	// expandtabs replaces tabs with enough spaces to reach the next tab stop,
+	// counting columns from the start of the current line.
+	StringType.Dict.Set("expandtabs", MustNewMethod("expandtabs", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return strExpandTabs(string(self.(String)), args, kwargs)
+	}, 0, `expandtabs(tabsize=8, /) -> str
+
+Return a copy where all tab characters are expanded using spaces.
+
+If tabsize is not given, a tab size of 8 characters is assumed.`))
+
+	StringType.Dict.Set("removeprefix", MustNewMethod("removeprefix", func(self Object, args Tuple) (Object, error) {
+		return strRemoveAffix(string(self.(String)), args, "removeprefix", true)
+	}, 0, `removeprefix(prefix, /) -> str
+
+Return a str with the given prefix string removed if present.
+
+If the string starts with the prefix string, return string[len(prefix):].
+Otherwise, return a copy of the original string.`))
+
+	StringType.Dict.Set("removesuffix", MustNewMethod("removesuffix", func(self Object, args Tuple) (Object, error) {
+		return strRemoveAffix(string(self.(String)), args, "removesuffix", false)
+	}, 0, `removesuffix(suffix, /) -> str
+
+Return a str with the given suffix string removed if present.
+
+If the string ends with the suffix string and that suffix is not empty,
+return string[:-len(suffix)].  Otherwise, return a copy of the original
+string.`))
+
+	// find/index and their reverse forms share one implementation; index and
+	// rindex raise where find and rfind return -1.
+	strFind := func(name string, reverse, raiseMissing bool) {
+		StringType.Dict.Set(name, MustNewMethod(name, func(self Object, args Tuple) (Object, error) {
+			return strFindMethod(string(self.(String)), args, name, reverse, raiseMissing)
+		}, 0, name+`(sub[, start[, end]]) -> int
+
+Return the lowest (or highest, for rfind/rindex) index in the string where
+substring sub is found.  With optional start and end, search only
+string[start:end].`))
+	}
+	strFind("index", false, true)
+	strFind("rindex", true, true)
+	strFind("rfind", true, false)
+
+	// translate walks the string, mapping each ordinal through the table.
+	// A table may be a dict - mapping ordinals to ordinals, strings or None -
+	// or any object with __getitem__.
+	StringType.Dict.Set("translate", MustNewMethod("translate", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		if kwargs.Len() != 0 {
+			return nil, ExceptionNewf(TypeError, "str.translate() takes no keyword arguments")
+		}
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "str.translate() takes exactly one argument (%d given)", len(args))
+		}
+		return strTranslate(string(self.(String)), args[0])
+	}, 0, `translate(table, /) -> str
+
+Return a copy of the string where each character is mapped through the given
+translation table.
+
+The table must implement lookup/indexing via __getitem__, for instance a
+dictionary or list.  If this operation raises LookupError, the character is
+left untouched.  Characters mapped to None are deleted.`))
+
+	// maketrans builds a table for translate.  It is a static method in
+	// CPython: it is looked up on the type (str.maketrans) and also on an
+	// instance, and in both forms its arguments arrive whole, so self is only
+	// used for the error message's type name.
+	StringType.Dict.Set("maketrans", MustNewMethod("maketrans", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return strMakeTrans(args, kwargs)
+	}, METH_CLASS, `maketrans(x, y=None, z=None, /)
+
+Return a translation table usable for str.translate().
+
+If there is only one argument, it must be a dictionary mapping Unicode
+ordinals (integers) or characters to Unicode ordinals, strings or None.
+Character keys will be then converted to ordinals.
+If there are two arguments, they must be strings of equal length, and in the
+resulting dictionary, each character in x will be mapped to the character at
+the same position in y.  If there is a third argument, it must be a string,
+whose characters will be mapped to None in the result.`))
 }
 
 // Type of this object

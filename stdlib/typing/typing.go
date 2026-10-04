@@ -406,9 +406,38 @@ func init() {
 	typedDictType.Dict.Set("__call__", py.MustNewMethod("__call__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		return self, nil
 	}, 0, "Return the class, ignoring the field specification."))
-	// "class X(t.TypedDict, total=False)" is a base with keywords.  There is
-	// no __init_subclass__ here, so the keywords are accepted and ignored
-	// through the type's own constructor.
+	// "class X(t.TypedDict, total=False)" carries keywords that TypedDict's own
+	// __init_subclass__ consumes.  Without this they reach object's no-op hook,
+	// which correctly refuses them - so the keyword had to be dropped for the
+	// whole language, and a class that legitimately takes one
+	// ("class Sub(Base, kind='x')") could not be configured.  Consuming them
+	// here is what CPython's TypedDict metaclass does.
+	typedDictType.Dict.Set("__init_subclass__", py.MustNewMethod("__init_subclass__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		var cls *py.Type
+		if len(args) > 0 {
+			cls, _ = args[0].(*py.Type)
+		}
+		total := py.Object(py.True)
+		if v, ok := kwargs.Get("total"); ok {
+			total = v
+			kwargs.Del("total")
+		}
+		// "closed" is the newer TypedDict keyword; accepted and recorded the
+		// same way so the class statement does not fail.
+		if v, ok := kwargs.Get("closed"); ok {
+			if cls != nil {
+				cls.Dict.Set("__closed__", v)
+			}
+			kwargs.Del("closed")
+		}
+		if cls != nil {
+			cls.Dict.Set("__total__", total)
+		}
+		if kwargs.Len() > 0 {
+			return nil, py.ExceptionNewf(py.TypeError, "%s.__init_subclass__() takes no keyword arguments", cls.Name)
+		}
+		return py.None, nil
+	}, 0, "Consume the TypedDict class keywords."))
 	typedDictType.New = func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		if len(args) >= 2 {
 			// The factory form: TypedDict('Name', {...}) returns a class.

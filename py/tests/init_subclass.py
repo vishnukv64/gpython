@@ -45,3 +45,19 @@ except TypeError as e:
     print("TypeError:", e)
 
 doc = "finished"
+
+# A base whose own hook consumes the class keywords, which is how TypedDict
+# takes total=False - and why dropping the keywords for the whole language was
+# the wrong fix for it.
+from typing import TypedDict
+
+
+class TD(TypedDict, total=False):
+    a: int
+
+
+class TD2(TypedDict):
+    b: str
+
+
+print("TD total:", TD.__total__, "TD2 total:", TD2.__total__)
