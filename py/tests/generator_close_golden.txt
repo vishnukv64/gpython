@@ -1,0 +1,8 @@
+next: 1
+cleanup ran
+close returns: None
+already closed is a no-op: None
+refusing
+RuntimeError: generator ignored GeneratorExit
+unstarted close: None
+exhausted close: None

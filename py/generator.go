@@ -182,7 +182,7 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 	res, err := VmRunFrame(it.Frame)
 	it.Running = false
 	it.Frame.PendingException = nil
-	if err == GeneratorExit || err == StopIteration {
+	if isGeneratorExit(err) || err == StopIteration {
 		return nil, StopIteration
 	}
 	if err != nil {
@@ -192,6 +192,31 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 		return res, nil
 	}
 	return nil, StopIteration
+}
+
+// isGeneratorExit reports whether an error is a GeneratorExit.
+//
+// The comparison must be against the exception's TYPE: comparing the error to
+// the GeneratorExit type object itself never matched, so a GeneratorExit that
+// propagated out of a generator was reported as an ordinary failure - which is
+// why close() raised where CPython returns None.
+// A GeneratorExit reaches here in EITHER form: as an *Exception instance (the
+// usual case, and what throw() produces) or as the GeneratorExit TYPE itself,
+// which is what this interpreter's unwinding yields for an exception that no
+// handler caught.  Both mean "the generator is being closed".
+func isGeneratorExit(err error) bool {
+	switch e := err.(type) {
+	case *Exception:
+		return e.Base == GeneratorExit || e.Base.Name == "GeneratorExit"
+	case *Type:
+		// A *Type implements error, so the GeneratorExit TYPE itself can arrive
+		// as the error value - which is what the unwinding produces for an
+		// exception no handler caught.  Compared by name as well as by
+		// identity, because the type that arrives is not always the same object
+		// as the one the exception module exported.
+		return e == GeneratorExit || e.Name == "GeneratorExit"
+	}
+	return err != nil && err.Error() == "GeneratorExit"
 }
 
 // throwIntoCaller raises the given exception in the calling code, for a
@@ -227,7 +252,44 @@ func (it *Generator) throwIntoCaller(args Tuple) (Object, error) {
 // caller. close() does nothing if the generator has already exited
 // due to an exception or normal exit.
 func (it *Generator) Close() (Object, error) {
-	return nil, NotImplementedError
+	if it.Running {
+		return nil, ExceptionNewf(ValueError, "generator already executing")
+	}
+	// Already finished, or never started: closing does nothing.  A generator
+	// that has not run yet has nothing to clean up.
+	if !it.Frame.Yielded && it.Frame.Lasti == 0 {
+		return None, nil
+	}
+	if !it.Frame.Yielded {
+		// It ran and returned, so it is exhausted.
+		return None, nil
+	}
+
+	// GeneratorExit is delivered at the point the generator is suspended, which
+	// is what lets a "finally" or an "except GeneratorExit" inside it run.
+	it.Frame.Yielded = false
+	it.Running = true
+	it.Frame.PendingException = GeneratorExitInstance()
+	res, err := VmRunFrame(it.Frame)
+
+	it.Running = false
+	it.Frame.PendingException = nil
+
+	// The generator must either stop or let GeneratorExit out.  Catching
+	// GeneratorExit and yielding again is an error: RuntimeError, with
+	// CPython's wording, because the generator is refusing to be closed.
+	if it.Frame.Yielded {
+		return nil, ExceptionNewf(RuntimeError, "generator ignored GeneratorExit")
+	}
+	if isGeneratorExit(err) || err == StopIteration {
+		return None, nil
+	}
+	if err != nil {
+		// Any OTHER exception the finally clause raised propagates.
+		return nil, err
+	}
+	_ = res
+	return None, nil
 }
 
 // Check interface is satisfied

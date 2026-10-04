@@ -554,6 +554,14 @@ var (
 	_ I__repr__ = (*Exception)(nil)
 )
 
+// GeneratorExitInstance is a fresh GeneratorExit, for closing a generator.
+//
+// A new instance each time: the exception carries its own traceback, and one
+// shared instance would accumulate the frames of every close ever performed.
+func GeneratorExitInstance() *Exception {
+	return exceptionNew(GeneratorExit, Tuple{})
+}
+
 // errnoValues is what OSError exposes as .errno and .strerror.
 //
 // CPython takes these from the two-argument form OSError(errno, strerror);
