@@ -1153,9 +1153,20 @@ func HashValue(o Object) (int64, bool) {
 		}
 		return 0, true
 	case Int:
+		// hash(-1) is -2, not -1: CPython uses -1 as its "no hash" ERROR
+		// sentinel, so a genuine -1 is remapped.  It is observable - it decides
+		// where -1 lands in a set, so set([-1, 5, 0]) iterates [0, 5, -1] in
+		// CPython and [0, 5, -1] here only once this matches.
+		if int64(v) == -1 {
+			return -2, true
+		}
 		return int64(v), true
 	case Float:
-		return int64(float64(v)), true
+		f := int64(float64(v))
+		if f == -1 {
+			return -2, true
+		}
+		return f, true
 	case String:
 		return MemoryHash([]byte(v)), true
 	case Bytes:

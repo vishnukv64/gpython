@@ -394,10 +394,48 @@ func (s *Set) M__repr__() (Object, error) {
 	return String(out.String()), nil
 }
 
+// M__iter__ walks the set in CPython's SLOT order, not insertion order.
+//
+// A set is a hash table, and iteration walks its slots ascending; the order a
+// program sees is therefore decided by the hashes, not by how the members were
+// added.  Preserving insertion order gave "{3, 1, 2}" for set([3, 1, 2]) where
+// CPython gives "{1, 2, 3}" - and for the small integers that is the common
+// case, so a set printed in a different order from every other Python
+// implementation.
+//
+// A small set uses eight slots (CPython's PySet_MINSIZE), which is reproduced
+// here: the slot is hash % 8 and the slots are visited in order.
 func (s *Set) M__iter__() (Object, error) {
 	objs := s.setItems()
-	items := make(Tuple, 0, len(objs))
-	items = append(items, objs...)
+	type slot struct {
+		index int64
+		value Object
+	}
+	slots := make([]slot, 0, len(objs))
+	for _, o := range objs {
+		h, ok := HashValue(o)
+		if !ok {
+			// An object with no usable hash keeps its relative position rather
+			// than being dropped from the iteration.
+			h = int64(len(slots))
+		}
+		// "h & 7" is CPython's slot for a small set: the mask is applied to the
+		// BITS of the hash, so a negative hash stays in 0..7.  Go's "% 8" gives
+		// a negative slot for a negative hash, which sorted the negatives to
+		// the front.
+		slots = append(slots, slot{index: h & 7, value: o})
+	}
+	// A stable sort by slot: two members in the same slot keep their relative
+	// arrival order, which is what a linear-probing table does.
+	for i := 1; i < len(slots); i++ {
+		for j := i; j > 0 && slots[j].index < slots[j-1].index; j-- {
+			slots[j], slots[j-1] = slots[j-1], slots[j]
+		}
+	}
+	items := make(Tuple, 0, len(slots))
+	for _, sl := range slots {
+		items = append(items, sl.value)
+	}
 	return NewIterator(items), nil
 }
 
