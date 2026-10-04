@@ -1,0 +1,5 @@
+int(None): int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+int([]): int() argument must be a string, a bytes-like object or a real number, not 'list'
+defined here: <class '__main__.MyError'>
+builtin: <class 'int'>
+str: <class 'str'>

@@ -122,7 +122,12 @@ func MakeInt(a Object) (Object, error) {
 		}
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for int: '%s'", a.Type().Name)
+	// CPython's wording, which says what IS accepted.  "unsupported operand
+	// type(s) for int: 'NoneType'" reads like an arithmetic failure and does
+	// not tell a caller that int() takes a number or a string.
+	return nil, ExceptionNewf(TypeError,
+		"int() argument must be a string, a bytes-like object or a real number, not '%s'",
+		a.Type().Name)
 }
 
 // MakeFloat the python Object returning an Object

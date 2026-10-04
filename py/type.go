@@ -2551,7 +2551,20 @@ func (ty *Type) M__repr__() (Object, error) {
 		// FIXME not a good way to tell objects from classes!
 		return String(fmt.Sprintf("<%s object at %p>", ty.Type().Name, ty)), nil
 	}
-	return String(fmt.Sprintf("<class '%s'>", ty.Name)), nil
+	// A class repr is QUALIFIED with its module: "<class '__main__.MyError'>".
+	// The module is the class's own __module__, which the class statement sets
+	// from the globals it ran in - so a class knows where it was defined
+	// without this needing to guess.
+	//
+	// A builtin type has no __module__ and prints bare, which is also what
+	// CPython does: "<class 'int'>".
+	name := ty.Name
+	if mod, ok := ty.Dict.Get("__module__"); ok {
+		if ms, ok := mod.(String); ok && string(ms) != "" && string(ms) != "builtins" {
+			name = string(ms) + "." + name
+		}
+	}
+	return String(fmt.Sprintf("<class '%s'>", name)), nil
 
 }
 
@@ -2571,6 +2584,16 @@ var _ I__str__ = (*Type)(nil)
 // packages that must not be imported from here, so they install their checks
 // at init time.  It is a slice so that several modules can contribute.
 var ABCHooks []func(obj Object, class *Type) bool
+
+// sequenceABC is collections.abc.Sequence, published by that module so that
+// code in this package can test for it without importing a stdlib package.
+var sequenceABC *Type
+
+// SetSequenceABC records collections.abc.Sequence.
+func SetSequenceABC(t *Type) { sequenceABC = t }
+
+// SequenceABC returns collections.abc.Sequence, or nil before it is published.
+func SequenceABC() *Type { return sequenceABC }
 
 // BuildEnumClass, when set, turns the body of a class that derives from an
 // enum into an enum class.  Python does this with a metaclass, and
