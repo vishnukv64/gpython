@@ -108,6 +108,17 @@ func init() {
 		return Int(f.File.Fd()), nil
 	}, 0, "The underlying file descriptor."))
 
+	// isatty is how a program decides whether it may prompt: pip's
+	// is_console_interactive calls sys.stdin.isatty() while registering its
+	// VCS backends, so its absence stopped every "pip install" at import.
+	FileType.Dict.Set("isatty", MustNewMethod("isatty", func(self Object, args Tuple) (Object, error) {
+		f, ok := self.(*File)
+		if !ok || f.File == nil {
+			return nil, errClosed
+		}
+		return NewBool(isTerminal(f.File.Fd())), nil
+	}, 0, "True if the file is connected to a TTY device."))
+
 	FileType.Dict.Set("readable", MustNewMethod("readable", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {

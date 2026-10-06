@@ -66,6 +66,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/logging/handlers"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
 	_ "github.com/vishnukv64/gpython/stdlib/mimetypes"
+	_ "github.com/vishnukv64/gpython/stdlib/mmap"
 	_ "github.com/vishnukv64/gpython/stdlib/netrc"
 	_ "github.com/vishnukv64/gpython/stdlib/operator"
 	_ "github.com/vishnukv64/gpython/stdlib/optparse"

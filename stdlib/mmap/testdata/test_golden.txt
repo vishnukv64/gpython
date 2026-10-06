@@ -1,0 +1,36 @@
+len 29
+tell 0
+read5 b'hello'
+tell2 5
+readline b' world\n'
+readline2 b'second line\n'
+readline3 b'third'
+readline_eof b''
+idx0 104 int
+idxneg 100
+slice b'hello' bytes
+step b'olleh'
+find 6 -1
+find_start 15
+rfind 15
+contains_int False False
+contains_bytes False
+iter [b'h', b'e', b'l']
+size 29
+eq_bytes True
+eq_neg False
+read_byte 104
+pos_after_byte 1
+seek_end b'third'
+resize_err TypeError
+readonly_setitem mmap can't modify a readonly memory map.
+bad_access mmap invalid access parameter.
+with_open 29
+closed_len mmap closed or invalid
+closed_read mmap closed or invalid
+closed_enter mmap closed or invalid
+double_close ok
+write_back b'HELLO!wo'
+anon_len 8
+anon_rw b'1234' 56
+done

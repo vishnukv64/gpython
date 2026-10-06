@@ -929,6 +929,26 @@ func init() {
 	parseGlobals.Set("DefragResult", defragResultType)
 	parseGlobals.Set("_ALWAYS_SAFE", py.String(alwaysSafe))
 	parseGlobals.Set("_WHATWG_C0_CONTROL_OR_SPACE", py.String(""))
+	// The scheme tables, as CPython 3.14 has them.  They are public and
+	// MUTABLE: pip's VersionControl.__init__ does
+	// "urllib.parse.uses_netloc.extend(self.schemes)" at import time, so their
+	// absence stopped every "pip install" before it reached the network.
+	for name, schemes := range map[string]string{
+		"uses_relative":    ",ftp,http,gopher,nntp,imap,wais,file,https,shttp,mms,prospero,rtsp,rtsps,rtspu,sftp,svn,svn+ssh,ws,wss",
+		"uses_netloc":      ",ftp,http,gopher,nntp,telnet,imap,wais,file,mms,https,shttp,snews,prospero,rtsp,rtsps,rtspu,rsync,svn,svn+ssh,sftp,nfs,git,git+ssh,ws,wss,itms-services",
+		"uses_params":      ",ftp,hdl,prospero,http,imap,https,shttp,rtsp,rtsps,rtspu,sip,sips,mms,sftp,tel",
+		"uses_query":       ",http,wais,imap,https,shttp,mms,gopher,rtsp,rtsps,rtspu,sip,sips",
+		"uses_fragment":    ",ftp,hdl,http,gopher,news,nntp,wais,https,shttp,snews,file,prospero",
+		"non_hierarchical": "gopher,hdl,mailto,news,telnet,wais,imap,snews,sip,sips",
+	} {
+		parts := strings.Split(schemes, ",")
+		items := make([]py.Object, len(parts))
+		for i, s := range parts {
+			items[i] = py.String(s)
+		}
+		parseGlobals.Set(name, py.NewListFromItems(items))
+	}
+	parseGlobals.Set("scheme_chars", py.String("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-."))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

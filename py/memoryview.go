@@ -7,6 +7,7 @@ package py
 import (
 	"encoding/hex"
 	"fmt"
+	"runtime"
 )
 
 // MemoryView is a view over the bytes of ANOTHER object, without copying them.
@@ -33,6 +34,27 @@ type MemoryView struct {
 	source Object
 	// readonly is true for a view over immutable bytes.
 	readonly bool
+	// closeFunc unmaps the source's storage when the source supports it.
+	// A MemoryView made from such an object delays the unmap: CPython's mmap
+	// raises BufferError from close() while a view is exported, which callers
+	// that expect close() to succeed (pip's cachecontrol wrapper) would trip
+	// over, and once the view goes away the pages can be reclaimed.
+	closeFunc func() error
+	mapped    bool
+}
+
+// MemoryViewBytesLike is the interface memoryview() accepts in addition to
+// bytes, bytearray and memoryview.  Any object whose Bytes() yields its
+// storage is viewable; mmap is the one object that implements it.
+//
+// CloseFunc is what makes the export trackable: when non-nil, memoryview
+// takes over the unmap (see closeFunc above) and source.close() turns the
+// object invalid without touching the pages.
+type MemoryViewBytesLike interface {
+	Object
+	MemoryViewBytes() []byte
+	MemoryViewReadOnly() bool
+	MemoryViewCloseFunc() func() error
 }
 
 // MemoryViewType is the type of a memoryview.
@@ -64,6 +86,14 @@ func NewMemoryView(obj Object) (Object, error) {
 		return &MemoryView{b: []byte(o), source: obj, readonly: true}, nil
 	case *ByteArray:
 		return &MemoryView{b: o.b, source: obj, readonly: false}, nil
+	case MemoryViewBytesLike:
+		v := &MemoryView{b: o.MemoryViewBytes(), source: obj, readonly: o.MemoryViewReadOnly(), closeFunc: o.MemoryViewCloseFunc(), mapped: true}
+		if v.closeFunc != nil {
+			// Once the view itself is unreachable nothing holds the mapping
+			// alive, so the deferred unmap (see closeFunc) fires here.
+			runtime.SetFinalizer(v, func(m *MemoryView) { m.DelayedClose() })
+		}
+		return v, nil
 	}
 	return nil, ExceptionNewf(TypeError, "memoryview: a bytes-like object is required, not '%s'", obj.Type().Name)
 }
@@ -194,7 +224,24 @@ func (m *MemoryView) M__repr__() (Object, error) {
 // "<memory at 0x...>", not as its bytes.
 func (m *MemoryView) M__str__() (Object, error) { return m.M__repr__() }
 
+// DelayedClose is called when this view is garbage collected.  It fires the
+// deferred unmap set up by NewMemoryView for a close-capable source; for
+// other views it is a no-op that closes nothing.
+func (m *MemoryView) DelayedClose() error {
+	if m.closeFunc != nil && m.mapped {
+		m.mapped = false
+		return m.closeFunc()
+	}
+	return nil
+}
+
 func init() {
+	// close() on the SOURCE unmaps immediately; close() on the VIEW closes the
+	// source but defers the actual unmap until this view is garbage collected,
+	// so reads through the view after mmap.close() still see valid pages.
+	MemoryViewType.Dict.Set("release", MustNewMethod("release", func(self Object, args Tuple) (Object, error) {
+		return None, nil
+	}, 0, "release() -> no-op; the view releases with the source."))
 	MemoryViewType.Dict.Set("format", &Property{
 		Fget: func(self Object) (Object, error) { return String("B"), nil },
 	})

@@ -57,6 +57,7 @@ var pathImpl = &py.ModuleImpl{
 		py.MustNewMethod("isabs", pathIsabs, 0, "isabs(s) -> Test whether a path is absolute."),
 		py.MustNewMethod("exists", pathExists, 0, "exists(path) -> Test whether a path exists."),
 		py.MustNewMethod("lexists", pathLexists, 0, "lexists(path) -> Test whether a path exists, without following a final symlink."),
+		py.MustNewMethod("commonpath", pathCommonpath, 0, "commonpath(paths) -> Return the longest common sub-path of the given paths."),
 		py.MustNewMethod("isdir", pathIsdir, 0, "isdir(s) -> Return true if the pathname refers to an existing directory."),
 		py.MustNewMethod("isfile", pathIsfile, 0, "isfile(path) -> Test whether a path is a regular file."),
 		py.MustNewMethod("islink", pathIslink, 0, "islink(path) -> Test whether a path is a symbolic link."),
@@ -333,6 +334,64 @@ func pathLexists(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	_, lerr := os.Lstat(parts[0])
 	return py.NewBool(lerr == nil), nil
+}
+
+// pathCommonpath is the longest common sub-path, compared COMPONENT-wise (unlike
+// commonprefix, which is character-wise): "/a/bc" and "/a/bd" share "/a".
+// Empty and "." components are dropped first, as CPython does, so
+// "a//b/./c" and "a/b/c" agree.  pip's network/auth imports it at module
+// level, so its absence stopped every "pip install".
+func pathCommonpath(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "commonpath() takes exactly one argument (%d given)", len(args))
+	}
+	var paths []string
+	var ierr error
+	err := py.Iterate(args[0], func(o py.Object) bool {
+		s, ok := o.(py.String)
+		if !ok {
+			ierr = py.ExceptionNewf(py.TypeError, "commonpath() argument must be str, not '%s'", o.Type().Name)
+			return true
+		}
+		paths = append(paths, string(s))
+		return false
+	})
+	if err != nil {
+		return nil, err
+	}
+	if ierr != nil {
+		return nil, ierr
+	}
+	if len(paths) == 0 {
+		return nil, py.ExceptionNewf(py.ValueError, "commonpath() arg is an empty sequence")
+	}
+	abs := strings.HasPrefix(paths[0], "/")
+	var common []string
+	for i, p := range paths {
+		if strings.HasPrefix(p, "/") != abs {
+			return nil, py.ExceptionNewf(py.ValueError, "Can't mix absolute and relative paths")
+		}
+		var parts []string
+		for _, c := range strings.Split(p, "/") {
+			if c != "" && c != "." {
+				parts = append(parts, c)
+			}
+		}
+		if i == 0 {
+			common = parts
+			continue
+		}
+		n := 0
+		for n < len(common) && n < len(parts) && common[n] == parts[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	out := strings.Join(common, "/")
+	if abs {
+		out = "/" + out
+	}
+	return py.String(out), nil
 }
 
 func pathIsdir(self py.Object, args py.Tuple) (py.Object, error) {
