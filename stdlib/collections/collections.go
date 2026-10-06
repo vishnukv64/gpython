@@ -1736,8 +1736,12 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		typename py.Object
 		names    py.Object
 		rename   py.Object = py.False
+		defaults py.Object = py.None
+		module   py.Object = py.None
 	)
-	err := py.ParseTupleAndKeywords(args, kwargs, "OO|O:namedtuple", []string{"typename", "field_names", "rename"}, &typename, &names, &rename)
+	// defaults= and module= as well as rename=, as in CPython: decimal and
+	// statistics pass module=, and rejecting it stopped both importing.
+	err := py.ParseTupleAndKeywords(args, kwargs, "OO|$OOO:namedtuple", []string{"typename", "field_names", "rename", "defaults", "module"}, &typename, &names, &rename, &defaults, &module)
 	if err != nil {
 		return nil, err
 	}
@@ -1810,6 +1814,22 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		fieldItems[i] = py.String(f)
 	}
 	cls.Dict.Set("_fields", py.NewListFromItems(fieldItems))
+	// defaults= fills the RIGHTMOST fields, as in CPython.
+	if defaults != py.None {
+		ds, err := py.SequenceList(defaults)
+		if err != nil {
+			return nil, err
+		}
+		if len(ds.Items) > len(fields) {
+			return nil, py.ExceptionNewf(py.TypeError, "Got more default values than field names")
+		}
+		per := make([]py.Object, len(fields))
+		copy(per[len(fields)-len(ds.Items):], ds.Items)
+		SetNamedTupleDefaults(cls, per)
+	}
+	if module != py.None {
+		cls.Dict.Set("__module__", module)
+	}
 	// __new__ must honour the class it was CALLED ON, not the class it was
 	// defined for: "class Sub(Base)" inherits this __new__ and Sub() must
 	// produce a Sub.  The first argument is the class when __new__ is reached

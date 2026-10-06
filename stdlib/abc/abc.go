@@ -17,6 +17,7 @@ package abc
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/collections"
@@ -171,17 +172,71 @@ var all = map[string]*py.Type{
 	"Buffer":          ContainerType,
 }
 
+// registered holds the classes register() has declared virtual subclasses of
+// each ABC, as ABCMeta's _abc_registry does.
+var (
+	registeredMu sync.Mutex
+	registered   = map[*py.Type][]*py.Type{}
+)
+
+// isRegistered reports whether obj's class was registered with abc, or with an
+// ABC deriving from it - registering with Mapping also makes a Collection.
+func isRegistered(obj py.Object, abc *py.Type) bool {
+	cls := obj.Type()
+	registeredMu.Lock()
+	defer registeredMu.Unlock()
+	for t, classes := range registered {
+		if !t.IsSubtype(abc) {
+			continue
+		}
+		for _, c := range classes {
+			if cls.IsSubtype(c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func init() {
 	for _, t := range all {
 		subscriptable(t)
 		// The abstract base classes exist to be derived from.
 		t.Flags |= py.TPFLAGS_BASETYPE
+		// register(cls) declares a virtual subclass and returns it, so it
+		// also works as a decorator.  These ABCs had none, so
+		// contextvars' "_collections_abc.Mapping.register(Context)" - and
+		// through it decimal - failed at import.
+		abc := t
+		t.Dict.Set("register", py.MustNewMethod("register", func(self py.Object, args py.Tuple) (py.Object, error) {
+			// Reached through the class, the method is unbound and the class
+			// to register arrives as self.
+			arg := self
+			if len(args) == 1 {
+				arg = args[0]
+			} else if len(args) > 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "register() takes exactly one argument (%d given)", len(args))
+			}
+			cls, ok := arg.(*py.Type)
+			if !ok {
+				return nil, py.ExceptionNewf(py.TypeError, "Can only register classes")
+			}
+			registeredMu.Lock()
+			registered[abc] = append(registered[abc], cls)
+			registeredMu.Unlock()
+			return cls, nil
+		}, 0, "Register a virtual subclass of an ABC."))
 	}
 
 	// Structural conformance.  Every test is a method presence check, which
 	// is how Python's own ABCs behave for the methods they declare abstract.
 	py.ABCHooks = append(py.ABCHooks, func(obj py.Object, class *py.Type) bool {
 		// Types are not instances of the ABCs; only their instances are.
+		// Before the class check below: an instance of a Python class is
+		// itself a *py.Type here.
+		if isRegistered(obj, class) {
+			return true
+		}
 		if _, isType := obj.(*py.Type); isType {
 			return false
 		}
@@ -234,6 +289,12 @@ func init() {
 			Name: "collections.abc",
 			Doc:  module_doc,
 		},
+		Globals: globals,
+	})
+	// _collections_abc is the same module: CPython's collections.abc is
+	// "from _collections_abc import *", and contextvars imports it by name.
+	py.RegisterModule(&py.ModuleImpl{
+		Info:    py.ModuleInfo{Name: "_collections_abc", Doc: module_doc},
 		Globals: globals,
 	})
 }
