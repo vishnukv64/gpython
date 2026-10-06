@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 // Copyright 2024 The go-python Authors.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -11,11 +13,15 @@
 // genuinely blocks.  Objects without a file descriptor cannot be waited on and
 // are reported as not-ready immediately, which is what CPython does for an
 // object whose fileno() is -1.
+//
+// It is built for darwin and linux, whose select(2) syscall.Select wraps; on
+// Windows syscall has no Select and the package registers nothing.
 package selectmod
 
 import (
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -84,9 +90,9 @@ func fdOf(obj py.Object) (int, error) {
 
 // pySelect performs the underlying select(2) wait and returns the ready sets.
 //
-// darwin's syscall.FdSet.Bits is [32]int32, so the bit arithmetic uses 32-bit
-// words and file descriptors must be below 1024 (FD_SETSIZE).  syscall.Select
-// on darwin returns only an error; readiness is read back from the FdSets.
+// File descriptors must be below 1024 (FD_SETSIZE).  Readiness is read back
+// from the FdSets rather than from select's count, which darwin's
+// syscall.Select does not return.
 func pySelect(rlist, wlist, xlist []int, timeout float64) (readyR, readyW, readyX map[int]bool, err error) {
 	readyR = map[int]bool{}
 	readyW = map[int]bool{}
@@ -134,11 +140,12 @@ func pySelect(rlist, wlist, xlist []int, timeout float64) (readyR, readyW, ready
 	}
 	var tv *syscall.Timeval
 	if timeout >= 0 {
-		sec := int64(timeout)
-		usec := int64((timeout - float64(sec)) * 1e6)
-		tv = &syscall.Timeval{Sec: sec, Usec: int32(usec)}
+		// NsecToTimeval, because Timeval's field types differ by platform:
+		// a hand-built literal compiled on darwin and failed on linux.
+		t := syscall.NsecToTimeval(int64(timeout * 1e9))
+		tv = &t
 	}
-	if err := syscall.Select(maxfd+1, &rfds, &wfds, &xfds, tv); err != nil {
+	if err := doSelect(maxfd+1, &rfds, &wfds, &xfds, tv); err != nil {
 		if err == syscall.EINTR {
 			return readyR, readyW, readyX, nil
 		}
@@ -162,14 +169,19 @@ func pySelect(rlist, wlist, xlist []int, timeout float64) (readyR, readyW, ready
 	return readyR, readyW, readyX, nil
 }
 
-// setFd and fdIsSet manipulate a syscall.FdSet, whose Bits are 32-bit words on
-// darwin.
+// nfdbits is the width of one FdSet word, which is the platform's choice:
+// int32 on darwin and linux/386, int64 on linux/amd64.  Hardcoding 32 put fd 40
+// in the wrong bit on amd64 linux.
+const nfdbits = int(unsafe.Sizeof(syscall.FdSet{}.Bits[0])) * 8
+
+// setFd and fdIsSet manipulate a syscall.FdSet; the shifted 1 takes the
+// word's own type from the expression it is used in.
 func setFd(set *syscall.FdSet, fd int) {
-	set.Bits[fd/32] |= 1 << (uint(fd) % 32)
+	set.Bits[fd/nfdbits] |= 1 << uint(fd%nfdbits)
 }
 
 func fdIsSet(set *syscall.FdSet, fd int) bool {
-	return set.Bits[fd/32]&(1<<(uint(fd)%32)) != 0
+	return set.Bits[fd/nfdbits]&(1<<uint(fd%nfdbits)) != 0
 }
 
 func selectSelect(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {

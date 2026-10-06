@@ -101,7 +101,6 @@ var errors = []errnoEntry{
 	{"EHOSTDOWN", syscall.EHOSTDOWN},
 	{"EHOSTUNREACH", syscall.EHOSTUNREACH},
 	{"ENOTEMPTY", syscall.ENOTEMPTY},
-	{"EPROCLIM", syscall.EPROCLIM},
 	{"EUSERS", syscall.EUSERS},
 	{"EDQUOT", syscall.EDQUOT},
 	{"ESTALE", syscall.ESTALE},
@@ -117,17 +116,12 @@ var errors = []errnoEntry{
 	{"EILSEQ", syscall.EILSEQ},
 	{"EOVERFLOW", syscall.EOVERFLOW},
 	{"ECANCELED", syscall.ECANCELED},
-	{"EBADEXEC", syscall.EBADEXEC},
-	{"EBADARCH", syscall.EBADARCH},
-	{"ESHLIBVERS", syscall.ESHLIBVERS},
-	{"EBADMACHO", syscall.EBADMACHO},
 	{"EMULTIHOP", syscall.EMULTIHOP},
 	{"ENODATA", syscall.ENODATA},
 	{"ENOLINK", syscall.ENOLINK},
 	{"EPROTO", syscall.EPROTO},
 	{"ENOTRECOVERABLE", syscall.ENOTRECOVERABLE},
 	{"EOWNERDEAD", syscall.EOWNERDEAD},
-	{"ENOATTR", syscall.ENOATTR},
 }
 
 func init() {
@@ -141,7 +135,7 @@ func init() {
 	// The errorcode mapping is filled through the dict's own setitem so that
 	// its keys use the same encoding a lookup from Python will produce; a
 	// plain Go string key would never be found by an int key.
-	for _, e := range errors {
+	for _, e := range append(errors, platformErrors...) {
 		number := int(e.number)
 		globals.Set(e.name, py.Int(number))
 		if _, ok := strerror[number]; !ok {

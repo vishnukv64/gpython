@@ -8,7 +8,6 @@ package time
 
 import (
 	"fmt"
-	"syscall"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -774,14 +773,12 @@ Process time for profiling: sum of the kernel and user-space CPU time.`
 
 func time_process_time(self py.Object) (py.Object, error) {
 	// CPU time consumed by this process, which is a different question from
-	// elapsed time: a sleep does not advance it.
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+	// elapsed time: a sleep does not advance it.  How to ask is per-platform.
+	t, err := processTime()
+	if err != nil {
 		return nil, py.ExceptionNewf(py.OSError, "process_time: %s", err)
 	}
-	user := float64(ru.Utime.Sec) + float64(ru.Utime.Usec)/1e6
-	sys := float64(ru.Stime.Sec) + float64(ru.Stime.Usec)/1e6
-	return py.Float(user + sys), nil
+	return py.Float(t), nil
 }
 
 const get_clock_info_doc = `get_clock_info(name: str) -> dict

@@ -11,7 +11,7 @@ on:
 env:
   GOPROXY: "https://proxy.golang.org"
   TAGS: "-tags=ci"
-  COVERAGE: "-coverpkg=github.com/go-python/gpython/..."
+  COVERAGE: "-coverpkg=github.com/vishnukv64/gpython/..."
 
 jobs:
 

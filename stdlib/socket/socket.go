@@ -53,7 +53,6 @@ var (
 
 	SOL_SOCKET   = syscall.SOL_SOCKET
 	SO_REUSEADDR = syscall.SO_REUSEADDR
-	SO_REUSEPORT = syscall.SO_REUSEPORT
 	SO_KEEPALIVE = syscall.SO_KEEPALIVE
 	SO_BROADCAST = syscall.SO_BROADCAST
 	SO_SNDBUF    = syscall.SO_SNDBUF
@@ -87,7 +86,8 @@ var (
 	MSG_DONTWAIT = 0x0080
 
 	INADDR_ANY       = 0
-	INADDR_BROADCAST = 0xffffffff
+	// int64 because the value does not fit a 32-bit int (linux/386).
+	INADDR_BROADCAST = int64(0xffffffff)
 )
 
 // Exception classes.  socket.error is OSError itself in CPython, so these
@@ -423,7 +423,7 @@ func listenOn(network, target string, opts map[int]int) (net.Listener, error) {
 		Control: func(network, address string, c syscall.RawConn) error {
 			var serr error
 			if err := c.Control(func(fd uintptr) {
-				serr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+				serr = setReuseAddr(fd)
 			}); err != nil {
 				return err
 			}
@@ -1193,8 +1193,8 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods:          methods,
-		Globals:          py.NewStringDictFrom(py.DictEntry{Key: "socket", Value: SocketType}, py.DictEntry{Key: "AF_UNSPEC", Value: py.Int(AF_UNSPEC)}, py.DictEntry{Key: "AF_UNIX", Value: py.Int(AF_UNIX)}, py.DictEntry{Key: "AF_INET", Value: py.Int(AF_INET)}, py.DictEntry{Key: "AF_INET6", Value: py.Int(AF_INET6)}, py.DictEntry{Key: "SOCK_STREAM", Value: py.Int(SOCK_STREAM)}, py.DictEntry{Key: "SOCK_DGRAM", Value: py.Int(SOCK_DGRAM)}, py.DictEntry{Key: "SOCK_RAW", Value: py.Int(SOCK_RAW)}, py.DictEntry{Key: "SOL_SOCKET", Value: py.Int(SOL_SOCKET)}, py.DictEntry{Key: "SO_REUSEADDR", Value: py.Int(SO_REUSEADDR)}, py.DictEntry{Key: "SO_REUSEPORT", Value: py.Int(SO_REUSEPORT)}, py.DictEntry{Key: "SO_KEEPALIVE", Value: py.Int(SO_KEEPALIVE)}, py.DictEntry{Key: "SO_BROADCAST", Value: py.Int(SO_BROADCAST)}, py.DictEntry{Key: "SO_SNDBUF", Value: py.Int(SO_SNDBUF)}, py.DictEntry{Key: "SO_RCVBUF", Value: py.Int(SO_RCVBUF)}, py.DictEntry{Key: "SHUT_RD", Value: py.Int(SHUT_RD)}, py.DictEntry{Key: "SHUT_WR", Value: py.Int(SHUT_WR)}, py.DictEntry{Key: "SHUT_RDWR", Value: py.Int(SHUT_RDWR)}, py.DictEntry{Key: "IPPROTO_TCP", Value: py.Int(IPPROTO_TCP)}, py.DictEntry{Key: "IPPROTO_UDP", Value: py.Int(IPPROTO_UDP)}, py.DictEntry{Key: "IPPROTO_IPV6", Value: py.Int(IPPROTO_IPV6)}, py.DictEntry{Key: "IPPROTO_IP", Value: py.Int(0)}, py.DictEntry{Key: "TCP_NODELAY", Value: py.Int(TCP_NODELAY)}, py.DictEntry{Key: "IPV6_V6ONLY", Value: py.Int(IPV6_V6ONLY)}, py.DictEntry{Key: "TCP_MAXSEG", Value: py.Int(0x2)}, py.DictEntry{Key: "AI_PASSIVE", Value: py.Int(AI_PASSIVE)}, py.DictEntry{Key: "AI_CANONNAME", Value: py.Int(AI_CANONNAME)}, py.DictEntry{Key: "AI_NUMERICHOST", Value: py.Int(AI_NUMERICHOST)}, py.DictEntry{Key: "AI_NUMERICSERV", Value: py.Int(AI_NUMERICSERV)}, py.DictEntry{Key: "NI_NUMERICHOST", Value: py.Int(NI_NUMERICHOST)}, py.DictEntry{Key: "NI_NUMERICSERV", Value: py.Int(NI_NUMERICSERV)}, py.DictEntry{Key: "NI_NOFQDN", Value: py.Int(NI_NOFQDN)}, py.DictEntry{Key: "NI_NAMEREQD", Value: py.Int(NI_NAMEREQD)}, py.DictEntry{Key: "NI_DGRAM", Value: py.Int(NI_DGRAM)}, py.DictEntry{Key: "MSG_PEEK", Value: py.Int(MSG_PEEK)}, py.DictEntry{Key: "MSG_DONTWAIT", Value: py.Int(MSG_DONTWAIT)}, py.DictEntry{Key: "INADDR_ANY", Value: py.Int(INADDR_ANY)}, py.DictEntry{Key: "INADDR_BROADCAST", Value: py.Int(INADDR_BROADCAST)}, py.DictEntry{Key: "error", Value: SocketErrorType}, py.DictEntry{Key: "gaierror", Value: GaierrorType}, py.DictEntry{Key: "herror", Value: HerrorType}, py.DictEntry{Key: // socket.timeout is TimeoutError as of CPython 3.10.
-		"timeout", Value: py.TimeoutError}, py.DictEntry{Key: "has_ipv6", Value: py.True}),
+		Globals:          py.NewStringDictFrom(append(platformGlobals, py.DictEntry{Key: "socket", Value: SocketType}, py.DictEntry{Key: "AF_UNSPEC", Value: py.Int(AF_UNSPEC)}, py.DictEntry{Key: "AF_UNIX", Value: py.Int(AF_UNIX)}, py.DictEntry{Key: "AF_INET", Value: py.Int(AF_INET)}, py.DictEntry{Key: "AF_INET6", Value: py.Int(AF_INET6)}, py.DictEntry{Key: "SOCK_STREAM", Value: py.Int(SOCK_STREAM)}, py.DictEntry{Key: "SOCK_DGRAM", Value: py.Int(SOCK_DGRAM)}, py.DictEntry{Key: "SOCK_RAW", Value: py.Int(SOCK_RAW)}, py.DictEntry{Key: "SOL_SOCKET", Value: py.Int(SOL_SOCKET)}, py.DictEntry{Key: "SO_REUSEADDR", Value: py.Int(SO_REUSEADDR)}, py.DictEntry{Key: "SO_KEEPALIVE", Value: py.Int(SO_KEEPALIVE)}, py.DictEntry{Key: "SO_BROADCAST", Value: py.Int(SO_BROADCAST)}, py.DictEntry{Key: "SO_SNDBUF", Value: py.Int(SO_SNDBUF)}, py.DictEntry{Key: "SO_RCVBUF", Value: py.Int(SO_RCVBUF)}, py.DictEntry{Key: "SHUT_RD", Value: py.Int(SHUT_RD)}, py.DictEntry{Key: "SHUT_WR", Value: py.Int(SHUT_WR)}, py.DictEntry{Key: "SHUT_RDWR", Value: py.Int(SHUT_RDWR)}, py.DictEntry{Key: "IPPROTO_TCP", Value: py.Int(IPPROTO_TCP)}, py.DictEntry{Key: "IPPROTO_UDP", Value: py.Int(IPPROTO_UDP)}, py.DictEntry{Key: "IPPROTO_IPV6", Value: py.Int(IPPROTO_IPV6)}, py.DictEntry{Key: "IPPROTO_IP", Value: py.Int(0)}, py.DictEntry{Key: "TCP_NODELAY", Value: py.Int(TCP_NODELAY)}, py.DictEntry{Key: "IPV6_V6ONLY", Value: py.Int(IPV6_V6ONLY)}, py.DictEntry{Key: "TCP_MAXSEG", Value: py.Int(0x2)}, py.DictEntry{Key: "AI_PASSIVE", Value: py.Int(AI_PASSIVE)}, py.DictEntry{Key: "AI_CANONNAME", Value: py.Int(AI_CANONNAME)}, py.DictEntry{Key: "AI_NUMERICHOST", Value: py.Int(AI_NUMERICHOST)}, py.DictEntry{Key: "AI_NUMERICSERV", Value: py.Int(AI_NUMERICSERV)}, py.DictEntry{Key: "NI_NUMERICHOST", Value: py.Int(NI_NUMERICHOST)}, py.DictEntry{Key: "NI_NUMERICSERV", Value: py.Int(NI_NUMERICSERV)}, py.DictEntry{Key: "NI_NOFQDN", Value: py.Int(NI_NOFQDN)}, py.DictEntry{Key: "NI_NAMEREQD", Value: py.Int(NI_NAMEREQD)}, py.DictEntry{Key: "NI_DGRAM", Value: py.Int(NI_DGRAM)}, py.DictEntry{Key: "MSG_PEEK", Value: py.Int(MSG_PEEK)}, py.DictEntry{Key: "MSG_DONTWAIT", Value: py.Int(MSG_DONTWAIT)}, py.DictEntry{Key: "INADDR_ANY", Value: py.Int(INADDR_ANY)}, py.DictEntry{Key: "INADDR_BROADCAST", Value: py.Int(INADDR_BROADCAST)}, py.DictEntry{Key: "error", Value: SocketErrorType}, py.DictEntry{Key: "gaierror", Value: GaierrorType}, py.DictEntry{Key: "herror", Value: HerrorType}, py.DictEntry{Key: // socket.timeout is TimeoutError as of CPython 3.10.
+		"timeout", Value: py.TimeoutError}, py.DictEntry{Key: "has_ipv6", Value: py.True})...),
 	})
 }
 

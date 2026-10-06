@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -946,13 +945,6 @@ func flagsFor(flags int) int {
 const access_doc = `access(path, mode, *, dir_fd=None, effective_ids=False, follow_symlinks=True)
 
 Use the real uid/gid to test for access to a path.`
-
-// unixAccess asks the operating system whether the real uid may use a path with
-// the given mask.  It is a syscall rather than a stat, because the mode bits on
-// their own do not account for group membership or a read-only filesystem.
-func unixAccess(path string, mask uint32) error {
-	return syscall.Access(path, mask)
-}
 
 // access tests the REAL user's permission to a path, which os.access uses to
 // decide whether it may write somewhere.  A missing path is False rather than

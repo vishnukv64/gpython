@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -546,13 +545,13 @@ func (p *path) ownerMethod() (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
+	uid, _, ok := ownerIDs(fi)
 	if !ok {
 		return nil, unsupported("Path.owner")
 	}
-	u, err := user.LookupId(strconv.FormatUint(uint64(st.Uid), 10))
+	u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
 	if err != nil {
-		return nil, py.ExceptionNewf(py.KeyError, "uid not found: %d", st.Uid)
+		return nil, py.ExceptionNewf(py.KeyError, "uid not found: %d", uid)
 	}
 	return py.String(u.Username), nil
 }
@@ -562,13 +561,13 @@ func (p *path) groupMethod() (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
+	_, gid, ok := ownerIDs(fi)
 	if !ok {
 		return nil, unsupported("Path.group")
 	}
-	g, err := user.LookupGroupId(strconv.FormatUint(uint64(st.Gid), 10))
+	g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
 	if err != nil {
-		return nil, py.ExceptionNewf(py.KeyError, "gid not found: %d", st.Gid)
+		return nil, py.ExceptionNewf(py.KeyError, "gid not found: %d", gid)
 	}
 	return py.String(g.Name), nil
 }
