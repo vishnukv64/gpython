@@ -53,31 +53,38 @@ func getpassFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	if len(args) > 0 {
 		promptObj = args[0]
 	}
-	// The stream argument is accepted for compatibility and otherwise ignored:
-	// this module writes its prompt to the process's stderr, which is where a
-	// password prompt belongs, and it has no Context to reach sys.stderr
-	// through.  CPython writes the prompt to the stream and reads from the real
-	// terminal; stderr is the closest equivalent here.
-	var stream py.Object
+	// A given stream receives the prompt, as in CPython.  Without one the
+	// prompt goes to the process's stderr: this module has no Context to reach
+	// sys.stderr through, and stderr is where a password prompt belongs.
+	var stream py.Object = py.None
 	if len(args) > 1 {
 		stream = args[1]
 	}
-	_ = stream
 	if v, ok := kwargs.Get("prompt"); ok {
 		promptObj = v
 	}
 	if v, ok := kwargs.Get("stream"); ok {
 		stream = v
 	}
-	if v, ok := kwargs.Get("echo_char"); ok {
-		_ = v
-	}
 	if s, err := py.StrAsString(promptObj); err == nil {
 		prompt = s
 	}
 
 	// The prompt, before anything is read.
-	if _, err := os.Stderr.WriteString(prompt); err != nil {
+	if stream != py.None {
+		write, err := py.GetAttrString(stream, "write")
+		if err != nil {
+			return nil, err
+		}
+		if _, err := py.Call(write, py.Tuple{py.String(prompt)}, py.NewStringDict()); err != nil {
+			return nil, err
+		}
+		if flush, err := py.GetAttrString(stream, "flush"); err == nil {
+			if _, err := py.Call(flush, nil, py.NewStringDict()); err != nil {
+				return nil, err
+			}
+		}
+	} else if _, err := os.Stderr.WriteString(prompt); err != nil {
 		return nil, err
 	}
 

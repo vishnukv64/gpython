@@ -1415,12 +1415,6 @@ func newStreamHandler(stream py.Object) *Handler {
 	return h
 }
 
-const streamHandler_doc = `StreamHandler(stream=None)
-
-Returns a new instance of the StreamHandler class.  If stream is specified,
-the instance will use it for logging output; otherwise, sys.stderr will be
-used.`
-
 func streamHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var stream py.Object = py.None
 	kwlist := []string{"stream"}
@@ -1432,11 +1426,6 @@ func streamHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	}
 	return newStreamHandler(stream), nil
 }
-
-const fileHandler_doc = `FileHandler(filename, mode='a', encoding=None, delay=False, errors=None)
-
-Returns a new instance of the FileHandler class.  The specified file is
-opened and used as the stream for logging.`
 
 func fileHandler(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
@@ -1479,10 +1468,6 @@ func stderrStream() py.Object {
 	}
 	return py.None
 }
-
-const formatter_doc = `Formatter(fmt=None, datefmt=None, style='%', validate=True, *, defaults=None)
-
-Initialize the formatter with specified format strings.`
 
 func formatter(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
@@ -2070,10 +2055,6 @@ func disable(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	return py.None, nil
 }
 
-const moduleLog_doc = `log(level, msg, *args, **kwargs)
-
-Log 'msg % args' with the integer severity 'level' on the root logger.`
-
 func moduleLevelLog(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	return loggerLogMethod(gRoot, args, kwargs)
 }
@@ -2105,11 +2086,6 @@ func plural(n int) string {
 	}
 	return "s"
 }
-
-const setLoggerClass_doc = `setLoggerClass(klass)
-
-Set the class to be used when instantiating a logger.  The class should
-define __init__ such that it requires only a name argument.`
 
 func setLoggerClass(self py.Object, args py.Tuple) (py.Object, error) {
 	var klass py.Object

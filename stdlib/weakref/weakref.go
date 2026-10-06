@@ -54,19 +54,6 @@ func (r *Ref) get() py.Object {
 }
 
 // clear drops the referent and runs the callback.
-func (r *Ref) clear() error {
-	r.mu.Lock()
-	had := r.referent
-	cb := r.callback
-	r.referent = nil
-	r.callback = nil
-	r.mu.Unlock()
-	if had != nil && cb != nil && cb != py.None {
-		_, err := py.Call(cb, py.Tuple{r}, py.StringDict{})
-		return err
-	}
-	return nil
-}
 
 func refNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) < 1 {

@@ -249,11 +249,11 @@ func chdir(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	dir, ok := args[0].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected, not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected, not "+args[0].Type().Name)
 	}
 	err := os.Chdir(string(dir))
 	if err != nil {
-		return nil, py.ExceptionNewf(py.NotADirectoryError, "Couldn't change cwd; "+err.Error())
+		return nil, py.ExceptionNewf(py.NotADirectoryError, "%s", "Couldn't change cwd; "+err.Error())
 	}
 	return py.None, nil
 }
@@ -266,7 +266,7 @@ func getenv(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	k, ok := args[0].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected (pos 1), not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected (pos 1), not "+args[0].Type().Name)
 	}
 	v, ok := os.LookupEnv(string(k))
 	if ok {
@@ -701,11 +701,11 @@ func putenv(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	k, ok := args[0].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected (pos 1), not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected (pos 1), not "+args[0].Type().Name)
 	}
 	v, ok := args[1].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected (pos 2), not "+args[1].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected (pos 2), not "+args[1].Type().Name)
 	}
 	err := os.Setenv(string(k), string(v))
 	if err != nil {
@@ -721,7 +721,7 @@ func unsetenv(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	k, ok := args[0].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected (pos 1), not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected (pos 1), not "+args[0].Type().Name)
 	}
 	err := os.Unsetenv(string(k))
 	if err != nil {
@@ -737,7 +737,7 @@ func _exit(self py.Object, args py.Tuple) (py.Object, error) { // can never retu
 	}
 	arg, ok := args[0].(py.Int)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "expected int (pos 1), not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "expected int (pos 1), not "+args[0].Type().Name)
 	}
 	os.Exit(int(arg))
 	return nil, nil
@@ -984,8 +984,6 @@ func access(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	return py.True, nil
 }
 
-const readlink_doc = `readlink(path) -> the path a symbolic link points to.`
-
 // readlink returns the target of a symbolic link, and raises OSError when the
 // path is not one - the same as CPython.
 func readlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -1003,8 +1001,6 @@ func readlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 	return py.String(target), nil
 }
-
-const link_doc = `link(src, dst) -> create a hard link.`
 
 func link(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var src, dst py.Object
@@ -1170,7 +1166,7 @@ func system(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	arg, ok := args[0].(py.String)
 	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "str expected (pos 1), not "+args[0].Type().Name)
+		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected (pos 1), not "+args[0].Type().Name)
 	}
 
 	var command *exec.Cmd
@@ -1181,7 +1177,7 @@ func system(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	outb, err := command.CombinedOutput() // - commbinedoutput to get both stderr and stdout -
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, err.Error())
+		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
 	}
 	ok = py.Println(self, string(outb))
 	if !ok {

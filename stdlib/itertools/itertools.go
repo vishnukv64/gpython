@@ -88,8 +88,6 @@ func (c *collector) M__next__() (py.Object, error) {
 	return item, nil
 }
 
-func collect(items []py.Object) *collector { return &collector{items: items} }
-
 var _ py.I__iter__ = (*collector)(nil)
 var _ py.I__next__ = (*collector)(nil)
 

@@ -103,12 +103,6 @@ func fspath(o py.Object) (string, error) {
 }
 
 // pathArg unpacks args[pos] as a path.
-func pathArg(args py.Tuple, pos int, name string) (string, error) {
-	if pos >= len(args) {
-		return "", py.ExceptionNewf(py.TypeError, "%s() missing required argument", name)
-	}
-	return fspath(args[pos])
-}
 
 // oserr converts a Go file-system error to the Python exception CPython
 // would raise for the same condition, so that "except FileNotFoundError"

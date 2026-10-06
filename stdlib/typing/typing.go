@@ -785,14 +785,12 @@ func isFieldName(fields []string, name string) bool {
 
 // collectionsModule returns the collections module, which is where the
 // namedtuple factory lives.  It is fetched from the runtime rather than
-// through an import, because this is an embedded module too.
-func collectionsModule() py.Object {
+// through an import, because this is an embedded module too.  It returns the
+// concrete *py.Module: wrapped in py.Object its nil was a non-nil interface,
+// so the callers' "== nil" guards never fired.
+func collectionsModule() *py.Module {
 	return py.GetModuleImplOrNil("collections")
 }
-
-const getTypeHints_doc = `get_type_hints(obj) -> dict
-
-Return the annotations of an object.`
 
 func getTypeHints(self py.Object, args py.Tuple) (py.Object, error) {
 	var obj py.Object
@@ -805,13 +803,6 @@ func getTypeHints(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	return anns, nil
 }
-
-const getArgs_doc = `get_args(tp) -> tuple
-
-Return the arguments of a subscripted type.
-
-The parameters of a typing construct carry no run-time meaning here, so an
-empty tuple is returned rather than a guess.`
 
 func getArgs(self py.Object, args py.Tuple) (py.Object, error) {
 	var tp py.Object

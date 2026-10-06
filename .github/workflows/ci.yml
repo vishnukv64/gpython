@@ -19,7 +19,7 @@ jobs:
     name: Build
     strategy:
       matrix:
-        go-version: [1.19.x, 1.18.x]
+        go-version: [1.25.x, 1.24.x]
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
@@ -93,11 +93,13 @@ jobs:
       run: |
         go run ./ci/run-tests.go $TAGS -race
     - name: static-check
-      uses: dominikh/staticcheck-action@v1
-      with:
-        install-go: false
-        cache-key: ${{ matrix.platform }}
-        version: "2022.1"
+      # Run directly rather than through dominikh/staticcheck-action, which
+      # cannot exclude a package: internal/blake2b is a vendored, read-only copy
+      # of golang.org/x/crypto/blake2b, and its unused helpers are upstream's.
+      shell: bash
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+        "$(go env GOPATH)/bin/staticcheck" $(go list ./... | grep -v '/internal/blake2b$')
     - name: Upload-Coverage
       if: matrix.platform == 'ubuntu-latest'
       uses: codecov/codecov-action@v3

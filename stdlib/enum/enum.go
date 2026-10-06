@@ -25,11 +25,10 @@ const module_doc = `Support for enumerations.`
 
 // EnumMember is one member of an enumeration.
 type EnumMember struct {
-	value  py.Object
-	name   string
-	enum   *py.Type
-	index  int
-	parent py.Object // the member this one aliases, when it is an alias
+	value py.Object
+	name  string
+	enum  *py.Type
+	index int
 }
 
 var EnumMemberType = py.NewTypeX("enum.member", "A single enum member.", nil, nil)
@@ -311,9 +310,7 @@ func mustInt(value py.Object) int64 {
 // for the names Python code compares against.
 func orderedNames(ns py.StringDict) []string {
 	names := make([]string, 0, ns.Len())
-	for _, key := range ns.Keys() {
-		names = append(names, key)
-	}
+	names = append(names, ns.Keys()...)
 	// Sort with dunders and private names first, then the members, so the
 	// class attributes are set up before the members reference them.
 	sortStrings(names)

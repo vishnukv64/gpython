@@ -248,9 +248,6 @@ func (s *shlex) nextRune() (rune, bool) {
 
 // nextRuneOrEOF is nextRune with an explicit EOF sentinel, since the state
 // machine distinguishes a real character from end of input.
-func (s *shlex) nextRuneOrEOF() (rune, bool) {
-	return s.nextRune()
-}
 
 // readLine consumes the rest of the current line, as comment handling does.
 func (s *shlex) readLine() {

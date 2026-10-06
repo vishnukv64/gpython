@@ -713,10 +713,7 @@ func init() {
 			}
 			// The other iterable's members as a decoded slice: a hash member's
 			// items key belongs to its own set, so it cannot be compared across.
-			var keep []Object
-			for _, item := range items {
-				keep = append(keep, item)
-			}
+			keep := append([]Object(nil), items...)
 			var dropErr error
 			for _, item := range ret.setItems() {
 				found := false
@@ -792,10 +789,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			var keep []Object
-			for _, item := range items {
-				keep = append(keep, item)
-			}
+			keep := append([]Object(nil), items...)
 			var dropErr error
 			for _, item := range s.setItems() {
 				found := false

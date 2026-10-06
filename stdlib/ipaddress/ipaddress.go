@@ -114,16 +114,13 @@ func ifaceType(v int) *py.Type {
 func parseAddrString(s string) (netip.Addr, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
+		//lint:ignore ST1005 the text is CPython's, shown to Python code verbatim
 		return netip.Addr{}, fmt.Errorf("Address cannot be empty")
 	}
 	if ip, err := netip.ParseAddr(s); err == nil {
 		return ip, nil
 	}
 	return netip.Addr{}, fmt.Errorf("'%s' does not appear to be an IPv4 or IPv6 address", s)
-}
-
-func netmaskErr(s string) error {
-	return fmt.Errorf("'%s' is not a valid netmask", s)
 }
 
 // --- Python conversion helpers -------------------------------------------
@@ -224,22 +221,8 @@ func divmodSmall(in []uint64, d uint64) ([]uint64, uint64) {
 }
 
 // intToAddr converts a python int back to an address of the right version.
-func intToAddr(v py.Object, version int) (netip.Addr, error) {
-	n, err := py.MakeGoInt64(v)
-	if err == nil {
-		return int64ToAddr(n, version)
-	}
-	// Fall back to the decimal string, which big ints support.
-	s, serr := py.StrAsString(v)
-	if serr != nil {
-		return netip.Addr{}, pyErr(AddressValueError, "an integer is required")
-	}
-	var u uint64
-	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &u); err != nil {
-		return netip.Addr{}, pyErr(AddressValueError, "'%s' does not appear to be an IPv4 or IPv6 address", s)
-	}
-	return int64ToAddr(int64(u), version)
-}
+
+// Fall back to the decimal string, which big ints support.
 
 func int64ToAddr(n int64, version int) (netip.Addr, error) {
 	max := int64(0xFFFFFFFF)

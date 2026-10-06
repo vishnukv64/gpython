@@ -50,16 +50,16 @@ var MmapType = py.NewTypeX("mmap.mmap", moduleDoc, mmapNew, nil)
 func (m *Mmap) Type() *py.Type { return MmapType }
 
 var (
-	_ py.I__len__          = (*Mmap)(nil)
-	_ py.I__getitem__      = (*Mmap)(nil)
-	_ py.I__setitem__      = (*Mmap)(nil)
-	_ py.I__iter__         = (*Mmap)(nil)
-	_ py.I__contains__     = (*Mmap)(nil)
-	_ py.I__eq__           = (*Mmap)(nil)
-	_ py.I__ne__           = (*Mmap)(nil)
-	_ py.I__enter__        = (*Mmap)(nil)
-	_ py.I__exit__         = (*Mmap)(nil)
-	_ py.I__repr__         = (*Mmap)(nil)
+	_ py.I__len__            = (*Mmap)(nil)
+	_ py.I__getitem__        = (*Mmap)(nil)
+	_ py.I__setitem__        = (*Mmap)(nil)
+	_ py.I__iter__           = (*Mmap)(nil)
+	_ py.I__contains__       = (*Mmap)(nil)
+	_ py.I__eq__             = (*Mmap)(nil)
+	_ py.I__ne__             = (*Mmap)(nil)
+	_ py.I__enter__          = (*Mmap)(nil)
+	_ py.I__exit__           = (*Mmap)(nil)
+	_ py.I__repr__           = (*Mmap)(nil)
 	_ py.MemoryViewBytesLike = (*Mmap)(nil)
 )
 
@@ -118,7 +118,8 @@ func (m *Mmap) unmap() error {
 }
 
 // mmap.mmap(fileno, length, flags=MAP_SHARED, prot=PROT_READ|PROT_WRITE,
-//           access=ACCESS_DEFAULT, offset=0)
+//
+//	access=ACCESS_DEFAULT, offset=0)
 func mmapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var filenoObj, lengthObj py.Object
 	var flagsObj py.Object = py.Int(syscall.MAP_SHARED)

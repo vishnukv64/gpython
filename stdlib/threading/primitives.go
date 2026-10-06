@@ -143,10 +143,8 @@ func newSemaphore(value int) *Semaphore {
 
 // Condition is a wait/notify primitive over a lock.
 type Condition struct {
-	mu       sync.Mutex
-	cond     *sync.Cond
-	waiters  int
-	released bool
+	mu   sync.Mutex
+	cond *sync.Cond
 }
 
 var ConditionType = py.NewTypeX("threading.Condition", "A wait/notify condition variable.",

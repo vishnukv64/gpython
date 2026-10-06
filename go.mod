@@ -1,6 +1,6 @@
 module github.com/vishnukv64/gpython
 
-go 1.18
+go 1.24
 
 require (
 	github.com/google/go-cmp v0.5.8

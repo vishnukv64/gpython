@@ -457,14 +457,13 @@ func walkPackagesFn(self py.Object, args py.Tuple) (py.Object, error) {
 
 // packageWalker implements walk_packages' depth-first traversal.
 type packageWalker struct {
-	self     py.Object
-	onerror  py.Object
-	seen     map[string]bool
-	paths    []string
-	prefix   string
-	pending  []py.Object
-	started  bool
-	finished bool
+	self    py.Object
+	onerror py.Object
+	seen    map[string]bool
+	paths   []string
+	prefix  string
+	pending []py.Object
+	started bool
 }
 
 func (w *packageWalker) next() (py.Object, bool, error) {
@@ -473,12 +472,9 @@ func (w *packageWalker) next() (py.Object, bool, error) {
 		entries := w.iterModules(w.paths, w.prefix)
 		w.pending = entries
 	}
-	for len(w.pending) == 0 {
-		if len(w.paths) == 0 {
-			return nil, false, nil
-		}
-		// Nothing left at this level; the traversal is complete because the
-		// per-package queues are pushed below as they are reached.
+	// Nothing pending means the traversal is complete: each package's own
+	// modules are pushed onto pending below, as it is reached.
+	if len(w.pending) == 0 {
 		return nil, false, nil
 	}
 	info := w.pending[0]

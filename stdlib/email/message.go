@@ -32,7 +32,6 @@ type Message struct {
 	headers []string // header names, in order
 	values  []string // header values, parallel to headers
 	payload py.Object
-	policy  py.Object
 	// defaultTyp is the content type used when no Content-Type header is set.
 	defaultTyp string
 	// preamble is the text before the first boundary of a multipart, exposed
@@ -61,15 +60,6 @@ func (m *Message) addDefect(t *py.Type) {
 		m.Dict.Set("defects", list)
 	}
 	list.Items = append(list.Items, newDefect(t))
-}
-
-func (m *Message) defectsList() *py.List {
-	if l, ok := m.Dict.GetOrNil("defects").(*py.List); ok {
-		return l
-	}
-	l := py.NewListFromItems(nil)
-	m.Dict.Set("defects", l)
-	return l
 }
 
 // messageNew is Message().
@@ -593,10 +583,6 @@ func msgAsBytes(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 		return nil, err
 	}
 	return py.Bytes([]byte(self.(*Message).headerString())), nil
-}
-
-func msgDefects(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return self.(*Message).defectsList(), nil
 }
 
 func msgSetType(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {

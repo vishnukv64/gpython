@@ -27,10 +27,6 @@ deepcopy(x)    -- Return a deep copy of x.
 // errorType is copy.Error.
 var errorType = py.ExceptionType.NewType("copy.Error", "Raised for copy errors.", nil, nil)
 
-func copyNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return nil, py.ExceptionNewf(py.TypeError, "cannot instantiate copy.Error directly")
-}
-
 // shallowCopy returns a shallow copy of x.
 func shallowCopy(x py.Object, memo py.Object) (py.Object, error) {
 	// A type that defines __copy__ supplies its own.

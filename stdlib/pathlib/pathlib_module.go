@@ -32,18 +32,6 @@ func optInt(kwargs py.StringDict, name string, def int64) (int64, error) {
 	return int64(n), nil
 }
 
-func optStr(kwargs py.StringDict, name string, def string) (string, error) {
-	v, ok := kwargs.Get(name)
-	if !ok || v == py.None {
-		return def, nil
-	}
-	s, ok := v.(py.String)
-	if !ok {
-		return "", py.ExceptionNewf(py.TypeError, "%s must be a str, not %s", name, v.Type().Name)
-	}
-	return string(s), nil
-}
-
 func optObj(kwargs py.StringDict, name string) py.Object {
 	if v, ok := kwargs.Get(name); ok {
 		return v

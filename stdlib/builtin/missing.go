@@ -6,7 +6,6 @@ package builtin
 
 import (
 	"reflect"
-	"sort"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -182,57 +181,10 @@ the given object, and of attributes reachable from it.`
 
 // builtinDir implements dir().  It needs the interpreter frame for the
 // no-argument form, so it is reached through InternalMethodDir.
-func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
-	if len(args) > 1 {
-		return nil, py.ExceptionNewf(py.TypeError, "dir expected at most 1 argument, got %d", len(args))
-	}
 
-	if len(args) == 0 {
-		f.FastToLocals()
-		names := make([]string, 0, f.Locals.Len())
-		for _, name := range f.Locals.Keys() {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		return namesToList(names), nil
-	}
+// Attributes supplied by the type and everything it inherits.
 
-	obj := args[0]
-	seen := map[string]bool{}
-
-	// Attributes supplied by the type and everything it inherits.
-	for t := obj.Type(); t != nil; t = t.Base {
-		for _, name := range t.Dict.Keys() {
-			seen[name] = true
-		}
-	}
-	// Attributes carried by the object itself.
-	if d, ok := obj.(py.IGetDict); ok {
-		for _, name := range d.GetDict().Keys() {
-			seen[name] = true
-		}
-	}
-	if m, ok := obj.(*py.Module); ok {
-		for _, name := range m.Globals.Keys() {
-			seen[name] = true
-		}
-	}
-
-	names := make([]string, 0, len(seen))
-	for name := range seen {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return namesToList(names), nil
-}
-
-func namesToList(names []string) *py.List {
-	items := make([]py.Object, len(names))
-	for i, name := range names {
-		items[i] = py.String(name)
-	}
-	return py.NewListFromItems(items)
-}
+// Attributes carried by the object itself.
 
 const format_doc = `format(value[, format_spec]) -> string
 

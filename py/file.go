@@ -385,13 +385,13 @@ func OpenFile(filename, mode string, buffering int) (Object, error) {
 	if err != nil {
 		switch {
 		case os.IsExist(err):
-			return nil, ExceptionNewf(FileExistsError, err.Error())
+			return nil, ExceptionNewf(FileExistsError, "%s", err.Error())
 
 		case os.IsNotExist(err):
-			return nil, ExceptionNewf(FileNotFoundError, err.Error())
+			return nil, ExceptionNewf(FileNotFoundError, "%s", err.Error())
 		}
 
-		return nil, ExceptionNewf(OSError, err.Error())
+		return nil, ExceptionNewf(OSError, "%s", err.Error())
 	}
 
 	if finfo, err := f.Stat(); err == nil {

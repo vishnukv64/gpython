@@ -23,10 +23,9 @@ headers and treats everything else as the body.`
 
 // Parser parses a whole message from a string.
 type Parser struct {
-	policy      py.Object
-	factory     py.Object
-	headersonly bool
-	Dict        py.StringDict
+	policy  py.Object
+	factory py.Object
+	Dict    py.StringDict
 }
 
 func (p *Parser) Type() *py.Type { return ParserType }
@@ -35,10 +34,9 @@ func (p *Parser) GetDict() py.StringDict { return p.Dict }
 
 // BytesParser parses a whole message from bytes.
 type BytesParser struct {
-	policy      py.Object
-	factory     py.Object
-	headersonly bool
-	Dict        py.StringDict
+	policy  py.Object
+	factory py.Object
+	Dict    py.StringDict
 }
 
 func (b *BytesParser) Type() *py.Type { return BytesParserType }

@@ -166,11 +166,11 @@ const (
 
 	// Async (PEP 492).  CPython put these at 50-52; those slots are taken
 	// here, so the next free numbers are used instead.
-	BEFORE_ASYNC_WITH OpCode = 154 // __aexit__ lookup + __aenter__ call, exits wrapped awaitable
-	BEFORE_AWAIT      OpCode = 155 // wraps await's operand as a driving iterator
-	GET_AITER         OpCode = 156 // __aiter__
-	GET_ANEXT         OpCode = 157 // __anext__
-	SETUP_ASYNC_WITH  OpCode = 158 // pushes the async-with finally block
+	BEFORE_ASYNC_WITH  OpCode = 154 // __aexit__ lookup + __aenter__ call, exits wrapped awaitable
+	BEFORE_AWAIT       OpCode = 155 // wraps await's operand as a driving iterator
+	GET_AITER          OpCode = 156 // __aiter__
+	GET_ANEXT          OpCode = 157 // __anext__
+	SETUP_ASYNC_WITH   OpCode = 158 // pushes the async-with finally block
 	WITH_CLEANUP_ASYNC OpCode = 159 // calls __aexit__ (awaitable) instead of __exit__
 	// FOR_ITER_AEXPR is FOR_ITER for "async for": drives __anext__() to a
 	// value, StopAsyncIteration exiting the loop like FOR_ITER's

@@ -256,14 +256,7 @@ func urlUnsplit(scheme, netloc, path, query, fragment string) string {
 	return b.String()
 }
 
-func urlUnsplitNoFrag(scheme, netloc, path, query, fragment string) string {
-	q := query
-	if q == "" && fragment != "" {
-		// A fragment without a query needs the empty query marker.
-		return urlUnsplit(scheme, netloc, path, "", fragment)
-	}
-	return urlUnsplit(scheme, netloc, path, query, fragment)
-}
+// A fragment without a query needs the empty query marker.
 
 func asStrField(v py.Object) (string, error) {
 	if v == nil || v == py.None {
@@ -834,16 +827,7 @@ func resultGetItem(fields []string, args py.Tuple) (py.Object, error) {
 	return py.String(fields[i]), nil
 }
 
-func resultIter(fields []string) py.Object { return resultList(fields) }
-
 // resultList builds the field list.
-func resultList(fields []string) py.Object {
-	items := make([]py.Object, len(fields))
-	for i, f := range fields {
-		items[i] = py.String(f)
-	}
-	return py.NewListFromItems(items)
-}
 
 func urllibResultGetURL(fields []string, hasParams bool) (py.Object, error) {
 	if hasParams {

@@ -53,11 +53,6 @@ func init() {
 	})
 }
 
-const get_config_var_doc = `get_config_var(name) -> the value of the variable, or None
-
-Return the value of a single variable.  If the variable is not set by this
-interpreter, None is returned.`
-
 func getConfigVar(self py.Object, args py.Tuple) (py.Object, error) {
 	var nameObj py.Object
 	if err := py.UnpackTuple(args, py.NewStringDict(), "get_config_var", 1, 1, &nameObj); err != nil {
@@ -69,12 +64,6 @@ func getConfigVar(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	return configVar(name), nil
 }
-
-const get_config_vars_doc = `get_config_vars(*args) -> dictionary
-
-With no arguments, return a dictionary of all configuration variables relevant
-for the current platform.  With arguments, return a list of the values for
-those variables.`
 
 func getConfigVars(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) == 0 {
@@ -213,12 +202,6 @@ func windowsArch() string {
 	return runtime.GOARCH
 }
 
-const get_platform_doc = `get_platform() -> string
-
-Return a string that identifies the current platform.  This is used mainly to
-distinguish platform-specific build directories and platform-specific built
-distributions.  Typical values include 'macosx-10.9-x86_64' and 'linux-x86_64'.`
-
 func getPlatform(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "get_platform() takes no arguments")
@@ -226,22 +209,12 @@ func getPlatform(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.String(systemPlatform()), nil
 }
 
-const get_python_version_doc = `get_python_version() -> string
-
-Return the MAJOR.MINOR Python version number as a string.  Similar to
-sys.version[:3].`
-
 func getPythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "get_python_version() takes no arguments")
 	}
 	return py.String("3.4"), nil
 }
-
-const get_paths_doc = `get_paths(scheme=..., vars=..., expand=True) -> a dictionary of paths
-
-Return a dictionary containing all installation paths corresponding to an
-installation scheme.`
 
 func getPaths(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var scheme, varsObj py.Object
@@ -264,10 +237,6 @@ func getPaths(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 	return d, nil
 }
-
-const get_path_doc = `get_path(name, scheme=..., vars=..., expand=True) -> string
-
-Return a string containing the path of the named installation path.`
 
 func getPath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var nameObj, scheme, varsObj py.Object
@@ -310,10 +279,6 @@ func installSchemes() py.Object {
 		py.DictEntry{Key: "gpython_posix_prefix", Value: scheme},
 	)
 }
-
-const get_scheme_names_doc = `get_scheme_names() -> tuple
-
-Return a tuple containing the schemes names.`
 
 func getSchemeNames(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 0 {

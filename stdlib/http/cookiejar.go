@@ -56,7 +56,6 @@ var (
 	ipv4Re      = regexp.MustCompile(`\.\d+$`)
 	cutPortRe   = regexp.MustCompile(`:\d+$`)
 	escapedChar = regexp.MustCompile(`%([0-9a-fA-F][0-9a-fA-F])`)
-	dotsRe      = regexp.MustCompile(`^\.+`)
 )
 
 // isHDN reports whether text is a host domain name.
@@ -706,14 +705,6 @@ func cookieJarNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Ob
 		}
 	}
 	return j, nil
-}
-
-func jarPolicy(self py.Object) (*defaultPolicy, py.Object, error) {
-	j := self.(*cookieJar)
-	if up, ok := j.Dict.Get("_user_policy"); ok {
-		return nil, up, nil
-	}
-	return j.policy, nil, nil
 }
 
 func jarSetPolicy(self py.Object, args py.Tuple) (py.Object, error) {

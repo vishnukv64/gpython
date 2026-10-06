@@ -12,7 +12,7 @@ import (
 //go:generate stringer -type=vmStatus,OpCode -output stringer.go
 
 // VM status code
-type vmStatus byte
+type vmStatus int8
 
 // VM Status code for main loop (reason for stack unwind)
 const (

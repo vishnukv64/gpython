@@ -85,7 +85,7 @@ var (
 	MSG_PEEK     = 0x0002
 	MSG_DONTWAIT = 0x0080
 
-	INADDR_ANY       = 0
+	INADDR_ANY = 0
 	// int64 because the value does not fit a 32-bit int (linux/386).
 	INADDR_BROADCAST = int64(0xffffffff)
 )
@@ -717,7 +717,6 @@ func (s *sock) fileno() (py.Object, error) {
 
 type socketFile struct {
 	conn net.Conn
-	r    io.Reader
 	w    io.Writer
 	rd   *bufReader
 }

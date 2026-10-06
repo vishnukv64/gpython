@@ -82,7 +82,6 @@ type Match struct {
 	pattern *Pattern
 	text    string
 	locs    []int // character offsets, two per group, -1 for a non-participating group
-	re      *py.Object
 }
 
 var MatchType = py.NewTypeX("re.Match", "The result of a successful match.", nil, nil)
@@ -997,16 +996,6 @@ func (p *Pattern) anchoredMatch(text string, whole bool) []int {
 }
 
 // wrapped is the pattern with the flag prefix, for re-anchoring.
-func (p *Pattern) wrapped() string {
-	translated, _, _, _, err := translate(p.source, p.flags)
-	if err != nil {
-		return p.source
-	}
-	if prefix := goFlags(p.flags); prefix != "" {
-		return "(?" + prefix + ")" + translated
-	}
-	return translated
-}
 
 // nextMatch finds the match after a given character position, applying
 // Python's rule that an empty match must advance by one.

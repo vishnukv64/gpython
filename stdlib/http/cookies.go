@@ -194,12 +194,6 @@ func (m *morsel) index(name string) int {
 }
 
 // getAttr returns the attribute value as a python object (String "" when unset).
-func (m *morsel) getAttr(name string) py.Object {
-	if i := m.index(name); i >= 0 {
-		return m.values[i]
-	}
-	return py.String("")
-}
 
 // setAttr sets a reserved attribute, rejecting unknown names and control
 // characters exactly as CPython's Morsel.__setitem__ does.

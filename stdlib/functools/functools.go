@@ -388,9 +388,7 @@ func keyFor(args py.Tuple, kwargs py.StringDict) (string, error) {
 	}
 	// Keyword order must not change the key, so sort the names.
 	names := make([]string, 0, kwargs.Len())
-	for _, k := range kwargs.Keys() {
-		names = append(names, k)
-	}
+	names = append(names, kwargs.Keys()...)
 	sort.Strings(names)
 	for _, name := range names {
 		k, err := py.DictKey(kwargs.GetOrNil(name))

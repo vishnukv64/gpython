@@ -1750,11 +1750,9 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 	// by commas and/or spaces.
 	var fields []string
 	if s, ok := names.(py.String); ok {
-		for _, f := range strings.FieldsFunc(string(s), func(r rune) bool {
+		fields = strings.FieldsFunc(string(s), func(r rune) bool {
 			return r == ',' || r == ' ' || r == '\t' || r == '\n'
-		}) {
-			fields = append(fields, f)
-		}
+		})
 	} else {
 		items, err := py.SequenceList(names)
 		if err != nil {

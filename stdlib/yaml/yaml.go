@@ -994,9 +994,7 @@ func emitMappingEntries(b *strings.Builder, m py.StringDict, indent int, afterDa
 	// Keys go out in sorted order, which is what PyYAML does with sort_keys
 	// defaulting to True, and makes the output stable.
 	keys := make([]string, 0, m.Len())
-	for _, encoded := range m.Keys() {
-		keys = append(keys, encoded)
-	}
+	keys = append(keys, m.Keys()...)
 	sort.Strings(keys)
 	for i, encoded := range keys {
 		key, err := py.DictKeyDecode(encoded)

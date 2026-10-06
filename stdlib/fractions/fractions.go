@@ -382,11 +382,8 @@ func parseFractionString(s string) (*big.Int, *big.Int, error) {
 		if !ok {
 			return nil, nil, invalid()
 		}
-		if decText == "" {
-			// An empty decimal part still requires the digit-run shape to be
-			// valid, which it is; it just contributes nothing.
-			frac = big.NewInt(0)
-		} else {
+		// An empty decimal part is a valid digit run that contributes nothing.
+		if decText != "" {
 			// The scale counts digits, not underscores.
 			scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(digitCount(decText))), nil)
 			num.Mul(num, scale)
@@ -547,14 +544,6 @@ func pyStringRepr(s string) string {
 	}
 	b.WriteByte('\'')
 	return b.String()
-}
-
-func isSpace(c byte) bool {
-	switch c {
-	case ' ', '\t', '\n', '\r', '\v', '\f':
-		return true
-	}
-	return false
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
@@ -1256,8 +1245,6 @@ func fractionCopy(self py.Object, args py.Tuple) (py.Object, error) {
 func fractionDeepCopy(self py.Object, args py.Tuple) (py.Object, error) {
 	return self, nil
 }
-
-const limitDenominator_doc = `Closest Fraction to self with denominator at most max_denominator.`
 
 func fractionLimitDenominator(self py.Object, args py.Tuple) (py.Object, error) {
 	f := self.(*Fraction)

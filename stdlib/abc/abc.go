@@ -114,13 +114,6 @@ func isBuiltinHashable(obj py.Object) bool {
 }
 
 // isStringOrBytes reports whether obj is the ByteString type's idea of one.
-func isStringOrBytes(obj py.Object) bool {
-	switch obj.(type) {
-	case py.String, py.Bytes:
-		return true
-	}
-	return false
-}
 
 var (
 	ContainerType       = abcType("Container", nil)

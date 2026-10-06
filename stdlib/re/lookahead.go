@@ -687,39 +687,10 @@ func (p *Pattern) matchWithAssertions(l lifted, text string, whole bool) []int {
 // with no interior to check.  Anything wider is refused by lift().
 // assertionsHoldOffset is assertionsHold for a slice that begins at base within
 // a larger string, so a lookbehind can read the text before the slice.
-func (p *Pattern) assertionsHoldOffset(l lifted, text string, idx []int, base int) bool {
-	for _, a := range l.assertions {
-		if !a.lookbehind {
-			continue
-		}
-		re, err := p.compileTranslated(a.body)
-		if err != nil {
-			return false
-		}
-		check := base + idx[0]
-		if a.trailing > 0 {
-			check = base + idx[1] - a.trailing
-		}
-		// check and before are BYTE offsets into the FULL text, and the indices
-		// are for the slice - so a bad tail width could run past the end and
-		// panic the host process.  Both bounds are checked.
-		if check > len(text) {
-			check = len(text)
-		}
-		before := check - a.width
-		matched := false
-		if before >= 0 && before <= check {
-			loc := re.FindStringIndex(text[before:check])
-			matched = loc != nil && loc[0] == 0 && loc[1] == a.width
-		} else if a.positive {
-			return false
-		}
-		if a.positive != matched {
-			return false
-		}
-	}
-	return true
-}
+
+// check and before are BYTE offsets into the FULL text, and the indices
+// are for the slice - so a bad tail width could run past the end and
+// panic the host process.  Both bounds are checked.
 
 func (p *Pattern) assertionsHold(l lifted, text string, idx []int, start, end int) bool {
 	for _, a := range l.assertions {
@@ -810,23 +781,6 @@ func (p *Pattern) compileTranslated(body string) (*regexp.Regexp, error) {
 // A shifted lookbehind must be able to see the characters before its match, and
 // those live in the larger string - so the check is given the whole text and the
 // base, rather than being handed a truncated slice.
-func (p *Pattern) matchWithAssertionsOffset(l lifted, slice string, whole bool, base int) []int {
-	if base == 0 {
-		return p.matchWithAssertions(l, slice, whole)
-	}
-	body, err := p.compileTranslated(l.pattern)
-	if err != nil {
-		return nil
-	}
-	idx := body.FindStringSubmatchIndex(slice)
-	if idx == nil {
-		return nil
-	}
-	if !p.assertionsHoldOffset(l, slice, idx, base) {
-		return nil
-	}
-	return trimLead(l, idx)
-}
 
 // matchWithAssertionsIn searches s from off and checks each candidate against
 // every lifted assertion, where a lookbehind reads from the WHOLE string so
@@ -956,19 +910,6 @@ func trimLead(l lifted, idx []int) []int {
 // it still matches so that position 0 remains a candidate - the caller's check
 // then decides, and for a NEGATIVE assertion "there is no preceding text" is a
 // success.
-func placeholderFor(w int) string {
-	var b strings.Builder
-	b.WriteString("(?:")
-	for i := 0; i < w; i++ {
-		if i > 0 {
-			b.WriteString("(?-s:.)")
-			continue
-		}
-		b.WriteString("(?:(?-s:.)|)")
-	}
-	b.WriteString(")")
-	return b.String()
-}
 
 // branchPos returns the offset in pattern at which the current top-level
 // branch begins, ignoring enclosing groups.
@@ -1022,7 +963,6 @@ func consumesBefore(pattern string, upto int) bool {
 			i += 2
 			continue
 		case c == '[':
-			i = skipClass(pattern, i)
 			return true
 		case c == '(':
 			// A group head consumes nothing; the interior is examined next.

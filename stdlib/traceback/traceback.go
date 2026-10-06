@@ -231,10 +231,7 @@ func resolveExcArgs(fname string, args py.Tuple) (*py.Exception, *py.Traceback, 
 				"Exception expected for value, %s found", args[0].Type().Name)
 		}
 	case 3:
-		value, ok := args[1].(py.Object)
-		if !ok {
-			value = py.None
-		}
+		value := args[1]
 		var exc *py.Exception
 		if value == py.None {
 			exc = nil

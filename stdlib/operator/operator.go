@@ -17,7 +17,6 @@ package operator
 
 import (
 	"reflect"
-	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -327,6 +326,3 @@ func reprShort(o py.Object) string {
 
 // attrName splits an attrgetter name on '.', so that "a.b" is a nested lookup
 // rather than an attribute literally called "a.b".
-func attrName(name string) []string {
-	return strings.Split(name, ".")
-}

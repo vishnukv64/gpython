@@ -686,9 +686,7 @@ func parsedateTz(data string) []py.Object {
 		}
 	}
 	month := monthNumber(mm)
-	if strings.HasSuffix(dd, ",") {
-		dd = dd[:len(dd)-1]
-	}
+	dd = strings.TrimSuffix(dd, ",")
 	if i := strings.Index(yy, ":"); i > 0 {
 		yy, tm = tm, yy
 	}
@@ -701,9 +699,7 @@ func parsedateTz(data string) []py.Object {
 	if yy[0] < '0' || yy[0] > '9' {
 		yy, tz = tz, yy
 	}
-	if strings.HasSuffix(tm, ",") {
-		tm = tm[:len(tm)-1]
-	}
+	tm = strings.TrimSuffix(tm, ",")
 	thh, tmm, tss, ok := splitTime(tm)
 	if !ok {
 		return nil

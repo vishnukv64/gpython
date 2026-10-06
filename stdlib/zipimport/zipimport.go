@@ -43,10 +43,9 @@ var ZipImportError = py.ImportError.NewType("zipimport.ZipImportError",
 // between imports is seen - which matters for a tool that installs packages
 // while it runs.
 type zipImporter struct {
-	archive  string // path to the .zip/.egg
-	prefix   string // directory inside the archive, "" for the root
-	isDir    bool   // the path given named a directory inside an archive
-	rawExtra bool   // accepted and ignored, as CPython's third argument is
+	archive string // path to the .zip/.egg
+	prefix  string // directory inside the archive, "" for the root
+	isDir   bool   // the path given named a directory inside an archive
 }
 
 var zipImporterType = py.NewType("zipimport.zipimporter", "Create a zipimporter object for the given file.")

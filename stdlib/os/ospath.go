@@ -92,66 +92,12 @@ var pathGlobals = py.NewStringDictFrom(
 	py.DictEntry{Key: "devnull", Value: osDevnull},
 )
 
-var pathRegistered = func() bool {
+var _ = func() bool {
 	pathImpl.Globals = pathGlobals
 	py.RegisterModule(pathImpl)
 	py.RegisterModuleAlias("ntpath", "posixpath")
 	return true
 }()
-
-func unusedInit() {
-	sep := osSep
-
-	methods := []*py.Method{
-		py.MustNewMethod("join", pathJoin, 0, "join(a, *p) -> Join two or more pathname components, inserting '/' as needed."),
-		py.MustNewMethod("split", pathSplit, 0, "split(p) -> Split a pathname into (head, tail)."),
-		py.MustNewMethod("splitext", pathSplitext, 0, "splitext(p) -> Split the extension from a pathname."),
-		py.MustNewMethod("basename", pathBasename, 0, "basename(p) -> Returns the final component of a pathname."),
-		py.MustNewMethod("dirname", pathDirname, 0, "dirname(p) -> Returns the directory component of a pathname."),
-		py.MustNewMethod("abspath", pathAbspath, 0, "abspath(path) -> Return the absolute version of a path."),
-		py.MustNewMethod("normpath", pathNormpath, 0, "normpath(path) -> Normalize path, eliminating double slashes, etc."),
-		py.MustNewMethod("normcase", pathNormcase, 0, "normcase(s) -> Normalize case of pathname."),
-		py.MustNewMethod("isabs", pathIsabs, 0, "isabs(s) -> Test whether a path is absolute."),
-		py.MustNewMethod("exists", pathExists, 0, "exists(path) -> Test whether a path exists."),
-		py.MustNewMethod("isdir", pathIsdir, 0, "isdir(s) -> Return true if the pathname refers to an existing directory."),
-		py.MustNewMethod("isfile", pathIsfile, 0, "isfile(path) -> Test whether a path is a regular file."),
-		py.MustNewMethod("islink", pathIslink, 0, "islink(path) -> Test whether a path is a symbolic link."),
-		py.MustNewMethod("getsize", pathGetsize, 0, "getsize(filename) -> Return the size of a file, reported by os.stat()."),
-		py.MustNewMethod("getmtime", pathGetmtime, 0, "getmtime(filename) -> Return the last modification time of a file."),
-		py.MustNewMethod("expanduser", pathExpanduser, 0, "expanduser(path) -> Expand ~ and ~user constructs."),
-		py.MustNewMethod("expandvars", pathExpandvars, 0, "expandvars(path) -> Expand shell variables of the form $var, ${var} and %var%."),
-		py.MustNewMethod("realpath", pathRealpath, 0, "realpath(filename) -> Return the canonical path of the specified filename."),
-		py.MustNewMethod("relpath", pathRelpath, 0, "relpath(path, start=os.curdir) -> Return a relative filepath to path."),
-		py.MustNewMethod("samefile", pathSamefile, 0, "samefile(f1, f2) -> Test whether two pathnames reference the same actual file."),
-	}
-
-	globals := py.NewStringDictFrom(
-		py.DictEntry{Key: "sep", Value: sep},
-		py.DictEntry{Key: "altsep", Value: osAltsep},
-		py.DictEntry{Key: "pathsep", Value: osPathsep},
-		py.DictEntry{Key: "curdir", Value: py.String(".")},
-		py.DictEntry{Key: "pardir", Value: py.String("..")},
-		py.DictEntry{Key: "extsep", Value: py.String(".")},
-		py.DictEntry{Key: "defpath", Value: osDefpath},
-		py.DictEntry{Key: "devnull", Value: osDevnull},
-	)
-
-	// The module is registered under both names a program may import, and
-	// the same object is what os.path is bound to.
-	// The constants are attached to the module implementation that os.path
-	// resolves to; building a Globals map and not attaching it left the
-	// module with its methods but none of the constants, so
-	// "os.path.pathsep" raised AttributeError.
-	pathImpl.Globals = globals
-	py.RegisterModule(&py.ModuleImpl{
-		Info: py.ModuleInfo{
-			Name: "ntpath",
-			Doc:  pathModule_doc,
-		},
-		Methods: methods,
-		Globals: globals,
-	})
-}
 
 // PathModule returns the module object that os.path refers to, building it
 // on first use so that the result does not depend on init order.

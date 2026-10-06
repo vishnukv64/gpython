@@ -38,45 +38,8 @@ var HTTPErrorType = URLErrorType.NewType("urllib.error.HTTPError",
 	"Raised when an HTTP request returns an error status.", nil, nil)
 
 // urlErrorNew builds URLError(reason), which also exposes .reason.
-func urlErrorNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	reason := py.Object(py.None)
-	if len(args) >= 1 {
-		reason = args[0]
-	}
-	e, err := py.ExceptionNew(metatype, py.Tuple{reason}, py.NewStringDict())
-	if err != nil {
-		return nil, err
-	}
-	e.(*py.Exception).Dict.Set("reason", reason)
-	return e, nil
-}
 
 // httpErrorNew builds HTTPError(url, code, msg, hdrs, fp).
-func httpErrorNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var (
-		urlObj  py.Object = py.None
-		codeObj py.Object = py.None
-		msgObj  py.Object = py.None
-		hdrsObj py.Object = py.None
-		fpObj   py.Object = py.None
-	)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OOOO:HTTPError",
-		[]string{"url", "code", "msg", "hdrs", "fp"},
-		&urlObj, &codeObj, &msgObj, &hdrsObj, &fpObj); err != nil {
-		return nil, err
-	}
-	reason := msgObj
-	e, err := py.ExceptionNew(metatype, py.Tuple{urlObj, codeObj, msgObj, hdrsObj, fpObj}, py.NewStringDict())
-	if err != nil {
-		return nil, err
-	}
-	exc := e.(*py.Exception)
-	exc.Dict.Set("reason", reason)
-	exc.Dict.Set("code", codeObj)
-	exc.Dict.Set("headers", hdrsObj)
-	exc.Dict.Set("fp", fpObj)
-	return exc, nil
-}
 
 // urlopenResponse is the object urlopen returns.  It is a thin wrapper over
 // the in-memory body and the header list: read/readline/readlines walk the
@@ -102,9 +65,6 @@ var _ py.IGetDict = (*urlopenResponse)(nil)
 
 // headersAsList renders the headers as the list of (name, value) pairs
 // HTTPMessage.items returns.
-func (r *urlopenResponse) headersList() py.Object {
-	return r.Dict.GetOrNil("_headers_list")
-}
 
 func (r *urlopenResponse) M__enter__() (py.Object, error) { return r, nil }
 

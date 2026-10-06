@@ -44,41 +44,12 @@ func payloadOf(self Object) (Object, bool) {
 }
 
 // hasPayload reports whether an object is a payload-carrying instance.
-func hasPayload(o Object) bool {
-	_, ok := payloadOf(o)
-	return ok
-}
 
 // payloadLen answers len() from the payload.
-func payloadLen(self Object) (Object, error) {
-	payload, ok := payloadOf(self)
-	if !ok {
-		return nil, ExceptionNewf(TypeError, "object of type '%s' has no len()", self.Type().Name)
-	}
-	return Len(payload)
-}
 
 // payloadGetItem answers "self[key]" from the payload.
-func payloadGetItem(self Object, key Object) (Object, error) {
-	payload, ok := payloadOf(self)
-	if !ok {
-		return nil, ExceptionNewf(TypeError, "'%s' object is not subscriptable", self.Type().Name)
-	}
-	return GetItem(payload, key)
-}
 
 // payloadContains answers "x in self" from the payload.
-func payloadContains(self Object, item Object) (Object, error) {
-	payload, ok := payloadOf(self)
-	if !ok {
-		return False, nil
-	}
-	found, err := SequenceContains(payload, item)
-	if err != nil {
-		return nil, err
-	}
-	return NewBool(found), nil
-}
 
 // rewrapPayload gives a freshly computed container value the class it should
 // have, when an operation on a subclass instance produced one.

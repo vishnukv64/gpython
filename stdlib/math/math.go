@@ -1544,7 +1544,7 @@ func combArgs(name string, nObj, kObj py.Object) (int64, int64, error) {
 		return 0, 0, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", kObj.Type().Name)
 	}
 	if n < 0 || k < 0 {
-		return 0, 0, py.ExceptionNewf(py.ValueError, name+"() arguments must be non-negative")
+		return 0, 0, py.ExceptionNewf(py.ValueError, "%s", name+"() arguments must be non-negative")
 	}
 	if k > n {
 		return 0, 0, py.ExceptionNewf(py.ValueError, "%s(): k must be less than or equal to n", name)

@@ -571,10 +571,9 @@ func readFrom(fp py.Object, amt int) ([]byte, error) {
 // so __init__ and close exist and are callable, while the methods that would
 // have to talk to a server raise NotImplementedError naming the limit.
 type httpConnection struct {
-	host    string
-	port    int
-	timeout py.Object
-	Dict    py.StringDict
+	host string
+	port int
+	Dict py.StringDict
 }
 
 func (c *httpConnection) Type() *py.Type         { return HTTPConnectionType }
