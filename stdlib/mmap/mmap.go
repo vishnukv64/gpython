@@ -63,7 +63,22 @@ var (
 	_ py.MemoryViewBytesLike = (*Mmap)(nil)
 )
 
-// closed is the one error every method guards with, so it is built once.
+// errnoError renders a syscall failure as CPython does: "[Errno 9] Bad file
+// descriptor".  Go's errno text is the same strerror text with its first
+// letter lowercased, so capitalising it restores CPython's wording.
+func errnoError(err error) error {
+	en, ok := err.(syscall.Errno)
+	if !ok {
+		return py.ExceptionNewf(py.OSError, "%s", err.Error())
+	}
+	msg := en.Error()
+	if msg != "" && msg[0] >= 'a' && msg[0] <= 'z' {
+		msg = string(msg[0]-'a'+'A') + msg[1:]
+	}
+	return py.ExceptionNewf(py.OSError, "[Errno %d] %s", int(en), msg)
+}
+
+// errClosed is the error every method raises once the map is closed.
 func errClosed() error {
 	return py.ExceptionNewf(py.ValueError, "mmap closed or invalid")
 }
@@ -172,7 +187,7 @@ func mmapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 	} else {
 		var st syscall.Stat_t
 		if err := syscall.Fstat(fileno, &st); err != nil {
-			return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+			return nil, errnoError(err)
 		}
 		if length == 0 {
 			if st.Size == 0 || offset >= st.Size {

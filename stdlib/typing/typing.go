@@ -34,6 +34,7 @@ import (
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/abc"
 	"github.com/vishnukv64/gpython/stdlib/collections"
+	"github.com/vishnukv64/gpython/stdlib/contextlib"
 )
 
 const module_doc = `The typing module: support for type hints.
@@ -72,18 +73,56 @@ func (s *specialForm) M__hash__() (py.Object, error) {
 
 // M__mro_entries__ is PEP 560: a class statement calls this on a base that is
 // not a class, and uses what it returns instead.
-//
-// A bare construct like "IO" or "Generic" has no runtime class beyond object,
-// so that is what it contributes - which is enough for the class statement to
-// succeed, and is what CPython does for a plain Generic.
 func (s *specialForm) M__mro_entries__(bases py.Object) (py.Object, error) {
-	origin := runtimeOrigin(s.name)
-	if ot, ok := origin.(*py.Type); ok && ot.Name == "" {
-		// An empty Name means an instance rather than a class in this
-		// interpreter's representation; a base must be a class.
-		return py.Tuple{py.ObjectType}, nil
+	return mroEntries(s, s.name, bases), nil
+}
+
+// mroEntries is CPython's _BaseGenericAlias.__mro_entries__: a typing alias
+// used as a base contributes the runtime class it stands for (unless that class
+// is already a base), followed by Generic - unless a LATER base already makes
+// the class generic.  "class R(ContextManager[T], Generic[T])" therefore has
+// the bases (AbstractContextManager, Generic) and the MRO
+// R, AbstractContextManager, ABC, Generic, object.
+//
+// Contributing object here - which this did for every alias - made that class
+// statement impossible: object listed before Generic, a subclass of object, has
+// no consistent MRO, and rich's progress module died on "mro is wonky".
+func mroEntries(self py.Object, name string, basesObj py.Object) py.Tuple {
+	bases, _ := basesObj.(py.Tuple)
+	in := func(t *py.Type) bool {
+		for _, b := range bases {
+			if b == py.Object(t) {
+				return true
+			}
+		}
+		return false
 	}
-	return py.Tuple{origin}, nil
+	var res py.Tuple
+	if origin := runtimeOrigin(name); origin != nil && !in(origin) {
+		res = append(res, origin)
+	}
+	if name == "Generic" || name == "Protocol" {
+		return res
+	}
+	after := false
+	for _, b := range bases {
+		if b == self {
+			after = true
+			continue
+		}
+		if !after {
+			continue
+		}
+		switch bt := b.(type) {
+		case *specialForm, *subscribedForm:
+			return res
+		case *py.Type:
+			if bt.IsSubtype(GenericType) {
+				return res
+			}
+		}
+	}
+	return append(res, GenericType)
 }
 
 func (s *specialForm) M__getitem__(key py.Object) (py.Object, error) {
@@ -124,19 +163,73 @@ var ProtocolType = func() *py.Type {
 	return t
 }()
 
-func runtimeOrigin(name string) py.Object {
-	switch name {
-	case "Generic", "Protocol":
+// GenericType is typing.Generic, at package level because mroEntries appends
+// it to the bases of a class whose only generic base is an alias.
+var GenericType = func() *py.Type {
+	t := py.NewType("typing.Generic", "Abstract base class for generic types.")
+	t.Flags |= py.TPFLAGS_BASETYPE
+	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self, nil
+	}, 0, "Return the class, ignoring the subscription parameters."))
+	return t
+}()
 
-		// Generic and Protocol have no runtime class of their own; CPython
-		// yields object for the protocol case and Generic itself otherwise.
-		return py.ObjectType
-	case "IO":
-		return py.ObjectType
-	case "List", "DefaultDict", "Deque", "KeysView", "ItemsView", "ValuesView":
-		return py.ObjectType
+// runtimeOrigin is the class a typing alias stands for, as CPython's
+// __origin__ has it: List is list, Iterable is collections.abc.Iterable,
+// ContextManager is contextlib.AbstractContextManager.  A construct with no
+// runtime class here (Optional, IO, ...) reports nil and contributes only
+// Generic.
+func runtimeOrigin(name string) *py.Type {
+	switch name {
+	case "Generic":
+		return GenericType
+	case "Protocol":
+		return ProtocolType
+	case "List":
+		return py.ListType
+	case "Dict":
+		return py.StringDictType
+	case "Set":
+		return py.SetType
+	case "FrozenSet":
+		return py.FrozenSetType
+	case "Tuple":
+		return py.TupleType
+	case "Type":
+		return py.TypeType
+	case "DefaultDict":
+		return collections.DefaultDictType
+	case "Deque":
+		return collections.DequeType
+	case "OrderedDict":
+		return collections.OrderedDictType
+	case "Counter":
+		return collections.CounterType
+	case "ChainMap":
+		return collections.ChainMapType
+	case "ContextManager", "AsyncContextManager":
+		return contextlib.AbstractContextManagerType
+	case "AbstractSet":
+		return abc.SetType
 	}
-	return py.ObjectType
+	if t, ok := abcOrigins[name]; ok {
+		return t
+	}
+	return nil
+}
+
+// abcOrigins are the aliases whose origin has the same name in collections.abc.
+var abcOrigins = map[string]*py.Type{
+	"Container": abc.ContainerType, "Hashable": abc.HashableType, "Sized": abc.SizedType,
+	"Callable": abc.CallableType, "Iterable": abc.IterableType, "Iterator": abc.IteratorType,
+	"Reversible": abc.ReversibleType, "Generator": abc.GeneratorType, "Collection": abc.CollectionType,
+	"Sequence": abc.SequenceType, "MutableSequence": abc.MutableSequenceType,
+	"MutableSet": abc.MutableSetType, "Mapping": abc.MappingType,
+	"MutableMapping": abc.MutableMappingType, "MappingView": abc.MappingViewType,
+	"KeysView": abc.KeysViewType, "ItemsView": abc.ItemsViewType, "ValuesView": abc.ValuesViewType,
+	"Awaitable": abc.AwaitableType, "Coroutine": abc.CoroutineType,
+	"AsyncIterable": abc.AsyncIterableType, "AsyncIterator": abc.AsyncIteratorType,
+	"AsyncGenerator": abc.AsyncGeneratorType,
 }
 
 // M__hash__ is identity-based, which is what makes a typing construct usable
@@ -154,7 +247,7 @@ func runtimeOrigin(name string) py.Object {
 // "class NullFile(IO[str])" failed with "bases must be types" - which is how
 // rich declares its own file wrappers, and pip renders through rich.
 func (s *subscribedForm) M__mro_entries__(bases py.Object) (py.Object, error) {
-	return py.Tuple{runtimeOrigin(s.form.name)}, nil
+	return mroEntries(s, s.form.name, bases), nil
 }
 
 func (s *subscribedForm) M__hash__() (py.Object, error) {
@@ -464,12 +557,7 @@ func init() {
 		return typedDictType, nil
 	}
 
-	genericType := py.NewType("typing.Generic", "Abstract base class for generic types.")
-	genericType.Flags |= py.TPFLAGS_BASETYPE
-	genericType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters."))
-	globals.Set("Generic", genericType)
+	globals.Set("Generic", GenericType)
 	globals.Set("TypedDict", typedDictType)
 
 	// ParamSpec and Concatenate are used in signatures: P = ParamSpec("P"),

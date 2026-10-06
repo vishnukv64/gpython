@@ -31,7 +31,7 @@ type VersionInfo struct {
 }
 
 // VersionInfoType is sys.version_info's type.
-var VersionInfoType = py.NewTypeX("sys.version_info",
+var VersionInfoType = py.NewTypeX("version_info",
 	"Version information as a named tuple.", nil, nil)
 
 func (v *VersionInfo) Type() *py.Type { return VersionInfoType }
@@ -189,4 +189,9 @@ func newVersionInfo(major, minor, micro int, level string, serial int) *VersionI
 // and for sys.implementation.version (which CPython also makes a version_info).
 func currentVersionInfo() *VersionInfo {
 	return newVersionInfo(pyVersionMajor, pyVersionMinor, pyVersionMicro, pyVersionLevel, pyVersionSerial)
+}
+
+// The module goes in __module__, not in the name: CPython's type(x).__name__ is the bare name and type(x).__module__ is 'sys'.
+func init() {
+	VersionInfoType.Dict.Set("__module__", py.String("sys"))
 }

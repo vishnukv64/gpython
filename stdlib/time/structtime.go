@@ -31,7 +31,7 @@ type StructTime struct {
 }
 
 // StructTimeType is time.struct_time.
-var StructTimeType = py.NewTypeX("time.struct_time",
+var StructTimeType = py.NewTypeX("struct_time",
 	"The time type represents a calendar time broken down into its components.", nil, nil)
 
 func (s *StructTime) Type() *py.Type { return StructTimeType }
@@ -538,4 +538,9 @@ func parseTime(text, format string) (*timeTuple, error) {
 		tt.wday = (int(t.Weekday()) + 6) % 7
 	}
 	return tt, nil
+}
+
+// The module goes in __module__, not in the name: CPython's type(x).__name__ is the bare name and type(x).__module__ is 'time'.
+func init() {
+	StructTimeType.Dict.Set("__module__", py.String("time"))
 }

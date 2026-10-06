@@ -43,3 +43,7 @@ func TestWalk(t *testing.T) {
 
 	pytest.RunScript(t, "./testdata/walk.py")
 }
+
+func TestStat(t *testing.T) {
+	pytest.RunScript(t, "./testdata/stat.py")
+}

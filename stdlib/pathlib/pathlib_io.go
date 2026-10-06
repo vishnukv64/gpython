@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
+	pyos "github.com/vishnukv64/gpython/stdlib/os"
 )
 
 // unsupported reports the honest error for an operation this interpreter has
@@ -123,120 +124,15 @@ func pathNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 // os error mapping
 // ---------------------------------------------------------------------------
 
-// osErr maps a Go error from the os package onto the exception class CPython
-// would raise, so that callers catching OSError subclasses behave.
+// osErr maps a Go error from the os package onto the exception CPython would
+// raise.  It delegates to py.OSErrorFrom, which picks the subclass by errno and
+// sets errno/strerror/filename; the table that was here hardcoded darwin's
+// errno numbers (66 for ENOTEMPTY, which is 39 on linux).
 func osErr(err error, path string) error {
-	switch {
-	case err == nil:
+	if err == nil {
 		return nil
-	case errors.Is(err, fs.ErrNotExist):
-		return py.ExceptionNewf(py.FileNotFoundError, "[Errno 2] No such file or directory: %s", reprOf(path))
-	case errors.Is(err, fs.ErrExist):
-		return py.ExceptionNewf(py.FileExistsError, "[Errno 17] File exists: %s", reprOf(path))
-	case errors.Is(err, fs.ErrPermission):
-		return py.ExceptionNewf(py.PermissionError, "[Errno 13] Permission denied: %s", reprOf(path))
-	case errors.Is(err, syscall.ENOTDIR):
-		return py.ExceptionNewf(py.NotADirectoryError, "[Errno 20] Not a directory: %s", reprOf(path))
-	case errors.Is(err, syscall.EISDIR):
-		return py.ExceptionNewf(py.IsADirectoryError, "[Errno 21] Is a directory: %s", reprOf(path))
-	case errors.Is(err, syscall.ENOTEMPTY):
-		return py.ExceptionNewf(py.OSError, "[Errno 66] Directory not empty: %s", reprOf(path))
 	}
-	return py.ExceptionNewf(py.OSError, "%s", err.Error())
-}
-
-// ---------------------------------------------------------------------------
-// stat results
-//
-// The interpreter has no os.stat_result, so this module defines the object it
-// returns.  The field names and the nanosecond companions match CPython's.
-// ---------------------------------------------------------------------------
-
-type statResult struct {
-	stMode    uint32
-	stIno     uint64
-	stDev     uint64
-	stNlink   uint64
-	stUid     uint32
-	stGid     uint32
-	stSize    int64
-	stAtime   float64
-	stMtime   float64
-	stCtime   float64
-	stAtimeNs int64
-	stMtimeNs int64
-	stCtimeNs int64
-	stBlocks  int64
-	stBlksize int64
-	stRdev    uint64
-}
-
-var StatResultType = py.NewTypeX("os.stat_result", "Result of os.stat and os.fstat.", nil, nil)
-
-func (s *statResult) Type() *py.Type { return StatResultType }
-
-func newStatResult(fi os.FileInfo) *statResult {
-	s := &statResult{stSize: fi.Size(), stMode: uint32(fi.Mode().Perm())}
-	// The permission bits alone are not enough: stat.S_ISDIR and friends read
-	// the file type out of the same word.
-	switch {
-	case fi.Mode()&os.ModeDir != 0:
-		s.stMode |= 0o040000
-	case fi.Mode()&os.ModeSymlink != 0:
-		s.stMode |= 0o120000
-	case fi.Mode()&os.ModeNamedPipe != 0:
-		s.stMode |= 0o010000
-	case fi.Mode()&os.ModeSocket != 0:
-		s.stMode |= 0o140000
-	case fi.Mode()&os.ModeDevice != 0:
-		if fi.Mode()&os.ModeCharDevice != 0 {
-			s.stMode |= 0o020000
-		} else {
-			s.stMode |= 0o060000
-		}
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		// The syscall Stat_t is authoritative where it exists: it carries
-		// the inode, link count, ownership and timestamps that FileInfo
-		// does not expose.
-		s.stMode = uint32(st.Mode)
-		s.stIno = st.Ino
-		s.stDev = uint64(st.Dev)
-		s.stNlink = uint64(st.Nlink)
-		s.stUid = st.Uid
-		s.stGid = st.Gid
-		s.stRdev = uint64(st.Rdev)
-		s.stBlocks = st.Blocks
-		s.stBlksize = int64(st.Blksize)
-		s.stAtime = float64(st.Atimespec.Sec) + float64(st.Atimespec.Nsec)/1e9
-		s.stMtime = float64(st.Mtimespec.Sec) + float64(st.Mtimespec.Nsec)/1e9
-		s.stCtime = float64(st.Ctimespec.Sec) + float64(st.Ctimespec.Nsec)/1e9
-		s.stAtimeNs = st.Atimespec.Sec*1e9 + st.Atimespec.Nsec
-		s.stMtimeNs = st.Mtimespec.Sec*1e9 + st.Mtimespec.Nsec
-		s.stCtimeNs = st.Ctimespec.Sec*1e9 + st.Ctimespec.Nsec
-	}
-	return s
-}
-
-// intProp/f64Prop expose the stat fields as attributes.
-func intProp(name string, get func(*statResult) int64) *py.Property {
-	return &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		s, ok := self.(*statResult)
-		if !ok {
-			return nil, py.ExceptionNewf(py.TypeError, "descriptor %s requires an os.stat_result", name)
-		}
-		return py.Int(get(s)), nil
-	}}
-}
-
-func f64Prop(name string, get func(*statResult) float64) *py.Property {
-	return &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		s, ok := self.(*statResult)
-		if !ok {
-			return nil, py.ExceptionNewf(py.TypeError, "descriptor %s requires an os.stat_result", name)
-		}
-		return py.Float(get(s)), nil
-	}}
+	return py.OSErrorFrom(err, path)
 }
 
 func init() {
@@ -251,32 +147,6 @@ func init() {
 		t.New = pathNew
 	}
 
-	statDict := &StatResultType.Dict
-	statDict.Set("st_mode", intProp("st_mode", func(s *statResult) int64 { return int64(s.stMode) }))
-	statDict.Set("st_ino", intProp("st_ino", func(s *statResult) int64 { return int64(s.stIno) }))
-	statDict.Set("st_dev", intProp("st_dev", func(s *statResult) int64 { return int64(s.stDev) }))
-	statDict.Set("st_nlink", intProp("st_nlink", func(s *statResult) int64 { return int64(s.stNlink) }))
-	statDict.Set("st_uid", intProp("st_uid", func(s *statResult) int64 { return int64(s.stUid) }))
-	statDict.Set("st_gid", intProp("st_gid", func(s *statResult) int64 { return int64(s.stGid) }))
-	statDict.Set("st_size", intProp("st_size", func(s *statResult) int64 { return s.stSize }))
-	statDict.Set("st_blocks", intProp("st_blocks", func(s *statResult) int64 { return s.stBlocks }))
-	statDict.Set("st_blksize", intProp("st_blksize", func(s *statResult) int64 { return s.stBlksize }))
-	statDict.Set("st_rdev", intProp("st_rdev", func(s *statResult) int64 { return int64(s.stRdev) }))
-	statDict.Set("st_atime", f64Prop("st_atime", func(s *statResult) float64 { return s.stAtime }))
-	statDict.Set("st_mtime", f64Prop("st_mtime", func(s *statResult) float64 { return s.stMtime }))
-	statDict.Set("st_ctime", f64Prop("st_ctime", func(s *statResult) float64 { return s.stCtime }))
-	statDict.Set("st_atime_ns", intProp("st_atime_ns", func(s *statResult) int64 { return s.stAtimeNs }))
-	statDict.Set("st_mtime_ns", intProp("st_mtime_ns", func(s *statResult) int64 { return s.stMtimeNs }))
-	statDict.Set("st_ctime_ns", intProp("st_ctime_ns", func(s *statResult) int64 { return s.stCtimeNs }))
-	statDict.Set("__repr__", py.MustNewMethod("__repr__", statRepr, 0, ""))
-}
-
-func statRepr(self py.Object) (py.Object, error) {
-	s, ok := self.(*statResult)
-	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "__repr__ requires an os.stat_result")
-	}
-	return py.String(fmtStat(s)), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +202,7 @@ func (p *path) statMethod(kwargs py.StringDict) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newStatResult(fi), nil
+	return pyos.NewStatResult(fi), nil
 }
 
 func (p *path) lstatMethod() (py.Object, error) {
@@ -340,7 +210,7 @@ func (p *path) lstatMethod() (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newStatResult(fi), nil
+	return pyos.NewStatResult(fi), nil
 }
 
 func (p *path) existsMethod(follow bool) (py.Object, error) {
@@ -941,12 +811,3 @@ func (p *path) openMethod(mode, buffering, encoding, errorsArg, newline py.Objec
 
 // statRepr renders a stat result similarly to CPython's repr.  The exact
 // spelling is not contract, but a useful one is.
-func fmtStat(s *statResult) string {
-	return "os.stat_result(st_mode=" + strconv.FormatUint(uint64(s.stMode), 10) +
-		", st_ino=" + strconv.FormatUint(s.stIno, 10) +
-		", st_dev=" + strconv.FormatUint(s.stDev, 10) +
-		", st_nlink=" + strconv.FormatUint(s.stNlink, 10) +
-		", st_uid=" + strconv.FormatUint(uint64(s.stUid), 10) +
-		", st_gid=" + strconv.FormatUint(uint64(s.stGid), 10) +
-		", st_size=" + strconv.FormatInt(s.stSize, 10) + ")"
-}

@@ -1,0 +1,15 @@
+shape: stat_result os 10 True
+size: 5 True True
+times: True True True
+tuple: True True True True
+repr: True 10
+lstat: True True
+follow: True True
+fstat: True True
+pathlib: True True
+error: FileNotFoundError 2 True [Errno 2] No such file or directory: '/nope/x'
+error: NotADirectoryError 20 True [Errno 20] Not a directory: 'D/f/sub'
+pathlib error: FileNotFoundError 2 [Errno 2] No such file or directory: '/nope/x'
+TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+module: version_info sys <class 'sys.version_info'>
+module: struct_time time <class 'time.struct_time'>

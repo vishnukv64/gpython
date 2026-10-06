@@ -266,7 +266,157 @@ var utilModule = &py.ModuleImpl{
 		py.MustNewMethod("find_spec", utilFindSpec, 0, find_spec_doc),
 		py.MustNewMethod("spec_from_file_location", utilSpecFromFileLocation, 0, spec_from_file_location_doc),
 		py.MustNewMethod("module_from_spec", utilModuleFromSpec, 0, module_from_spec_doc),
+		py.MustNewMethod("cache_from_source", utilCacheFromSource, 0, "cache_from_source(path, debug_override=None, *, optimization=None) -> the .pyc path for a source path"),
+		py.MustNewMethod("source_from_cache", utilSourceFromCache, 0, "source_from_cache(path) -> the source path for a .pyc path"),
 	},
+}
+
+// cacheTag is sys.implementation.cache_tag, which names the .pyc files; it is
+// kept beside sys's value ("gpython-310") so the two cannot disagree.
+const cacheTag = "gpython-310"
+
+// pathArg accepts a str or anything with __fspath__ (pathlib.Path).
+func pathArg(o py.Object) (string, error) {
+	if s, ok := o.(py.String); ok {
+		return string(s), nil
+	}
+	if fn, err := py.GetAttrString(o, "__fspath__"); err == nil {
+		r, err := py.Call(fn, nil, py.NewStringDict())
+		if err != nil {
+			return "", err
+		}
+		if s, ok := r.(py.String); ok {
+			return string(s), nil
+		}
+	}
+	return "", py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", o.Type().Name)
+}
+
+// splitPath is CPython's _path_split: everything before the last "/", and the
+// rest.  The root is NOT kept for a file directly under it - CPython's
+// cache_from_source("/x.py") is "__pycache__/x...pyc", measured on 3.14 - so
+// this reproduces that rather than what looks more correct.
+func splitPath(p string) (string, string) {
+	i := strings.LastIndex(p, "/")
+	if i < 0 {
+		return "", p
+	}
+	return p[:i], p[i+1:]
+}
+
+func joinPath(head, tail string) string {
+	switch {
+	case head == "":
+		return tail
+	case strings.HasSuffix(head, "/"):
+		return head + tail
+	}
+	return head + "/" + tail
+}
+
+// utilCacheFromSource is PEP 3147's rule, as CPython computes it: the
+// __pycache__ directory beside the source, and the source's base name with the
+// cache tag and an optional ".opt-N".  pip's uninstaller uses it to find the
+// .pyc files to remove, and imports it at module level, so its absence stopped
+// "pip install" before anything ran.
+func utilCacheFromSource(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var pathObj, debugOverride py.Object
+	var optimization py.Object = py.None
+	debugOverride = py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O$O:cache_from_source",
+		[]string{"path", "debug_override", "optimization"}, &pathObj, &debugOverride, &optimization); err != nil {
+		return nil, err
+	}
+	p, err := pathArg(pathObj)
+	if err != nil {
+		return nil, err
+	}
+	if debugOverride != py.None {
+		// CPython's deprecated spelling: True means no optimization suffix,
+		// False means level 1.
+		if optimization != py.None {
+			return nil, py.ExceptionNewf(py.TypeError, "debug_override or optimization must be set to None")
+		}
+		if b, _ := py.MakeBool(debugOverride); b == py.True {
+			optimization = py.String("")
+		} else {
+			optimization = py.Int(1)
+		}
+	}
+	head, tail := splitPath(p)
+	name := tail
+	sep := ""
+	if i := strings.LastIndex(tail, "."); i >= 0 {
+		name, sep = tail[:i], "."
+		if name == "" {
+			// ".hidden" has no base, so the part after the dot is the name.
+			name = tail[i+1:]
+		}
+	}
+	filename := name + sep + cacheTag
+	// None means this interpreter's level, which is 0 - and level 0 has no suffix.
+	opt := ""
+	if optimization != py.None {
+		s, err := py.StrAsString(optimization)
+		if err != nil {
+			return nil, err
+		}
+		opt = s
+	}
+	if opt != "" {
+		for _, r := range opt {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+				q, _ := py.ReprAsString(py.String(opt))
+				return nil, py.ExceptionNewf(py.ValueError, "%s is not alphanumeric", q)
+			}
+		}
+		filename += ".opt-" + opt
+	}
+	return py.String(joinPath(joinPath(head, "__pycache__"), filename+".pyc")), nil
+}
+
+// utilSourceFromCache inverts cache_from_source, refusing a path that is not a
+// PEP 3147 cache file with CPython's messages.
+func utilSourceFromCache(self py.Object, args py.Tuple) (py.Object, error) {
+	var pathObj py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "source_from_cache", 1, 1, &pathObj); err != nil {
+		return nil, err
+	}
+	p, err := pathArg(pathObj)
+	if err != nil {
+		return nil, err
+	}
+	head, pycFile := splitPath(p)
+	head, pycache := splitPath(head)
+	if pycache != "__pycache__" {
+		q, _ := py.ReprAsString(py.String(p))
+		return nil, py.ExceptionNewf(py.ValueError, "__pycache__ not bottom-level directory in %s", q)
+	}
+	quoted, _ := py.ReprAsString(py.String(pycFile))
+	switch strings.Count(pycFile, ".") {
+	case 2:
+	case 3:
+		parts := strings.Split(pycFile, ".")
+		optPart := parts[len(parts)-2]
+		if !strings.HasPrefix(optPart, "opt-") {
+			return nil, py.ExceptionNewf(py.ValueError, "optimization portion of filename does not start with 'opt-'")
+		}
+		level := optPart[4:]
+		ok := level != ""
+		for _, r := range level {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+				ok = false
+			}
+		}
+		if !ok {
+			q, _ := py.ReprAsString(py.String(level))
+			return nil, py.ExceptionNewf(py.ValueError, "optimization level %s is not an alphanumeric value", q)
+		}
+	default:
+		return nil, py.ExceptionNewf(py.ValueError, "expected only 2 or 3 dots in %s", quoted)
+	}
+	base := pycFile[:strings.Index(pycFile, ".")]
+	return py.String(joinPath(head, base+".py")), nil
 }
 
 func utilFindSpec(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {

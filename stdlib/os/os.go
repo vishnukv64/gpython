@@ -65,6 +65,9 @@ func init() {
 		py.MustNewMethod("rename", rename, 0, rename_doc),
 		py.MustNewMethod("access", access, 0, access_doc),
 		py.MustNewMethod("utime", utime, 0, utime_doc),
+		py.MustNewMethod("stat", osStat, 0, "stat(path, *, dir_fd=None, follow_symlinks=True) -> stat_result"),
+		py.MustNewMethod("lstat", osLstat, 0, "lstat(path, *, dir_fd=None) -> stat_result, not following a final symlink"),
+		py.MustNewMethod("fstat", osFstat, 0, "fstat(fd) -> stat_result for an open file descriptor"),
 		py.MustNewMethod("open", osOpen, 0, open_doc),
 		py.MustNewMethod("symlink", symlink, 0, "symlink(src, dst, target_is_directory=False) -> create a symbolic link."),
 		py.MustNewMethod("readlink", readlink, 0, "readlink(path) -> the path a symbolic link points to."),
@@ -122,6 +125,7 @@ func init() {
 		return self, nil
 	}, 0, "Return the class, ignoring the subscription parameters."))
 	globals.Set("PathLike", pathLikeType)
+	globals.Set("stat_result", StatResultType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

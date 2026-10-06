@@ -572,8 +572,19 @@ func (t *Type) NewTypeFlags(Name string, Doc string, New NewFunc, Init InitFunc,
 	// class did not match - binascii.Error derives from ValueError, and
 	// 'except Exception' has to catch it.
 	Flags &^= TPFLAGS_READY | TPFLAGS_READYING
+	// A subclass's metatype is its BASE's metatype - type(str) is type, as is
+	// type(object).  This said "ObjectType: t", making the base itself the
+	// metatype: type(str), type(int) and type(list) were all object, so
+	// "isinstance(str, type)" was False and optparse rejected "type=str" (pip's
+	// --config-settings).  The base's metatype is nil while package variables
+	// are being initialised - object's is only set in init() - and it is type
+	// then.
+	meta := t.ObjectType
+	if meta == nil {
+		meta = TypeType
+	}
 	tt := &Type{
-		ObjectType: t,
+		ObjectType: meta,
 		Name:       Name,
 		Doc:        Doc,
 		New:        New,
@@ -1748,7 +1759,15 @@ func (t *Type) Alloc() *Type {
 
 // Create a new type
 func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
-	// fmt.Printf("TypeNew(type=%q, args=%v, kwargs=%v\n", metatype.Name, args, kwargs)
+	// The bases' MROs must be computed before the new one is built from them.
+	// A Go type from a later-initialising package is queued, not readied, so
+	// "class MyFinder(importlib.abc.MetaPathFinder)" got the MRO MyFinder,
+	// MetaPathFinder - no Finder, no object - and isinstance against Finder
+	// failed.  That was masked while a Go subclass's metatype was its base
+	// class, which routed the class statement through a path that readied it.
+	if err := TypeEnsureReady(); err != nil {
+		return nil, err
+	}
 	var nameObj, basesObj, orig_dictObj Object
 	var new_type, base, winner *Type
 	// PyHeapTypeObject et;
