@@ -657,8 +657,9 @@ func (a Int) M__round__(digits Object) (Object, error) {
 		scale := Int(math.Pow(10, float64(-b)))
 		digits := r % scale
 		r -= digits
-		// Round
-		if 2*digits >= scale {
+		// Round half to EVEN, as CPython does: round(2500, -3) is 2000 and
+		// round(3500, -3) is 4000.  ">=" rounded every half up.
+		if 2*digits > scale || 2*digits == scale && (r/scale)%2 == 1 {
 			r += scale
 		}
 		if negative {

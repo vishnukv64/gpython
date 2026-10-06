@@ -8,7 +8,10 @@
 
 package py
 
-import "bytes"
+import (
+	"bytes"
+	"strings"
+)
 
 var SetType = NewTypeX("set", "set() -> new empty set object\nset(iterable) -> new set object\n\nBuild an unordered collection of unique elements.", SetNew, nil)
 
@@ -34,6 +37,10 @@ type Set struct {
 	// random: "{1, 2} | frozenset({3})" printed as {2, 3, 1}, and a set built
 	// from a list did not read back in that list's order.
 	order []string
+	// boolKeys marks a member whose first insertion was a bool, which is
+	// stored under the int it equals; as for dict, the first object wins, so
+	// {True, 1} is {True}.  Nil until a bool is added.
+	boolKeys map[string]bool
 }
 
 // Type of this Set object
@@ -138,6 +145,12 @@ func (s *Set) setAddCode(item Object) error {
 	}
 	if _, exists := s.items[k]; !exists {
 		s.order = append(s.order, k)
+		if _, isBool := item.(Bool); isBool {
+			if s.boolKeys == nil {
+				s.boolKeys = map[string]bool{}
+			}
+			s.boolKeys[k] = true
+		}
 	}
 	s.items[k] = SetValue{}
 	return nil
@@ -187,11 +200,15 @@ func (s *Set) setDelete(item Object) bool {
 		}
 	}
 	s.ht.forget(k)
+	delete(s.boolKeys, k)
 	return true
 }
 
 // decodeKey recovers the member an items key stands for.
 func (s *Set) decodeKey(encoded string) (Object, error) {
+	if s.boolKeys[encoded] {
+		return NewBool(strings.HasSuffix(encoded, "1")), nil
+	}
 	if isHashKey(encoded) {
 		if obj, ok := s.ht.objs[encoded]; ok {
 			return obj, nil
@@ -229,6 +246,12 @@ func (s *Set) Copy() *Set {
 	ret.order = append([]string{}, s.order...)
 	for k := range s.items {
 		ret.items[k] = SetValue{}
+	}
+	for k := range s.boolKeys {
+		if ret.boolKeys == nil {
+			ret.boolKeys = map[string]bool{}
+		}
+		ret.boolKeys[k] = true
 	}
 	return ret
 }

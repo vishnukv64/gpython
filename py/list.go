@@ -181,57 +181,11 @@ func init() {
 	}, 0, "insert(index, object) -- insert object before index."))
 
 	ListType.Dict.Set("index", MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
-		l := self.(*List)
-		if len(args) < 1 {
-			return nil, ExceptionNewf(TypeError, "index expected at least 1 argument, got %d", len(args))
-		}
-		if len(args) > 3 {
-			return nil, ExceptionNewf(TypeError, "index expected at most 3 arguments, got %d", len(args))
-		}
-		n := len(l.Items)
-		start, stop := 0, n
-		if len(args) >= 2 {
-			var err error
-			start, err = sliceIndex(args[1], n, 0)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if len(args) >= 3 {
-			var err error
-			stop, err = sliceIndex(args[2], n, n)
-			if err != nil {
-				return nil, err
-			}
-		}
-		for i := start; i < stop; i++ {
-			eq, err := Eq(l.Items[i], args[0])
-			if err != nil {
-				return nil, err
-			}
-			if eq == True {
-				return Int(i), nil
-			}
-		}
-		return nil, ExceptionNewf(ValueError, "list.index(x): x not in list")
+		return seqIndex("list", self.(*List).snapshot(), args)
 	}, 0, "index(value, [start, [stop]]) -> integer -- return first index of value."))
 
 	ListType.Dict.Set("count", MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
-		l := self.(*List)
-		if len(args) != 1 {
-			return nil, ExceptionNewf(TypeError, "list.count() takes exactly one argument (%d given)", len(args))
-		}
-		count := 0
-		for _, item := range l.Items {
-			eq, err := Eq(item, args[0])
-			if err != nil {
-				return nil, err
-			}
-			if eq == True {
-				count++
-			}
-		}
-		return Int(count), nil
+		return seqCount("list", self.(*List).snapshot(), args)
 	}, 0, "count(value) -> integer -- return number of occurrences of value."))
 
 	ListType.Dict.Set("reverse", MustNewMethod("reverse", func(self Object, args Tuple) (Object, error) {
@@ -882,4 +836,59 @@ func (l *List) snapshot() []Object {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]Object(nil), l.Items...)
+}
+
+// seqIndex is list.index and tuple.index: the first position in
+// items[start:stop] equal to the value, or ValueError.
+func seqIndex(kind string, items []Object, args Tuple) (Object, error) {
+	if len(args) < 1 {
+		return nil, ExceptionNewf(TypeError, "index expected at least 1 argument, got %d", len(args))
+	}
+	if len(args) > 3 {
+		return nil, ExceptionNewf(TypeError, "index expected at most 3 arguments, got %d", len(args))
+	}
+	n := len(items)
+	start, stop := 0, n
+	var err error
+	if len(args) >= 2 {
+		if start, err = sliceIndex(args[1], n, 0); err != nil {
+			return nil, err
+		}
+	}
+	if len(args) >= 3 {
+		if stop, err = sliceIndex(args[2], n, n); err != nil {
+			return nil, err
+		}
+	}
+	for i := start; i < stop; i++ {
+		eq, err := Eq(items[i], args[0])
+		if err != nil {
+			return nil, err
+		}
+		if eq == True {
+			return Int(i), nil
+		}
+	}
+	if kind == "tuple" {
+		return nil, ExceptionNewf(ValueError, "tuple.index(x): x not in tuple")
+	}
+	return nil, ExceptionNewf(ValueError, "list.index(x): x not in list")
+}
+
+// seqCount is list.count and tuple.count.
+func seqCount(kind string, items []Object, args Tuple) (Object, error) {
+	if len(args) != 1 {
+		return nil, ExceptionNewf(TypeError, "%s.count() takes exactly one argument (%d given)", kind, len(args))
+	}
+	count := 0
+	for _, item := range items {
+		eq, err := Eq(item, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if eq == True {
+			count++
+		}
+	}
+	return Int(count), nil
 }

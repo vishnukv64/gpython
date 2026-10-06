@@ -1938,10 +1938,11 @@ func (s String) Justify(args Tuple, mode int) (Object, error) {
 	case 1:
 		return String(strings.Repeat(fillStr, pad) + string(s)), nil
 	default:
-		// The odd extra character goes on the RIGHT: "ab".center(5) is
-		// "  ab " and "ab".center(4) is " ab " - measured against CPython.
-		right := pad / 2
-		left := pad - right
+		// CPython's rule (unicodeobject.c pad): the odd extra character goes
+		// LEFT only when the width is odd too - "a".center(4, "*") is '*a**'
+		// but "ab".center(5, ".") is '..ab.'.
+		left := pad/2 + (pad & width & 1)
+		right := pad - left
 		return String(strings.Repeat(fillStr, left) + string(s) + strings.Repeat(fillStr, right)), nil
 	}
 }
@@ -2042,7 +2043,9 @@ func (s String) FindMethod(args Tuple, name string, reverse, raiseMissing bool) 
 		}
 		return Int(-1), nil
 	}
-	return Int(beg + idx), nil
+	// idx is a BYTE offset into haystack; the result is in characters.  Adding
+	// it raw made "héllo".rfind("l") 4 where CPython has 3.
+	return Int(beg + utf8.RuneCountInString(haystack[:idx])), nil
 }
 
 // Partition splits at the first (or the last) occurrence of sep, returning the

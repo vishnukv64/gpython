@@ -512,9 +512,10 @@ func (a *BigInt) M__round__(digits Object) (Object, error) {
 		scale := new(big.Int).Exp((*big.Int)(bigInt10), negB, nil)
 		digits := new(big.Int).Mod(r, scale)
 		r.Sub(r, digits)
-		// Round
+		// Round half to EVEN, as CPython does (see Int.M__round__).
 		digits.Lsh(digits, 1)
-		if digits.Cmp(scale) >= 0 {
+		c := digits.Cmp(scale)
+		if c > 0 || c == 0 && new(big.Int).Quo(r, scale).Bit(0) == 1 {
 			r.Add(r, scale)
 		}
 		if negative {

@@ -473,7 +473,12 @@ type dictShared struct {
 	// it.  A dict of plain string keys - nearly all of them - never touches
 	// it, and its two maps stay nil.
 	ht hashTable
-	// mu guards m, order and ht.  There is no GIL, so a dict is read and
+	// boolKeys marks an int-encoded key whose FIRST insertion was a bool.  A
+	// bool is encoded as the int it equals, so True and 1 are one key - but
+	// CPython keeps the key object first inserted, so {True: 1} prints as
+	// {True: 1}, not {1: 1}.  Nil until a bool key is stored.
+	boolKeys map[string]bool
+	// mu guards m, order, ht and boolKeys.  There is no GIL, so a dict is read and
 	// written from several goroutines at once - a module's globals by every
 	// thread running a function from it - and an unguarded Go map does not
 	// merely give a wrong answer then: the runtime aborts the process with
@@ -597,6 +602,7 @@ func (d *StringDict) Del(key string) bool {
 	}
 	// A key whose type defines __hash__ also owns a slot in the bucket table.
 	d.shared.ht.forget(key)
+	delete(d.shared.boolKeys, key)
 	return true
 }
 
@@ -663,8 +669,38 @@ func (d StringDict) setItem(key, value Object) error {
 	if isHashKey(encoded) {
 		return d.hashSet(encoded, key, value)
 	}
+	if _, isBool := key.(Bool); isBool {
+		d.noteBoolKey(encoded)
+	}
 	d.Set(encoded, value)
 	return nil
+}
+
+// noteBoolKey records that encoded is being inserted as a bool, unless the
+// slot already holds a key - which keeps its original object, as in CPython.
+func (d StringDict) noteBoolKey(encoded string) {
+	if d.shared == nil {
+		return
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	if _, exists := d.m[encoded]; exists {
+		return
+	}
+	if d.shared.boolKeys == nil {
+		d.shared.boolKeys = map[string]bool{}
+	}
+	d.shared.boolKeys[encoded] = true
+}
+
+// isBoolKey reports whether encoded was first inserted as a bool.
+func (d StringDict) isBoolKey(encoded string) bool {
+	if d.shared == nil {
+		return false
+	}
+	d.shared.mu.RLock()
+	defer d.shared.mu.RUnlock()
+	return d.shared.boolKeys[encoded]
 }
 
 // DecodeKey recovers the object an encoded key stands for.
@@ -674,6 +710,9 @@ func (d StringDict) setItem(key, value Object) error {
 // object lives in this dict's table - hashing is not reversible - so it takes
 // the dict to decode it.  See hashTable.
 func (d StringDict) DecodeKey(encoded string) (Object, error) {
+	if d.isBoolKey(encoded) {
+		return NewBool(strings.HasSuffix(encoded, "1")), nil
+	}
 	if isHashKey(encoded) && d.shared != nil {
 		d.shared.mu.RLock()
 		obj, ok := d.shared.ht.objs[encoded]
@@ -691,6 +730,9 @@ func (d StringDict) DecodeKey(encoded string) (Object, error) {
 // and filed anew in d.
 func (d *StringDict) copyEntryFrom(src StringDict, code string, value Object) error {
 	if !isHashKey(code) {
+		if src.isBoolKey(code) {
+			d.noteBoolKey(code)
+		}
 		d.Set(code, value)
 		return nil
 	}
@@ -785,6 +827,7 @@ func (d *StringDict) Clear() {
 	}
 	d.shared.order = d.shared.order[:0]
 	d.shared.ht = hashTable{}
+	d.shared.boolKeys = nil
 }
 
 // DictEntry is one key/value pair for NewStringDictFrom.
@@ -1458,7 +1501,10 @@ func readPrefixInt(s string) (int, string, error) {
 	return n, s[i+1:], nil
 }
 
-// DictNew
+// DictNew is dict(): a dict or dict subclass is copied directly, and anything
+// else goes through dictUpdateFrom, as dict.update does.  It used its own
+// loop, which accepted only tuples with str keys and silently dropped the
+// rest, so dict([(1, 2)]) was {} and dict(defaultdict) raised.
 func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	if len(args) > 1 {
 		return nil, ExceptionNewf(TypeError, "dict expects at most one argument")
@@ -1477,21 +1523,8 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 					}
 				}
 			}
-		} else {
-			seq, err := SequenceList(arg)
-			if err != nil {
-				return nil, err
-			}
-			for _, i := range seq.Items {
-				switch z := i.(type) {
-				case Tuple:
-					if zStr, ok := z[0].(String); ok {
-						out.Set(string(zStr), z[1])
-					}
-				default:
-					return nil, ExceptionNewf(TypeError, "non-tuple sequence")
-				}
-			}
+		} else if err := dictUpdateFrom(out, arg); err != nil {
+			return nil, err
 		}
 	}
 	if kwargs.Len() > 0 {

@@ -1211,13 +1211,13 @@ func builtin_iter(self py.Object, args py.Tuple) (py.Object, error) {
 	if nArgs == 1 {
 		return py.Iter(v)
 	}
-	_, ok := v.(*py.Function)
-	sentinel := args[1]
-	if !ok {
+	// Any callable, not only a Python function: iter(f.readline, "") and
+	// iter(it.__next__, 0) pass a bound method.
+	if c, _ := builtin_callable(nil, v); c != py.True {
 		return nil, py.ExceptionNewf(py.TypeError,
 			"iter(v, w): v must be callable")
 	}
-	return py.NewCallIterator(v, sentinel), nil
+	return py.NewCallIterator(v, args[1]), nil
 }
 
 // For code see vm/builtin.go

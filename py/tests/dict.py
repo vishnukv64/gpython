@@ -67,7 +67,8 @@ assert a["a"] == "1"
 assert a["b"] == "2"
 assert a["c"] == "3"
 
-assertRaises(TypeError, dict, "a")
+# A str is a sequence of 1-length items, not pairs - CPython says ValueError.
+assertRaises(ValueError, dict, "a")
 assertRaises(TypeError, dict, 1)
 assertRaises(TypeError, dict, {"a":1}, {"b":2})
 

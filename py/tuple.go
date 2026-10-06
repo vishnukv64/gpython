@@ -305,3 +305,30 @@ var _ I__eq__ = Tuple(nil)
 var _ I__ne__ = Tuple(nil)
 
 // var _ richComparison = Tuple(nil)
+
+// tupleItems is the sequence behind self: a Tuple, or the payload of an
+// instance of a tuple subclass (a namedtuple record, say).
+func tupleItems(self Object) ([]Object, error) {
+	if t, ok := self.(Tuple); ok {
+		return t, nil
+	}
+	return SequenceTuple(self)
+}
+
+func init() {
+	TupleType.Dict.Set("index", MustNewMethod("index", func(self Object, args Tuple) (Object, error) {
+		items, err := tupleItems(self)
+		if err != nil {
+			return nil, err
+		}
+		return seqIndex("tuple", items, args)
+	}, 0, "index(value, [start, [stop]]) -> integer -- return first index of value."))
+
+	TupleType.Dict.Set("count", MustNewMethod("count", func(self Object, args Tuple) (Object, error) {
+		items, err := tupleItems(self)
+		if err != nil {
+			return nil, err
+		}
+		return seqCount("tuple", items, args)
+	}, 0, "count(value) -> integer -- return number of occurrences of value."))
+}
