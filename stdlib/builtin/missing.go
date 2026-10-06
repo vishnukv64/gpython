@@ -150,25 +150,27 @@ func builtin_issubclass(self py.Object, args py.Tuple) (py.Object, error) {
 		return nil, py.ExceptionNewf(py.TypeError, "issubclass() arg 1 must be a class")
 	}
 
-	if infos, ok := classinfo.(py.Tuple); ok {
-		for _, info := range infos {
-			parent, ok := info.(*py.Type)
-			if !ok {
-				return nil, py.ExceptionNewf(py.TypeError, "issubclass() arg 2 must be a class or tuple of classes")
-			}
-			if class.IsSubtype(parent) {
+	infos, isTuple := classinfo.(py.Tuple)
+	if !isTuple {
+		infos = py.Tuple{classinfo}
+	}
+	for _, info := range infos {
+		parent, ok := info.(*py.Type)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "issubclass() arg 2 must be a class or tuple of classes")
+		}
+		// A metaclass __subclasscheck__ (ABCMeta's) decides, as in CPython.
+		if res, ok, err := metaclassHook(parent, "__subclasscheck__", class); err != nil {
+			return nil, err
+		} else if ok {
+			if res {
 				return py.True, nil
 			}
+			continue
 		}
-		return py.False, nil
-	}
-
-	parent, ok := classinfo.(*py.Type)
-	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "issubclass() arg 2 must be a class or tuple of classes")
-	}
-	if class.IsSubtype(parent) {
-		return py.True, nil
+		if class.IsSubtype(parent) {
+			return py.True, nil
+		}
 	}
 	return py.False, nil
 }

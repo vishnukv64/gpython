@@ -659,6 +659,19 @@ func do_TUPLE_EXTEND(vm *Vm, i int32) error {
 func do_LIST_EXTEND(vm *Vm, i int32) error {
 	iterable := vm.POP()
 	listObj := vm.PEEK(int(i))
+	// A starred SET display ("{tag, *attrs}") extends a set the same way, as
+	// LIST_APPEND serves tuple displays; each element gets SET_ADD's
+	// unhashable check.
+	if set, ok := listObj.(*py.Set); ok {
+		var aerr error
+		if err := py.Iterate(iterable, func(o py.Object) bool {
+			aerr = set.AddErr(o)
+			return aerr != nil
+		}); err != nil {
+			return err
+		}
+		return aerr
+	}
 	list, ok := listObj.(*py.List)
 	if !ok {
 		return py.ExceptionNewf(py.SystemError, "LIST_EXTEND: expected a list, got %s", listObj.Type().Name)

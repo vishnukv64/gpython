@@ -16,6 +16,9 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
+	"strings"
+	"sync"
 )
 
 // Type flags (tp_flags)
@@ -93,7 +96,7 @@ type Type struct {
 	Bases Tuple
 	Mro   Tuple // method resolution order
 	//	Cache      Object
-	//	Subclasses Tuple
+	subclasses []*Type // direct subclasses, for __subclasses__; see add_subclass
 	//	Weaklist   Tuple
 	New      NewFunc
 	Init     InitFunc
@@ -418,6 +421,13 @@ func init() {
 		return None, nil
 	}, 0, "This method is called when a class is subclassed."))
 
+	// object.__subclasshook__: "no opinion", so an ABC's __subclasscheck__
+	// falls back to its registry and real subclasses.  ABCMeta calls it on
+	// every ABC, and its absence stopped numbers (and so decimal) importing.
+	ObjectType.Dict.Set("__subclasshook__", MustNewMethod("__subclasshook__", func(self Object, args Tuple) (Object, error) {
+		return NotImplemented, nil
+	}, 0, "Abstract classes can override this to customize issubclass()."))
+
 	ObjectType.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return None, nil
 	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
@@ -431,6 +441,24 @@ func init() {
 	// The descriptor form is what makes it useful: "tuple.__new__(T, ...)" must
 	// build a T, and only the owner knows that.
 	ObjectType.Dict.Set("__new__", &nativeNew{})
+	// type.__new__ too, where super() can find it: a metaclass's
+	// "super().__new__(mcls, name, bases, ns)" - ABCMeta's, so every ABC -
+	// failed with "'super' object has no attribute '__new__'".
+	TypeType.Dict.Set("__new__", &nativeNew{})
+	// __subclasses__ is how ABCMeta finds the classes it must check, so every
+	// register() and isinstance against an ABC needed it.
+	TypeType.Dict.Set("__subclasses__", MustNewMethod("__subclasses__", func(self Object, args Tuple) (Object, error) {
+		t, ok := self.(*Type)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "descriptor '__subclasses__' requires a 'type' object")
+		}
+		subs := t.Subclasses()
+		items := make([]Object, len(subs))
+		for i, c := range subs {
+			items[i] = c
+		}
+		return NewListFromItems(items), nil
+	}, 0, "Return a list of immediate subclasses."))
 
 	// A type is hashable by identity, as in CPython: "{str: 1, bytes: 2}" is
 	// ordinary code (requests builds HEADER_VALIDATORS that way).  Without a
@@ -1458,39 +1486,27 @@ func (t *Type) inherit_special(base *Type) {
 
 }
 
-func add_subclass(base, t *Type) {
-	// Py_ssize_t i;
-	// int result;
-	// PyObject *list, *ref, *newobj;
+// subclassMu guards every Type's subclasses list; classes are created from
+// several goroutines once threads run.
+var subclassMu sync.Mutex
 
-	// list = base->tp_subclasses;
-	// if (list == nil) {
-	//     base->tp_subclasses = list = PyList_New(0);
-	//     if (list == nil)
-	//         return -1;
-	// }
-	// assert(PyList_Check(list));
-	// newobj = PyWeakref_NewRef((PyObject *)type, nil);
-	// i = PyList_GET_SIZE(list);
-	// while (--i >= 0) {
-	//     ref = PyList_GET_ITEM(list, i);
-	//     assert(PyWeakref_CheckRef(ref));
-	//     if (PyWeakref_GET_OBJECT(ref) == Py_None)
-	//         return PyList_SetItem(list, i, newobj);
-	// }
-	// result = PyList_Append(list, newobj);
-	// Py_DECREF(newobj);
-	// return result;
+// add_subclass records t as a direct subclass of base, for
+// type.__subclasses__().  The references are strong - Go has no weak
+// pointer here - so a class lives as long as its base does, which CPython
+// only guarantees while something else holds it.
+func add_subclass(base, t *Type) {
+	subclassMu.Lock()
+	base.subclasses = append(base.subclasses, t)
+	subclassMu.Unlock()
 }
 
-// func remove_subclass(base, t *Type) {
-// 	// Py_ssize_t i;
-// 	// PyObject *list, *ref;
-//
-// 	// list = base->tp_subclasses;
-// 	// if (list == nil) {
-// 	//     return;
-// 	// }
+// Subclasses returns the direct subclasses of t, in creation order.
+func (t *Type) Subclasses() []*Type {
+	subclassMu.Lock()
+	defer subclassMu.Unlock()
+	return append([]*Type(nil), t.subclasses...)
+}
+
 // 	// assert(PyList_Check(list));
 // 	// i = PyList_GET_SIZE(list);
 // 	// while (--i >= 0) {
@@ -2451,57 +2467,27 @@ func ObjectNew(t *Type, args Tuple, kwargs StringDict) (Object, error) {
 		return nil, ExceptionNewf(TypeError, "object() takes no parameters")
 	}
 
-	// FIXME abstrac ty pes
-	// if (type->tp_flags & TPFLAGS_IS_ABSTRACT) {
-	// 	PyObject *abstract_methods = NULL;
-	// 	PyObject *builtins;
-	// 	PyObject *sorted;
-	// 	PyObject *sorted_methods = NULL;
-	// 	PyObject *joined = NULL;
-	// 	PyObject *comma;
-	// 	_Py_static_string(comma_id, ", ");
-	// 	_Py_IDENTIFIER(sorted);
-
-	// 	// Compute ", ".join(sorted(type.__abstractmethods__))
-	// 	// into joined.
-	// 	abstract_methods = type_abstractmethods(type, NULL);
-	// 	if (abstract_methods == NULL) {
-	// 		goto error;
-	// 	}
-	// 	builtins = PyEval_GetBuiltins();
-	// 	if (builtins == NULL) {
-	// 		goto error;
-	// 	}
-	// 	sorted = _PyDict_GetItemId(builtins, &PyId_sorted);
-	// 	if (sorted == NULL) {
-	// 		goto error;
-	// 	}
-	// 	sorted_methods = PyObject_CallFunctionObjArgs(sorted,
-	// 		abstract_methods,
-	// 		NULL);
-	// 	if (sorted_methods == NULL) {
-	// 		goto error;
-	// 	}
-	// 	comma = _PyUnicode_FromId(&comma_id);
-	// 	if (comma == NULL) {
-	// 		goto error;
-	// 	}
-	// 	joined = PyUnicode_Join(comma, sorted_methods);
-	// 	if (joined == NULL) {
-	// 		goto error;
-	// 	}
-
-	// 	PyErr_Format(PyExc_TypeError,
-	// 		"Can't instantiate abstract class %s "
-	// 		"with abstract methods %U",
-	// 		type->tp_name,
-	// 		joined);
-	// error:
-	// 	Py_XDECREF(joined);
-	// 	Py_XDECREF(sorted_methods);
-	// 	Py_XDECREF(abstract_methods);
-	// 	return NULL;
-	// }
+	// An ABC with abstract methods left cannot be instantiated: _py_abc sets
+	// __abstractmethods__, and this is where CPython enforces it.  Without the
+	// check A() on an abstract class silently built an instance.
+	if abs := t.Lookup("__abstractmethods__"); abs != nil {
+		var names []string
+		_ = Iterate(abs, func(o Object) bool {
+			if n, ok := o.(String); ok {
+				names = append(names, "'"+string(n)+"'")
+			}
+			return false
+		})
+		if len(names) > 0 {
+			sort.Strings(names)
+			plural := ""
+			if len(names) > 1 {
+				plural = "s"
+			}
+			return nil, ExceptionNewf(TypeError, "Can't instantiate abstract class %s without an implementation for abstract method%s %s",
+				t.Name, plural, strings.Join(names, ", "))
+		}
+	}
 	return t.Alloc(), nil
 }
 

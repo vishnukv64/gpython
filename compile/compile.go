@@ -2152,8 +2152,29 @@ func (c *compiler) Expr(expr ast.Expr) {
 		}
 	case *ast.Set:
 		// Elts []Expr
-		c.Exprs(node.Elts)
-		c.OpArg(vm.BUILD_SET, uint32(len(node.Elts)))
+		starred := false
+		for _, elt := range node.Elts {
+			if _, ok := elt.(*ast.Starred); ok {
+				starred = true
+			}
+		}
+		if !starred {
+			c.Exprs(node.Elts)
+			c.OpArg(vm.BUILD_SET, uint32(len(node.Elts)))
+			break
+		}
+		// PEP 448: an empty set grown in place, as compileListDisplay does,
+		// so evaluation stays left to right.
+		c.OpArg(vm.BUILD_SET, 0)
+		for _, elt := range node.Elts {
+			if star, ok := elt.(*ast.Starred); ok {
+				c.Expr(star.Value)
+				c.OpArg(vm.LIST_EXTEND, 1)
+				continue
+			}
+			c.Expr(elt)
+			c.OpArg(vm.SET_ADD, 1)
+		}
 	case *ast.ListComp:
 		// Elt        Expr
 		// Generators []Comprehension

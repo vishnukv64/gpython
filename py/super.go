@@ -70,7 +70,17 @@ func typeNameOf(obj Object) string {
 func (s *Super) lookup(name string) (Object, bool, error) {
 	start := s.typ
 	var mro Object
-	if s.obj != nil && s.obj != None {
+	// onClass: the bound object IS the class; attributes then bind as
+	// __get__(None, obj), as CPython's super_getattro does.
+	onClass := false
+	if t, isClass := s.obj.(*Type); isClass && IsClassObject(t) && t.IsSubtype(s.typ) {
+		onClass = true
+		// super_check: when the bound object is itself a subclass of the
+		// proxy's class - mcls in a metaclass __new__, cls in a classmethod -
+		// its OWN MRO is walked.  type(obj)'s MRO (type, object) never holds
+		// the proxy's class, so "super().__new__(mcls, ...)" found nothing.
+		mro = t.Mro
+	} else if s.obj != nil && s.obj != None {
 		mro = s.obj.Type().Mro
 	} else {
 		mro = s.typ.Mro
@@ -102,7 +112,11 @@ func (s *Super) lookup(name string) (Object, bool, error) {
 			// A descriptor found on the class binds to the instance.
 			if fn := entryType.Lookup(name); fn != nil {
 				if getter, ok := fn.(I__get__); ok {
-					res, err := getter.M__get__(s.obj, entryType)
+					inst, owner := s.obj, Object(entryType)
+					if onClass {
+						inst, owner = None, s.obj
+					}
+					res, err := getter.M__get__(inst, owner)
 					if err != nil {
 						return nil, false, err
 					}
@@ -176,6 +190,11 @@ func SuperNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	obj := args[1]
 	// The instance must be an instance of the class, as in CPython.
 	if obj != None && obj != nil {
+		// An instance of typ, or a class deriving from it (super(B, B) in a
+		// classmethod), as in CPython's supercheck.
+		if t, isClass := obj.(*Type); isClass && IsClassObject(t) && t.IsSubtype(typ) {
+			return &Super{typ: typ, obj: obj}, nil
+		}
 		if !isInstanceOf(obj, typ) {
 			return nil, ExceptionNewf(TypeError, "super(type, obj): obj must be an instance or subtype of type")
 		}

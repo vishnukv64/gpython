@@ -19,7 +19,6 @@ import (
 	"github.com/vishnukv64/gpython/vm"
 
 	_ "github.com/vishnukv64/gpython/stdlib/abc"
-	_ "github.com/vishnukv64/gpython/stdlib/abcmachinery"
 	_ "github.com/vishnukv64/gpython/stdlib/array"
 	_ "github.com/vishnukv64/gpython/stdlib/ast"
 	_ "github.com/vishnukv64/gpython/stdlib/base64"
@@ -76,6 +75,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/platform"
 	_ "github.com/vishnukv64/gpython/stdlib/plistlib"
 	_ "github.com/vishnukv64/gpython/stdlib/pprint"
+	_ "github.com/vishnukv64/gpython/stdlib/pylib"
 	_ "github.com/vishnukv64/gpython/stdlib/queue"
 	_ "github.com/vishnukv64/gpython/stdlib/random"
 	_ "github.com/vishnukv64/gpython/stdlib/re"
@@ -217,18 +217,18 @@ func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.
 
 	err = resolveRunPath(pathname, opts, tryPaths, func(fpath string) (bool, error) {
 
-		stat, err := os.Stat(fpath)
+		stat, err := py.StatPath(fpath)
 		if err == nil && stat.IsDir() {
 			// FIXME this is a massive simplification!
 			fpath = path.Join(fpath, "__init__.py")
-			_, err = os.Stat(fpath)
+			_, err = py.StatPath(fpath)
 		}
 
 		ext := strings.ToLower(filepath.Ext(fpath))
 		if ext == "" && os.IsNotExist(err) {
 			fpath += ".py"
 			ext = ".py"
-			_, err = os.Stat(fpath)
+			_, err = py.StatPath(fpath)
 		}
 
 		// Keep searching while we get FNFs, stop on an error
@@ -243,7 +243,7 @@ func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.
 		switch ext {
 		case ".py":
 			var pySrc []byte
-			pySrc, err = os.ReadFile(fpath)
+			pySrc, err = py.ReadPath(fpath)
 			if err != nil {
 				return false, py.ExceptionNewf(py.OSError, "Error reading %q: %v", fpath, err)
 			}
@@ -321,8 +321,9 @@ func resolveRunPath(runPath string, opts py.CompileOpts, pathObjs []py.Object, t
 	runPath = strings.TrimSuffix(runPath, "/")
 
 	// An absolute pathname is complete on its own: it must not be joined with
-	// the search paths, which would strip its leading separator.
-	if filepath.IsAbs(runPath) {
+	// the search paths, which would strip its leading separator.  So is one in
+	// the embedded library.
+	if filepath.IsAbs(runPath) || py.IsEmbeddedPath(runPath) {
 		cont, err := tryPath(runPath)
 		if err != nil {
 			return err
@@ -348,7 +349,7 @@ func resolveRunPath(runPath string, opts py.CompileOpts, pathObjs []py.Object, t
 		// If an absolute path, just try that.
 		// Otherwise, check from the passed current dir then check from the current working dir.
 		fpath := path.Join(string(pathStr), runPath)
-		if filepath.IsAbs(fpath) {
+		if filepath.IsAbs(fpath) || py.IsEmbeddedPath(fpath) {
 			cont, err = tryPath(fpath)
 		} else {
 			if len(opts.CurDir) > 0 {

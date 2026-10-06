@@ -280,8 +280,15 @@ func GetItem(self Object, key Object) (Object, error) {
 		// - the hook fired for the instance because the check was on the Go
 		// type alone.
 		if t.Name != "" {
+			// The hook is CALLED, as CPython does: returning the class unasked
+			// made "__class_getitem__ = classmethod(GenericAlias)" give back the
+			// class instead of S[int].
 			if t.Lookup("__class_getitem__") != nil {
-				return self, nil
+				hook, err := GetAttrString(self, "__class_getitem__")
+				if err != nil {
+					return nil, err
+				}
+				return Call(hook, Tuple{key}, NewStringDict())
 			}
 			// PEP 585: a BUILTIN type is subscriptable on the class itself, and
 			// the class is the result.  "deque[int]" and "defaultdict[str, int]"

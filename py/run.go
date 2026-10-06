@@ -76,6 +76,9 @@ type CompileOut struct {
 var DefaultCoreSysPaths = []string{
 	".",
 	"lib",
+	// The standard library embedded in the binary.  It comes after the local
+	// entries, so a file on disk can still shadow it.
+	EmbeddedLibRoot,
 }
 
 // DefaultAuxSysPaths are secondary default search paths for module sys.

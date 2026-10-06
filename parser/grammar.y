@@ -292,7 +292,7 @@ func finishArglist(items []argItem) *ast.Call {
 %type <expr> pattern or_pattern closed_pattern value_pattern
 %type <matchthing> sequence_patterns mapping_patterns mapping_patterns1 mapping_item
 %type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
-%type <exprs> exprlist testlistraw comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators sequence_patterns1
+%type <exprs> exprlist comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators sequence_patterns1
 %type <cmpop> comp_op
 %type <comma> optional_comma
 %type <comprehensions> comp_for
@@ -2346,12 +2346,6 @@ testlist:
 		}
 	}
 
-testlistraw:
-	tests optional_comma
-	{
-		$$ = $1
-	}
-
 // (',' test ':' test)*
 // dictentries is a dict display's contents, which may mix "key: value" with
 // the "**mapping" unpacking of PEP 448.  A nil key marks an unpacked entry,
@@ -2394,7 +2388,10 @@ dictorsetmaker:
 	{
 		$$ = &ast.DictComp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Key: $1, Value: $3, Generators: $4}
 	}
-|	testlistraw
+	// Starred items are allowed, as in a list or tuple display (PEP 448):
+	// {tag, *attrs}.  This took plain tests only, so a starred set display
+	// was a SyntaxError.
+|	test_or_star_exprs optional_comma
 	{
 		$$ = &ast.Set{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elts: $1}
 	}

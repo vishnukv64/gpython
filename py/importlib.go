@@ -116,7 +116,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 			{filepath.Join(dir, base+".pyc"), false},
 		}
 		for _, c := range candidates {
-			stat, err := os.Stat(c.file)
+			stat, err := StatPath(c.file)
 			if err == nil && !stat.IsDir() {
 				return c.file, c.isPkg, nil
 			}
@@ -130,7 +130,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		// "a package with no code to run".
 		// collected below, across EVERY search path entry
 		nsDir := filepath.Join(dir, base)
-		if stat, err := os.Stat(nsDir); err == nil && stat.IsDir() {
+		if stat, err := StatPath(nsDir); err == nil && stat.IsDir() {
 			nsDirs = append(nsDirs, nsDir)
 		}
 	}
@@ -181,7 +181,7 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 			mod.Globals.Set("__file__", None)
 			return mod, nil
 		}
-		if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+		if stat, err := StatPath(path); err == nil && stat.IsDir() {
 			mod, err := ctx.ModuleInit(&ModuleImpl{
 				Info: ModuleInfo{Name: name, FileDesc: path},
 			})

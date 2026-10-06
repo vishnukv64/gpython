@@ -53,7 +53,41 @@ func (r *Ref) get() py.Object {
 	return r.referent
 }
 
-// clear drops the referent and runs the callback.
+// M__hash__ is the referent's hash, as in CPython: a ref is a set member and a
+// dict key (_weakrefset keeps a set of them, so every ABC registry needed it).
+func (r *Ref) M__hash__() (py.Object, error) {
+	target := r.get()
+	if target == py.None {
+		return nil, py.ExceptionNewf(py.TypeError, "weak object has gone away")
+	}
+	h, ok := py.HashValue(target)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", target.Type().Name)
+	}
+	return py.Int(h), nil
+}
+
+// M__eq__ compares two live refs by their referents, and dead ones by
+// identity - CPython's weakref_richcompare.
+func (r *Ref) M__eq__(other py.Object) (py.Object, error) {
+	o, ok := other.(*Ref)
+	if !ok {
+		return py.NotImplemented, nil
+	}
+	a, b := r.get(), o.get()
+	if a == py.None || b == py.None {
+		return py.NewBool(r == o), nil
+	}
+	return py.Eq(a, b)
+}
+
+func (r *Ref) M__ne__(other py.Object) (py.Object, error) {
+	eq, err := r.M__eq__(other)
+	if err != nil || eq == py.NotImplemented {
+		return eq, err
+	}
+	return py.Not(eq)
+}
 
 func refNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) < 1 {
@@ -171,6 +205,17 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+	})
+
+	// _weakref is the low-level module CPython's pure-Python _weakrefset (and
+	// through it abc, numbers, decimal) imports; it is these same objects.
+	low := py.NewStringDict()
+	for _, k := range []string{"ref", "proxy", "ProxyType", "CallableProxyType", "ReferenceType", "getweakrefcount", "getweakrefs"} {
+		low.Set(k, globals.GetOrNil(k))
+	}
+	py.RegisterModule(&py.ModuleImpl{
+		Info:    py.ModuleInfo{Name: "_weakref", Doc: "Weak-reference support module."},
+		Globals: low,
 	})
 }
 

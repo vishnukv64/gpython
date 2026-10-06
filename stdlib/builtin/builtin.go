@@ -471,10 +471,10 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	var prep, cell, cls py.Object
 	var mkw, ns py.StringDict
 	var meta, winner *py.Type
+	// metaFn is a metaclass= that is not a class - CPython accepts any
+	// callable there, and calls it in place of type.
+	var metaFn py.Object
 	var isclass bool
-	// explicitMeta records whether the class statement named a metaclass.
-	// Resolution of a more derived metaclass only makes sense then.
-	var explicitMeta bool
 	var err error
 
 	if len(args) < 2 {
@@ -494,16 +494,21 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	bases := args[2:]
 
 	if !kwargs.IsNil() {
-		mkw = kwargs.Copy()               // Don't modify kwds passed in!
-		meta := mkw.GetOrNil("metaclass") // _PyDict_GetItemId(mkw, &PyId_metaclass)
-		if meta != nil {
-			explicitMeta = true
+		mkw = kwargs.Copy() // Don't modify kwds passed in!
+		// This used to read "meta := ...", declaring a NEW meta that shadowed
+		// the outer one: every metaclass= was dropped and type used instead,
+		// so ABCMeta classes had no register() and "class N(metaclass=M)"
+		// got none of M's methods.
+		if given := mkw.GetOrNil("metaclass"); given != nil {
 			mkw.Del("metaclass")
 			// metaclass is explicitly given, check if it's indeed a class
-			_, isclass = meta.(*py.Type)
+			meta, isclass = given.(*py.Type)
+			if !isclass {
+				metaFn = given
+			}
 		}
 	}
-	if meta == nil {
+	if meta == nil && metaFn == nil {
 		// if there are no bases, use type:
 		if len(bases) == 0 {
 			meta = py.TypeType
@@ -530,17 +535,10 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	}
 
 	if isclass {
-		// meta is really a class, so check for a more derived
-		// metaclass, or possible metaclass conflicts:
-		//
-		// Only when a metaclass was actually ASKED for.  With none, meta is
-		// TypeType or the first base's metatype, and CalculateMetaclass would
-		// re-derive the latter from each base's Type() and report a conflict -
-		// which is what stopped "class MyErr(Exception)" with "the metaclass
-		// of a derived class must be a (non-strict) subclass of the
-		// metaclasses of all its bases".  There are no real metaclasses here,
-		// so a class statement with no metaclass= is simply built by type.
-		if !explicitMeta {
+		// meta is really a class, so check for a more derived metaclass, or a
+		// metaclass conflict, as CPython always does: a subclass of an ABCMeta
+		// class is built by ABCMeta.
+		{
 			winner, err = meta.CalculateMetaclass(bases)
 			if err != nil {
 				return nil, err
@@ -552,7 +550,13 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	}
 	// else: meta is not a class, so we cannot do the metaclass
 	// calculation, so we will use the explicitly given object as it is
-	prep = meta.Type().Dict.GetOrNil("___prepare__") // FIXME should be using _PyObject_GetAttr
+	var metaObj py.Object = metaFn
+	if metaFn == nil {
+		metaObj = meta
+	}
+	// __prepare__ is looked up on the metaclass itself, as CPython does; the
+	// old lookup spelled it with THREE underscores, so it never ran.
+	prep, _ = py.GetAttrString(metaObj, "__prepare__")
 	if prep == nil {
 		ns = py.NewStringDict()
 	} else {
@@ -560,7 +564,11 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		if err != nil {
 			return nil, err
 		}
-		ns = nsObj.(py.StringDict)
+		if d, ok := nsObj.(py.StringDict); ok {
+			ns = d
+		} else {
+			ns = py.NewStringDict()
+		}
 	}
 	// fmt.Printf("Calling %v with %v and %v\n", fn.Name, fn.Globals, ns)
 	// fmt.Printf("Code = %#v\n", fn.Code)
@@ -618,7 +626,7 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 
 	if cell != nil {
 		// fmt.Printf("Calling %v\n", meta)
-		cls, err = py.Call(meta, py.Tuple{name, bases, ns}, mkw)
+		cls, err = py.Call(metaObj, py.Tuple{name, bases, ns}, mkw)
 		if err != nil {
 			return nil, err
 		}
@@ -1158,10 +1166,17 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 		// type built in Go: importlib.abc.MetaPathFinder derives from Finder,
 		// and "isinstance(a.MetaPathFinder(), a.Finder)" was False while
 		// issubclass of the same two said True.
-		if t := obj.Type(); t != nil {
-			if t == class || t.IsSubtype(class) {
-				return true, nil
-			}
+		if t := obj.Type(); t != nil && t == class {
+			return true, nil
+		}
+		// A metaclass __instancecheck__ decides everything past the exact
+		// match - ABCMeta's, which is how A.register(int) makes
+		// isinstance(3, A) True.
+		if res, ok, err := metaclassHook(class, "__instancecheck__", obj); ok || err != nil {
+			return res, err
+		}
+		if t := obj.Type(); t != nil && t.IsSubtype(class) {
+			return true, nil
 		}
 
 		// Structural checks registered by the modules that define the
@@ -1174,6 +1189,29 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 		}
 		return false, nil
 	}
+}
+
+// metaclassHook calls class's metaclass hook (__instancecheck__ or
+// __subclasscheck__) when the metaclass defines one; ok reports whether it
+// did.  type's own are the plain subtype test, which the callers do directly.
+func metaclassHook(class *py.Type, name string, arg py.Object) (py.Bool, bool, error) {
+	meta := class.Type()
+	if meta == nil || meta == py.TypeType {
+		return false, false, nil
+	}
+	fn := meta.Lookup(name)
+	if fn == nil {
+		return false, false, nil
+	}
+	res, err := py.Call(fn, py.Tuple{class, arg}, py.NewStringDict())
+	if err != nil {
+		return false, true, err
+	}
+	b, err := py.MakeBool(res)
+	if err != nil {
+		return false, true, err
+	}
+	return b.(py.Bool), true, nil
 }
 
 func builtin_isinstance(self py.Object, args py.Tuple) (py.Object, error) {
