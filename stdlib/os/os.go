@@ -165,7 +165,7 @@ func closefd(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		name = strconv.Itoa(int(fd))
 	)
 
-	f := os.NewFile(fd, name)
+	f := py.TakeFD(fd, name)
 	if f == nil {
 		return nil, py.ExceptionNewf(py.OSError, "Bad file descriptor")
 	}
@@ -217,12 +217,12 @@ func fdopen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 		return nil, err
 	}
 
-	f := os.NewFile(fd, name)
+	f := py.TakeFD(fd, name)
 	if f == nil {
 		return nil, py.ExceptionNewf(py.OSError, "Bad file descriptor")
 	}
 
-	return &py.File{f, perm}, nil
+	return &py.File{File: f, FileMode: perm}, nil
 }
 
 // getCwd returns the current working directory.
@@ -912,7 +912,7 @@ func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if err != nil {
 		return nil, py.OSErrorFrom(err, path)
 	}
-	return py.Int(fd.Fd()), nil
+	return py.Int(py.OwnFD(fd)), nil
 }
 
 // flagsFor translates the POSIX open flags a program passes into the Go ones.

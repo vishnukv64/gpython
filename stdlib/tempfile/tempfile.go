@@ -273,7 +273,7 @@ func mkstemp(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		typ = t3
 	}
 
-	tuple := py.Tuple{py.Int(f.Fd())}
+	tuple := py.Tuple{py.Int(py.OwnFD(f))}
 	switch typ {
 	case 2:
 		tuple = append(tuple, py.Bytes(f.Name()))
