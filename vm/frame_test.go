@@ -25,7 +25,7 @@ var probeType = py.NewType("frameprobe", "test helper")
 func (p *frameProbe) Type() *py.Type { return probeType }
 
 func (p *frameProbe) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	f := p.ctx.Store().CurrentFrame()
+	f := py.CurrentFrame()
 	depth := 0
 	for at := f; at != nil; at = at.Back {
 		depth++
@@ -94,7 +94,7 @@ top()
 	if len(probe.names) != 1 || probe.names[0] != "probe_module" {
 		t.Errorf("caller globals __name__ = %v, want [\"probe_module\"]", probe.names)
 	}
-	if f := ctx.Store().CurrentFrame(); f != nil {
+	if f := py.CurrentFrame(); f != nil {
 		t.Errorf("frame stack not empty after the program finished: depth still non-zero at %v", f.Code.Name)
 	}
 }
@@ -132,7 +132,7 @@ probe()
 	if got, want := probe.depths[1], 1; got != want {
 		t.Errorf("depth after the exception = %d, want %d (frames leaked)", got, want)
 	}
-	if f := ctx.Store().CurrentFrame(); f != nil {
+	if f := py.CurrentFrame(); f != nil {
 		t.Errorf("frame stack not empty at the end")
 	}
 }
@@ -172,7 +172,37 @@ next(g)
 	if got, want := probe.depths[2], 2; got != want {
 		t.Errorf("depth after resume = %d, want %d", got, want)
 	}
-	if f := ctx.Store().CurrentFrame(); f != nil {
+	if f := py.CurrentFrame(); f != nil {
 		t.Errorf("frame stack not empty at the end")
+	}
+}
+
+// TestFrameChainIsPerGoroutine covers a thread: a frame run on another
+// goroutine starts a chain of its own.  The chain used to be one stack per
+// interpreter, so a worker's first frame linked back to whatever the starting
+// goroutine was running - its traceback walked into that live frame, which
+// is a data race - and the probe below saw a depth of 3, not 1.
+func TestFrameChainIsPerGoroutine(t *testing.T) {
+	src := `
+def work():
+    probe()
+def start():
+    import threading
+    t = threading.Thread(target=work)
+    t.start()
+    t.join()
+start()
+`
+	probe, ctx, err := runProgram(t, src)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	defer ctx.Close()
+
+	if len(probe.depths) != 1 {
+		t.Fatalf("probe called %d times, want 1", len(probe.depths))
+	}
+	if got, want := probe.depths[0], 1; got != want {
+		t.Errorf("depth inside the thread = %d, want %d (linked into the starting goroutine)", got, want)
 	}
 }

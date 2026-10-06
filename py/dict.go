@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const dictDoc = `dict() -> new empty dictionary
@@ -472,6 +473,13 @@ type dictShared struct {
 	// it.  A dict of plain string keys - nearly all of them - never touches
 	// it, and its two maps stay nil.
 	ht hashTable
+	// mu guards m, order and ht.  There is no GIL, so a dict is read and
+	// written from several goroutines at once - a module's globals by every
+	// thread running a function from it - and an unguarded Go map does not
+	// merely give a wrong answer then: the runtime aborts the process with
+	// "concurrent map read and map write".  It is a lock per dict, as list has
+	// one, and it is never held while Python code runs (see find).
+	mu sync.RWMutex
 }
 
 type StringDict struct {
@@ -489,6 +497,12 @@ func (d StringDict) Ptr() uintptr {
 
 // Get returns the value stored under an encoded key and whether it is present.
 func (d StringDict) Get(key string) (Object, bool) {
+	if s := d.shared; s != nil {
+		s.mu.RLock()
+		v, ok := d.m[key]
+		s.mu.RUnlock()
+		return v, ok
+	}
 	v, ok := d.m[key]
 	return v, ok
 }
@@ -510,7 +524,8 @@ func (d StringDict) SameAs(other StringDict) bool {
 // old map-typed StringDict, for the few places that relied on that - notably
 // comparing the result against nil to test for a key's presence.
 func (d StringDict) GetOrNil(key string) Object {
-	return d.m[key]
+	v, _ := d.Get(key)
+	return v
 }
 
 // IsNil reports whether the dict has never been given storage, which is what
@@ -550,6 +565,7 @@ func (d *StringDict) Set(key string, value Object) {
 	// with a single hash.  A nil Object can never have been stored as a
 	// value - the interpreter has no nil value, None is a real type - so the
 	// test is unambiguous.
+	shared.mu.Lock()
 	prev := d.m[key]
 	d.m[key] = value
 	if prev == nil {
@@ -558,10 +574,16 @@ func (d *StringDict) Set(key string, value Object) {
 		// is why this is not unconditional.
 		shared.order = append(shared.order, key)
 	}
+	shared.mu.Unlock()
 }
 
 // Del removes an encoded key, reporting whether it was present.
 func (d *StringDict) Del(key string) bool {
+	if d.shared == nil {
+		return false
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
 	if _, ok := d.m[key]; !ok {
 		return false
 	}
@@ -595,13 +617,15 @@ func (d *StringDict) sharedState() *dictShared {
 // any - the key is, exactly as CPython's bucket walk does.
 func (d *StringDict) hashSet(bucket string, key, value Object) error {
 	shared := d.sharedState()
-	code, found, err := shared.ht.find(bucket, key)
+	code, found, err := shared.find(bucket, key)
 	if err != nil {
 		return err
 	}
 	if !found {
+		shared.mu.Lock()
 		code = shared.ht.newCode(bucket)
 		shared.ht.objs[code] = key
+		shared.mu.Unlock()
 	}
 	d.Set(code, value)
 	return nil
@@ -617,18 +641,16 @@ func (d StringDict) keyCode(key Object) (string, bool, error) {
 		return "", false, err
 	}
 	if !isHashKey(encoded) {
-		_, ok := d.m[encoded]
-		return encoded, ok, nil
+		return encoded, d.Has(encoded), nil
 	}
 	if d.shared == nil {
 		return "", false, nil
 	}
-	code, ok, err := d.shared.ht.find(encoded, key)
+	code, ok, err := d.shared.find(encoded, key)
 	if err != nil || !ok {
 		return "", false, err
 	}
-	_, ok = d.m[code]
-	return code, ok, nil
+	return code, d.Has(code), nil
 }
 
 // setItem stores value under key.  It is dict.__setitem__'s whole body and the
@@ -653,7 +675,10 @@ func (d StringDict) setItem(key, value Object) error {
 // the dict to decode it.  See hashTable.
 func (d StringDict) DecodeKey(encoded string) (Object, error) {
 	if isHashKey(encoded) && d.shared != nil {
-		if obj, ok := d.shared.ht.objs[encoded]; ok {
+		d.shared.mu.RLock()
+		obj, ok := d.shared.ht.objs[encoded]
+		d.shared.mu.RUnlock()
+		if ok {
 			return obj, nil
 		}
 	}
@@ -678,12 +703,16 @@ func (d *StringDict) copyEntryFrom(src StringDict, code string, value Object) er
 
 // Has reports whether an encoded key is present.
 func (d StringDict) Has(key string) bool {
-	_, ok := d.m[key]
+	_, ok := d.Get(key)
 	return ok
 }
 
 // Len returns the number of entries.
 func (d StringDict) Len() int {
+	if s := d.shared; s != nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+	}
 	return len(d.m)
 }
 
@@ -692,6 +721,8 @@ func (d StringDict) Keys() []string {
 	if d.shared == nil {
 		return nil
 	}
+	d.shared.mu.RLock()
+	defer d.shared.mu.RUnlock()
 	out := make([]string, len(d.shared.order))
 	copy(out, d.shared.order)
 	return out
@@ -702,6 +733,8 @@ func (d StringDict) Values() []Object {
 	if d.shared == nil {
 		return nil
 	}
+	d.shared.mu.RLock()
+	defer d.shared.mu.RUnlock()
 	order := d.shared.order
 	out := make([]Object, len(order))
 	for i, k := range order {
@@ -717,6 +750,8 @@ func (d StringDict) Items() []DictEntry {
 	if d.shared == nil {
 		return nil
 	}
+	d.shared.mu.RLock()
+	defer d.shared.mu.RUnlock()
 	out := make([]DictEntry, 0, len(d.shared.order))
 	for _, k := range d.shared.order {
 		out = append(out, DictEntry{Key: k, Value: d.m[k]})
@@ -728,7 +763,7 @@ func (d StringDict) Items() []DictEntry {
 // returns true.  The keys are snapshotted first, so fn may delete entries.
 func (d StringDict) Range(fn func(key string, value Object) bool) {
 	for _, k := range d.Keys() {
-		v, ok := d.m[k]
+		v, ok := d.Get(k)
 		if !ok {
 			continue // deleted by fn
 		}
@@ -740,9 +775,11 @@ func (d StringDict) Range(fn func(key string, value Object) bool) {
 
 // Clear removes every entry, keeping the dict object itself in place.
 func (d *StringDict) Clear() {
-	if d.m == nil {
+	if d.m == nil || d.shared == nil {
 		return
 	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
 	for k := range d.m {
 		delete(d.m, k)
 	}
@@ -839,6 +876,34 @@ func (h *hashTable) find(bucket string, obj Object) (string, bool, error) {
 		}
 		if eq {
 			return code, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// find is hashTable.find for a dict, with the bucket's entries read under the
+// lock and __eq__ called WITHOUT it.  __eq__ is Python code and may read this
+// same dict; an RWMutex is not reentrant, so holding it across the call would
+// deadlock the moment a writer queued between the two reads.
+func (s *dictShared) find(bucket string, obj Object) (string, bool, error) {
+	s.mu.RLock()
+	codes := s.ht.buckets[bucket]
+	cands := make([]Object, len(codes))
+	for i, code := range codes {
+		cands[i] = s.ht.objs[code]
+	}
+	codes = append([]string(nil), codes...)
+	s.mu.RUnlock()
+	for i, other := range cands {
+		if other == nil {
+			continue
+		}
+		eq, err := objEq(obj, other)
+		if err != nil {
+			return "", false, err
+		}
+		if eq {
+			return codes[i], true, nil
 		}
 	}
 	return "", false, nil

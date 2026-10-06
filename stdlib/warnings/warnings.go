@@ -275,7 +275,7 @@ func moduleOf(self py.Object) *py.Module {
 // reached through the calling module's context, which owns the frame stack.
 func frameOf(self py.Object) *py.Frame {
 	if mod := moduleOf(self); mod != nil && mod.Context != nil {
-		return mod.Context.Store().CurrentFrame()
+		return py.CurrentFrame()
 	}
 	return nil
 }

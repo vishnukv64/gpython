@@ -1635,7 +1635,6 @@ func do_SETUP_ASYNC_WITH(vm *Vm, delta int32) error {
 	return nil
 }
 
-
 // Loads the global named co_names[namei] onto the stack.
 func do_LOAD_GLOBAL(vm *Vm, namei int32) error {
 	name := vm.frame.Code.Names[namei]
@@ -2230,7 +2229,7 @@ func builtinGetFrame(f *py.Frame, args py.Tuple) (py.Object, error) {
 	// CPython counts from the frame that called _getframe, as seen by
 	// Python; here the caller of the internal method is the Python frame, so
 	// start there and walk out.
-	at := f.Context.Store().CurrentFrame()
+	at := gCurrentFrame.get()
 	for i := 0; i < depth && at != nil; i++ {
 		at = at.Back
 	}
@@ -2250,9 +2249,7 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 	if len(args) == 0 {
 		f.FastToLocals()
 		names := make([]string, 0, f.Locals.Len())
-		for _, name := range f.Locals.Keys() {
-			names = append(names, name)
-		}
+		names = append(names, f.Locals.Keys()...)
 		sort.Strings(names)
 		return dirList(names), nil
 	}
@@ -2426,19 +2423,19 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 	// so this is the one place that needs to keep the chain of executing
 	// frames correct.  The defer covers every exit: a return, a raised
 	// exception, or a yield that suspends the frame.
-	store := frame.Context.Store()
-	store.PushFrame(frame)
-	// The executing frame is recorded PER GOROUTINE, not in a package-level
-	// variable: two interpreter contexts running in two goroutines each need
-	// their own "current frame", and a shared variable made them fight over
-	// one - a data race on this exact line, and the wrong frame handed to
-	// super() when they interleaved.
+	//
+	// The executing frame is recorded PER GOROUTINE, and so is the caller a
+	// frame links back to: each thread's chain ends at that thread's entry, as
+	// CPython's does.  A stack shared by the whole interpreter linked a worker
+	// thread's first frame to whatever another thread was running - its
+	// traceback walked into the main thread's live frame, a data race - and
+	// popping assumed frames finish in the order they start, which threads
+	// break.  Back is set on every run, so a resumed generator points at
+	// whoever resumed it.
 	prevFrame := gCurrentFrame.get()
+	frame.Back = prevFrame
 	gCurrentFrame.set(frame)
-	defer func() {
-		gCurrentFrame.set(prevFrame)
-		store.PopFrame(frame)
-	}()
+	defer gCurrentFrame.set(prevFrame)
 
 	var vm = Vm{
 		frame:   frame,

@@ -367,9 +367,7 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 
 func sortedKeys(d py.StringDict) []string {
 	keys := make([]string, 0, d.Len())
-	for _, k := range d.Keys() {
-		keys = append(keys, k)
-	}
+	keys = append(keys, d.Keys()...)
 	// There is no declaration order to recover from a map, so the names are
 	// ordered so that the result is at least stable.
 	sortStrings(keys)
@@ -624,7 +622,7 @@ func callerFrame(self py.Object) *py.Frame {
 	// A Go method runs no bytecode of its own, so the top of the frame
 	// stack is already the Python code that called it - the class statement
 	// being decorated.
-	return m.Context.Store().CurrentFrame()
+	return py.CurrentFrame()
 }
 
 // frameContext is the context a generated method runs in, taken from the
@@ -790,8 +788,6 @@ func reprFields(fields []*fieldType) []*fieldType {
 	return out
 }
 
-const generatedInit_doc = `Generated __init__ for a dataclass.`
-
 // makeInit builds the __init__ that binds the fields in order.  Parameters
 // with neither a default nor a default factory are required; one with a
 // factory is looked up at call time so that a mutable default is fresh per
@@ -951,8 +947,6 @@ func wasWere(n int) string {
 	return "were"
 }
 
-const generatedRepr_doc = `Generated __repr__ for a dataclass.`
-
 // makeRepr builds "Cls(field=value, ...)".
 func makeRepr(cls *py.Type, fields []*fieldType) dataclassMethod {
 	shown := reprFields(fields)
@@ -985,8 +979,6 @@ func makeRepr(cls *py.Type, fields []*fieldType) dataclassMethod {
 		return py.String(b.String()), nil
 	}
 }
-
-const generatedEq_doc = `Generated __eq__ for a dataclass.`
 
 // makeEq compares the class-identity and then each compare field with the
 // interpreter's own "==".
@@ -1096,8 +1088,6 @@ func makeOrder(cls *py.Type, fields []*fieldType, op string, orEqual bool) datac
 	}
 }
 
-const generatedHash_doc = `Generated __hash__ for a dataclass.`
-
 // makeHash hashes the tuple of compare fields, which is what dataclasses
 // does for an unsafe_hash.
 func makeHash(cls *py.Type, fields []*fieldType) dataclassMethod {
@@ -1120,8 +1110,6 @@ func makeHash(cls *py.Type, fields []*fieldType) dataclassMethod {
 	}
 }
 
-const frozen_setattr_doc = `Raise FrozenInstanceError on assignment to a frozen dataclass.`
-
 func frozenSetattr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) != 2 {
 		return nil, py.ExceptionNewf(py.TypeError, "__setattr__() takes exactly 2 arguments (%d given)", len(args))
@@ -1132,8 +1120,6 @@ func frozenSetattr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	}
 	return nil, py.ExceptionNewf(FrozenInstanceError, "cannot assign to field %q", name)
 }
-
-const frozen_delattr_doc = `Raise FrozenInstanceError on deletion from a frozen dataclass.`
 
 func frozenDelattr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) != 1 {
@@ -1311,9 +1297,9 @@ func asdictImpl(obj, factory py.Object, depth int) (py.Object, error) {
 
 // asdictValue recurses into the containers dataclasses specifies.
 func asdictValue(v, factory py.Object, depth int) (py.Object, error) {
-	switch v.(type) {
+	switch tv := v.(type) {
 	case *py.List:
-		l, _ := v.(*py.List)
+		l := tv
 		out := py.NewList()
 		for _, item := range l.Items {
 			conv, err := asdictValue(item, factory, depth+1)
@@ -1324,7 +1310,7 @@ func asdictValue(v, factory py.Object, depth int) (py.Object, error) {
 		}
 		return out, nil
 	case py.Tuple:
-		t, _ := v.(py.Tuple)
+		t := tv
 		out := make(py.Tuple, 0, len(t))
 		for _, item := range t {
 			conv, err := asdictValue(item, factory, depth+1)
@@ -1539,6 +1525,7 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 			}
 		}
 	}
+	ann := py.NewStringDict()
 	iter, err := py.Iter(fieldsOb)
 	if err != nil {
 		return nil, err
@@ -1555,24 +1542,28 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 		// or a (name, type) / even (name, type, Field) sequence.  Requiring a
 		// sequence rejected the plain-string form that CPython accepts and
 		// which is the common way to call this.
-		var fname string
+		//
+		// The annotations are built in the same pass: walking the argument a
+		// second time found a generator already exhausted.  A bare name is
+		// annotated typing.Any, as CPython has it.
 		switch v := item.(type) {
 		case py.String:
-			fname = string(v)
+			ann.Set(string(v), anyType())
 		case py.Tuple:
-			if len(v) == 0 {
-				return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
+			if len(v) < 2 || len(v) > 3 {
+				return nil, py.ExceptionNewf(py.TypeError, "Invalid field: %s", reprOf(item))
 			}
-			name, err := py.StrAsString(v[0])
+			fname, err := py.StrAsString(v[0])
 			if err != nil {
 				return nil, err
 			}
-			fname = name
-			if len(v) >= 3 {
+			ann.Set(fname, v[1])
+			if len(v) == 3 {
 				namespace.Set(fname, v[2])
 			}
 		default:
-			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
+			// CPython reaches this through len(item), so that is its message.
+			return nil, py.ExceptionNewf(py.TypeError, "object of type '%s' has no len()", item.Type().Name)
 		}
 	}
 
@@ -1600,47 +1591,8 @@ func make_dataclass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	}
 	opts := &decoOpts{init: initObj, repr: reprObj, eq: eqObj, order: orderObj,
 		unsafeHash: hashObj, frozen: frozen, kwOnly: kwOnly}
-	// A generated class has no source to scan, so the fields just built are
-	// installed directly as its __annotations__, which annotationFields
-	// reads first.
-	ann := py.NewStringDict()
-	iter, err = py.Iter(fieldsOb)
-	if err != nil {
-		return nil, err
-	}
-	for {
-		item, err := nextItem(iter)
-		if err != nil {
-			if py.IsException(py.StopIteration, err) {
-				break
-			}
-			return nil, err
-		}
-		// The annotations are built from the same entries, and each may be a
-		// bare name or a (name, type) pair.  This is the same unguarded
-		// assertion that panicked a moment earlier at the loop above.
-		fname := ""
-		var typ py.Object = py.None
-		switch v := item.(type) {
-		case py.String:
-			fname = string(v)
-		case py.Tuple:
-			if len(v) == 0 {
-				return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
-			}
-			name, err := py.StrAsString(v[0])
-			if err != nil {
-				return nil, err
-			}
-			fname = name
-			if len(v) >= 2 {
-				typ = v[1]
-			}
-		default:
-			return nil, py.ExceptionNewf(py.TypeError, "field entries must be sequences")
-		}
-		ann.Set(fname, typ)
-	}
+	// A generated class has no source to scan, so the annotations built above
+	// are installed directly, which annotationFields reads first.
 	cls.Dict.Set("__annotations__", ann)
 	return applyDataclass(cls, opts, nil)
 }
@@ -1846,3 +1798,22 @@ func init() {
 }
 
 var _ = fs.ErrNotExist
+
+// anyType is typing.Any, the annotation make_dataclass gives a field named
+// without a type, as CPython does.
+func anyType() py.Object {
+	if m := py.GetModuleImplOrNil("typing"); m != nil {
+		if a, err := py.GetAttrString(m, "Any"); err == nil {
+			return a
+		}
+	}
+	return py.None
+}
+
+func reprOf(o py.Object) string {
+	s, err := py.ReprAsString(o)
+	if err != nil {
+		return "?"
+	}
+	return s
+}

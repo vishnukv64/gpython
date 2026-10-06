@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -64,8 +65,10 @@ func (l *Local) Type() *py.Type {
 
 // Lock is a mutual exclusion lock.
 type Lock struct {
-	mu     sync.Mutex
-	locked bool
+	mu sync.Mutex
+	// locked is atomic: locked() reads it without taking mu, which is the
+	// point - it must not block on the very lock it asks about.
+	locked atomic.Bool
 }
 
 var LockType = py.NewTypeX("threading.Lock", "A lock object.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -116,11 +119,10 @@ type Thread struct {
 	// threads is exactly the data race the Go race detector will report.
 	// Python-level synchronisation (Lock, Event when it exists) is the way to
 	// order them.
-	wg     sync.WaitGroup
-	done   chan struct{}
-	mu     sync.Mutex
-	alive  bool
-	joined bool
+	wg    sync.WaitGroup
+	done  chan struct{}
+	mu    sync.Mutex
+	alive bool
 }
 
 var ThreadType = py.NewTypeX("threading.Thread", "A thread of control.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -247,11 +249,11 @@ func init() {
 			case *Lock:
 				if blocking == py.True {
 					v.mu.Lock()
-					v.locked = true
+					v.locked.Store(true)
 					return py.True, nil
 				}
 				if v.mu.TryLock() {
-					v.locked = true
+					v.locked.Store(true)
 					return py.True, nil
 				}
 				return py.False, nil
@@ -263,8 +265,8 @@ func init() {
 		t.Dict.Set("release", py.MustNewMethod("release", func(self py.Object, args py.Tuple) (py.Object, error) {
 			switch v := self.(type) {
 			case *Lock:
+				v.locked.Store(false)
 				v.mu.Unlock()
-				v.locked = false
 			case *RLock:
 				return v.release()
 			}
@@ -274,7 +276,7 @@ func init() {
 			switch v := self.(type) {
 			case *Lock:
 				v.mu.Lock()
-				v.locked = true
+				v.locked.Store(true)
 			case *RLock:
 				v.acquire()
 			}
@@ -283,8 +285,8 @@ func init() {
 		t.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
 			switch v := self.(type) {
 			case *Lock:
+				v.locked.Store(false)
 				v.mu.Unlock()
-				v.locked = false
 			case *RLock:
 				return v.release()
 			}
@@ -300,7 +302,7 @@ func init() {
 	lockMethods(RLockType, true)
 
 	LockType.Dict.Set("locked", py.MustNewMethod("locked", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return py.NewBool(self.(*Lock).locked), nil
+		return py.NewBool(self.(*Lock).locked.Load()), nil
 	}, 0, "Return whether the lock is held."))
 
 	ThreadType.Dict.Set("start", py.MustNewMethod("start", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -514,13 +516,13 @@ var (
 // with statement's own lookup.
 func (l *Lock) M__enter__() (py.Object, error) {
 	l.mu.Lock()
-	l.locked = true
+	l.locked.Store(true)
 	return l, nil
 }
 
 func (l *Lock) M__exit__(excType, excValue, traceback py.Object) (py.Object, error) {
+	l.locked.Store(false)
 	l.mu.Unlock()
-	l.locked = false
 	return py.False, nil
 }
 

@@ -49,6 +49,14 @@ var currentFrame = func() *Frame { return nil }
 // package can reach the running frame without importing it.
 func SetCurrentFrame(fn func() *Frame) { currentFrame = fn }
 
+// CurrentFrame is the frame executing on THIS goroutine, or nil between calls.
+func CurrentFrame() *Frame {
+	if currentFrame == nil {
+		return nil
+	}
+	return currentFrame()
+}
+
 // typeNameOf is the instance's class name, for the repr.
 func typeNameOf(obj Object) string {
 	if t := obj.Type(); t != nil {

@@ -500,10 +500,14 @@ func (l *List) M__repr__() (Object, error) {
 }
 
 func (l *List) M__len__() (Object, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return Int(len(l.Items)), nil
 }
 
 func (l *List) M__bool__() (Object, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return NewBool(len(l.Items) > 0), nil
 }
 
@@ -710,11 +714,15 @@ func (a *List) M__eq__(other Object) (Object, error) {
 	if !ok {
 		return NotImplemented, nil
 	}
-	if len(a.Items) != len(b.Items) {
+	// Compare snapshots taken under each list's lock: another thread may be
+	// appending, and Eq can run Python code, so the locks are not held across
+	// it.
+	as, bs := a.snapshot(), b.snapshot()
+	if len(as) != len(bs) {
 		return False, nil
 	}
-	for i := range a.Items {
-		eq, err := Eq(a.Items[i], b.Items[i])
+	for i := range as {
+		eq, err := Eq(as[i], bs[i])
 		if err != nil {
 			return nil, err
 		}
@@ -866,4 +874,12 @@ func SortInPlace(l *List, kwargs StringDict, funcName string) error {
 	s := ptrSortable{&sortable{l, keyFunc, ok, nil}}
 	sort.Stable(s)
 	return s.s.firstErr
+}
+
+// snapshot copies the items under the list's lock, for a reader that must not
+// hold the lock while it runs Python code on them.
+func (l *List) snapshot() []Object {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]Object(nil), l.Items...)
 }
