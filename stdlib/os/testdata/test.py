@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+import errno
 import os
 
 print("test os")
@@ -163,8 +164,8 @@ try:
     try:
         os.mkdir(dir11)
         print("creating nested dirs with os.mkdir should have failed")
-    except SystemError as e:
-        print("caught: SystemError - no such file or directory [OK]")
+    except FileNotFoundError as e:
+        print("caught: FileNotFoundError [OK]")
     except Exception as e:
         print("caught: %s" % e)
 
@@ -183,8 +184,10 @@ try:
     try:
         os.rmdir(dir2)
         print("removing a non-empty directory should have failed")
-    except SystemError as e:
-        print("caught: SystemError - directory not empty [OK]")
+    except OSError as e:
+        # ENOTEMPTY has no subclass in CPython; the number differs by
+        # platform (66 on darwin, 39 on linux), so compare it by name.
+        print("caught: OSError ENOTEMPTY [OK]" if e.errno == errno.ENOTEMPTY else "INVALID errno: %s" % e.errno)
     except Exception as e:
         print("INVALID error caught: %s" % e)
     os.remove(fname)

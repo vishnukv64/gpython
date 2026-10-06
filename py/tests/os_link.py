@@ -23,11 +23,15 @@ os.symlink(os.path.basename(target), link)
 print("lexists link:", os.path.lexists(link))
 print("exists link:", os.path.exists(link))
 print("readlink:", os.readlink(link))
-print("read through link:", open(link).read().strip())
+# "with", because nothing else closes the file here: gpython has a garbage
+# collector rather than refcounting, and Windows will not unlink an open file.
+with open(link) as fh:
+    print("read through link:", fh.read().strip())
 
 hard = os.path.join(here, "_link_hard")
 os.link(target, hard)
-print("hard link contents:", open(hard).read().strip())
+with open(hard) as fh:
+    print("hard link contents:", fh.read().strip())
 
 os.unlink(link)
 os.unlink(hard)

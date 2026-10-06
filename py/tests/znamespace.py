@@ -15,7 +15,7 @@ print("has __file__:", getattr(nspkg, "__file__", None))
 # a run from the repository root and one from this directory - so what is pinned
 # is that the path is non-empty and absolute, not its arity.
 print("__path__ non-empty:", len(nspkg.__path__) > 0)
-print("__path__ absolute:", all(p.startswith("/") for p in nspkg.__path__))
+print("__path__ absolute:", all(os.path.isabs(p) for p in nspkg.__path__))
 
 # Its submodules resolve, both by dotted import and through fromlist.
 from nspkg.inner import mod

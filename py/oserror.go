@@ -13,12 +13,14 @@ import (
 // OSErrorFrom turns an error from Go's os or syscall packages into the
 // exception CPython raises for the same failure: the OSError SUBCLASS chosen by
 // errno, the message "[Errno 2] No such file or directory: '/x'", and the
-// errno, strerror and filename attributes set.  filename may be empty.
+// errno, strerror and filename attributes set.  filename may be empty; a
+// two-path call (rename, link, symlink) passes its destination as filename2,
+// which CPython shows as "'src' -> 'dst'".
 //
 // Callers that formatted err.Error() themselves raised a bare OSError (or worse)
 // with Go's wording - "stat /x: no such file or directory" - which no
 // "except FileNotFoundError" clause catches.
-func OSErrorFrom(err error, filename string) error {
+func OSErrorFrom(err error, filename string, filename2 ...string) error {
 	var en syscall.Errno
 	if !errors.As(err, &en) {
 		return ExceptionNewf(OSError, "%s", err.Error())
@@ -36,8 +38,18 @@ func OSErrorFrom(err error, filename string) error {
 		if rerr != nil {
 			return rerr
 		}
+		if len(filename2) > 0 {
+			quoted2, rerr := ReprAsString(String(filename2[0]))
+			if rerr != nil {
+				return rerr
+			}
+			quoted += " -> " + quoted2
+		}
 		e = ExceptionNewf(osErrorClass(err, en), "[Errno %d] %s: %s", int(en), strerror, quoted)
 		e.Dict.Set("filename", String(filename))
+		if len(filename2) > 0 {
+			e.Dict.Set("filename2", String(filename2[0]))
+		}
 	}
 	SetErrno(e, int(en), strerror)
 	return e

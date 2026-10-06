@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -228,7 +229,7 @@ func fdopen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 func getCwd(self py.Object, args py.Tuple) (py.Object, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "Unable to get current working directory.")
+		return nil, py.OSErrorFrom(err, "")
 	}
 	return py.String(dir), nil
 }
@@ -237,7 +238,7 @@ func getCwd(self py.Object, args py.Tuple) (py.Object, error) {
 func getCwdb(self py.Object, args py.Tuple) (py.Object, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "Unable to get current working directory.")
+		return nil, py.OSErrorFrom(err, "")
 	}
 	return py.Bytes(dir), nil
 }
@@ -253,7 +254,7 @@ func chdir(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	err := os.Chdir(string(dir))
 	if err != nil {
-		return nil, py.ExceptionNewf(py.NotADirectoryError, "%s", "Couldn't change cwd; "+err.Error())
+		return nil, py.OSErrorFrom(err, string(dir))
 	}
 	return py.None, nil
 }
@@ -307,7 +308,7 @@ func listDir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	if path == py.None {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, py.ExceptionNewf(py.OSError, "cannot get cwd, error %s", err.Error())
+			return nil, py.OSErrorFrom(err, "")
 		}
 		path = py.String(cwd)
 	}
@@ -326,7 +327,7 @@ func listDir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 
 	dirEntries, err := os.ReadDir(dirName)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "cannot read directory %s, error %s", dirName, err.Error())
+		return nil, py.OSErrorFrom(err, dirName)
 	}
 	result := py.NewListSized(len(dirEntries))
 	for i, dirEntry := range dirEntries {
@@ -632,15 +633,14 @@ func makedirs(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if pyok.(py.Bool) == py.False {
 		// check if leaf exists.
 		_, err := os.Stat(path)
-		// FIXME(sbinet): handle other errors.
 		if err == nil {
-			return nil, py.ExceptionNewf(py.FileExistsError, "File exists: '%s'", path)
+			return nil, py.OSErrorFrom(syscall.EEXIST, path)
 		}
 	}
 
 	err = os.MkdirAll(path, mode)
 	if err != nil {
-		return nil, err
+		return nil, py.OSErrorFrom(err, path)
 	}
 
 	return py.None, nil
@@ -688,7 +688,7 @@ func mkdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 
 	err = os.Mkdir(path, mode)
 	if err != nil {
-		return nil, err
+		return nil, py.OSErrorFrom(err, path)
 	}
 
 	return py.None, nil
@@ -793,7 +793,7 @@ func symlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		return nil, err
 	}
 	if err := os.Symlink(s, d); err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, s, d)
 	}
 	return py.None, nil
 }
@@ -847,7 +847,7 @@ func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		}
 		if err := os.Chtimes(path,
 			time.Unix(0, int64(atime)), time.Unix(0, int64(mtime))); err != nil {
-			return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+			return nil, py.OSErrorFrom(err, path)
 		}
 		return py.None, nil
 	}
@@ -868,7 +868,7 @@ func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		atime, mtime = secondsToTime(a), secondsToTime(m)
 	}
 	if err := os.Chtimes(path, atime, mtime); err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, path)
 	}
 	return py.None, nil
 }
@@ -910,7 +910,7 @@ func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	}
 	fd, err := os.OpenFile(path, flagsFor(flags), os.FileMode(mode))
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, path)
 	}
 	return py.Int(fd.Fd()), nil
 }
@@ -997,7 +997,7 @@ func readlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 	target, err := os.Readlink(p)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, p)
 	}
 	return py.String(target), nil
 }
@@ -1016,7 +1016,7 @@ func link(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 		return nil, err
 	}
 	if err := os.Link(s, d); err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, s, d)
 	}
 	return py.None, nil
 }
@@ -1040,7 +1040,7 @@ func rename(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 		return nil, err
 	}
 	if err := os.Rename(s, d); err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err.Error())
+		return nil, py.OSErrorFrom(err, s, d)
 	}
 	return py.None, nil
 }
@@ -1083,7 +1083,7 @@ func remove(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 
 	err = os.Remove(name)
 	if err != nil {
-		return nil, err
+		return nil, py.OSErrorFrom(err, name)
 	}
 
 	return py.None, nil
@@ -1115,7 +1115,7 @@ func removedirs(self py.Object, args py.Tuple) (py.Object, error) {
 
 	err = os.RemoveAll(name)
 	if err != nil {
-		return nil, err
+		return nil, py.OSErrorFrom(err, name)
 	}
 
 	return py.None, nil
@@ -1153,7 +1153,7 @@ func rmdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 
 	err = os.Remove(name)
 	if err != nil {
-		return nil, err
+		return nil, py.OSErrorFrom(err, name)
 	}
 
 	return py.None, nil
