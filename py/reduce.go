@@ -55,7 +55,14 @@ def reduce_ex(self, proto):
     elif hasattr(cls, "__getnewargs__"):
         args = self.__getnewargs__()
     else:
-        args = ()
+        # The value-carrying builtins' __getnewargs__: str, bytes and the
+        # numbers rebuild from their value.
+        for b in cls.__mro__:
+            if b in (str, bytes, int, float, complex, tuple):
+                args = (b(self),)
+                break
+        else:
+            args = ()
     if kwargs:
         newobj, newargs = copyreg.__newobj_ex__, (cls, args, kwargs)
     else:
@@ -112,16 +119,20 @@ func reduceCall(name string, args ...Object) (Object, error) {
 
 // registerReduce is called from type.go's init, once ObjectType's dict is final.
 func registerReduce() {
-	ObjectType.Dict.Set("__reduce_ex__", MustNewMethod("__reduce_ex__", func(self Object, args Tuple) (Object, error) {
+	set := func(m *Method) {
+		m.KeepSelf = true
+		ObjectType.Dict.Set(m.Name, m)
+	}
+	set(MustNewMethod("__reduce_ex__", func(self Object, args Tuple) (Object, error) {
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "__reduce_ex__() takes exactly one argument (%d given)", len(args))
 		}
 		return reduceCall("reduce_ex", self, args[0])
 	}, 0, "Helper for pickle."))
-	ObjectType.Dict.Set("__reduce__", MustNewMethod("__reduce__", func(self Object, args Tuple) (Object, error) {
+	set(MustNewMethod("__reduce__", func(self Object, args Tuple) (Object, error) {
 		return reduceCall("reduce", self)
 	}, 0, "Helper for pickle."))
-	ObjectType.Dict.Set("__getstate__", MustNewMethod("__getstate__", func(self Object, args Tuple) (Object, error) {
+	set(MustNewMethod("__getstate__", func(self Object, args Tuple) (Object, error) {
 		return reduceCall("getstate", self)
 	}, 0, "Helper for pickle."))
 }

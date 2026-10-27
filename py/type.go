@@ -757,7 +757,25 @@ func (n *nativeNew) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	if t.New == nil {
 		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
 	}
-	return t.New(t, args[1:], kwargs)
+	obj, err := t.New(t, args[1:], kwargs)
+	if err != nil {
+		return nil, err
+	}
+	return wrapPayload(t, obj), nil
+}
+
+// wrapPayload makes value an instance of t when t is a program-declared
+// subclass of the builtin whose value it is: str.__new__(S, "x") is an S.
+func wrapPayload(t *Type, value Object) Object {
+	if !isUserContainerSubclass(t, value) {
+		return value
+	}
+	return &Type{
+		ObjectType: t,
+		Base:       t,
+		Dict:       NewStringDict(),
+		Payload:    unwrapPayload(value),
+	}
 }
 
 // payloadContainers are the builtin containers whose whole content can live in
@@ -876,14 +894,7 @@ func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	// program declared - so a native constructor that honoured its argument (a
 	// dict subclass, say) is untouched, and a __new__ returning something else
 	// entirely is left alone, as CPython does.
-	if isUserContainerSubclass(t, obj) {
-		obj = &Type{
-			ObjectType: t,
-			Base:       t,
-			Dict:       NewStringDict(),
-			Payload:    unwrapPayload(obj),
-		}
-	}
+	obj = wrapPayload(t, obj)
 	// Ugly exception: when the call was type(something),
 	// don't call tp_init on the result.
 	if t == TypeType && len(args) == 1 && kwargs.Len() == 0 {

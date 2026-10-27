@@ -122,6 +122,7 @@ func init() {
 		py.MustNewMethod("unsetenv", unsetenv, 0, "Unset (delete) the environment variable named key."),
 	}
 	methods = append(methods, procMethods()...)
+	methods = append(methods, statvfsMethods()...)
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "error", Value: py.OSError},
 		py.DictEntry{Key: "environ", Value: Environ},

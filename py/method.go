@@ -77,6 +77,9 @@ type Method struct {
 	// descriptor.  Its first argument supplies the instance, as
 	// str.upper(s) is s.upper(); see callUnbound.
 	Unbound bool
+	// KeepSelf passes a payload-carrying instance through as itself rather
+	// than its builtin value: object's pickling helpers must see the subclass.
+	KeepSelf bool
 }
 
 // Internal method types implemented within eval.go
@@ -151,7 +154,7 @@ func (m *Method) Call(self Object, args Tuple) (Object, error) {
 	// covers every container method at once.  A method written in PYTHON is a
 	// *Function rather than a *Method and never reaches this, so an override
 	// still sees the instance it was written for.
-	if payload, ok := payloadOf(self); ok {
+	if payload, ok := payloadOf(self); ok && !m.KeepSelf {
 		self = payload
 	}
 	switch f := m.method.(type) {
