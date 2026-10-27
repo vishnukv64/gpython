@@ -81,18 +81,25 @@ var ntFlavor = &flavor{
 	},
 }
 
+// hostPath is chosen in a variable initialiser, not init(): os.go's init binds
+// os.path and runs before this file's init, so choosing here in init() bound
+// posixpath on Windows.
 var (
 	pathImpls = [...]*py.ModuleImpl{newPathImpl(posixFlavor), newPathImpl(ntFlavor)}
-	hostPath  = pathImpls[0]
+	hostPath  = pathImpls[hostFlavorIndex()]
 )
+
+func hostFlavorIndex() int {
+	if runtime.GOOS == "windows" {
+		return 1
+	}
+	return 0
+}
 
 // allowMissing is os.path.ALLOW_MISSING, the sentinel realpath(strict=) takes.
 var allowMissing = py.NewList()
 
 func init() {
-	if runtime.GOOS == "windows" {
-		hostPath = pathImpls[1]
-	}
 	for _, impl := range pathImpls {
 		py.RegisterModule(impl)
 	}
