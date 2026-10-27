@@ -206,7 +206,7 @@ func (e *Encoder) encodeTo(b *strings.Builder, obj py.Object, depth int, seen ma
 }
 
 func (e *Encoder) encodeValue(obj py.Object, depth int, seen map[uintptr]bool) (string, error) {
-	switch v := obj.(type) {
+	switch v := py.UnwrapScalar(obj).(type) {
 	case py.NoneType:
 		return "null", nil
 	case py.Bool:

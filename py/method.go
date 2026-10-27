@@ -80,6 +80,8 @@ type Method struct {
 	// KeepSelf passes a payload-carrying instance through as itself rather
 	// than its builtin value: object's pickling helpers must see the subclass.
 	KeepSelf bool
+	// keepArgs: see keepArgsNames.
+	keepArgs bool
 }
 
 // Internal method types implemented within eval.go
@@ -118,10 +120,11 @@ func NewMethod(name string, method interface{}, flags int, doc string) (*Method,
 		return nil, ExceptionNewf(SystemError, "Unknown function type for NewMethod %q, %T", name, method)
 	}
 	return &Method{
-		Name:   name,
-		Doc:    doc,
-		Flags:  flags,
-		method: method,
+		Name:     name,
+		Doc:      doc,
+		Flags:    flags,
+		method:   method,
+		keepArgs: keepArgsNames[name],
 	}, nil
 }
 
@@ -157,6 +160,7 @@ func (m *Method) Call(self Object, args Tuple) (Object, error) {
 	if payload, ok := payloadOf(self); ok && !m.KeepSelf {
 		self = payload
 	}
+	args = m.nativeArgs(self, args)
 	switch f := m.method.(type) {
 	case func(self Object, args Tuple) (Object, error):
 		return f(self, args)
@@ -176,8 +180,24 @@ func (m *Method) Call(self Object, args Tuple) (Object, error) {
 	panic(fmt.Sprintf("Unknown method type: %T", m.method))
 }
 
+// nativeArgs gives a native function the builtin value of every scalar-subclass
+// argument (str/int/float/bytes/complex), so its type assertions hold.
+func (m *Method) nativeArgs(self Object, args Tuple) Tuple {
+	if m.keepArgs {
+		return args
+	}
+	return unwrapScalarArgs(args)
+}
+
 // Call the method with the given arguments
 func (m *Method) CallWithKeywords(self Object, args Tuple, kwargs StringDict) (Object, error) {
+	if payload, ok := payloadOf(self); ok && !m.KeepSelf {
+		self = payload
+	}
+	args = m.nativeArgs(self, args)
+	if !m.keepArgs || m.Name == "print" { // print's sep/end/file are not stored
+		kwargs = unwrapScalarKwargs(kwargs)
+	}
 	if kwargs.Len() == 0 {
 		return m.Call(self, args)
 	}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !(darwin || freebsd || netbsd || openbsd || linux)
+//go:build !(darwin || freebsd || netbsd || openbsd || linux || windows)
 
 package os
 
@@ -16,8 +16,7 @@ import (
 // NewStatResult falls back to the portable os.FileInfo.
 func sysStatFields(fi os.FileInfo) (statFields, bool) { return statFields{}, false }
 
-// fstatResult goes through os.File, which on these platforms needs a handle
-// rather than a POSIX descriptor; until that mapping exists, refuse plainly.
+// fstatResult is not supported here.
 func fstatResult(fd int) (py.Object, error) {
 	return nil, py.ExceptionNewf(py.NotImplementedError, "os.fstat is not supported on this platform")
 }

@@ -31,6 +31,7 @@ func GetLen(obj Object) (Int, error) {
 
 // GetInt is a high-level convenience function that converts the given value to an int.
 func GetInt(obj Object) (Int, error) {
+	obj = UnwrapScalar(obj)
 	toIdx, ok := obj.(I__index__)
 	if !ok {
 		_, err := cantConvert(obj, "int")

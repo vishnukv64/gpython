@@ -163,6 +163,9 @@ func Send(self, value Object) (Object, error) {
 
 // SequenceContains returns True if obj is in seq
 func SequenceContains(seq, obj Object) (found bool, err error) {
+	if p, ok := payloadUnlessOverridden(seq, "__contains__"); ok {
+		return SequenceContains(p, obj)
+	}
 	if I, ok := seq.(I__contains__); ok {
 		result, err := I.M__contains__(obj)
 		if err != nil {
@@ -173,7 +176,7 @@ func SequenceContains(seq, obj Object) (found bool, err error) {
 		if err != nil {
 			return false, err
 		}
-		return result == True, nil
+		return ObjectIsTrue(result)
 	}
 	var loopErr error
 	err = Iterate(seq, func(item Object) bool {

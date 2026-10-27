@@ -6,7 +6,7 @@ import os
 root = os.environ["GPY_WALK_ROOT"]
 
 def rel(p):
-    return p[len(root):] or "."
+    return p[len(root):].replace(os.sep, "/") or "."
 
 # Top-down: the parent is yielded before its children, and a symlink to a
 # directory is a member of dirnames.

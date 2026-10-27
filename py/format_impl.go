@@ -21,6 +21,15 @@ import (
 
 // Format renders value according to a format spec, the way format() does.
 func Format(value Object, spec string) (Object, error) {
+	// str.__format__ / int.__format__ on a SUBCLASS: an empty spec is str(value),
+	// which honours a Python __str__; any other spec formats the builtin value.
+	// A __format__ written in Python wins over both.
+	if p, ok := scalarOf(value); ok && value.(*Type).LookupPython("__format__") == nil {
+		if spec == "" {
+			return Str(value)
+		}
+		return Format(p, spec)
+	}
 	switch v := value.(type) {
 	case String:
 		return formatString(string(v), spec)

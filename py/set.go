@@ -41,6 +41,9 @@ type Set struct {
 	// stored under the int it equals; as for dict, the first object wins, so
 	// {True, 1} is {True}.  Nil until a bool is added.
 	boolKeys map[string]bool
+	// keyObjs keeps the object a member was first added as when decoding its
+	// key would give back the base type (an instance of a str/int subclass).
+	keyObjs map[string]Object
 }
 
 // Type of this Set object
@@ -145,6 +148,15 @@ func (s *Set) setAddCode(item Object) error {
 	}
 	if _, exists := s.items[k]; !exists {
 		s.order = append(s.order, k)
+		if s.keyObjs != nil {
+			delete(s.keyObjs, k)
+		}
+		if _, isScalar := scalarOf(item); isScalar {
+			if s.keyObjs == nil {
+				s.keyObjs = map[string]Object{}
+			}
+			s.keyObjs[k] = item
+		}
 		if _, isBool := item.(Bool); isBool {
 			if s.boolKeys == nil {
 				s.boolKeys = map[string]bool{}
@@ -201,6 +213,7 @@ func (s *Set) setDelete(item Object) bool {
 	}
 	s.ht.forget(k)
 	delete(s.boolKeys, k)
+	delete(s.keyObjs, k)
 	return true
 }
 
@@ -208,6 +221,9 @@ func (s *Set) setDelete(item Object) bool {
 func (s *Set) decodeKey(encoded string) (Object, error) {
 	if s.boolKeys[encoded] {
 		return NewBool(strings.HasSuffix(encoded, "1")), nil
+	}
+	if obj, ok := s.keyObjs[encoded]; ok {
+		return obj, nil
 	}
 	if isHashKey(encoded) {
 		if obj, ok := s.ht.objs[encoded]; ok {
@@ -246,6 +262,12 @@ func (s *Set) Copy() *Set {
 	ret.order = append([]string{}, s.order...)
 	for k := range s.items {
 		ret.items[k] = SetValue{}
+	}
+	if len(s.keyObjs) > 0 {
+		ret.keyObjs = make(map[string]Object, len(s.keyObjs))
+		for k, v := range s.keyObjs {
+			ret.keyObjs[k] = v
+		}
 	}
 	for k := range s.boolKeys {
 		if ret.boolKeys == nil {

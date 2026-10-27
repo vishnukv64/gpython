@@ -237,7 +237,7 @@ func init() {
 			if len(args) == 2 {
 				return args[1], nil
 			}
-			return nil, ExceptionNewf(KeyError, "%v", args[0])
+			return nil, keyError(args[0])
 		}
 		encoded, ok, err := d.keyCode(args[0])
 		if err != nil {
@@ -251,7 +251,7 @@ func init() {
 		if len(args) == 2 {
 			return args[1], nil
 		}
-		return nil, ExceptionNewf(KeyError, "%v", args[0])
+		return nil, keyError(args[0])
 	}, 0, "pop(key[, default]) -> value -- remove specified key and return the corresponding value."))
 
 	StringDictType.Dict.Set("popitem", MustNewMethod("popitem", func(self Object, args Tuple) (Object, error) {
@@ -1257,7 +1257,7 @@ func identityHash(o Object) int64 {
 func HashValue(o Object) (int64, bool) {
 	// A payload-carrying instance hashes as the container it carries, so
 	// "hash(T((1,2))) == hash((1,2))" and the two key the same dict entry.
-	if payload, ok := payloadOf(o); ok {
+	if payload, ok := payloadUnlessOverridden(o, "__hash__"); ok {
 		return HashValue(payload)
 	}
 	switch v := o.(type) {
@@ -1282,6 +1282,12 @@ func HashValue(o Object) (int64, bool) {
 		return int64(v), true
 	case Float:
 		return hashFloat(float64(v)), true
+	case Complex:
+		h := uint64(hashFloat(real(complex128(v)))) + 1000003*uint64(hashFloat(imag(complex128(v))))
+		if int64(h) == -1 {
+			return -2, true
+		}
+		return int64(h), true
 	case *BigInt:
 		return hashBig((*big.Int)(v)), true
 	case String:
@@ -1687,16 +1693,16 @@ func (d StringDict) M__getitem__(key Object) (Object, error) {
 	if err == nil && ok {
 		return d.GetOrNil(encoded), nil
 	}
-	return nil, ExceptionNewf(KeyError, "%v", key)
+	return nil, keyError(key)
 }
 
 func (d StringDict) M__delitem__(key Object) (Object, error) {
 	encoded, ok, err := d.keyCode(key)
 	if err != nil {
-		return nil, ExceptionNewf(KeyError, "%v", key)
+		return nil, keyError(key)
 	}
 	if !ok {
-		return nil, ExceptionNewf(KeyError, "%v", key)
+		return nil, keyError(key)
 	}
 	d.Del(encoded)
 	return None, nil

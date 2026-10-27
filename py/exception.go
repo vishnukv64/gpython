@@ -302,6 +302,12 @@ func init() {
 	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
 }
 
+// keyError is KeyError(key): the key itself is the argument, so str(e) is
+// repr(key), as in CPython, rather than Go's rendering of the value.
+func keyError(key Object) *Exception {
+	return &Exception{Base: KeyError, Args: Tuple{key}, Dict: NewStringDict()}
+}
+
 // ExceptionNewf - make a new exception with fmt parameters
 func ExceptionNewf(metatype *Type, format string, a ...interface{}) *Exception {
 	message := fmt.Sprintf(format, a...)

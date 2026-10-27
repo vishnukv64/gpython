@@ -59,7 +59,7 @@ func shallowCopy(x py.Object, memo py.Object) (py.Object, error) {
 		if cls == nil {
 			return nil, py.ExceptionNewf(errorType, "cannot copy %s", x.Type().Name)
 		}
-		obj, err := py.Call(cls, py.Tuple{}, py.NewStringDict())
+		obj, err := py.Call(cls, ctorArgs(x), py.NewStringDict())
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +148,7 @@ func deepCopy(x py.Object, memo py.Object) (py.Object, error) {
 		if cls == nil {
 			return x, nil
 		}
-		obj, err := py.Call(cls, py.Tuple{}, py.NewStringDict())
+		obj, err := py.Call(cls, ctorArgs(x), py.NewStringDict())
 		if err != nil {
 			return x, nil
 		}
@@ -259,4 +259,13 @@ func init() {
 		},
 		Globals: globals,
 	})
+}
+
+// ctorArgs gives the constructor call that rebuilds x: a subclass of a builtin
+// value type (str, int, tuple...) must be handed the value it carries.
+func ctorArgs(x py.Object) py.Tuple {
+	if p, ok := py.PayloadOf(x); ok {
+		return py.Tuple{p}
+	}
+	return py.Tuple{}
 }

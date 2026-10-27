@@ -17,7 +17,7 @@ import (
 // AttributeName converts an Object to a string, raising a TypeError
 // if it wasn't a String
 func AttributeName(keyObj Object) (string, error) {
-	if key, ok := keyObj.(String); ok {
+	if key, ok := UnwrapScalar(keyObj).(String); ok {
 		return string(key), nil
 	}
 	return "", ExceptionNewf(TypeError, "attribute name must be string, not '%s'", keyObj.Type().Name)
@@ -115,6 +115,13 @@ func MakeGoInt64(a Object) (int64, error) {
 //
 // Will raise TypeError if Index can't be run on this object
 func Index(a Object) (Int, error) {
+	// CPython takes an int subclass's value as it is: __index__ is not consulted.
+	if p, ok := scalarOf(a); ok {
+		switch p.(type) {
+		case Int, *BigInt:
+			return Index(p)
+		}
+	}
 	if A, ok := a.(I__index__); ok {
 		return A.M__index__()
 	}
@@ -215,7 +222,7 @@ func Len(self Object) (Object, error) {
 	// in Payload, and the length is the VALUE's.  Unwrapping here covers every
 	// caller - the Go path and the method path alike - because this is the one
 	// place both route through.
-	if payload, ok := payloadOf(self); ok {
+	if payload, ok := payloadUnlessOverridden(self, "__len__"); ok {
 		return Len(payload)
 	}
 	if I, ok := self.(I__len__); ok {
@@ -270,9 +277,10 @@ func Call(fn Object, args Tuple, kwargs StringDict) (Object, error) {
 
 // GetItem
 func GetItem(self Object, key Object) (Object, error) {
+	key = seqKey(self, key)
 	// The payload first, so "class L(list); L([1,2])[0]" is the element the list
 	// holds rather than an item lookup on the instance's namespace.
-	if payload, ok := payloadOf(self); ok {
+	if payload, ok := payloadUnlessOverridden(self, "__getitem__"); ok {
 		return GetItem(payload, key)
 	}
 	// "X[params]" on a class is __class_getitem__ in Python 3.7 and later.
@@ -333,9 +341,10 @@ func GetItem(self Object, key Object) (Object, error) {
 
 // SetItem
 func SetItem(self Object, key Object, value Object) (Object, error) {
+	key = seqKey(self, key)
 	// The payload's element is the one assigned: "L([1])[0] = 9" is
 	// list.__setitem__ on the list the instance carries.
-	if payload, ok := payloadOf(self); ok {
+	if payload, ok := payloadUnlessOverridden(self, "__setitem__"); ok {
 		return SetItem(payload, key, value)
 	}
 	if I, ok := self.(I__setitem__); ok {
@@ -349,7 +358,8 @@ func SetItem(self Object, key Object, value Object) (Object, error) {
 
 // Delitem
 func DelItem(self Object, key Object) (Object, error) {
-	if payload, ok := payloadOf(self); ok {
+	key = seqKey(self, key)
+	if payload, ok := payloadUnlessOverridden(self, "__delitem__"); ok {
 		return DelItem(payload, key)
 	}
 	if I, ok := self.(I__delitem__); ok {
@@ -685,6 +695,17 @@ func DebugRepr(self Object) string {
 
 // Calls __str__ on the object and if not found calls __repr__
 func Str(self Object) (Object, error) {
+	if p, ok := scalarOf(self); ok && self.(*Type).LookupPython("__str__") == nil {
+		// int/float/complex have no __str__ of their own: str() is repr(), so a
+		// __repr__ the subclass defines shows through.  str and bytes do not.
+		switch p.(type) {
+		case Int, *BigInt, Float, Complex:
+			if self.(*Type).LookupPython("__repr__") != nil {
+				return Repr(self)
+			}
+		}
+		return Str(p)
+	}
 	if _, isExc := self.(*Exception); isExc {
 		// a subclass may override __str__; the Go method below is only the default
 		if res, ok, err := TypeCall0(self, "__str__"); ok {
@@ -735,7 +756,7 @@ func ReprAsString(self Object) (string, error) {
 //
 // If object is sequence object, create an iterator
 func Iter(self Object) (res Object, err error) {
-	if payload, ok := payloadOf(self); ok {
+	if payload, ok := payloadUnlessOverridden(self, "__iter__"); ok {
 		return Iter(payload)
 	}
 	if I, ok := self.(I__iter__); ok {

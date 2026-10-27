@@ -25,14 +25,22 @@ func OSErrorFrom(err error, filename string, filename2 ...string) error {
 	if !errors.As(err, &en) {
 		return ExceptionNewf(OSError, "%s", err.Error())
 	}
-	strerror := en.Error()
+	errno, winerror, strerror := sysErrno(en)
+	tag := "Errno"
+	if winerror >= 0 {
+		tag = "WinError"
+	}
+	code := errno
+	if winerror >= 0 {
+		code = winerror
+	}
 	if strerror != "" && strerror[0] >= 'a' && strerror[0] <= 'z' {
 		// Go's text is C's strerror with the first letter lowercased.
 		strerror = string(strerror[0]-'a'+'A') + strerror[1:]
 	}
 	var e *Exception
 	if filename == "" {
-		e = ExceptionNewf(osErrorClass(err, en), "[Errno %d] %s", int(en), strerror)
+		e = ExceptionNewf(osErrorClass(err, errno), "[%s %d] %s", tag, code, strerror)
 	} else {
 		quoted, rerr := ReprAsString(String(filename))
 		if rerr != nil {
@@ -45,20 +53,23 @@ func OSErrorFrom(err error, filename string, filename2 ...string) error {
 			}
 			quoted += " -> " + quoted2
 		}
-		e = ExceptionNewf(osErrorClass(err, en), "[Errno %d] %s: %s", int(en), strerror, quoted)
+		e = ExceptionNewf(osErrorClass(err, errno), "[%s %d] %s: %s", tag, code, strerror, quoted)
 		e.Dict.Set("filename", String(filename))
 		if len(filename2) > 0 {
 			e.Dict.Set("filename2", String(filename2[0]))
 		}
 	}
-	SetErrno(e, int(en), strerror)
+	SetErrno(e, errno, strerror)
+	if winerror >= 0 {
+		e.Dict.Set("winerror", Int(winerror))
+	}
 	return e
 }
 
 // osErrorClass is CPython's errno-to-subclass table (PEP 3151).  The fs
 // sentinels are checked first because they also match Windows error codes,
 // whose numbers are not the POSIX ones.
-func osErrorClass(err error, en syscall.Errno) *Type {
+func osErrorClass(err error, errno int) *Type {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return FileNotFoundError
@@ -67,29 +78,5 @@ func osErrorClass(err error, en syscall.Errno) *Type {
 	case errors.Is(err, fs.ErrPermission):
 		return PermissionError
 	}
-	switch en {
-	case syscall.ENOTDIR:
-		return NotADirectoryError
-	case syscall.EISDIR:
-		return IsADirectoryError
-	case syscall.EINTR:
-		return InterruptedError
-	case syscall.ECHILD:
-		return ChildProcessError
-	case syscall.ESRCH:
-		return ProcessLookupError
-	case syscall.EAGAIN, syscall.EALREADY, syscall.EINPROGRESS:
-		return BlockingIOError
-	case syscall.EPIPE, syscall.ESHUTDOWN:
-		return BrokenPipeError
-	case syscall.ECONNABORTED:
-		return ConnectionAbortedError
-	case syscall.ECONNREFUSED:
-		return ConnectionRefusedError
-	case syscall.ECONNRESET:
-		return ConnectionResetError
-	case syscall.ETIMEDOUT:
-		return TimeoutError
-	}
-	return OSError
+	return errnoClass(errno)
 }

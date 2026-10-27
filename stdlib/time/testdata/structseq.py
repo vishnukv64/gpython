@@ -38,10 +38,13 @@ print("st named:", isinstance(st.tm_year, int), isinstance(st.tm_mon, int))
 print("st index matches name:", st[0] == st.tm_year)
 print("st slice:", len(st[:3]))
 print("st eq tuple:", st == tuple(st))
-print("st eq self:", st == time.localtime())
+# Both from one fixed instant: two bare localtime() calls may straddle a second.
+now = time.time()
+st, st2 = time.localtime(now), time.localtime(now)
+print("st eq self:", st == st2)
 print("st hashable:", isinstance(hash(st), int))
 print("st in set:", st in {st})
-print("st as key:", isinstance({st: 1}[time.localtime()], int))
+print("st as key:", isinstance({st: 1}[st2], int))
 
 print("OK")
 

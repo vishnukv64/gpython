@@ -7,12 +7,13 @@
 package py
 
 import (
-	"fmt"
 	"math"
 	"math/cmplx"
+	"strconv"
+	"strings"
 )
 
-var ComplexType = ObjectType.NewType("complex64", "complex(real[, imag]) -> complex number\n\nCreate a complex number from a real part and an optional imaginary part.\nThis is equivalent to (real + imag*1j) where imag defaults to 0.", ComplexNew, nil)
+var ComplexType = ObjectType.NewType("complex", "complex(real[, imag]) -> complex number\n\nCreate a complex number from a real part and an optional imaginary part.\nThis is equivalent to (real + imag*1j) where imag defaults to 0.", ComplexNew, nil)
 
 type Complex complex128
 
@@ -29,15 +30,31 @@ func ComplexNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	real, err := MakeFloat(realObj)
-	if err != nil {
-		return nil, err
+	if str, ok := realObj.(String); ok {
+		if len(args)+kwargs.Len() > 1 {
+			return nil, ExceptionNewf(TypeError, "complex() can't take second arg if first is a string")
+		}
+		text := strings.TrimSpace(string(str))
+		text = strings.TrimSuffix(strings.TrimPrefix(text, "("), ")")
+		c, perr := strconv.ParseComplex(strings.NewReplacer("j", "i", "J", "i").Replace(text), 128)
+		if perr != nil {
+			return nil, ExceptionNewf(ValueError, "complex() arg is a malformed string")
+		}
+		return Complex(c), nil
 	}
-	imag, err := MakeFloat(imagObj)
-	if err != nil {
-		return nil, err
+	parts := [2]complex128{}
+	for i, o := range [2]Object{realObj, imagObj} {
+		if c, ok := o.(Complex); ok {
+			parts[i] = complex128(c)
+			continue
+		}
+		f, err := MakeFloat(o)
+		if err != nil {
+			return nil, err
+		}
+		parts[i] = complex(float64(f.(Float)), 0)
 	}
-	return Complex(complex(real.(Float), imag.(Float))), nil
+	return Complex(parts[0] + parts[1]*1i), nil
 }
 
 // Convert an Object to an Complex
@@ -62,7 +79,20 @@ func convertToComplex(other Object) (Complex, bool) {
 }
 
 func (a Complex) M__str__() (Object, error) {
-	return String(fmt.Sprintf("(%g%+gj)", real(complex128(a)), imag(complex128(a)))), nil
+	r, i := real(complex128(a)), imag(complex128(a))
+	im := floatRepr(i)
+	if im[0] != '-' {
+		im = "+" + im
+	}
+	if r == 0 && !math.Signbit(r) {
+		return String(strings.TrimPrefix(im, "+") + "j"), nil
+	}
+	return String("(" + floatRepr(r) + im + "j)"), nil
+}
+
+func floatRepr(f float64) string {
+	s, _ := Float(f).M__repr__()
+	return strings.TrimSuffix(string(s.(String)), ".0")
 }
 
 func (a Complex) M__repr__() (Object, error) {
@@ -218,9 +248,25 @@ func (a Complex) M__pow__(other, modulus Object) (Object, error) {
 		return NotImplemented, nil
 	}
 	if b, ok := convertToComplex(other); ok {
+		// A small integral exponent is repeated multiplication, as in CPython,
+		// so (1+2j)**2 is exactly (-3+4j) rather than a polar-form estimate.
+		if n := real(complex128(b)); imag(complex128(b)) == 0 && n == math.Trunc(n) && math.Abs(n) <= 100 {
+			r := complex(1, 0)
+			for i := 0; i < int(math.Abs(n)); i++ {
+				r *= complex128(a)
+			}
+			if n < 0 {
+				r = 1 / r
+			}
+			return Complex(r), nil
+		}
 		return Complex(cmplx.Pow(complex128(a), complex128(b))), nil
 	}
 	return NotImplemented, nil
+}
+
+func (a Complex) M__bool__() (Object, error) {
+	return NewBool(a != 0), nil
 }
 
 func (a Complex) M__rpow__(other Object) (Object, error) {

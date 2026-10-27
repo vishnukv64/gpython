@@ -15,6 +15,9 @@ import "reflect"
 //
 // Will raise TypeError if Neg can't be run on this object
 func Neg(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__neg__") == nil {
+		return Neg(p)
+	}
 
 	if A, ok := a.(I__neg__); ok {
 		res, err := A.M__neg__()
@@ -38,6 +41,9 @@ func Neg(a Object) (Object, error) {
 //
 // Will raise TypeError if Pos can't be run on this object
 func Pos(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__pos__") == nil {
+		return Pos(p)
+	}
 
 	if A, ok := a.(I__pos__); ok {
 		res, err := A.M__pos__()
@@ -61,6 +67,9 @@ func Pos(a Object) (Object, error) {
 //
 // Will raise TypeError if Abs can't be run on this object
 func Abs(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__abs__") == nil {
+		return Abs(p)
+	}
 
 	if A, ok := a.(I__abs__); ok {
 		res, err := A.M__abs__()
@@ -84,6 +93,9 @@ func Abs(a Object) (Object, error) {
 //
 // Will raise TypeError if Invert can't be run on this object
 func Invert(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__invert__") == nil {
+		return Invert(p)
+	}
 
 	if A, ok := a.(I__invert__); ok {
 		res, err := A.M__invert__()
@@ -107,6 +119,9 @@ func Invert(a Object) (Object, error) {
 //
 // Will raise TypeError if MakeComplex can't be run on this object
 func MakeComplex(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__complex__") == nil {
+		return MakeComplex(p)
+	}
 
 	if _, ok := a.(Complex); ok {
 		return a, nil
@@ -135,6 +150,9 @@ func MakeComplex(a Object) (Object, error) {
 //
 // Will raise TypeError if MakeInt can't be run on this object
 func MakeInt(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__int__") == nil {
+		return MakeInt(p)
+	}
 
 	if _, ok := a.(Int); ok {
 		return a, nil
@@ -168,6 +186,9 @@ func MakeInt(a Object) (Object, error) {
 //
 // Will raise TypeError if MakeFloat can't be run on this object
 func MakeFloat(a Object) (Object, error) {
+	if p, ok := scalarOf(a); ok && a.(*Type).LookupPython("__float__") == nil {
+		return MakeFloat(p)
+	}
 
 	if _, ok := a.(Float); ok {
 		return a, nil
@@ -196,6 +217,9 @@ func MakeFloat(a Object) (Object, error) {
 //
 // Will raise TypeError if can't be add can't be run on these objects
 func Add(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__add__", "__radd__"); ok {
+		return Add(x, y)
+	}
 	// An instance of a Python subclass of a builtin carries its value in
 	// Payload, and it is the VALUE that adds: "self + (val,)" on pygments' Token
 	// builds a child token from a tuple subclass.  The instance is a *Type and
@@ -205,14 +229,14 @@ func Add(a, b Object) (Object, error) {
 	// "a + (val,)" on a tuple subclass is another instance of that subclass, and
 	// returning a plain tuple left pygments' child token without its class - its
 	// __getattr__ and __repr__ then could not be found.
-	if payload, ok := payloadOf(a); ok {
+	if payload, ok := containerPayloadOf(a); ok {
 		res, err := Add(payload, b)
 		if err != nil || res == NotImplemented {
 			return res, err
 		}
 		return rewrapPayload(a.(*Type).ObjectType, res), nil
 	}
-	if payload, ok := payloadOf(b); ok {
+	if payload, ok := containerPayloadOf(b); ok {
 		res, err := Add(a, payload)
 		if err != nil || res == NotImplemented {
 			return res, err
@@ -285,6 +309,9 @@ func IAdd(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be sub can't be run on these objects
 func Sub(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__sub__", "__rsub__"); ok {
+		return Sub(x, y)
+	}
 	// Try using a to sub
 	if A, ok := a.(I__sub__); ok {
 		res, err := A.M__sub__(b)
@@ -334,6 +361,9 @@ func ISub(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be mul can't be run on these objects
 func Mul(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__mul__", "__rmul__"); ok {
+		return Mul(x, y)
+	}
 	// Try using a to mul
 	if A, ok := a.(I__mul__); ok {
 		res, err := A.M__mul__(b)
@@ -383,6 +413,9 @@ func IMul(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be truediv can't be run on these objects
 func TrueDiv(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__truediv__", "__rtruediv__"); ok {
+		return TrueDiv(x, y)
+	}
 	// Try using a to truediv
 	if A, ok := a.(I__truediv__); ok {
 		res, err := A.M__truediv__(b)
@@ -432,6 +465,9 @@ func ITrueDiv(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be floordiv can't be run on these objects
 func FloorDiv(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__floordiv__", "__rfloordiv__"); ok {
+		return FloorDiv(x, y)
+	}
 	// Try using a to floordiv
 	if A, ok := a.(I__floordiv__); ok {
 		res, err := A.M__floordiv__(b)
@@ -481,6 +517,22 @@ func IFloorDiv(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be mod can't be run on these objects
 func Mod(a, b Object) (Object, error) {
+	// "fmt % args": the arguments are formatted as themselves, so a
+	// __str__/__repr__/__format__ they define is honoured; only the format
+	// string is unwrapped.
+	if p, ok := scalarUnlessOverridden(a, "__mod__", "__rmod__"); ok {
+		switch p.(type) {
+		case String, Bytes:
+			return Mod(p, b)
+		}
+	}
+	if _, isFmt := a.(String); !isFmt {
+		if _, isFmt := a.(Bytes); !isFmt {
+			if x, y, ok := scalarOperands(a, b, "__mod__", "__rmod__"); ok {
+				return Mod(x, y)
+			}
+		}
+	}
 	// Try using a to mod
 	if A, ok := a.(I__mod__); ok {
 		res, err := A.M__mod__(b)
@@ -530,6 +582,9 @@ func IMod(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be divmod can't be run on these objects
 func DivMod(a, b Object) (Object, Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__divmod__", "__rdivmod__"); ok {
+		return DivMod(x, y)
+	}
 	// Try using a to divmod
 	if A, ok := a.(I__divmod__); ok {
 		res, res2, err := A.M__divmod__(b)
@@ -568,6 +623,9 @@ func DivMod(a, b Object) (Object, Object, error) {
 //
 // Will raise TypeError if can't be lshift can't be run on these objects
 func Lshift(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__lshift__", "__rlshift__"); ok {
+		return Lshift(x, y)
+	}
 	// Try using a to lshift
 	if A, ok := a.(I__lshift__); ok {
 		res, err := A.M__lshift__(b)
@@ -617,6 +675,9 @@ func ILshift(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be rshift can't be run on these objects
 func Rshift(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__rshift__", "__rrshift__"); ok {
+		return Rshift(x, y)
+	}
 	// Try using a to rshift
 	if A, ok := a.(I__rshift__); ok {
 		res, err := A.M__rshift__(b)
@@ -666,6 +727,9 @@ func IRshift(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be and can't be run on these objects
 func And(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__and__", "__rand__"); ok {
+		return And(x, y)
+	}
 	// Try using a to and
 	if A, ok := a.(I__and__); ok {
 		res, err := A.M__and__(b)
@@ -745,6 +809,9 @@ func IAnd(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be xor can't be run on these objects
 func Xor(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__xor__", "__rxor__"); ok {
+		return Xor(x, y)
+	}
 	// Try using a to xor
 	if A, ok := a.(I__xor__); ok {
 		res, err := A.M__xor__(b)
@@ -794,6 +861,9 @@ func IXor(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be or can't be run on these objects
 func Or(a, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__or__", "__ror__"); ok {
+		return Or(x, y)
+	}
 	// Try using a to or
 	if A, ok := a.(I__or__); ok {
 		res, err := A.M__or__(b)
@@ -845,6 +915,12 @@ func IOr(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be pow can't be run on these objects
 func Pow(a, b, c Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__pow__", "__rpow__"); ok {
+		return Pow(x, y, UnwrapScalar(c))
+	}
+	if p, ok := scalarOf(c); ok {
+		return Pow(a, b, p)
+	}
 	// Try using a to pow
 	if A, ok := a.(I__pow__); ok {
 		res, err := A.M__pow__(b, c)
@@ -941,6 +1017,9 @@ func callPyReflected(o Object, name string, arg Object) (Object, bool, error) {
 //
 // Will raise TypeError if Gt can't be run on this object
 func Gt(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__gt__", "__lt__"); ok {
+		return Gt(x, y)
+	}
 	// Try using a to gt
 	if A, ok := a.(I__gt__); ok {
 		res, err := A.M__gt__(b)
@@ -980,6 +1059,9 @@ func Gt(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Ge can't be run on this object
 func Ge(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__ge__", "__le__"); ok {
+		return Ge(x, y)
+	}
 	// Try using a to ge
 	if A, ok := a.(I__ge__); ok {
 		res, err := A.M__ge__(b)
@@ -1019,6 +1101,9 @@ func Ge(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Lt can't be run on this object
 func Lt(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__lt__", "__gt__"); ok {
+		return Lt(x, y)
+	}
 	// Try using a to lt
 	if A, ok := a.(I__lt__); ok {
 		res, err := A.M__lt__(b)
@@ -1058,6 +1143,9 @@ func Lt(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Le can't be run on this object
 func Le(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__le__", "__ge__"); ok {
+		return Le(x, y)
+	}
 	// Try using a to le
 	if A, ok := a.(I__le__); ok {
 		res, err := A.M__le__(b)
@@ -1097,16 +1185,19 @@ func Le(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Eq can't be run on this object
 func Eq(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__eq__", "__eq__"); ok {
+		return Eq(x, y)
+	}
 	// Compare the VALUES of payload-carrying instances: "L([1,2]) == L([1,2])"
 	// is list equality, and comparing the instances themselves asked their
 	// class for __eq__ instead.
-	if pa, ok := payloadOf(a); ok {
-		if pb, ok2 := payloadOf(b); ok2 {
+	if pa, ok := containerPayloadOf(a); ok {
+		if pb, ok2 := containerPayloadOf(b); ok2 {
 			return Eq(pa, pb)
 		}
 		return Eq(pa, b)
 	}
-	if pb, ok := payloadOf(b); ok {
+	if pb, ok := containerPayloadOf(b); ok {
 		return Eq(a, pb)
 	}
 	// Try using a to eq
@@ -1161,6 +1252,9 @@ func Eq(a Object, b Object) (Object, error) {
 //
 // Will raise TypeError if Ne can't be run on this object
 func Ne(a Object, b Object) (Object, error) {
+	if x, y, ok := scalarOperands(a, b, "__ne__", "__ne__"); ok {
+		return Ne(x, y)
+	}
 	// Try using a to ne
 	if A, ok := a.(I__ne__); ok {
 		res, err := A.M__ne__(b)

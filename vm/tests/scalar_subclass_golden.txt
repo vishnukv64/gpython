@@ -1,0 +1,117 @@
+ab 'ab' ab|5|2.5 ab 5 'ab' ab 5
+ab-c abc cab abab a AB 2 True ['a', '']
+ab/x b "ab" 5
+5 5 6 10 -5 3 True True True [0, 1, 2] 6
+2.5 2.5 5.0 2.6 2
+b'xy' b'xyz' xy 2 120 b'xy'
+1 1 ['a', 'b'] 2 3
+True True True True True
+str int str
+False False 12 b'ab' True
+v True [5]
+A b [0, 0] (3, 1) 8 2 b'\x05'
+ True q
+P! Prepr P! zw
+enum-like ERR TypeError
+slots ('SS', 'HI!') tuple
+double 14 II
+new ('x', 'N', 2) tuple
+newint (2, 'Nint', 3) tuple
+cplx ((1+2j), 'Cs', (2+2j), 5.0, 1.0, (1+2j), (2+4j)) tuple
+float (2.5, 3.0, 1.0, 0.5, 1, 2.0, 1.5, 1, False) tuple
+floatfmt   1.5|1.5|1.5|1.50 str
+bytes (b'byz', b'zby', b'byby', 98, b'b', '6279', b'by', bytearray(b'by'), True, b'BY', 'by') tuple
+bytesjoin b'by,q' bytes
+struct b'\x00\x00\x01\x02by\x00' bytes
+in (True, True, True, True, True, True) tuple
+sorted ['a', 'b', 'c'] list
+sorted-int [1, 2, 3, 4, 9, True] list
+minmax-type ('II', 'SS') tuple
+sum (3, 1.5, 6) tuple
+dictkeys {'a': 1, 2: 2, 3.5: 3} dict
+dictkeys2 (1, 'x', 1) tuple
+dictkeytype ['SS', 'II'] list
+setmember (True, 1, {1}) tuple
+percent hi|7|7|7|7|   hi|hi   |'hi'|A str
+percent-dict hi 7 str
+format hi|   hi|hi  |7|7|'hi'|hi|0001.500 str
+fstr hi|   hi|007|7|1.50|b'by'|ss='hi' str
+format() ('  hi', '7', '1.5', 'hi') tuple
+json ('{"hi": 7, "f": 1.5}', '["hi", "by"]', 'hi') tuple
+json-sort {"a": 2, "b": 1} str
+os.path ('hi/x', 'a/hi', 'b.c', '/a', ('f', '.txt'), '/r', True, 'a/b', 'x') tuple
+os ('hi', True, True, b'a', [], 'd', None, 0) tuple
+os-fspath-obj ('p', 'p/q') tuple
+open  str
+pathlib ('/a/b', PurePosixPath('/a/b'), 'c') tuple
+int() (7, 12, 7, 1, 255, 0, 9, True) tuple
+int-type ('int', 'II', 'int') tuple
+float() (1.5, 7.0, 2.5, 100.0, 'float') tuple
+str() ('hi', '7', '1.5', "b'by'", 'by', 'q', 'str', '1j') tuple
+bytes() (b'by', b'\x00\x00\x00', b'AB', b'hi', b'hi', 'bytes') tuple
+complex() ((1+2j), (7+0j), (1.5+7j), (1+2j)) tuple
+bool (False, False, False, False, False, True, True) tuple
+round (2.6, 2, 2) tuple
+divmod ((3, 1), (3, 1), (3.0, 1.5), 1024, 3, 8, 4, 3, 3, 3.5) tuple
+bits (2, 7, 4, 16, 16, -6, -5, 5, 5, 3) tuple
+cmp (True, True, True, True, False, True, True, True, True, True, True, True, True) tuple
+cmp-same (True, True, True, False) tuple
+hash (True, True, True, True, True) tuple
+index (1, 'c', (1, 2), [1, 2, 3], [1, 1, 1], 'abab', 98, '0xff', '0b101', '0o10', 'B', 3) tuple
+slice ('el', 'ace') tuple
+seq (['a', 'b'], ('a', 'b'), {'a'}, 5, 'cba', ['a', 'b'], '1x2', 'b', [(0, 'a'), (1, 'b')], [('a', 97), ('b', 98)]) tuple
+str-methods ('ABC', 2, 1, 2, 'aXc', ['a', 'b'], 'a', True, True, True, '**a**', 'a  ', '00a', 'a   b', b'ab', ('', 'a', ''), '1') tuple
+str-types ['str', 'str', 'str', 'str', 'str', 'str', 'str', 'str', 'str', 'str', 'str', 'bytes', 'str', 'str'] list
+int-types ['int', 'int', 'int', 'int', 'int', 'int', 'int', 'int', 'int', 'int', 'int', 'int'] list
+float-types ['float', 'float', 'float', 'float', 'float', 'float', 'float'] list
+bytes-types ['bytes', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'] list
+regex ('bbb', 'aa', ['1', '2'], ['a', 'b'], 'x', 'a\\.b') tuple
+string ('1', {97: 99}, 'zbc', 'A B') tuple
+copy [('SS', 'hi'), ('II', 7), ('Fs', 1.5), ('Bs', b'by'), ('Cs', (1+2j))] list
+copy-attr ('a', 'a', 5, 5, 5, 'SA') tuple
+deepcopy-list ['SS', 'II', 'Fs', 'Bs'] list
+pickle [('SS', True), ('II', True), ('Fs', True), ('Bs', True), ('Cs', True), ('SS', True), ('II', True), ('Fs', True), ('Bs', True), ('Cs', True)] list
+pickle-attr ('SA', 'a', {'k': 1}) tuple
+pickle-plain ['a', 1, 2.5, b'x'] list
+reduce ('__newobj__', '__newobj__', True) tuple
+ov-str ('yes', 'added', 'radded', 99, 'fmts', 'fmt', 'fmt>3', 'item', True, 'contains', 'lt', False, 'UP', 'q', "'q'", 1, {'q': 1}, 'q', 'q', 'fmt') tuple
+ov-int (42, 'iadd', 2, 'neg', 1, 0.5, 'OI', 'OIs', 'OIs', 'OIs OI', 77, True, True, range(0, 1), '0x1', '1', '1', 0, 2, '42', 1) tuple
+ov-float (9.5, 'OF', 'OF', 2.0, 1.0, '1.000000', 'OF') tuple
+ov-bytes (b'ob', 'OB', "b'z'", b'zx', True, b'z', 1) tuple
+STR
+pstr ('STR', 'REPR', 'STR', 'STR REPR', 'STR REPR STR', 'a', 'ab', [REPR], (REPR,), {REPR: REPR}, None, 'STR', '"a"', 'a/b', 'bac') tuple
+STR|STR
+[REPR] {1: REPR} (3, 'x', 0.5, b'y')
+isinst (True, True, True, True, True, True, True, True, 'str', True, False, False) tuple
+attrs (0, 7, 'HI', False, 'd', 7, 0, 1.5, 2.0, 8, 0) tuple
+instdict ({'a': 1, 'b': 2}, {'a': 1, 'b': 2}, 1, [], True, 'w') tuple
+id-ident (True, True, True, 0, 1, True, True, True) tuple
+list-ops ['II', 'SS', 'Fs'] list
+list-store (['SS', 'II'], ['SS', 'II'], ['SS', 'SS'], ['SS'], ['SS'], 'SS', 'II', ['II']) tuple
+stores ([('SS', 'II'), ('SS', 'II'), ('str', 'SS')], ['SS'], ['II', 'SS', 'Fs'], {'a': 2}, 1, 1, True) tuple
+misc (['a', 1], [1, 2, 3], ['r', 'r'], 1, 2, 'a b\nc', 'a', ['a', 'b c'], b'aGk=', b'hi', '0cc175b9c0f1b6a831c399e269772661', b'61', 3904355907, b'a', 'a', 'LATIN SMALL LETTER A', '&lt;', 'a%20b', '/y', Decimal('2.5'), Decimal('3'), datetime.timedelta(days=1), datetime.date(2020, 1, 2), '1970', 1, 2, 4, 24, 4.0, 5.0, True, -1.0, (3, 1), 'A', 'a,b', 'a', 4, {'a': 1}, 'a1', [1, 2], ['a'], 6, 'ab', 6, True, True, 'b', 'x', 5, 5, True) tuple
+struct2 ((1,), 4, b'\x00\x00\x00\x00\x00\x00\xf8?') tuple
+io abc str
+io-bytes b'ab' bytes
+a-1-0.5-b'b'!
+print-file None NoneType
+exc ('m', ('m',), "KeyError('k')", 0) tuple
+raise ('boom', 'SS') tuple
+getitem-dict (1, 2, 3, 1, 2) tuple
+tuple-key 1 int
+kwargs {'a': 1} dict
+a
+star (None, ['a', 'b'], {'a': 1}) tuple
+match S str
+sliceidx ([2, 3], 'ab', [1, 3], 'c', [1, 2], []) tuple
+int-edge (1180591620717411303425, 2361183241434822606848, '1180591620717411303424', 1180591620717411303424, True, True, True, '1180591620717411303424', 71, -1180591620717411303424, 393530540239137101141, 2, (236118324143482260684, 4), 1, 1024, 1208925819614629174706176) tuple
+neg-err ERR TypeError
+neg-err2 ERR TypeError
+neg-err3 ERR TypeError
+neg-err4 ERR ValueError
+neg-err5 ERR ValueError
+neg-err6 ERR TypeError
+neg-err7 ERR TypeError
+neg-err8 ERR TypeError
+neg-err9 ERR TypeError
+neg-err10 ERR TypeError

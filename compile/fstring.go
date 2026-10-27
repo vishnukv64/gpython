@@ -321,8 +321,10 @@ func (c *compiler) compileFString(node *ast.FString) {
 			if part.formatSpec != "" {
 				c.callFormat(part.formatSpec)
 			} else if part.conversion == 0 && !part.debug {
-				// A debug field defaults to repr, not str.
-				c.callBuiltin1("str")
+				// A debug field defaults to repr, not str.  format(x, "") is
+				// what CPython's FORMAT_VALUE does, so a __format__ the
+				// class defines is honoured.
+				c.callFormat("")
 			}
 
 			// Join the source text pushed above to the rendered value.

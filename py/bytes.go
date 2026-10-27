@@ -52,6 +52,19 @@ func BytesNew(metatype *Type, args Tuple, kwargs StringDict) (res Object, err er
 		return Bytes{}, nil
 	}
 
+	if t, ok := x.(*Type); ok && t.Payload != nil {
+		if fn := t.LookupPython("__bytes__"); fn != nil {
+			res, err := Call(fn, Tuple{x}, NewStringDict())
+			if err != nil {
+				return nil, err
+			}
+			if _, isBytes := res.(Bytes); !isBytes {
+				return nil, ExceptionNewf(TypeError, "__bytes__ returned non-bytes (type %s)", res.Type().Name)
+			}
+			return res, nil
+		}
+	}
+
 	if s, ok := x.(String); ok {
 		if encoding == nil {
 			return nil, ExceptionNewf(TypeError, "string argument without an encoding")
@@ -238,7 +251,7 @@ func convertToBytes(other Object) (Bytes, bool) {
 // ByteArray.  It is what every method that accepts "bytes or bytearray" uses,
 // so the two types share one implementation.
 func bytesLikeData(other Object) ([]byte, bool) {
-	switch b := other.(type) {
+	switch b := UnwrapScalar(other).(type) {
 	case Bytes:
 		return b, true
 	case *ByteArray:
@@ -1908,6 +1921,7 @@ bytes.translate.`))
 // indexForContainer resolves a single subscript against a length, raising the
 // IndexError/TypeError CPython raises for the named container.
 func indexForContainer(key Object, length int, what string) (int, error) {
+	key = UnwrapScalar(key)
 	switch key.(type) {
 	case Int, Bool, *BigInt:
 	default:

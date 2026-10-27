@@ -136,7 +136,10 @@ func init() {
 	// its keys use the same encoding a lookup from Python will produce; a
 	// plain Go string key would never be found by an int key.
 	for _, e := range append(errors, platformErrors...) {
-		number := int(e.number)
+		number, ok := numberOf(e.number)
+		if !ok {
+			continue
+		}
 		globals.Set(e.name, py.Int(number))
 		if _, ok := strerror[number]; !ok {
 			strerror[number] = e.number.Error()

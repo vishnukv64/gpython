@@ -1005,6 +1005,9 @@ func (a String) M__mod__(other Object) (Object, error) {
 			}
 			text = StringEscape(String(r), true)
 		case 'd', 'i', 'u', 'x', 'X', 'o':
+			if _, isInt := scalarOf(value); isInt {
+				value = UnwrapScalar(value) // an int subclass formats as its value
+			}
 			n, err := MakeGoInt(value)
 			if err != nil {
 				return nil, err
@@ -1028,6 +1031,7 @@ func (a String) M__mod__(other Object) (Object, error) {
 				text = string(rune(n))
 			}
 		case 'e', 'E', 'f', 'F', 'g', 'G':
+			value = UnwrapScalar(value) // a float subclass formats as its value
 			f, err := FloatAsFloat64(value)
 			if err != nil {
 				return nil, err
@@ -1286,7 +1290,7 @@ func (s String) M__getitem__(key Object) (Object, error) {
 }
 
 func (s String) M__contains__(item Object) (Object, error) {
-	needle, ok := item.(String)
+	needle, ok := UnwrapScalar(item).(String)
 	if !ok {
 		return nil, ExceptionNewf(TypeError, "'in <string>' requires string as left operand, not %s", item.Type().Name)
 	}
@@ -1347,7 +1351,7 @@ func strStartsEndsWith(self String, args Tuple, atStart bool) (Object, error) {
 		prefixes = append(prefixes, string(v))
 	case Tuple:
 		for _, t := range v {
-			s, ok := t.(String)
+			s, ok := UnwrapScalar(t).(String)
 			if !ok {
 				return nil, ExceptionNewf(TypeError, "%s first arg must be str or a tuple of str, not %s", name, t.Type().Name)
 			}
@@ -1655,7 +1659,7 @@ func (s String) Join(args Tuple) (Object, error) {
 	}
 	item, err := Next(iterable)
 	for err == nil {
-		str, ok := item.(String)
+		str, ok := UnwrapScalar(item).(String)
 		if !ok {
 			return nil, ExceptionNewf(TypeError, "sequence item %d: expected str instance, %s found", len(parts), item.Type().Name)
 		}

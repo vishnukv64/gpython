@@ -757,7 +757,8 @@ func (n *nativeNew) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	if t.New == nil {
 		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
 	}
-	obj, err := t.New(t, args[1:], kwargs)
+	nargs, nkw := ctorArgs(t, args[1:], kwargs)
+	obj, err := t.New(t, nargs, nkw)
 	if err != nil {
 		return nil, err
 	}
@@ -786,7 +787,7 @@ func wrapPayload(t *Type, value Object) Object {
 // arrangement that already makes "class D(dict)" work.  A set, list and tuple
 // have positional contents and nothing to read them from, so their subclass
 // instances read the Payload.
-var payloadContainers = []*Type{TupleType, ListType, SetType}
+var payloadContainers = []*Type{TupleType, ListType, SetType, StringType, IntType, BigIntType, FloatType, BytesType, ComplexType}
 
 // IsClassObject reports whether an object is a CLASS rather than an instance.
 //
@@ -880,6 +881,7 @@ func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 		}
 	}
 
+	args, kwargs = ctorArgs(t, args, kwargs)
 	obj, err := t.New(t, args, kwargs)
 	if err != nil {
 		return nil, err
