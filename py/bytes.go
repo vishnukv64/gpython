@@ -1355,6 +1355,10 @@ func encodeStringWith(name, text, handler string) ([]byte, error) {
 	switch canonical {
 	case "utf-8":
 		return []byte(text), nil
+	case "unicode-escape":
+		return encodeUnicodeEscape(text), nil
+	case "raw-unicode-escape":
+		return encodeRawUnicodeEscape(text), nil
 	case "latin-1":
 		out := make([]byte, 0, len(text))
 		for i, r := range text {
@@ -1453,6 +1457,10 @@ func decodeBytesWith(name string, raw []byte, handler string) (Object, error) {
 	// The error handler is only consulted when an error is actually hit, so an
 	// unknown name is not rejected for an input that decodes cleanly.
 	switch canonical {
+	case "unicode-escape":
+		return decodeUnicodeEscape(raw)
+	case "raw-unicode-escape":
+		return decodeRawUnicodeEscape(raw)
 	case "utf-8":
 		if !utf8.Valid(raw) {
 			return decodeInvalid(name, raw, handler)
@@ -1692,6 +1700,10 @@ func canonicalEncoding(name string) (string, error) {
 		return "utf-16-be", nil
 	case "utf-32", "utf32":
 		return "utf-32", nil
+	case "unicode-escape":
+		return "unicode-escape", nil
+	case "raw-unicode-escape":
+		return "raw-unicode-escape", nil
 	}
 	return "", ExceptionNewf(LookupError, "unknown encoding: %s", name)
 }

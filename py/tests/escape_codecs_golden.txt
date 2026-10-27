@@ -1,0 +1,15 @@
+b'' b'' True True
+b'plain' b'plain' True True
+b'tab\\t nl\\n cr\\r bs\\\\ q\'"' b'tab\t nl\n cr\r bs\\ q\'"' True True
+b'\\x00\\x1f\\x7f\\xe9\\xff' b'\x00\x1f\x7f\xe9\xff' True True
+b'\\u20ac\\U0001f600' b'\\u20ac\\U0001f600' True True
+b'\\\\u0041 \\\\\\\\u0041' b'\\u0041 \\\\u0041' True False
+'\x07\x08\x0c\x0bAAé\\q'
+'\\\\u0041A\\x41'
+err 'unicodeescape' codec can't decode bytes in position 0-2: truncated \xXX escape
+err 'unicodeescape' codec can't decode bytes in position 0-3: truncated \uXXXX escape
+err 'unicodeescape' codec can't decode byte 0x5c in position 0: \ at end of string
+b'Va\\u20ac\\u005c\np0\n.'
+True
+4 bytearray(b'efcd') 2 bytearray(b'efcd') 0
+TE readinto() argument must be read-write bytes-like object, not bytes

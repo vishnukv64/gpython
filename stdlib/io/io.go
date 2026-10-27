@@ -282,11 +282,16 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "readinto", 1, 1, &target); err != nil {
 			return nil, err
 		}
-		// bytearray does not exist in this interpreter, so there is no
-		// writable in-place buffer to fill.  Say so rather than accepting
-		// the argument and doing nothing.
-		_ = target
-		return nil, py.ExceptionNewf(UnsupportedOperationType, "readinto() needs a preallocated writable buffer, and bytearray is not available here")
+		buf, writable, ok := py.BufferBytes(target)
+		if !ok || !writable {
+			return nil, py.ExceptionNewf(py.TypeError, "readinto() argument must be read-write bytes-like object, not %s", target.Type().Name)
+		}
+		n := 0
+		if b.pos < len(b.data) {
+			n = copy(buf, b.data[b.pos:])
+		}
+		b.pos += n
+		return py.Int(n), nil
 	}, 0, "Read bytes into a preallocated buffer."))
 
 	BytesIOType.Dict.Set("write", py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {

@@ -238,6 +238,17 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 		methodInst.Module = m
 		m.Globals.Set(method.Name, methodInst)
 	}
+	// A builtin function placed in Globals rather than Methods has no module
+	// yet; give it this one, so __module__ names it and pickle can save it by
+	// reference (codecs.encode is how pickle saves bytes at protocols 0-2).
+	for _, k := range m.Globals.Keys() {
+		if method, ok := m.Globals.GetOrNil(k).(*Method); ok && method.Module == nil {
+			methodInst := new(Method)
+			*methodInst = *method
+			methodInst.Module = m
+			m.Globals.Set(k, methodInst)
+		}
+	}
 	// Set some module globals
 	m.Globals.Set("__name__", String(name))
 	m.Globals.Set("__doc__", String(impl.Info.Doc))
