@@ -96,5 +96,14 @@ func rawAccept(l net.Listener) (net.Conn, error) {
 	return l.Accept()
 }
 
-func placeholderFD(family, typ int) (int, error) { return -1, syscall.EOPNOTSUPP }
-func closeFD(fd int)                             {}
+// A socket with no connection yet still needs a handle to answer fileno()
+// (asyncio asks before connect); a real, unused socket stands in for it.
+func placeholderFD(family, typ int) (int, error) {
+	h, err := syscall.Socket(family, typ, 0)
+	if err != nil {
+		return -1, err
+	}
+	return int(h), nil
+}
+
+func closeFD(fd int) { _ = syscall.Closesocket(syscall.Handle(fd)) }
