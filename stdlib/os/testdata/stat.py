@@ -33,15 +33,30 @@ with open(p) as fh:
 print("pathlib:", pathlib.Path(p).stat() == s, os.stat(pathlib.Path(p)) == s)
 
 # The errors are the OSError SUBCLASS CPython picks, with errno and filename.
+# Windows reports both as ERROR_PATH_NOT_FOUND (WinError 3 -> ENOENT), as
+# CPython does there; the golden keeps the POSIX wording, so Windows checks
+# its own and prints the shared lines.
+WIN3 = "[WinError 3] The system cannot find the path specified: "
+POSIX = {"/nope/x": "error: FileNotFoundError 2 True [Errno 2] No such file or directory: '/nope/x'",
+         p + "/sub": "error: NotADirectoryError 20 True [Errno 20] Not a directory: 'D/f/sub'"}
 for bad in ("/nope/x", p + "/sub"):
     try:
         os.stat(bad)
     except OSError as e:
-        print("error:", type(e).__name__, e.errno, e.filename == bad, str(e).replace(d, "D"))
+        if os.name == "nt":
+            assert type(e) is FileNotFoundError and e.errno == 2 and e.winerror == 3, (type(e), e.errno)
+            assert str(e) == WIN3 + repr(bad), str(e)
+            print(POSIX[bad])
+        else:
+            print("error:", type(e).__name__, e.errno, e.filename == bad, str(e).replace(d, "D"))
 try:
     pathlib.Path("/nope/x").stat()
 except OSError as e:
-    print("pathlib error:", type(e).__name__, e.errno, e)
+    if os.name == "nt":
+        assert str(e) == WIN3 + "'/nope/x'", str(e)
+        print("pathlib error: FileNotFoundError 2 [Errno 2] No such file or directory: '/nope/x'")
+    else:
+        print("pathlib error:", type(e).__name__, e.errno, e)
 try:
     os.stat(1.5)
 except TypeError as e:
