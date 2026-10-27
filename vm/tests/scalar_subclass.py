@@ -6,7 +6,7 @@ class B(bytes): pass
 s, i, f, b = S("ab"), I(5), F(2.5), B(b"xy")
 print(str(s), repr(s), f"{s}|{i}|{f}", "%s %d %r" % (s, i, s), "{} {}".format(s, i))
 print("-".join([s, "c"]), s + "c", "c" + s, s * 2, s[0], s.upper(), len(s), "a" in s, s.split("b"))
-print(os.path.join(s, "x"), os.path.basename(S("/a/b")), json.dumps(s), json.dumps(i))
+print(posixpath.join(s, "x"), posixpath.basename(S("/a/b")), json.dumps(s), json.dumps(i))
 print(str(i), int(i), i + 1, i * 2, -i, abs(I(-3)), i == 5, i < 6, hash(i) == hash(5), list(range(I(3))), [1,2,3,4,5,6][i])
 print(str(f), float(f), f * 2, round(F(2.567), 1), int(f))
 print(bytes(b), b + b"z", b.decode(), len(b), b[0], str(b))
@@ -60,7 +60,7 @@ class Num(int):
     def __repr__(self): return "<Num.%s: %r>" % (self.name, self.value)
     def __str__(self): return "Num.%s" % self.name
 RED, ONE, TWO = Color("RED", "red"), Num("ONE", 1), Num("TWO", 2)
-t("enum-like", lambda: (RED, str(RED), RED == "red", "x" + RED, f"{RED}", f"{ONE}", f"{ONE:03d}", "%s|%d|%r" % (TWO, TWO, TWO), json.dumps({"c": RED, "n": TWO}), os.path.join(RED, "x"), {RED: 1}["red"], {"red": 1}[RED], sorted([TWO, 1, ONE]), [10, 20, 30][ONE], range(TWO), isinstance(RED, str), RED.upper(), TWO + 1, hash(TWO) == hash(2), RED.name, TWO.value, RED in ("red",), ONE < TWO, bin(TWO), struct.pack("B", TWO), chr(TWO + 64), int(TWO), str(ONE), repr(ONE), format(ONE), format(ONE, "d"), copy.copy(TWO), pickle.loads(pickle.dumps(RED, 4)) == "red"))
+t("enum-like", lambda: (RED, str(RED), RED == "red", "x" + RED, f"{RED}", f"{ONE}", f"{ONE:03d}", "%s|%d|%r" % (TWO, TWO, TWO), json.dumps({"c": RED, "n": TWO}), posixpath.join(RED, "x"), {RED: 1}["red"], {"red": 1}[RED], sorted([TWO, 1, ONE]), [10, 20, 30][ONE], range(TWO), isinstance(RED, str), RED.upper(), TWO + 1, hash(TWO) == hash(2), RED.name, TWO.value, RED in ("red",), ONE < TWO, bin(TWO), struct.pack("B", TWO), chr(TWO + 64), int(TWO), str(ONE), repr(ONE), format(ONE), format(ONE, "d"), copy.copy(TWO), pickle.loads(pickle.dumps(RED, 4)) == "red"))
 class Pth(str):
     def __fspath__(self): return str(self)
 
@@ -94,9 +94,9 @@ t("json-sort", lambda: json.dumps({SS("b"): 1, "a": 2}, sort_keys=True))
 # posixpath is POSIX on every host, so this row's golden is host independent.
 t("os.path", lambda: (posixpath.join(ss, "x"), posixpath.join("a", ss), posixpath.basename(SS("/a/b.c")), posixpath.dirname(SS("/a/b")), posixpath.splitext(SS("f.txt")), posixpath.abspath(SS("/q/../r")), posixpath.isabs(SS("/x")), posixpath.normpath(SS("a//b")), posixpath.expanduser(SS("x"))))
 t("os", lambda: (os.fspath(ss), os.path.exists(SS(".")), os.path.isdir(SS(".")), os.fsencode(SS("a")), os.listdir(SS("."))[:0], os.getenv(SS("NOPE_XYZ"), "d"), os.environ.get(SS("NOPE_XYZ")), 0))
-t("os-fspath-obj", lambda: (os.fspath(Pth("p")), os.path.join(Pth("p"), "q")))
+t("os-fspath-obj", lambda: (os.fspath(Pth("p")), posixpath.join(Pth("p"), "q")))
 t("open", lambda: open(os.devnull, SS("r")).read() + open(SS(os.devnull)).read())
-t("pathlib", lambda: (str(pathlib.Path(SS("/a/b"))), pathlib.PurePosixPath(SS("/a")) / SS("b"), pathlib.PurePosixPath("/a").joinpath(SS("c")).name))
+t("pathlib", lambda: (str(pathlib.PurePosixPath(SS("/a/b"))), pathlib.PurePosixPath(SS("/a")) / SS("b"), pathlib.PurePosixPath("/a").joinpath(SS("c")).name))
 t("int()", lambda: (int(ii), int(SS("12")), int(SS(" 7 ")), int(fs), int(ii, 0) if False else int(SS("ff"), 16), int(II(3), 2) if False else 0, int(Bs(b"9")), int(II(9)) is not ii))
 t("int-type", lambda: (type(int(ii)).__name__, type(II(II(4))).__name__, type(int(II(4))).__name__))
 t("float()", lambda: (float(fs), float(ii), float(SS("2.5")), float(Bs(b"1e2")), type(float(fs)).__name__))
@@ -178,7 +178,7 @@ t("ov-bytes", lambda: (bytes(ob), repr(ob), str(ob), ob + b"x", ob == b"z", b"".
 class Pstr(str):
     def __str__(self): return "STR"
     def __repr__(self): return "REPR"
-t("pstr", lambda: (str(Pstr("a")), repr(Pstr("a")), f"{Pstr('a')}", "%s %r" % (Pstr("a"), Pstr("a")), "{} {!r} {!s}".format(Pstr("a"), Pstr("a"), Pstr("a")), "".join([Pstr("a")]), Pstr("a") + "b", [Pstr("a")], (Pstr("a"),), {Pstr("a"): Pstr("b")}, print(Pstr("a")), format(Pstr("a")), json.dumps(Pstr("a")), os.path.join(Pstr("a"), "b"), "a".join([Pstr("b"), Pstr("c")])))
+t("pstr", lambda: (str(Pstr("a")), repr(Pstr("a")), f"{Pstr('a')}", "%s %r" % (Pstr("a"), Pstr("a")), "{} {!r} {!s}".format(Pstr("a"), Pstr("a"), Pstr("a")), "".join([Pstr("a")]), Pstr("a") + "b", [Pstr("a")], (Pstr("a"),), {Pstr("a"): Pstr("b")}, print(Pstr("a")), format(Pstr("a")), json.dumps(Pstr("a")), posixpath.join(Pstr("a"), "b"), "a".join([Pstr("b"), Pstr("c")])))
 print(Pstr("pp"), Pstr("p2"), sep="|")
 print([Pstr("a")], {1: Pstr("b")}, (II(3), SS("x"), Fs(.5), Bs(b"y")))
 t("isinst", lambda: (isinstance(ss, SS), isinstance(ss, str), isinstance(ii, (str, int)), issubclass(SS, str), issubclass(type(ii), int), type(ss) is SS, type(ss) == SS, ss.__class__ is SS, ss.__class__.__mro__[1].__name__, SS.__mro__[1] is str, isinstance(ii, float), isinstance(True, II)))
