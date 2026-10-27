@@ -31,7 +31,7 @@ if __name__ == "__main__":
         p.start()
     for p in ps:
         p.join()
-    print("value", v.value)
+    print("value", v.value, "exitcodes", [p.exitcode for p in ps])
 
     d = mp.Value("d", 1.5, lock=False)
     print(d.value)
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     p = mp.Process(target=fill, args=(a,))
     p.start()
     p.join()
-    print("array", list(a))
+    print("array", list(a), "exitcode", p.exitcode)
 
     ev = mp.Event()
     sem = mp.Semaphore(1)

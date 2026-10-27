@@ -91,6 +91,10 @@ func init() {
 		py.DictEntry{Key: "list2cmdline", Value: py.MustNewMethod("list2cmdline", list2cmdline, 0, "Translate a sequence of arguments into a command line string.")},
 	)
 
+	for _, e := range platformEntries() {
+		globals.Set(e.Key, e.Value)
+	}
+
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
 			Name: "subprocess",

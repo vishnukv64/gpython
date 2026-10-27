@@ -1,4 +1,4 @@
-//go:build windows || plan9 || js || wasip1
+//go:build plan9 || js || wasip1
 
 // Copyright 2026 The go-python Authors.  All rights reserved.
 // Use of this source code is governed by a BSD-style

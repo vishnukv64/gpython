@@ -1,10 +1,8 @@
-//go:build !windows
-
 // stdlib/mmap: memory-mapped files.
 //
-// The mapping itself is syscall.Mmap, which exists only on Unix; on Windows the
-// package registers nothing, so "import mmap" is a ModuleNotFoundError there
-// rather than a broken build.  There is no portable mremap, so resize()
+// The mapping itself is platform code (mmap_unix.go: syscall.Mmap;
+// mmap_windows.go: CreateFileMapping/MapViewOfFile).  There is no portable
+// mremap, so resize()
 // refuses, and every method on a closed object raises ValueError "mmap closed
 // or invalid" - both measured against CPython 3.14 on darwin.
 package mmap
@@ -12,7 +10,6 @@ package mmap
 import (
 	"bytes"
 	"fmt"
-	"syscall"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -23,6 +20,15 @@ const (
 	ACCESS_COPY    = 3
 	ACCESS_DEFAULT = 0
 )
+
+// mapArgs is mmap.mmap's arguments, parsed per platform: POSIX takes
+// (fileno, length, flags, prot, access, offset), Windows (fileno, length,
+// tagname, access, offset).
+type mapArgs struct {
+	fileno, length, access int
+	offset                 int64
+	tag                    string
+}
 
 const moduleDoc = `An interface to memory-mapped files.`
 
@@ -63,21 +69,6 @@ var (
 	_ py.MemoryViewBytesLike = (*Mmap)(nil)
 )
 
-// errnoError renders a syscall failure as CPython does: "[Errno 9] Bad file
-// descriptor".  Go's errno text is the same strerror text with its first
-// letter lowercased, so capitalising it restores CPython's wording.
-func errnoError(err error) error {
-	en, ok := err.(syscall.Errno)
-	if !ok {
-		return py.ExceptionNewf(py.OSError, "%s", err.Error())
-	}
-	msg := en.Error()
-	if msg != "" && msg[0] >= 'a' && msg[0] <= 'z' {
-		msg = string(msg[0]-'a'+'A') + msg[1:]
-	}
-	return py.ExceptionNewf(py.OSError, "[Errno %d] %s", int(en), msg)
-}
-
 // errClosed is the error every method raises once the map is closed.
 func errClosed() error {
 	return py.ExceptionNewf(py.ValueError, "mmap closed or invalid")
@@ -113,7 +104,7 @@ func (m *Mmap) unmap() error {
 	}
 	d, err := m.data, error(nil)
 	m.data = nil
-	err = syscall.Munmap(d)
+	err = unmapMem(d)
 	return err
 }
 
@@ -121,59 +112,24 @@ func (m *Mmap) unmap() error {
 //
 //	access=ACCESS_DEFAULT, offset=0)
 func mmapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var filenoObj, lengthObj py.Object
-	var flagsObj py.Object = py.Int(syscall.MAP_SHARED)
-	var protObj py.Object = py.Int(syscall.PROT_READ | syscall.PROT_WRITE)
-	var accessObj py.Object = py.Int(ACCESS_DEFAULT)
-	var offsetObj py.Object = py.Int(0)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|OOOO:mmap.mmap",
-		[]string{"fileno", "length", "flags", "prot", "access", "offset"},
-		&filenoObj, &lengthObj, &flagsObj, &protObj, &accessObj, &offsetObj); err != nil {
-		return nil, err
-	}
-	fileno, err := py.IndexInt(filenoObj)
+	r, err := parseArgs(args, kwargs)
 	if err != nil {
 		return nil, err
 	}
-	length, err := py.IndexInt(lengthObj)
-	if err != nil {
-		return nil, err
-	}
-	access, err := py.IndexInt(accessObj)
-	if err != nil {
-		return nil, err
-	}
-	offset, err := py.MakeGoInt64(offsetObj)
-	if err != nil {
-		return nil, err
-	}
+	fileno, length, access, offset := r.fileno, r.length, r.access, r.offset
 
-	// access and (flags, prot) are two spellings of the same request; CPython
-	// on POSIX lets either drive.  flags/prot are accepted but access wins,
-	// because that is the spelling pip's cachecontrol uses.
-	var prot, mapFlags int
 	readonly := false
 	switch access {
-	case ACCESS_DEFAULT, ACCESS_WRITE:
-		prot = syscall.PROT_READ | syscall.PROT_WRITE
-		mapFlags = syscall.MAP_SHARED
+	case ACCESS_DEFAULT, ACCESS_WRITE, ACCESS_COPY:
 	case ACCESS_READ:
-		prot = syscall.PROT_READ
-		mapFlags = syscall.MAP_SHARED
 		readonly = true
-	case ACCESS_COPY:
-		prot = syscall.PROT_READ | syscall.PROT_WRITE
-		mapFlags = syscall.MAP_PRIVATE
 	default:
 		return nil, py.ExceptionNewf(py.ValueError, "mmap invalid access parameter.")
 	}
 
 	// Only -1 means anonymous, as in CPython; any other negative descriptor is
-	// left to Fstat to reject.
+	// left to fileSize to reject.
 	anonymous := fileno == -1
-	if anonymous {
-		mapFlags |= syscall.MAP_ANON
-	}
 
 	if length < 0 {
 		return nil, py.ExceptionNewf(py.OverflowError, "memory mapped length must be positive")
@@ -186,45 +142,32 @@ func mmapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 			return nil, py.ExceptionNewf(py.OSError, "[Errno 22] Invalid argument")
 		}
 	} else {
-		var st syscall.Stat_t
-		if err := syscall.Fstat(fileno, &st); err != nil {
-			return nil, errnoError(err)
+		fsize, err := fileSize(fileno)
+		if err != nil {
+			return nil, err
 		}
 		if length == 0 {
-			if st.Size == 0 || offset >= st.Size {
+			if fsize == 0 || offset >= fsize {
 				return nil, py.ExceptionNewf(py.ValueError, "cannot mmap an empty file")
 			}
-			length = int(st.Size - offset)
+			length = int(fsize - offset)
 		}
 		size = int64(length)
-		if offset+size > st.Size {
-			size = st.Size - offset
+		if offset+size > fsize {
+			size = fsize - offset
 		}
 		if size <= 0 {
 			size = int64(length)
 		}
 	}
 
-	var data []byte
-	if anonymous {
-		data, err = syscall.Mmap(-1, 0, int(size), prot, mapFlags)
-	} else {
-		data, err = syscall.Mmap(fileno, offset, int(size), prot, mapFlags)
-	}
+	data, err := mapMem(fileno, offset, int(size), access, r.tag)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "[Errno %d] %s", err.(syscall.Errno), err.Error())
+		return nil, err
 	}
 	if anonymous {
 		size = int64(length)
-	} else {
-		var st syscall.Stat_t
-		_ = syscall.Fstat(fileno, &st)
-		if length == 0 {
-			size = st.Size - offset
-		}
 	}
-	_ = flagsObj
-	_ = protObj
 	return &Mmap{data: data, size: size, access: access, readonly: readonly}, nil
 }
 
@@ -400,15 +343,7 @@ func init() {
 	globals.Set("ACCESS_WRITE", py.Int(ACCESS_WRITE))
 	globals.Set("ACCESS_COPY", py.Int(ACCESS_COPY))
 	globals.Set("ACCESS_DEFAULT", py.Int(ACCESS_DEFAULT))
-	globals.Set("MAP_SHARED", py.Int(syscall.MAP_SHARED))
-	globals.Set("MAP_PRIVATE", py.Int(syscall.MAP_PRIVATE))
-	globals.Set("MAP_ANONYMOUS", py.Int(syscall.MAP_ANON))
-	globals.Set("MAP_ANON", py.Int(syscall.MAP_ANON))
-	globals.Set("PROT_READ", py.Int(syscall.PROT_READ))
-	globals.Set("PROT_WRITE", py.Int(syscall.PROT_WRITE))
-	globals.Set("PROT_EXEC", py.Int(syscall.PROT_EXEC))
-	globals.Set("PAGESIZE", py.Int(syscall.Getpagesize()))
-	globals.Set("ALLOCATIONGRANULARITY", py.Int(syscall.Getpagesize()))
+	platformGlobals(globals)
 	globals.Set("__doc__", py.String(moduleDoc))
 
 	py.RegisterModule(&py.ModuleImpl{

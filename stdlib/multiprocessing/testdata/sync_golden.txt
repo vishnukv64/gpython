@@ -1,6 +1,6 @@
-value 300
+value 300 exitcodes [0, 0, 0]
 1.5
-array [0, 1, 4, 9, 16, 25]
+array [0, 1, 4, 9, 16, 25] exitcode 0
 event True
 sem taken by child: True
 held by dead child: False

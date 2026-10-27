@@ -700,8 +700,9 @@ func init() {
 		py.DictEntry{Key: "__stdout__", Value: stdout},
 		py.DictEntry{Key: "__stderr__", Value: stderr},
 		py.DictEntry{Key: "executable", Value: py.String(executable)},
+		py.DictEntry{Key: "_base_executable", Value: py.String(executable)},
 		// The platform and version attributes, which code branches on.
-		py.DictEntry{Key: "platform", Value: py.String(runtime.GOOS)},
+		py.DictEntry{Key: "platform", Value: py.String(platform)},
 		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
 		py.DictEntry{Key: "version", Value: py.String("3.10.0 (gpython)")},
 		py.DictEntry{Key: "version_info", Value: currentVersionInfo()},
@@ -834,6 +835,9 @@ func init() {
 		//     SET_SYS_FROM_STRING("thread_info", PyThread_GetInfo());
 		// #endif
 	)
+	for _, e := range winExtras() {
+		globals.Set(e.Key, e.Value)
+	}
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

@@ -30,6 +30,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	gpython = filepath.Join(tmp, "gpython")
+	if runtime.GOOS == "windows" {
+		gpython += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", gpython, "github.com/vishnukv64/gpython")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	code := 1
@@ -43,9 +46,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestScripts(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("multiprocessing is POSIX-only here: _multiprocessing.SemLock raises NotImplementedError on windows")
-	}
 	scripts, err := filepath.Glob("testdata/*.py")
 	if err != nil || len(scripts) == 0 {
 		t.Fatalf("no scripts: %v", err)
