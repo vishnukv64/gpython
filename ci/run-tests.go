@@ -67,15 +67,19 @@ func main() {
 	}
 	args = append(args, "")
 
+	// Every package runs even after a failure, so one CI run reports all of
+	// them instead of only the first in alphabetical order.
+	var failed []string
 	for _, pkg := range pkgs {
 		args[len(args)-1] = pkg
 		cmd := exec.Command("go", args...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			log.Fatal(err)
+		if err := cmd.Run(); err != nil {
+			failed = append(failed, pkg)
+			os.Remove("profile.out")
+			continue
 		}
 		if *cover != "" {
 			profile, err := os.ReadFile("profile.out")
@@ -93,6 +97,9 @@ func main() {
 	err = f.Close()
 	if err != nil {
 		log.Fatal(err)
+	}
+	if len(failed) > 0 {
+		log.Fatalf("%d package(s) failed:\n\t%s", len(failed), strings.Join(failed, "\n\t"))
 	}
 }
 
