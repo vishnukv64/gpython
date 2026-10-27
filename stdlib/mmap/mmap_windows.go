@@ -1,6 +1,7 @@
 package mmap
 
 import (
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -17,6 +18,16 @@ var lastError atomic.Uint32
 
 // LastError returns the status of the most recent mapping created.
 func LastError() uint32 { return lastError.Load() }
+
+// mappings holds each view's file-mapping handle, keyed by the view's base
+// address, until the view is unmapped.  The view alone keeps the memory but
+// not the NAME: Windows drops a tagname when its last handle closes, so a
+// child reopening the tag (multiprocessing's Arena) would get fresh zeroed
+// memory.  CPython likewise holds map_handle for the mmap's lifetime.
+var (
+	mappingsMu sync.Mutex
+	mappings   = map[uintptr]windows.Handle{}
+)
 
 // mmap.mmap(fileno, length, tagname=None, access=ACCESS_DEFAULT, offset=0)
 func parseArgs(args py.Tuple, kwargs py.StringDict) (r mapArgs, err error) {
@@ -92,19 +103,30 @@ func mapMem(fileno int, offset int64, size, access int, tag string) ([]byte, err
 	if err != nil {
 		return nil, winErr(err)
 	}
-	// The view keeps the mapping object alive, so the handle can go now.
-	defer windows.CloseHandle(h)
 	addr, err := windows.MapViewOfFile(h, view, uint32(uint64(offset)>>32), uint32(offset), uintptr(size))
 	if err != nil {
+		windows.CloseHandle(h)
 		return nil, winErr(err)
 	}
+	mappingsMu.Lock()
+	mappings[addr] = h
+	mappingsMu.Unlock()
 	// addr is OS memory, not Go memory; convert without a vet-flagged
 	// uintptr -> unsafe.Pointer cast.
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&addr)), size), nil
 }
 
 func unmapMem(d []byte) error {
-	return windows.UnmapViewOfFile(uintptr(unsafe.Pointer(&d[0])))
+	addr := uintptr(unsafe.Pointer(&d[0]))
+	err := windows.UnmapViewOfFile(addr)
+	mappingsMu.Lock()
+	h, ok := mappings[addr]
+	delete(mappings, addr)
+	mappingsMu.Unlock()
+	if ok {
+		windows.CloseHandle(h)
+	}
+	return err
 }
 
 func platformGlobals(globals py.StringDict) {
