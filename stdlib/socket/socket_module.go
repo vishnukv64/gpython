@@ -348,6 +348,9 @@ func registerSocketMethods() {
 			if !lOk || !oOk {
 				return nil, py.ExceptionNewf(py.TypeError, "setsockopt() level and option must be integers")
 			}
+			if ignoredSockopt(level, optname) {
+				return py.None, nil
+			}
 			value := 0
 			if len(args) == 3 {
 				v, ok := asInt(args[2])

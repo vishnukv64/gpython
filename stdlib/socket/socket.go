@@ -24,10 +24,12 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -761,6 +763,7 @@ func (s *sock) fileno() (py.Object, error) {
 			}
 			s.placeholder = fd
 		}
+		noteFileno(s.placeholder, s)
 		return py.Int(s.placeholder), nil
 	}
 	raw, err := c.SyscallConn()
@@ -771,6 +774,7 @@ func (s *sock) fileno() (py.Object, error) {
 	if err := raw.Control(func(f uintptr) { fd = f }); err != nil {
 		return nil, osErr(err)
 	}
+	noteFileno(int(fd), s)
 	return py.Int(int64(fd)), nil
 }
 
@@ -1163,7 +1167,7 @@ func socketpairMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 	if v, ok := asInt(typObj); ok {
 		typ = v
 	}
-	if family != AF_UNIX {
+	if family != AF_UNIX && !(runtime.GOOS == "windows" && family == AF_INET) {
 		return nil, py.ExceptionNewf(py.OSError, "only AF_UNIX is supported by socketpair on this platform")
 	}
 	if typ != SOCK_STREAM {
@@ -1172,17 +1176,23 @@ func socketpairMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 
 	// Unix socketpair in Go: listen on a temporary unix socket, connect to
 	// it, and accept, which yields a connected pair.  The listening socket
-	// and its file are removed before returning.
-	tmp, err := os.CreateTemp("", "gpython-socketpair-*")
-	if err != nil {
-		return nil, osErr(err)
+	// and its file are removed before returning.  Windows lacks reliable
+	// AF_UNIX, so there (as in CPython's fallback) the pair goes over loopback TCP.
+	network, target, pairFamily := "unix", "", AF_UNIX
+	if runtime.GOOS == "windows" {
+		network, target, pairFamily = "tcp", "127.0.0.1:0", AF_INET
+	} else {
+		tmp, err := os.CreateTemp("", "gpython-socketpair-*")
+		if err != nil {
+			return nil, osErr(err)
+		}
+		target = tmp.Name()
+		tmp.Close()
+		os.Remove(target)
+		defer os.Remove(target)
 	}
-	path := tmp.Name()
-	tmp.Close()
-	os.Remove(path)
-	defer os.Remove(path)
 
-	l, err := net.Listen("unix", path)
+	l, err := net.Listen(network, target)
 	if err != nil {
 		return nil, osErr(err)
 	}
@@ -1199,7 +1209,7 @@ func socketpairMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 		done <- c
 	}()
 
-	client, err := net.Dial("unix", path)
+	client, err := net.Dial(network, l.Addr().String())
 	if err != nil {
 		return nil, osErr(err)
 	}
@@ -1216,7 +1226,7 @@ func socketpairMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 
 	mk := func(c net.Conn) *sock {
 		return &sock{
-			family:  AF_UNIX,
+			family:  pairFamily,
 			typ:     SOCK_STREAM,
 			timeout: py.None,
 			opts:    map[int]int{},
@@ -1306,4 +1316,10 @@ func toFloat(v py.Object) (float64, error) {
 		return 0, nil
 	}
 	return 0, py.ExceptionNewf(py.TypeError, "a number is required")
+}
+
+// M__hash__ hashes by identity: CPython sockets are hashable, and Windows'
+// asyncio keeps them in sets (IocpProactor._registered).
+func (s *sock) M__hash__() (py.Object, error) {
+	return py.Int(int64(uintptr(unsafe.Pointer(s)) >> 4)), nil
 }

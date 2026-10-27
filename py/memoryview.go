@@ -319,3 +319,20 @@ var _ I__setitem__ = (*MemoryView)(nil)
 var _ I__iter__ = (*MemoryView)(nil)
 var _ I__contains__ = (*MemoryView)(nil)
 var _ I__eq__ = (*MemoryView)(nil)
+
+// BufferBytes returns the storage behind a bytes-like object (bytes, bytearray,
+// memoryview, mmap) without copying; writes through it change the object when
+// writable is true.  ok is false for anything else.
+func BufferBytes(obj Object) (b []byte, writable, ok bool) {
+	switch o := obj.(type) {
+	case Bytes:
+		return []byte(o), false, true
+	case *ByteArray:
+		return o.b, true, true
+	case *MemoryView:
+		return o.b, !o.readonly, true
+	case MemoryViewBytesLike:
+		return o.MemoryViewBytes(), !o.MemoryViewReadOnly(), true
+	}
+	return nil, false, false
+}

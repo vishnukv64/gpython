@@ -19,6 +19,7 @@ package structmod
 import (
 	"encoding/binary"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -60,8 +61,10 @@ func itemSizeNative(c byte) (int, bool) {
 		return 2, true
 	case 'i', 'I', 'l', 'L', 'f':
 		return 4, true
-	case 'q', 'Q', 'd', 'n', 'N', 'P':
+	case 'q', 'Q', 'd':
 		return 8, true
+	case 'n', 'N', 'P':
+		return ptrSize, true
 	case 'e':
 		return 2, true
 	case 's':
@@ -259,7 +262,7 @@ func (l *layout) packOne(code byte, v py.Object) ([]byte, error) {
 			return nil, err
 		}
 		return encodeInt(order, uint64(n), fieldSize(code), true)
-	case 'B', 'H', 'I', 'L', 'Q':
+	case 'B', 'H', 'I', 'L', 'Q', 'P':
 		n, err := py.IndexInt(v)
 		if err != nil {
 			return nil, err
@@ -313,6 +316,8 @@ func fieldSize(c byte) int {
 		return 4
 	case 'q', 'Q':
 		return 8
+	case 'P':
+		return ptrSize
 	}
 	return 0
 }
@@ -402,6 +407,11 @@ func (l *layout) unpackOne(code byte, data []byte) (py.Object, int, error) {
 		return py.Int(int64(order.Uint64(data))), 8, nil
 	case 'Q':
 		return py.Int(order.Uint64(data)), 8, nil
+	case 'P':
+		if ptrSize == 4 {
+			return py.Int(order.Uint32(data)), 4, nil
+		}
+		return py.Int(order.Uint64(data)), 8, nil
 	case 'f':
 		return py.Float(math.Float32frombits(order.Uint32(data))), 4, nil
 	case 'd':
@@ -409,6 +419,9 @@ func (l *layout) unpackOne(code byte, data []byte) (py.Object, int, error) {
 	}
 	return nil, 0, errorf("unsupported format character '%c'", code)
 }
+
+// ptrSize is the size of a C pointer (native 'P', 'n', 'N').
+const ptrSize = strconv.IntSize / 8
 
 func nativeOrder() binary.ByteOrder {
 	// The host is little-endian on every platform this interpreter builds for
