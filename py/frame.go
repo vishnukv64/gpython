@@ -40,6 +40,9 @@ type Frame struct {
 	// to the current stack top.
 	// Stacktop *Object
 	Yielded bool // set if the function yielded, cleared otherwise
+	// DelegateLen != 0: suspended inside YIELD_FROM / FOR_ITER_AEXPR (sub-iterator is TOS; value is the instruction length), so
+	// throw()/close() must be forwarded to it.
+	DelegateLen int32
 	// Trace   Object // Trace function
 
 	// In a generator, we need to be able to swap between the exception
@@ -63,6 +66,9 @@ type Frame struct {
 	// unwinds through the frame's own handlers, so an "except" inside a
 	// suspended generator catches what the caller threw at it.
 	PendingException *Exception
+	// Handling is the exception this frame's innermost active except or
+	// finally block is handling, or nil: what a raise here chains as __context__.
+	Handling Object
 	// Call PyFrame_GetLineNumber() instead of reading this field
 	// directly.  As of 2.3 f_lineno is only valid when tracing is
 	// active (i.e. when f_trace is set).  At other times we use

@@ -209,6 +209,9 @@ func (c *compiler) newCompilerScope(compilerScope compilerScopeType, Ast ast.Ast
 
 	/* use the class name for name mangling */
 	newC.private = private
+	if private == "" {
+		newC.private = c.private // nested scopes keep mangling with the enclosing class
+	}
 
 	if newSymTable.NeedsClassClosure {
 		// Cook up a implicit __class__ cell.
@@ -235,6 +238,12 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	// "from __future__ import annotations" changes how every annotation in
 	// this unit is compiled, so it is detected before anything is emitted.
 	if c.scopeType == compilerScopeModule {
+		// CPython 3.14 evaluates annotations lazily (PEP 649), so embedded
+		// stdlib may annotate with names imported only under `if False:`.
+		// ponytail: approximated by string annotations for <gpython-lib> files.
+		if strings.HasPrefix(filename, "<gpython-lib>") {
+			c.stringAnnotations = true
+		}
 		for _, stmt := range moduleStatements(Ast) {
 			imp, ok := stmt.(*ast.ImportFrom)
 			if !ok || imp.Module != "__future__" {
@@ -285,7 +294,12 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 		if node.IsAsync {
 			// An "async def" is a coroutine even with no await inside:
 			// calling it must return a coroutine object, not run the body.
-			code.Flags |= py.CO_COROUTINE
+			if SymTable.Generator {
+				code.Flags &^= py.CO_GENERATOR
+				code.Flags |= py.CO_ASYNC_GENERATOR
+			} else {
+				code.Flags |= py.CO_COROUTINE
+			}
 		}
 		c.setQualname()
 		c.Stmts(c.docString(node.Body, true))
@@ -450,9 +464,19 @@ func (c *compiler) Name(Id ast.Identifier) uint32 {
 
 // Adds this opcode with mangled name as an argument
 func (c *compiler) OpName(opcode vm.OpCode, name ast.Identifier) {
-	// FIXME mangled := _Py_Mangle(c->u->u_private, o);
-	mangled := name
-	c.OpArg(opcode, c.Name(mangled))
+	c.OpArg(opcode, c.Name(ast.Identifier(mangle(c.private, string(name)))))
+}
+
+// mangle is _Py_Mangle: inside class "private", __spam becomes _private__spam.
+func mangle(private, name string) string {
+	if !strings.HasPrefix(name, "__") || strings.HasSuffix(name, "__") || strings.Contains(name, ".") {
+		return name
+	}
+	private = strings.TrimLeft(private, "_")
+	if private == "" {
+		return name
+	}
+	return "_" + private + name
 }
 
 // Compiles an instruction with an argument
@@ -481,6 +505,7 @@ func (c *compiler) OpNoArg(op vm.OpCode) {
 	instr.SetLineno(c.Lineno)
 	c.OpCodes.Add(instr)
 }
+
 // Inserts an existing label
 func (c *compiler) Label(Dest *Label) {
 	c.OpCodes.Add(Dest)
@@ -576,8 +601,13 @@ func (c *compiler) codeFlags(st *symtable.SymTable) (flags int32) {
 		if st.Nested {
 			flags |= py.CO_NESTED
 		}
-		if st.Generator {
+		switch {
+		case st.Generator && st.AsyncComp:
+			flags |= py.CO_ASYNC_GENERATOR
+		case st.Generator:
 			flags |= py.CO_GENERATOR
+		case st.AsyncComp:
+			flags |= py.CO_COROUTINE
 		}
 		if st.Varargs {
 			flags |= py.CO_VARARGS
@@ -1301,6 +1331,7 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 			c.OpArg(vm.BEFORE_AWAIT, 0)
 		}
 		if node.IsAsync {
+			c.LoadConst(py.None) // value "sent" to the awaitable, as for YIELD_FROM
 			c.Jump(vm.FOR_ITER_AEXPR, endfor)
 		} else {
 			c.Jump(vm.FOR_ITER, endfor)
@@ -1580,6 +1611,9 @@ func (c *compiler) NameOp(name string, ctx ast.ExprContext) {
 	if op == 0 {
 		panic("NameOp: Op not set")
 	}
+	if dict == &c.Code.Names {
+		mangled = mangle(c.private, mangled)
+	}
 	i := c.Index(mangled, dict)
 	// using CellAndFreeVars in closures requires skipping Cellvars
 	if scope == symtable.ScopeFree {
@@ -1737,14 +1771,25 @@ func (c *compiler) comprehensionGenerator(generators []ast.Comprehension, gen_in
 	if gen_index == 0 {
 		/* Receive outermost iter as an implicit argument */
 		c.Code.Argcount = 1
-		c.OpArg(vm.LOAD_FAST, 0)
+		c.OpArg(vm.LOAD_FAST, 0) // already an iterator / async iterator
 	} else {
 		/* Sub-iter - calculate on the fly */
 		c.Expr(gen.Iter)
-		c.Op(vm.GET_ITER)
+		if gen.IsAsync {
+			c.OpArg(vm.GET_AITER, 0)
+		} else {
+			c.Op(vm.GET_ITER)
+		}
 	}
 	c.Label(start)
-	c.Jump(vm.FOR_ITER, anchor)
+	if gen.IsAsync {
+		c.OpArg(vm.GET_ANEXT, 0)
+		c.OpArg(vm.BEFORE_AWAIT, 0)
+		c.LoadConst(py.None)
+		c.Jump(vm.FOR_ITER_AEXPR, anchor)
+	} else {
+		c.Jump(vm.FOR_ITER, anchor)
+	}
 	c.Expr(gen.Target)
 
 	/* XXX this needs to be cleaned up...a lot! */
@@ -1792,8 +1837,18 @@ func (c *compiler) comprehension(expr ast.Expr, generators []ast.Comprehension) 
 	c.makeClosure(newC.Code, 0, newC, newC.Code.Name)
 	outermost_iter := generators[0].Iter
 	c.Expr(outermost_iter)
-	c.Op(vm.GET_ITER)
+	if generators[0].IsAsync {
+		c.OpArg(vm.GET_AITER, 0)
+	} else {
+		c.Op(vm.GET_ITER)
+	}
 	c.OpArg(vm.CALL_FUNCTION, 1)
+	if _, isGen := expr.(*ast.GeneratorExp); !isGen && newC.SymTable.AsyncComp {
+		// list/set/dict comprehension that awaits: the call made a coroutine
+		c.OpArg(vm.BEFORE_AWAIT, 0)
+		c.LoadConst(py.None)
+		c.Op(vm.YIELD_FROM)
+	}
 }
 
 // compileListDisplay compiles a list display, honouring PEP 448 unpacking
@@ -2331,7 +2386,7 @@ func (c *compiler) Expr(expr ast.Expr) {
 		default:
 			panic("unknown context in attribute expression")
 		}
-		c.OpArg(op, c.Name(node.Attr))
+		c.OpName(op, node.Attr)
 	case *ast.Subscript:
 		// Value Expr
 		// Slice Slicer

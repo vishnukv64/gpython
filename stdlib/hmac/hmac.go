@@ -287,15 +287,28 @@ func hmacCompareDigest(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 2 {
 		return nil, py.ExceptionNewf(py.TypeError, "compare_digest() takes exactly two arguments")
 	}
-	a, err := py.BytesFromObject(args[0])
+	// Two ASCII str are compared as bytes, as CPython allows.
+	conv := func(o py.Object) ([]byte, error) {
+		if s, ok := o.(py.String); ok {
+			for i := 0; i < len(s); i++ {
+				if s[i] >= 0x80 {
+					return nil, py.ExceptionNewf(py.TypeError, "comparing strings with non-ASCII characters is not supported")
+				}
+			}
+			return []byte(s), nil
+		}
+		b, err := py.BytesFromObject(o)
+		return []byte(b), err
+	}
+	a, err := conv(args[0])
 	if err != nil {
 		return nil, err
 	}
-	b, err := py.BytesFromObject(args[1])
+	b, err := conv(args[1])
 	if err != nil {
 		return nil, err
 	}
-	if subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 {
+	if subtle.ConstantTimeCompare(a, b) == 1 {
 		return py.Bool(true), nil
 	}
 	return py.Bool(false), nil

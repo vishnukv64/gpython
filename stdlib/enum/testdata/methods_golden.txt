@@ -1,0 +1,5 @@
+Z 7 10 C C 2 3
+C!Z RY C!Z
+True [RZ, RY]
+A D.A <D.A: 1>
+AttributeError

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/types"
 )
 
 const time_doc = `time() -> floating point number
@@ -786,93 +787,30 @@ const get_clock_info_doc = `get_clock_info(name: str) -> dict
 Get information of the specified clock.`
 
 func time_get_clock_info(self py.Object, args py.Tuple) (py.Object, error) {
-	// 	char * name
-	// 	var info _Py_clock_info_t
-	// 	var obj, dict, ns py.Object
-
-	// 	if !PyArg_ParseTuple(args, "s:get_clock_info", &name) {
-	// 		return nil
-	// 	}
-
-	// 	info.implementation = ""
-	// 	info.monotonic = 0
-	// 	info.adjustable = 0
-	// 	info.resolution = 1.0
-
-	// 	if strcmp(name, "time") == 0 {
-	// 		obj = floattime(&info)
-	// 	} else if strcmp(name, "clock") == 0 {
-	// 		obj = pyclock(&info)
-	// 	} else if strcmp(name, "monotonic") == 0 {
-	// 		obj = pymonotonic(&info)
-	// 	} else if strcmp(name, "perf_counter") == 0 {
-	// 		obj = perf_counter(&info)
-	// 	} else if strcmp(name, "process_time") == 0 {
-	// 		obj = py_process_time(&info)
-	// 	} else {
-	// 		PyErr_SetString(PyExc_ValueError, "unknown clock")
-	// 		return nil
-	// 	}
-	// 	if obj == nil {
-	// 		return nil
-	// 	}
-	// 	Py_DECREF(obj)
-
-	// 	dict = PyDict_New()
-	// 	if dict == nil {
-	// 		return nil
-	// 	}
-
-	// 	assert(info.implementation != nil)
-	// 	obj = PyUnicode_FromString(info.implementation)
-	// 	if obj == nil {
-	// 		goto error
-	// 	}
-	// 	if PyDict_SetItemString(dict, "implementation", obj) == -1 {
-	// 		goto error
-	// 	}
-	// 	Py_CLEAR(obj)
-
-	// 	assert(info.monotonic != -1)
-	// 	obj = PyBool_FromLong(info.monotonic)
-	// 	if obj == nil {
-	// 		goto error
-	// 	}
-	// 	if PyDict_SetItemString(dict, "monotonic", obj) == -1 {
-	// 		goto error
-	// 	}
-	// 	Py_CLEAR(obj)
-
-	// 	assert(info.adjustable != -1)
-	// 	obj = PyBool_FromLong(info.adjustable)
-	// 	if obj == nil {
-	// 		goto error
-	// 	}
-	// 	if PyDict_SetItemString(dict, "adjustable", obj) == -1 {
-	// 		goto error
-	// 	}
-	// 	Py_CLEAR(obj)
-
-	// 	assert(info.resolution > 0.0)
-	// 	assert(info.resolution <= 1.0)
-	// 	obj = py.Float(info.resolution)
-	// 	if obj == nil {
-	// 		goto error
-	// 	}
-	// 	if PyDict_SetItemString(dict, "resolution", obj) == -1 {
-	// 		goto error
-	// 	}
-	// 	Py_CLEAR(obj)
-
-	// 	ns = _PyNamespace_New(dict)
-	// 	Py_DECREF(dict)
-	// 	return ns
-
-	// error:
-	// 	Py_DECREF(dict)
-	// 	Py_XDECREF(obj)
-	// 	return nil
-	return nil, py.NotImplementedError
+	var name py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "get_clock_info", 1, 1, &name); err != nil {
+		return nil, err
+	}
+	n, _ := name.(py.String)
+	d := py.NewStringDict()
+	switch string(n) {
+	case "time":
+		d.Set("implementation", py.String("clock_gettime(CLOCK_REALTIME)"))
+		d.Set("monotonic", py.False)
+		d.Set("adjustable", py.True)
+	case "monotonic", "perf_counter":
+		d.Set("implementation", py.String("clock_gettime(CLOCK_MONOTONIC)"))
+		d.Set("monotonic", py.True)
+		d.Set("adjustable", py.False)
+	case "process_time", "thread_time":
+		d.Set("implementation", py.String("clock_gettime(CLOCK_PROCESS_CPUTIME_ID)"))
+		d.Set("monotonic", py.True)
+		d.Set("adjustable", py.False)
+	default:
+		return nil, py.ExceptionNewf(py.ValueError, "unknown clock")
+	}
+	d.Set("resolution", py.Float(1e-09))
+	return &types.SimpleNamespace{Dict: d}, nil
 }
 
 func PyInit_timezone(m py.Object) {

@@ -128,9 +128,14 @@ func parse(format string) (*layout, error) {
 			if j >= len(rest) {
 				return nil, errorf("repeat count given without format specifier")
 			}
-			item, err := parseOne(rest[j], stdSizes)
-			if err != nil {
-				return nil, err
+			var item field
+			if rest[j] == 'x' {
+				item = field{code: 'x', size: 1}
+			} else {
+				var err error
+				if item, err = parseOne(rest[j], stdSizes); err != nil {
+					return nil, err
+				}
 			}
 			item.count = n
 			l.fields = append(l.fields, item)
@@ -233,11 +238,13 @@ func (l *layout) packItems(values []py.Object) ([]byte, error) {
 func countValues(l *layout) int {
 	n := 0
 	for _, f := range l.fields {
-		if f.code == 'x' || f.code == 's' {
+		switch f.code {
+		case 'x':
+		case 's':
 			n++
-			continue
+		default:
+			n += f.count
 		}
-		n += f.count
 	}
 	return n
 }

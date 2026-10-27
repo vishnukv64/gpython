@@ -4,4 +4,5 @@ caught error: sleep() argument 1 must be float, not str
 perf_counter: float=True monotonic=True
 monotonic: float=True
 process_time: float=True ignores sleep=True
+clock_info: monotonic=True adjustable=False
 OK

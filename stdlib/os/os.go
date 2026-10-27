@@ -55,7 +55,42 @@ func init() {
 		py.MustNewMethod("getcwdb", getCwdb, 0, "Get the current working directory in a byte slice"),
 		py.MustNewMethod("chdir", chdir, 0, "Change the current working directory"),
 		py.MustNewMethod("getenv", getenv, 0, "Return the value of the environment variable key if it exists, or default if it doesn’t. key, default and the result are str."),
+		py.MustNewMethod("chmod", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+			var path, mode py.Object
+			if err := py.UnpackTuple(args, kwargs, "chmod", 2, 2, &path, &mode); err != nil {
+				return nil, err
+			}
+			name, err := py.StrAsString(path)
+			if err != nil {
+				return nil, err
+			}
+			m, err := py.IndexInt(mode)
+			if err != nil {
+				return nil, err
+			}
+			if err := os.Chmod(name, os.FileMode(m).Perm()|setBits(m)); err != nil {
+				return nil, py.OSErrorFrom(err, name)
+			}
+			return py.None, nil
+		}, 0, "chmod(path, mode) -> Change the access permissions of a file."),
+		py.MustNewMethod("fsencode", func(self py.Object, args py.Tuple) (py.Object, error) {
+			r, err := fspath(self, args)
+			if s, ok := r.(py.String); ok {
+				return py.Bytes(s), nil
+			}
+			return r, err
+		}, 0, "Encode a path-like to bytes (utf-8)."),
+		py.MustNewMethod("fsdecode", func(self py.Object, args py.Tuple) (py.Object, error) {
+			r, err := fspath(self, args)
+			if b, ok := r.(py.Bytes); ok {
+				return py.String(b), nil
+			}
+			return r, err
+		}, 0, "Decode a path-like to str (utf-8)."),
+		py.MustNewMethod("fspath", fspath, 0, "Return the file system path representation of the object."),
+		py.MustNewMethod("isatty", isatty, 0, "Return True if the fd is connected to a terminal."),
 		py.MustNewMethod("getpid", getpid, 0, "Return the current process id."),
+		py.MustNewMethod("kill", kill, 0, "Send a signal to a process."),
 		py.MustNewMethod("listdir", listDir, 0, listDir_doc),
 		py.MustNewMethod("walk", walk, 0, walk_doc),
 		py.MustNewMethod("makedirs", makedirs, 0, makedirs_doc),
@@ -279,7 +314,64 @@ func getenv(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.None, nil
 }
 
+// kill sends a signal to a process.
+func kill(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "kill expected 2 arguments, got %d", len(args))
+	}
+	pid, err := py.IndexInt(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if v, e := py.GetAttrString(args[1], "value"); e == nil {
+		args[1] = v // IntEnum member
+	}
+	sig, err := py.IndexInt(args[1])
+	if err != nil {
+		return nil, err
+	}
+	p, err := os.FindProcess(int(pid))
+	if err == nil {
+		err = p.Signal(syscall.Signal(sig))
+	}
+	if err != nil {
+		return nil, py.ExceptionNewf(py.OSError, "%v", err)
+	}
+	if int(pid) == os.Getpid() && py.SignalSent != nil {
+		py.SignalSent(int(sig))
+	}
+	return py.None, nil
+}
+
 // getpid returns the current process id.
+func fspath(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "fspath() takes exactly one argument")
+	}
+	switch args[0].(type) {
+	case py.String, py.Bytes:
+		return args[0], nil
+	}
+	hook, err := py.GetAttrString(args[0], "__fspath__")
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", args[0].Type().Name)
+	}
+	return py.Call(hook, py.Tuple{}, py.NewStringDict())
+}
+
+func isatty(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "isatty() takes exactly one argument")
+	}
+	fd, err := py.IndexInt(args[0])
+	if err != nil {
+		return nil, err
+	}
+	// ponytail: char-device test also true for /dev/null; term ioctl if that matters.
+	st, err := os.NewFile(uintptr(fd), "").Stat()
+	return py.NewBool(err == nil && st.Mode()&os.ModeCharDevice != 0), nil
+}
+
 func getpid(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.Int(os.Getpid()), nil
 }
@@ -1185,4 +1277,19 @@ func system(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 
 	return py.Int(0), nil
+}
+
+// setBits maps the posix setuid/setgid/sticky bits onto Go's FileMode.
+func setBits(m int) os.FileMode {
+	var f os.FileMode
+	if m&0o4000 != 0 {
+		f |= os.ModeSetuid
+	}
+	if m&0o2000 != 0 {
+		f |= os.ModeSetgid
+	}
+	if m&0o1000 != 0 {
+		f |= os.ModeSticky
+	}
+	return f
 }

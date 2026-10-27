@@ -136,6 +136,12 @@ func init() {
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Property).Doc), nil
 		},
+		Fset: func(self, value Object) error {
+			if d, ok := value.(String); ok {
+				self.(*Property).Doc = string(d)
+			}
+			return nil
+		},
 	})
 
 	// The accessor decorators.  Each returns a NEW property carrying the part

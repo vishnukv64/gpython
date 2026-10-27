@@ -33,7 +33,8 @@ assert seq == ["."], seq
 # followlinks=False must not descend through the symlink; followlinks=True must.
 seq = [rel(r) for r, d, f in os.walk(root, followlinks=False)]
 assert seq == [".", "/a", "/a/b"], seq
-seq = [rel(r) for r, d, f in os.walk(root, followlinks=True)]
+# Sibling order is the filesystem's readdir order (unsorted on Linux).
+seq = sorted(rel(r) for r, d, f in os.walk(root, followlinks=True))
 assert seq == [".", "/a", "/a/b", "/link_to_a", "/link_to_a/b"], seq
 
 print("OK")

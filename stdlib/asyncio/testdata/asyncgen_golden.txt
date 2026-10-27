@@ -1,0 +1,21 @@
+agen finally
+[0, 1, 2]
+agen finally
+[1, 3, 5]
+agen finally
+[0, 1, 2]
+agen finally
+None 7 8
+stopped
+agen finally
+async_generator True
+agen finally
+athrow 'k'
+ok
+hello
+5
+'generator' object can't be awaited
+True True
+1
+['first']
+(None, None)

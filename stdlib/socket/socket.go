@@ -134,6 +134,12 @@ func osErr(err error) error {
 // asInt reads a Python integer argument, so callers do not have to unpack
 // through a *py.Object and then assert.
 func asInt(o py.Object) (int, bool) {
+	if b, isBool := o.(py.Bool); isBool {
+		if b {
+			return 1, true
+		}
+		return 0, true
+	}
 	v, ok := o.(py.Int)
 	if !ok {
 		return 0, false
@@ -156,6 +162,8 @@ type sock struct {
 	listener net.Listener   // listening stream socket
 	packet   net.PacketConn // bound or connected datagram socket
 	closed   bool
+	// placeholder stands in for a descriptor until connect or bind; 0 means none.
+	placeholder int
 }
 
 var SocketType = py.NewTypeX("socket.socket",
@@ -313,7 +321,8 @@ func (s *sock) deadline() time.Time {
 	default:
 		return time.Time{}
 	}
-	if secs < 0 {
+	if secs <= 0 {
+		// 0 is non-blocking: those paths avoid the deadline; connect just completes.
 		return time.Time{}
 	}
 	return time.Now().Add(time.Duration(secs * float64(time.Second)))
@@ -374,6 +383,7 @@ func (s *sock) connect(address py.Object) (py.Object, error) {
 	if err != nil {
 		return nil, osErr(err)
 	}
+	s.dropPlaceholder()
 	s.conn = conn
 	return py.None, nil
 }
@@ -410,6 +420,7 @@ func (s *sock) bind(address py.Object) (py.Object, error) {
 	if err != nil {
 		return nil, osErr(err)
 	}
+	s.dropPlaceholder()
 	s.listener = l
 	return py.None, nil
 }
@@ -445,12 +456,38 @@ func (s *sock) listen(backlog int) (py.Object, error) {
 	return py.None, nil
 }
 
+// nonblocking reports setblocking(False) / settimeout(0).
+func (s *sock) nonblocking() bool {
+	f, ok := s.timeout.(py.Float)
+	return ok && f == 0
+}
+
+// nbErr maps a raw errno: EAGAIN is BlockingIOError, the rest as Go's net would.
+func nbErr(op string, err error) error {
+	if err == syscall.EAGAIN {
+		return py.ExceptionNewf(py.BlockingIOError, "[Errno %d] Resource temporarily unavailable", int(syscall.EAGAIN))
+	}
+	return osErr(&net.OpError{Op: op, Err: os.NewSyscallError(op, err)})
+}
+
 func (s *sock) accept() (py.Object, error) {
 	if err := s.checkOpen("accept"); err != nil {
 		return nil, err
 	}
 	if s.listener == nil {
 		return nil, py.ExceptionNewf(py.OSError, "socket is not listening")
+	}
+	if s.nonblocking() {
+		conn, err := rawAccept(s.listener)
+		if err != nil {
+			return nil, nbErr("accept", err)
+		}
+		child := &sock{family: s.family, typ: s.typ, proto: s.proto, timeout: py.Float(0), opts: map[int]int{}, conn: conn}
+		addr, err := s.addrTuple(conn.RemoteAddr())
+		if err != nil {
+			return nil, err
+		}
+		return py.Tuple{child, addr}, nil
 	}
 	if d := s.deadline(); !d.IsZero() {
 		if tl, ok := s.listener.(*net.TCPListener); ok {
@@ -494,6 +531,13 @@ func (s *sock) send(data py.Object) (py.Object, error) {
 		}
 		return py.Int(n), nil
 	}
+	if s.nonblocking() {
+		n, err := rawSend(s.conn, []byte(b))
+		if err != nil {
+			return nil, nbErr("write", err)
+		}
+		return py.Int(n), nil
+	}
 	if d := s.deadline(); !d.IsZero() {
 		_ = s.conn.SetWriteDeadline(d)
 	}
@@ -512,6 +556,13 @@ func (s *sock) recv(bufsize int) (py.Object, error) {
 		return nil, py.ExceptionNewf(py.OSError, "socket is not connected")
 	}
 	buf := make([]byte, bufsize)
+	if s.nonblocking() {
+		n, err := rawRecv(s.conn, buf)
+		if err != nil {
+			return nil, nbErr("read", err)
+		}
+		return py.Bytes(buf[:n]), nil
+	}
 	if d := s.deadline(); !d.IsZero() {
 		_ = s.conn.SetReadDeadline(d)
 	}
@@ -609,11 +660,19 @@ func (s *sock) sendto(data py.Object, address py.Object) (py.Object, error) {
 	return py.Int(n), nil
 }
 
+func (s *sock) dropPlaceholder() {
+	if s.placeholder != 0 {
+		closeFD(s.placeholder)
+		s.placeholder = 0
+	}
+}
+
 func (s *sock) close() (py.Object, error) {
 	if s.closed {
 		return py.None, nil
 	}
 	s.closed = true
+	s.dropPlaceholder()
 	if s.listener != nil {
 		_ = s.listener.Close()
 	}
@@ -695,7 +754,14 @@ func (s *sock) fileno() (py.Object, error) {
 		}
 	}
 	if c == nil {
-		return nil, py.ExceptionNewf(py.OSError, "fileno is not available for this socket")
+		if s.placeholder == 0 {
+			fd, err := placeholderFD(s.family, s.typ)
+			if err != nil {
+				return nil, py.ExceptionNewf(py.OSError, "fileno is not available for this socket")
+			}
+			s.placeholder = fd
+		}
+		return py.Int(s.placeholder), nil
 	}
 	raw, err := c.SyscallConn()
 	if err != nil {

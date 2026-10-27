@@ -198,3 +198,9 @@ func init() {
 		return b, nil
 	}
 }
+
+// Ordering comparisons treat a bool as the int it is (True > False).
+func (a Bool) M__lt__(other Object) (Object, error) { return a.asInt().M__lt__(other) }
+func (a Bool) M__le__(other Object) (Object, error) { return a.asInt().M__le__(other) }
+func (a Bool) M__gt__(other Object) (Object, error) { return a.asInt().M__gt__(other) }
+func (a Bool) M__ge__(other Object) (Object, error) { return a.asInt().M__ge__(other) }

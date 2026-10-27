@@ -2506,6 +2506,28 @@ comp_for:
 		$$ = []ast.Comprehension{c}
 		$$ = append($$, $<comprehensions>5...)
 	}
+|	ASYNC FOR exprlist IN or_test
+	{
+		c := ast.Comprehension{
+			Target: tupleOrExpr($<pos>$, $3, $<comma>3),
+			Iter: $5,
+			IsAsync: true,
+		}
+		setCtx(yylex, c.Target, ast.Store)
+		$$ = []ast.Comprehension{c}
+	}
+|	ASYNC FOR exprlist IN or_test comp_iter
+	{
+		c := ast.Comprehension{
+			Target: tupleOrExpr($<pos>$, $3, $<comma>3),
+			Iter: $5,
+			Ifs: $6,
+			IsAsync: true,
+		}
+		setCtx(yylex, c.Target, ast.Store)
+		$$ = []ast.Comprehension{c}
+		$$ = append($$, $<comprehensions>6...)
+	}
 
 comp_if:
 	IF test_nocond

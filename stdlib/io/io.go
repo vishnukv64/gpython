@@ -72,6 +72,12 @@ func init() {
 	IOBaseType.Dict.Set("flush", py.MustNewMethod("flush", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.None, nil
 	}, 0, "Flush the write buffers of the stream if applicable."))
+	IOBaseType.Dict.Set("tell", py.MustNewMethod("tell", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return rawCall(self, "seek", py.Int(0), py.Int(1))
+	}, 0, "Return current stream position."))
+	IOBaseType.Dict.Set("isatty", py.MustNewMethod("isatty", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.False, nil
+	}, 0, "Return whether this is an interactive stream."))
 	IOBaseType.Dict.Set("seekable", py.MustNewMethod("seekable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.False, nil
 	}, 0, "Return whether the stream supports random access."))
@@ -105,8 +111,8 @@ func init() {
 		py.DictEntry{Key: "SEEK_CUR", Value: py.Int(1)},
 		py.DictEntry{Key: "SEEK_END", Value: py.Int(2)},
 		py.DictEntry{Key: "DEFAULT_BUFFER_SIZE", Value: py.Int(8192)},
-		py.DictEntry{Key: "BufferedReader", Value: RawIOBaseType},
-		py.DictEntry{Key: "BufferedWriter", Value: RawIOBaseType},
+		py.DictEntry{Key: "BufferedReader", Value: BufferedReaderType},
+		py.DictEntry{Key: "BufferedWriter", Value: BufferedWriterType},
 		py.DictEntry{Key: "BufferedRandom", Value: RawIOBaseType},
 		py.DictEntry{Key: "TextIOWrapper", Value: TextIOBaseType},
 		py.DictEntry{Key: "FileIO", Value: RawIOBaseType},
@@ -393,6 +399,11 @@ func init() {
 		return py.Bytes(out), nil
 	}, 0, "Return a readable view of the buffer."))
 
+	for _, t := range []*py.Type{BytesIOType, StringIOType} {
+		t.Dict.Set("flush", py.MustNewMethod("flush", func(self py.Object, args py.Tuple) (py.Object, error) {
+			return py.None, nil
+		}, 0, "Flush is a no-op for an in-memory stream."))
+	}
 	BytesIOType.Dict.Set("readable", py.MustNewMethod("readable", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.True, nil
 	}, 0, "A BytesIO is always readable."))

@@ -6,6 +6,7 @@
 package builtin
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -191,8 +192,15 @@ func init() {
 		},
 		Methods: methods,
 		Globals: globals,
+		CodeSrc: exceptionGroupSrc,
 	})
 }
+
+// exceptionGroupSrc defines BaseExceptionGroup/ExceptionGroup (PEP 654) in
+// Python; they run in the builtins namespace when the module is initialised.
+//
+//go:embed exceptiongroup.py
+var exceptionGroupSrc string
 
 const reversed_doc = `reversed(sequence) -> reverse iterator over the values of a sequence
 

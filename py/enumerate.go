@@ -37,7 +37,7 @@ func (ei *EnumerateIterator) Type() *Type {
 func EnumerateNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	var iterable Object
 	var start Object
-	err := UnpackTuple(args, kwargs, "enumerate", 1, 2, &iterable, &start)
+	err := ParseTupleAndKeywords(args, kwargs, "O|O:enumerate", []string{"iterable", "start"}, &iterable, &start)
 	if err != nil {
 		return nil, err
 	}

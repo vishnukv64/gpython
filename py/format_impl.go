@@ -34,6 +34,12 @@ func Format(value Object, spec string) (Object, error) {
 		}
 		return nil, ExceptionNewf(TypeError, "unsupported format string passed to NoneType.__format__")
 	}
+	// A __format__ written in Python lives in the class Dict.
+	if res, found, err := value.Type().CallMethod("__format__", Tuple{value, String(spec)}, NewStringDict()); err != nil {
+		return nil, err
+	} else if found && res != NotImplemented {
+		return res, nil
+	}
 	if spec == "" {
 		return Str(value)
 	}

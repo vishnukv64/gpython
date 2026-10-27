@@ -5,6 +5,7 @@
 package socket
 
 import (
+	"net"
 	"syscall"
 
 	"github.com/vishnukv64/gpython/py"
@@ -20,3 +21,12 @@ var platformGlobals []py.DictEntry
 func setReuseAddr(fd uintptr) error {
 	return syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 }
+
+// Without a raw non-blocking path the operations fall back to Go's blocking
+// ones (ponytail: asyncio over sockets is POSIX-only for now).
+func rawRecv(c net.Conn, buf []byte) (int, error) { return c.Read(buf) }
+func rawSend(c net.Conn, b []byte) (int, error)   { return c.Write(b) }
+func rawAccept(l net.Listener) (net.Conn, error)  { return l.Accept() }
+
+func placeholderFD(family, typ int) (int, error) { return -1, syscall.EOPNOTSUPP }
+func closeFD(fd int)                             {}

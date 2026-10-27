@@ -1111,7 +1111,7 @@ func appendKey(b *[]byte, key Object) error {
 		*b = append(*b, keyTag...)
 		*b = append(*b, 'm')
 		*b = strconv.AppendUint(*b, uint64(k.Globals.Ptr()), 16)
-	case *Function, *Method:
+	case *Function, *Method, *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
 		// A function and a method encode as their identity, for the same
 		// reason: two distinct functions are two distinct keys.
 		*b = append(*b, keyTag...)
@@ -1261,6 +1261,9 @@ func HashValue(o Object) (int64, bool) {
 		}
 		return 0, true
 	case Int:
+		if v >= hashModulus || v <= -hashModulus {
+			return hashBig(big.NewInt(int64(v))), true
+		}
 		// hash(-1) is -2, not -1: CPython uses -1 as its "no hash" ERROR
 		// sentinel, so a genuine -1 is remapped.  It is observable - it decides
 		// where -1 lands in a set, so set([-1, 5, 0]) iterates [0, 5, -1] in
@@ -1270,11 +1273,9 @@ func HashValue(o Object) (int64, bool) {
 		}
 		return int64(v), true
 	case Float:
-		f := int64(float64(v))
-		if f == -1 {
-			return -2, true
-		}
-		return f, true
+		return hashFloat(float64(v)), true
+	case *BigInt:
+		return hashBig((*big.Int)(v)), true
 	case String:
 		return MemoryHash([]byte(v)), true
 	case Bytes:
@@ -1810,3 +1811,56 @@ func (d StringDict) GetDict() StringDict {
 var _ IGetDict = (*StringDict)(nil)
 var _ I__or__ = NewStringDict()
 var _ I__ior__ = NewStringDict()
+
+// CPython's numeric hash: a number hashes to its value mod P = 2**61-1, so
+// equal numbers of different types (1, 1.0, Fraction, Decimal) hash alike.
+const hashModulus = 1<<61 - 1
+
+func hashBig(b *big.Int) int64 {
+	m := new(big.Int).Mod(new(big.Int).Abs(b), big.NewInt(hashModulus)).Int64()
+	if b.Sign() < 0 {
+		m = -m
+	}
+	if m == -1 {
+		return -2
+	}
+	return m
+}
+
+func hashFloat(f float64) int64 {
+	switch {
+	case math.IsInf(f, 1):
+		return 314159
+	case math.IsInf(f, -1):
+		return -314159
+	case math.IsNaN(f):
+		return 0
+	}
+	m, e := math.Frexp(f)
+	sign := int64(1)
+	if m < 0 {
+		sign, m = -1, -m
+	}
+	var x int64
+	for m != 0 {
+		x = ((x << 28) & hashModulus) | x>>(61-28)
+		m *= 268435456.0 // 2**28
+		e -= 28
+		y := int64(m)
+		m -= float64(y)
+		x += y
+		if x >= hashModulus {
+			x -= hashModulus
+		}
+	}
+	e = e % 61
+	if e < 0 {
+		e += 61
+	}
+	x = ((x << uint(e)) & hashModulus) | x>>(61-uint(e))
+	x *= sign
+	if x == -1 {
+		return -2
+	}
+	return x
+}

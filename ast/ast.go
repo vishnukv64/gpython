@@ -784,9 +784,10 @@ type Index struct {
 }
 
 type Comprehension struct {
-	Target Expr
-	Iter   Expr
-	Ifs    []Expr
+	Target  Expr
+	Iter    Expr
+	Ifs     []Expr
+	IsAsync bool // "async for"
 }
 
 // ------------------------------------------------------------

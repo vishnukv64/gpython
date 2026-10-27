@@ -409,8 +409,55 @@ func extractTb(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	return py.NewListFromItems(frames), nil
 }
 
+// tracebackException is traceback.TracebackException: enough of it to hold an
+// exception plus traceback and format them (unittest's result rendering).
+// ponytail: capture_locals/compact/limit are accepted and ignored.
+type tracebackException struct {
+	exc *py.Exception
+	tb  *py.Traceback
+}
+
+var tracebackExceptionType = py.NewTypeX("traceback.TracebackException", "An exception ready for rendering.",
+	func(_ *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) < 3 {
+			return nil, py.ExceptionNewf(py.TypeError, "TracebackException() requires exc_type, exc_value, exc_traceback")
+		}
+		te := &tracebackException{}
+		if args[1] != py.None {
+			te.exc = py.MakeException(args[1])
+		}
+		if t, ok := args[2].(*py.Traceback); ok {
+			te.tb = t
+		} else if te.exc != nil {
+			te.tb = py.TracebackOf(te.exc)
+		}
+		return te, nil
+	}, nil)
+
+func (*tracebackException) Type() *py.Type { return tracebackExceptionType }
+
+func init() {
+	tracebackExceptionType.Dict.Set("format", py.MustNewMethod("format", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		te := self.(*tracebackException)
+		if te.exc == nil {
+			return splitLines("NoneType: None\n"), nil
+		}
+		var sb strings.Builder
+		formatExceptionInto(&sb, te.exc, te.tb, nil)
+		return splitLines(sb.String()), nil
+	}, 0, "Format the exception (and chain) as a list of lines."))
+	tracebackExceptionType.Dict.Set("format_exception_only", py.MustNewMethod("format_exception_only", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		te := self.(*tracebackException)
+		if te.exc == nil {
+			return splitLines("NoneType: None\n"), nil
+		}
+		return splitLines(exceptionText(te.exc) + "\n"), nil
+	}, 0, "Format only the exception line."))
+}
+
 func init() {
 	globals := py.NewStringDict()
+	globals.Set("TracebackException", tracebackExceptionType)
 	globals.Set("__doc__", py.String(module_doc))
 
 	globals.Set("format_exception", py.MustNewMethod("format_exception", formatException, 0, "Format and return the specified exception information as a list of strings."))

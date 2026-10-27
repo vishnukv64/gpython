@@ -1,0 +1,3 @@
+b'echo:hello\n'
+b'echo:world\n'
+closed

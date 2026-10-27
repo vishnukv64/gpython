@@ -20,6 +20,7 @@ type Exception struct {
 	Base            *Type
 	Args            Object
 	Traceback       Object
+	FullTraceback   Object // untrimmed traceback while caught; see TrimTraceback
 	Context         Object
 	Cause           Object
 	SuppressContext bool
@@ -183,6 +184,14 @@ func (exc *ExceptionInfo) TracebackDump(w io.Writer) {
 		fmt.Fprintf(w, "Traceback <nil>\n")
 		return
 	}
+	if e, ok := exc.Value.(*Exception); ok {
+		dumpChain(w, e, map[*Exception]bool{e: true})
+	}
+	exc.dumpOne(w)
+}
+
+// dumpOne writes one exception's traceback and final line.
+func (exc *ExceptionInfo) dumpOne(w io.Writer) {
 	fmt.Fprintf(w, "Traceback (most recent call last):\n")
 	exc.Traceback.TracebackDump(w)
 	// The final line is "Name: str(value)", rendered the PYTHON way.  Go's
@@ -198,6 +207,25 @@ func (exc *ExceptionInfo) TracebackDump(w io.Writer) {
 		return
 	}
 	fmt.Fprintf(w, "%s\n", name)
+}
+
+// dumpChain writes e's cause, or else its unsuppressed context, oldest
+// first, each followed by CPython's separator line.
+func dumpChain(w io.Writer, e *Exception, seen map[*Exception]bool) {
+	sep := "\nThe above exception was the direct cause of the following exception:\n\n"
+	next, _ := e.Cause.(*Exception)
+	if next == nil && !e.SuppressContext {
+		next, _ = e.Context.(*Exception)
+		sep = "\nDuring handling of the above exception, another exception occurred:\n\n"
+	}
+	if next == nil || seen[next] {
+		return
+	}
+	seen[next] = true
+	dumpChain(w, next, seen)
+	info := ExceptionInfo{Type: next.Type(), Value: next, Traceback: TracebackOf(next)}
+	info.dumpOne(w)
+	io.WriteString(w, sep)
 }
 
 // Test for being set
@@ -310,6 +338,11 @@ func MakeException(r interface{}) *Exception {
 	switch x := r.(type) {
 	case *Exception:
 		return x
+	case ExceptionInfo:
+		if e, ok := x.Value.(*Exception); ok {
+			return e
+		}
+		return MakeException(x.Value)
 	case *Type:
 		if x.Flags&TPFLAGS_BASE_EXC_SUBCLASS != 0 {
 			return exceptionNew(x, nil)
@@ -524,6 +557,28 @@ func SetCurrentException(e *Exception) {
 	// traceback an exception already carries, so a re-raise or a chain keeps
 	// the place the exception originally came from.
 	SetExceptionTraceback(e, CaptureTraceback())
+}
+
+// ChainContext sets e.__context__ to the exception being handled by frame
+// or the nearest frame below it, as CPython does on every raise, cutting any
+// cycle that would run back through e.
+func ChainContext(e *Exception, frame *Frame) {
+	var ctx *Exception
+	for f := frame; f != nil && ctx == nil; f = f.Back {
+		ctx, _ = f.Handling.(*Exception)
+	}
+	if ctx == nil || ctx == e {
+		return
+	}
+	for o := ctx; o != nil; {
+		next, _ := o.Context.(*Exception)
+		if next == e {
+			o.Context = nil
+			break
+		}
+		o = next
+	}
+	e.Context = ctx
 }
 
 // CurrentException returns the exception now being handled, or nil.

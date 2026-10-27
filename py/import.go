@@ -107,9 +107,15 @@ func ImportModuleLevelObject(ctx Context, name string, globals, locals StringDic
 	var err error
 	var parent *Module
 	for i := range parts {
-		module, err = importDotted(ctx, strings.Join(parts[:i+1], "."))
+		full := strings.Join(parts[:i+1], ".")
+		module, err = importDotted(ctx, full)
 		if err != nil {
 			return nil, err
+		}
+		// A module may replace itself in sys.modules while it runs
+		// (decimal.py does); the import yields the replacement.
+		if m, gerr := ctx.GetModule(full); gerr == nil {
+			module = m
 		}
 		if parent != nil {
 			parent.Globals.Set(parts[i], module)

@@ -32,6 +32,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/concurrent/futures"
 	_ "github.com/vishnukv64/gpython/stdlib/configparser"
 	_ "github.com/vishnukv64/gpython/stdlib/contextlib"
+	_ "github.com/vishnukv64/gpython/stdlib/contextvars"
 	_ "github.com/vishnukv64/gpython/stdlib/copy"
 	_ "github.com/vishnukv64/gpython/stdlib/csv"
 	_ "github.com/vishnukv64/gpython/stdlib/datetime"
@@ -81,6 +82,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/re"
 	_ "github.com/vishnukv64/gpython/stdlib/reprlib"
 	_ "github.com/vishnukv64/gpython/stdlib/select"
+	_ "github.com/vishnukv64/gpython/stdlib/signal"
 	_ "github.com/vishnukv64/gpython/stdlib/shlex"
 	_ "github.com/vishnukv64/gpython/stdlib/shutil"
 	_ "github.com/vishnukv64/gpython/stdlib/site"
@@ -107,6 +109,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/zlib"
 
 	_ "github.com/vishnukv64/gpython/stdlib/atexit"
+	_ "github.com/vishnukv64/gpython/stdlib/gc"
 	_ "github.com/vishnukv64/gpython/stdlib/bisect"
 	_ "github.com/vishnukv64/gpython/stdlib/dataclasses"
 	_ "github.com/vishnukv64/gpython/stdlib/imp"

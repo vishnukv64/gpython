@@ -487,3 +487,23 @@ var _ floatArithmetic = Float(0)
 var _ conversionBetweenTypes = Float(0)
 var _ I__bool__ = Float(0)
 var _ richComparison = Float(0)
+
+func init() {
+	FloatType.Dict.Set("as_integer_ratio", MustNewMethod("as_integer_ratio", func(self Object) (Object, error) {
+		f, err := FloatAsFloat64(self)
+		if err != nil {
+			return nil, err
+		}
+		if math.IsInf(f, 0) {
+			return nil, ExceptionNewf(OverflowError, "cannot convert Infinity to integer ratio")
+		}
+		if math.IsNaN(f) {
+			return nil, ExceptionNewf(ValueError, "cannot convert NaN to integer ratio")
+		}
+		r := new(big.Rat).SetFloat64(f)
+		return Tuple{(*BigInt)(new(big.Int).Set(r.Num())).MaybeInt(), (*BigInt)(new(big.Int).Set(r.Denom())).MaybeInt()}, nil
+	}, 0, "Return a pair of integers whose ratio is exactly equal to the float."))
+	FloatType.Dict.Set("real", &Property{Fget: func(s Object) (Object, error) { return s, nil }})
+	FloatType.Dict.Set("imag", &Property{Fget: func(Object) (Object, error) { return Float(0), nil }})
+	FloatType.Dict.Set("conjugate", MustNewMethod("conjugate", func(s Object) (Object, error) { return s, nil }, 0, "Return self."))
+}

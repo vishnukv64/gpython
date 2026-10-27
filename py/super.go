@@ -110,11 +110,15 @@ func (s *Super) lookup(name string) (Object, bool, error) {
 		var target Object = entryType
 		if s.obj != nil && s.obj != None {
 			// A descriptor found on the class binds to the instance.
-			if fn := entryType.Lookup(name); fn != nil {
+			if fn, found := entryType.Dict.Get(name); found {
 				if getter, ok := fn.(I__get__); ok {
 					inst, owner := s.obj, Object(entryType)
 					if onClass {
 						inst, owner = None, s.obj
+						if name == "__init_subclass__" {
+							// implicit classmethod: bind to the class itself
+							inst = s.obj
+						}
 					}
 					res, err := getter.M__get__(inst, owner)
 					if err != nil {
@@ -205,7 +209,7 @@ func SuperNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 // isInstanceOf reports whether obj's class derives from typ.
 func isInstanceOf(obj Object, typ *Type) bool {
 	for t := obj.Type(); t != nil; t = t.Base {
-		if t == typ {
+		if t == typ || t.IsSubtype(typ) {
 			return true
 		}
 	}

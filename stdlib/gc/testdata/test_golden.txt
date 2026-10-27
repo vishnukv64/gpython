@@ -1,0 +1,11 @@
+/usr/l ''
+['dir/a.txt']
+hello
+True 2
+test_a (__main__.Ok.test_a) ... ok
+test_b (__main__.Ok.test_b) ... ok
+
+----------------------------------------------------------------------
+5 1 1 1 1
+AssertionError: 1 != 2
+ValueError: x

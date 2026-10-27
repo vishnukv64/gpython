@@ -1,0 +1,17 @@
+ValueError KeyError None False
+IndexError ZeroDivisionError None False
+ValueError KeyError None True
+ValueError KeyError KeyError True
+TypeError None None False
+RuntimeError KeyError None False
+KeyError None None False
+True 2
+after-handler ValueError None False
+after-go-catch ValueError None False
+gen-throw ValueError KeyError False
+finally ValueError KeyError False
+bad-cause exception causes must derive from BaseException
+cycle KeyError TypeError False
+None
+after-callee-handler ValueError KeyError False
+go-error ValueError KeyError False

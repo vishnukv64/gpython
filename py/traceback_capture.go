@@ -46,6 +46,38 @@ func CaptureTraceback() *Traceback {
 	return tb
 }
 
+// TrimTraceback makes e.__traceback__ start at the frame that caught it, as in
+// CPython, where the traceback only holds frames between the raise and the
+// handler. The full chain is kept so a re-raise can show the outer frames.
+func TrimTraceback(e *Exception, frame *Frame) {
+	tb, _ := e.Traceback.(*Traceback)
+	// The handler frame may be absent from the chain (a generator the
+	// exception was thrown into), so start at the innermost entry whose frame
+	// is the handler or one of its callers.
+	var start *Traceback
+	for t := tb; t != nil; t = t.Next {
+		for f := frame; f != nil; f = f.Back {
+			if t.Frame == f {
+				start = t
+				break
+			}
+		}
+	}
+	if start != nil && start != tb {
+		if e.FullTraceback == nil {
+			e.FullTraceback = tb
+		}
+		e.Traceback = start
+	}
+}
+
+// RestoreTraceback undoes TrimTraceback when e is raised again.
+func RestoreTraceback(e *Exception) {
+	if e.FullTraceback != nil {
+		e.Traceback, e.FullTraceback = e.FullTraceback, nil
+	}
+}
+
 // SetExceptionTraceback records the traceback on an exception, as CPython's
 // PyException_SetTraceback does.
 //
@@ -56,6 +88,7 @@ func SetExceptionTraceback(e *Exception, tb *Traceback) {
 	if e == nil || tb == nil {
 		return
 	}
+	RestoreTraceback(e)
 	if existing, ok := e.Traceback.(*Traceback); ok && existing != nil {
 		return
 	}
@@ -92,6 +125,49 @@ func SetCurrentExceptionFromValue(v Object) {
 }
 
 func init() {
+	// __cause__ / __context__: the chain fields the vm fills on raise.
+	chain := func(name string, field func(*Exception) *Object) {
+		ExceptionType.Dict.Set(name, &Property{
+			Fget: func(self Object) (Object, error) {
+				if e, ok := self.(*Exception); ok {
+					if v := *field(e); v != nil {
+						return v, nil
+					}
+				}
+				return None, nil
+			},
+			Fset: func(self, value Object) error {
+				e, ok := self.(*Exception)
+				if !ok {
+					return ExceptionNewf(TypeError, "not an exception")
+				}
+				if value == None {
+					value = nil
+				} else if _, ok := value.(*Exception); !ok {
+					return ExceptionNewf(TypeError, "exception %s must be None or derive from BaseException", name)
+				}
+				*field(e) = value
+				return nil
+			},
+		})
+	}
+	chain("__cause__", func(e *Exception) *Object { return &e.Cause })
+	chain("__context__", func(e *Exception) *Object { return &e.Context })
+	ExceptionType.Dict.Set("__suppress_context__", &Property{
+		Fget: func(self Object) (Object, error) {
+			e, ok := self.(*Exception)
+			return NewBool(ok && (e.SuppressContext || e.Cause != nil)), nil
+		},
+		Fset: func(self, value Object) error {
+			if e, ok := self.(*Exception); ok {
+				b, err := ObjectIsTrue(value)
+				e.SuppressContext = b
+				return err
+			}
+			return nil
+		},
+	})
+
 	// "__traceback__" is what a Python program reads to find out where an
 	// exception came from - rich's traceback renderer, and therefore pip's
 	// error output, is built on it.
@@ -162,6 +238,27 @@ func init() {
 				return None, nil
 			}
 			return tb.Next, nil
+		},
+		Fset: func(self Object, value Object) error {
+			tb, ok := self.(*Traceback)
+			if !ok {
+				return ExceptionNewf(TypeError, "not a traceback")
+			}
+			if value == None {
+				tb.Next = nil
+				return nil
+			}
+			next, ok := value.(*Traceback)
+			if !ok {
+				return ExceptionNewf(TypeError, "expected traceback object or None, got '%s'", value.Type().Name)
+			}
+			for t := next; t != nil; t = t.Next {
+				if t == tb {
+					return ExceptionNewf(ValueError, "traceback loop detected")
+				}
+			}
+			tb.Next = next
+			return nil
 		},
 		Doc: "The next traceback entry, or None at the innermost frame.",
 	})

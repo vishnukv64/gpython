@@ -48,6 +48,7 @@ _p = time.process_time()
 time.sleep(0.02)
 print("process_time: float=%s ignores sleep=%s"
       % (isinstance(_p, float), time.process_time() - _p < 0.02))
-notimplemented(time.get_clock_info)
+_ci = time.get_clock_info("monotonic")
+print("clock_info: monotonic=%s adjustable=%s" % (_ci.monotonic, _ci.adjustable))
 
 print("OK")

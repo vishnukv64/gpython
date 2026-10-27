@@ -67,10 +67,15 @@ type Pattern struct {
 	groupNames map[int]string
 	nameToNum  map[string]int
 	ngroups    int
+	// binary marks a bytes pattern. Bytes are matched as Latin-1 text, so the
+	// str engine serves both; only group results are converted back.
+	binary bool
 	// lifted carries the pattern with any negative lookahead REMOVED and the
 	// assertions to re-check, or nil when the pattern had none - which is the
 	// overwhelmingly common case and skips every check below.
 	lifted *lifted
+	// bt, when set, runs the pattern instead of re (positive lookahead).
+	bt *backtrack
 }
 
 var PatternType = py.NewTypeX("re.Pattern", "A compiled regular expression.", nil, nil)
@@ -555,7 +560,14 @@ func compile(pattern string, flags int) (*Pattern, error) {
 	// compiles the pattern with the assertions removed, and the match paths
 	// re-check them.  A pattern with none takes the identical old path.
 	var liftedForm *lifted
-	if hasLookahead(translated) {
+	var bt *backtrack
+	if needsBacktrack(translated) {
+		bt, err = newBacktrack(translated, flags)
+		if err != nil {
+			return nil, err
+		}
+		translated = "" // RE2 never sees it
+	} else if hasLookahead(translated) {
 		l, lerr := lift(translated)
 		if lerr != nil {
 			return nil, lerr
@@ -566,9 +578,12 @@ func compile(pattern string, flags int) (*Pattern, error) {
 	if prefix := goFlags(flags); prefix != "" {
 		translated = "(?" + prefix + ")" + translated
 	}
-	compiled, err := regexp.Compile(translated)
-	if err != nil {
-		return nil, py.ExceptionNewf(ErrorType, "%s", cleanErr(err))
+	var compiled *regexp.Regexp
+	if bt == nil {
+		compiled, err = regexp.Compile(translated)
+		if err != nil {
+			return nil, py.ExceptionNewf(ErrorType, "%s", cleanErr(err))
+		}
 	}
 
 	p := &Pattern{
@@ -579,6 +594,7 @@ func compile(pattern string, flags int) (*Pattern, error) {
 		nameToNum:  nameToNum,
 		ngroups:    ngroups,
 		lifted:     liftedForm,
+		bt:         bt,
 	}
 	if flags&FlagASCII == 0 {
 		// A str pattern is Unicode by default, which is what flags reports.
@@ -661,12 +677,24 @@ func (m *Match) groupText(i int) py.Object {
 		return py.None
 	}
 	runes := []rune(m.text)
+	if m.pattern.binary {
+		return unlatin1(string(runes[start:end]))
+	}
 	return py.String(string(runes[start:end]))
+}
+
+// latinGroup is a group's engine text ("" when it did not participate).
+func (m *Match) latinGroup(i int) string {
+	start, end := m.locs[2*i], m.locs[2*i+1]
+	if start < 0 || end < 0 {
+		return ""
+	}
+	return string([]rune(m.text)[start:end])
 }
 
 func init() {
 	PatternType.Dict.Set("pattern", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.String(self.(*Pattern).source), nil
+		return self.(*Pattern).out(self.(*Pattern).source), nil
 	}})
 	PatternType.Dict.Set("flags", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*Pattern).flags), nil
@@ -690,7 +718,7 @@ func init() {
 	patternMethod := func(name string, find func(*Pattern, string, int) *Match) *py.Method {
 		return py.MustNewMethod(name, func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 			p := self.(*Pattern)
-			text, pos, endpos, err := patternArgs(name, args, kwargs)
+			text, pos, endpos, err := patternArgs(self.(*Pattern), name, args, kwargs)
 			if err != nil {
 				return nil, err
 			}
@@ -708,7 +736,7 @@ func init() {
 
 	PatternType.Dict.Set("findall", py.MustNewMethod("findall", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
-		text, _, _, err := patternArgs("findall", args, kwargs)
+		text, _, _, err := patternArgs(self.(*Pattern), "findall", args, kwargs)
 		if err != nil {
 			return nil, err
 		}
@@ -717,7 +745,7 @@ func init() {
 
 	PatternType.Dict.Set("finditer", py.MustNewMethod("finditer", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
-		text, _, _, err := patternArgs("finditer", args, kwargs)
+		text, _, _, err := patternArgs(self.(*Pattern), "finditer", args, kwargs)
 		if err != nil {
 			return nil, err
 		}
@@ -730,7 +758,7 @@ func init() {
 
 	PatternType.Dict.Set("split", py.MustNewMethod("split", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		p := self.(*Pattern)
-		text, _, _, err := patternArgs("split", args, kwargs)
+		text, _, _, err := patternArgs(self.(*Pattern), "split", args, kwargs)
 		if err != nil {
 			return nil, err
 		}
@@ -849,7 +877,7 @@ func init() {
 	}, 0, "Return the (start, end) positions of the match."))
 
 	MatchType.Dict.Set("string", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.String(self.(*Match).text), nil
+		return self.(*Match).pattern.out(self.(*Match).text), nil
 	}})
 	MatchType.Dict.Set("re", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return self.(*Match).pattern, nil
@@ -915,7 +943,7 @@ func searchIn(p *Pattern, text string, pos int) *Match {
 		// assertions fail are skipped rather than ending the search.
 		idx = p.matchWithAssertions(*p.lifted, sub, false)
 	} else {
-		idx = p.re.FindStringSubmatchIndex(sub)
+		idx = p.findIndex(sub)
 	}
 	if idx == nil {
 		return nil
@@ -949,6 +977,14 @@ func (p *Pattern) matchFromIndices(text string, idx []int, base int) *Match {
 	return p.buildMatch(text, shifted)
 }
 
+// findIndex is an unanchored search returning byte-index submatches.
+func (p *Pattern) findIndex(text string) []int {
+	if p.bt != nil {
+		return p.bt.find(text, false, false)
+	}
+	return p.re.FindStringSubmatchIndex(text)
+}
+
 // anchoredMatch matches with the pattern anchored at the start; when whole
 // is false the match must also consume the entire string.
 //
@@ -963,6 +999,9 @@ func (p *Pattern) anchoredMatch(text string, whole bool) []int {
 	// prefix may turn it on.  The anchor is therefore placed OUTSIDE the
 	// pattern's flag group, with the flags reset around it, so it means the
 	// start of the text whatever the pattern asked for.
+	if p.bt != nil {
+		return p.bt.find(text, true, whole)
+	}
 	body := p.re.String()
 	translated, _, _, _, terr := translate(p.source, p.flags)
 	if terr == nil {
@@ -1024,7 +1063,7 @@ func (p *Pattern) nextMatch(text string, from int, lastEnd int, lastWasEmpty boo
 				}
 			}
 		} else {
-			idx = p.re.FindStringSubmatchIndex(sub)
+			idx = p.findIndex(sub)
 		}
 		if idx == nil {
 			return nil, 0, false
@@ -1043,8 +1082,15 @@ func (p *Pattern) nextMatch(text string, from int, lastEnd int, lastWasEmpty boo
 			// is the rule Go's FindAll does not apply.
 			continue
 		}
-		m := p.buildMatch(text, absolute)
-		return m, absolute[1], empty
+		// absolute is already in characters; buildMatch would convert again.
+		locs := make([]int, 2*(p.ngroups+1))
+		for i := range locs {
+			locs[i] = -1
+			if i < len(absolute) {
+				locs[i] = absolute[i]
+			}
+		}
+		return &Match{pattern: p, text: text, locs: locs}, absolute[1], empty
 	}
 	return nil, 0, false
 }
@@ -1090,12 +1136,12 @@ func (p *Pattern) findAll(text string) (py.Object, error) {
 			continue
 		}
 		if p.ngroups == 1 {
-			out = append(out, m.groupText(1))
+			out = append(out, p.out(m.latinGroup(1)))
 			continue
 		}
 		group := make(py.Tuple, p.ngroups)
 		for g := 1; g <= p.ngroups; g++ {
-			group[g-1] = m.groupText(g)
+			group[g-1] = p.out(m.latinGroup(g))
 		}
 		out = append(out, group)
 	}
@@ -1118,14 +1164,14 @@ func (p *Pattern) split(text string, maxsplit int) (py.Object, error) {
 		if maxsplit > 0 && count >= maxsplit {
 			break
 		}
-		out = append(out, py.String(string(runes[last:m.locs[0]])))
+		out = append(out, p.out(string(runes[last:m.locs[0]])))
 		for g := 1; g <= p.ngroups; g++ {
 			out = append(out, m.groupText(g))
 		}
 		last = m.locs[1]
 		count++
 	}
-	out = append(out, py.String(string(runes[last:])))
+	out = append(out, p.out(string(runes[last:])))
 	return py.NewListFromItems(out), nil
 }
 
@@ -1145,11 +1191,7 @@ func (m *Match) expand(template string) (string, error) {
 			if g > m.pattern.ngroups {
 				return "", py.ExceptionNewf(ErrorType, "invalid group reference %d", g)
 			}
-			text, err := py.StrAsString(m.groupText(g))
-			if err != nil {
-				continue
-			}
-			b.WriteString(text)
+			b.WriteString(m.latinGroup(g))
 			i++
 		case next == 'g':
 			end := strings.IndexByte(template[i:], '>')
@@ -1158,10 +1200,7 @@ func (m *Match) expand(template string) (string, error) {
 			}
 			name := template[i+3 : i+end]
 			if n, ok := m.pattern.nameToNum[name]; ok {
-				text, err := py.StrAsString(m.groupText(n))
-				if err == nil {
-					b.WriteString(text)
-				}
+				b.WriteString(m.latinGroup(n))
 			}
 			i += end
 		default:
@@ -1177,17 +1216,12 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 		return nil, py.ExceptionNewf(py.TypeError, "sub() needs a replacement and a string")
 	}
 	repl := args[0]
-	var text string
-	switch v := args[1].(type) {
-	case py.String:
-		text = string(v)
-	case py.Bytes:
-		text = string(v)
-	default:
-		return nil, py.ExceptionNewf(py.TypeError, "expected string or bytes-like object")
+	text, err := p.textArg(args[1])
+	if err != nil {
+		return nil, err
 	}
 	if v, ok := kwargs.Get("string"); ok {
-		s, err := py.StrAsString(v)
+		s, err := p.textArg(v)
 		if err != nil {
 			return nil, err
 		}
@@ -1224,8 +1258,16 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 		}
 		b.WriteString(string(runes[last:m.locs[0]]))
 		switch r := repl.(type) {
-		case py.String:
-			expanded, err := m.expand(string(r))
+		case py.String, py.Bytes:
+			t, err := p.textArg(r)
+			if err != nil {
+				want := "str instance, bytes"
+				if p.binary {
+					want = "a bytes-like object, str"
+				}
+				return nil, py.ExceptionNewf(py.TypeError, "sequence item 0: expected %s found", want)
+			}
+			expanded, err := m.expand(t)
 			if err != nil {
 				return nil, err
 			}
@@ -1236,7 +1278,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 			if err != nil {
 				return nil, err
 			}
-			s, err := py.StrAsString(value)
+			s, err := p.textArg(value)
 			if err != nil {
 				return nil, err
 			}
@@ -1247,24 +1289,19 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 	}
 	b.WriteString(string(runes[last:]))
 	if withCount {
-		return py.Tuple{py.String(b.String()), py.Int(done)}, nil
+		return py.Tuple{p.out(b.String()), py.Int(done)}, nil
 	}
-	return py.String(b.String()), nil
+	return p.out(b.String()), nil
 }
 
 // patternArgs reads (string, pos, endpos) from a pattern method's arguments.
-func patternArgs(name string, args py.Tuple, kwargs py.StringDict) (string, int, int, error) {
+func patternArgs(p *Pattern, name string, args py.Tuple, kwargs py.StringDict) (string, int, int, error) {
 	if len(args) < 1 {
 		return "", 0, 0, py.ExceptionNewf(py.TypeError, "%s() missing required argument 'string'", name)
 	}
-	var text string
-	switch v := args[0].(type) {
-	case py.String:
-		text = string(v)
-	case py.Bytes:
-		return "", 0, 0, py.ExceptionNewf(py.TypeError, "cannot use a bytes pattern on a string")
-	default:
-		return "", 0, 0, py.ExceptionNewf(py.TypeError, "expected string or bytes-like object")
+	text, err := p.textArg(args[0])
+	if err != nil {
+		return "", 0, 0, err
 	}
 	pos, endpos := 0, len([]rune(text))
 	if len(args) >= 2 {
@@ -1282,7 +1319,7 @@ func patternArgs(name string, args py.Tuple, kwargs py.StringDict) (string, int,
 		endpos = n
 	}
 	if v, ok := kwargs.Get("string"); ok {
-		s, err := py.StrAsString(v)
+		s, err := p.textArg(v)
 		if err != nil {
 			return "", 0, 0, err
 		}
@@ -1306,13 +1343,36 @@ func patternArgs(name string, args py.Tuple, kwargs py.StringDict) (string, int,
 }
 
 // The module-level functions build a Pattern and delegate.
+// latin1 maps each byte to the rune of the same value, and back.
+func latin1(b []byte) string {
+	r := make([]rune, len(b))
+	for i, c := range b {
+		r[i] = rune(c)
+	}
+	return string(r)
+}
+
+func unlatin1(s string) py.Bytes {
+	out := make(py.Bytes, 0, len(s))
+	for _, r := range s {
+		out = append(out, byte(r))
+	}
+	return out
+}
+
 func compileFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "compile() missing required argument 'pattern'")
 	}
-	source, err := py.StrAsString(args[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.TypeError, "first argument must be string or compiled pattern")
+	binary := false
+	var source string
+	if b, ok := args[0].(py.Bytes); ok {
+		source, binary = latin1(b), true
+	} else {
+		var err error
+		if source, err = py.StrAsString(args[0]); err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "first argument must be string or compiled pattern")
+		}
 	}
 	flags := 0
 	if len(args) >= 2 {
@@ -1329,13 +1389,27 @@ func compileFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 		}
 		flags = n
 	}
-	return compile(source, flags)
+	return compileKind(source, flags, binary)
+}
+
+func compileKind(source string, flags int, binary bool) (*Pattern, error) {
+	if binary {
+		flags |= FlagASCII
+	}
+	p, err := compile(source, flags)
+	if p != nil {
+		p.binary = binary
+	}
+	return p, err
 }
 
 // asPattern accepts either a compiled pattern or a string.
 func asPattern(v py.Object, flags int) (*Pattern, error) {
 	if p, ok := v.(*Pattern); ok {
 		return p, nil
+	}
+	if b, ok := v.(py.Bytes); ok {
+		return compileKind(latin1(b), flags, true)
 	}
 	source, err := py.StrAsString(v)
 	if err != nil {
@@ -1400,7 +1474,7 @@ func matchFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1416,7 +1490,7 @@ func searchFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1432,7 +1506,7 @@ func fullMatchFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1448,7 +1522,7 @@ func findAllFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1460,7 +1534,7 @@ func findIterFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object,
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1476,7 +1550,7 @@ func splitFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	if err != nil {
 		return nil, err
 	}
-	text, err := textOf(rest)
+	text, err := textOf(p, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -1515,17 +1589,37 @@ func subNFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 }
 
 // textOf extracts the string from the remaining arguments.
-func textOf(rest py.Tuple) (string, error) {
+func textOf(p *Pattern, rest py.Tuple) (string, error) {
 	if len(rest) < 1 {
 		return "", py.ExceptionNewf(py.TypeError, "expected string or bytes-like object")
 	}
-	switch v := rest[0].(type) {
+	return p.textArg(rest[0])
+}
+
+// textArg returns the subject as engine text (Latin-1 for bytes), refusing a
+// str/bytes mix as CPython does.
+func (p *Pattern) textArg(v py.Object) (string, error) {
+	switch v := v.(type) {
 	case py.String:
+		if p.binary {
+			return "", py.ExceptionNewf(py.TypeError, "cannot use a bytes pattern on a string-like object")
+		}
 		return string(v), nil
 	case py.Bytes:
-		return string(v), nil
+		if !p.binary {
+			return "", py.ExceptionNewf(py.TypeError, "cannot use a string pattern on a bytes-like object")
+		}
+		return latin1(v), nil
 	}
-	return "", py.ExceptionNewf(py.TypeError, "expected string or bytes-like object")
+	return "", py.ExceptionNewf(py.TypeError, "expected string or bytes-like object, got '%s'", v.Type().Name)
+}
+
+// out wraps engine text as str, or bytes for a bytes pattern.
+func (p *Pattern) out(s string) py.Object {
+	if p.binary {
+		return unlatin1(s)
+	}
+	return py.String(s)
 }
 
 // escapeFn quotes the characters that would otherwise be special.

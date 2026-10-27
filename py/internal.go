@@ -66,6 +66,22 @@ func MakeBool(a Object) (Object, error) {
 		}
 	}
 
+	// __bool__ / __len__ written in PYTHON live in the class Dict and match no
+	// Go interface above.
+	if res, ok, err := callPyUnary(a, "__bool__"); err != nil {
+		return nil, err
+	} else if ok {
+		if _, isBool := res.(Bool); !isBool {
+			return nil, ExceptionNewf(TypeError, "__bool__ should return bool, returned %s", res.Type().Name)
+		}
+		return res, nil
+	}
+	if res, ok, err := callPyUnary(a, "__len__"); err != nil {
+		return nil, err
+	} else if ok {
+		return MakeBool(res)
+	}
+
 	return True, nil
 }
 
@@ -396,7 +412,9 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 			// the class body yields the plain function, a classmethod a
 			// method bound to the class, and a property the property
 			// object itself (its getter is only run for an instance).
-			if _, isType := self.(*Type); isType {
+			// An instance of a python class is a *Type with an empty Name; its
+			// own dict entries are plain values, never descriptors.
+			if ty, isType := self.(*Type); isType && ty.Name != "" {
 				if I, ok := res.(I__get__); ok {
 					return I.M__get__(None, self)
 				}
@@ -494,21 +512,35 @@ type IDictSetter interface {
 func SetAttrString(self Object, key string, value Object) (Object, error) {
 	// First look in type's dictionary etc for a property that could
 	// be set - do this before looking in the instance dictionary
-	setter := self.Type().NativeGetAttrOrNil(key)
-	if setter != nil {
-		// Call __set__ which writes properties etc
-		if I, ok := setter.(I__set__); ok {
-			return I.M__set__(self, value)
-		}
+	if res, ok, err := setViaDescriptor(self, key, value); ok {
+		return res, err
 	}
 
 	// If we have __setattr__ then use that
 	if I, ok := self.(I__setattr__); ok {
 		return I.M__setattr__(key, value)
-	} else if res, ok, err := TypeCall2(self, "__setattr__", String(key), value); ok {
-		return res, err
+	} else if m := self.Type().Lookup("__setattr__"); m != nil && m != Object(objectSetattr) {
+		if res, ok, err := TypeCall2(self, "__setattr__", String(key), value); ok {
+			return res, err
+		}
 	}
 
+	return setAttrDict(self, key, value)
+}
+
+// setViaDescriptor runs a data descriptor (property etc) found on the type.
+func setViaDescriptor(self Object, key string, value Object) (Object, bool, error) {
+	if setter := self.Type().NativeGetAttrOrNil(key); setter != nil {
+		if I, ok := setter.(I__set__); ok {
+			res, err := I.M__set__(self, value)
+			return res, true, err
+		}
+	}
+	return nil, false, nil
+}
+
+// setAttrDict is the default store into the instance namespace.
+func setAttrDict(self Object, key string, value Object) (Object, error) {
 	// Otherwise set the attribute in the instance dictionary if
 	// possible
 	if I, ok := self.(IGetDict); ok {
@@ -554,23 +586,34 @@ func SetAttr(self Object, keyObj Object, value Object) (Object, error) {
 func DeleteAttrString(self Object, key string) error {
 	// First look in type's dictionary etc for a property that could
 	// be set - do this before looking in the instance dictionary
-	deleter := self.Type().NativeGetAttrOrNil(key)
-	if deleter != nil {
-		// Call __set__ which writes properties etc
-		if I, ok := deleter.(I__delete__); ok {
-			_, err := I.M__delete__(self)
-			return err
-		}
+	if ok, err := delViaDescriptor(self, key); ok {
+		return err
 	}
 
 	// If we have __delattr__ then use that
 	if I, ok := self.(I__delattr__); ok {
 		_, err := I.M__delattr__(key)
 		return err
-	} else if _, ok, err := TypeCall1(self, "__delattr__", String(key)); ok {
-		return err
+	} else if m := self.Type().Lookup("__delattr__"); m != nil && m != Object(objectDelattr) {
+		if _, ok, err := TypeCall1(self, "__delattr__", String(key)); ok {
+			return err
+		}
 	}
 
+	return delAttrDict(self, key)
+}
+
+func delViaDescriptor(self Object, key string) (bool, error) {
+	if d := self.Type().NativeGetAttrOrNil(key); d != nil {
+		if I, ok := d.(I__delete__); ok {
+			_, err := I.M__delete__(self)
+			return true, err
+		}
+	}
+	return false, nil
+}
+
+func delAttrDict(self Object, key string) error {
 	// Otherwise delete the attribute from the instance dictionary
 	// if possible
 	if I, ok := self.(IGetDict); ok {
@@ -634,6 +677,12 @@ func DebugRepr(self Object) string {
 
 // Calls __str__ on the object and if not found calls __repr__
 func Str(self Object) (Object, error) {
+	if _, isExc := self.(*Exception); isExc {
+		// a subclass may override __str__; the Go method below is only the default
+		if res, ok, err := TypeCall0(self, "__str__"); ok {
+			return res, err
+		}
+	}
 	if I, ok := self.(I__str__); ok {
 		return I.M__str__()
 	} else if res, ok, err := TypeCall0(self, "__str__"); ok {
@@ -690,4 +739,43 @@ func Iter(self Object) (res Object, err error) {
 		return NewIterator(self), nil
 	}
 	return nil, ExceptionNewf(TypeError, "'%s' object is not iterable", self.Type().Name)
+}
+
+// object.__setattr__/__delattr__: the default behaviour, reachable from an
+// overriding __setattr__ via super() or object.__setattr__(self, ...). They
+// bypass user overrides, so they must not route through SetAttr (recursion);
+// SetAttrString/DeleteAttrString skip dispatching to them for the same reason.
+var objectSetattr, objectDelattr *Method
+
+func init() {
+	objectSetattr = MustNewMethod("__setattr__", func(self Object, args Tuple) (Object, error) {
+		var name, value Object
+		if err := UnpackTuple(args, StringDict{}, "__setattr__", 2, 2, &name, &value); err != nil {
+			return nil, err
+		}
+		key, err := AttributeName(name)
+		if err != nil {
+			return nil, err
+		}
+		if res, ok, err := setViaDescriptor(self, key, value); ok {
+			return res, err
+		}
+		return setAttrDict(self, key, value)
+	}, 0, "Implement setattr(self, name, value).")
+	objectDelattr = MustNewMethod("__delattr__", func(self Object, args Tuple) (Object, error) {
+		var name Object
+		if err := UnpackTuple(args, StringDict{}, "__delattr__", 1, 1, &name); err != nil {
+			return nil, err
+		}
+		key, err := AttributeName(name)
+		if err != nil {
+			return nil, err
+		}
+		if ok, err := delViaDescriptor(self, key); ok {
+			return None, err
+		}
+		return None, delAttrDict(self, key)
+	}, 0, "Implement delattr(self, name).")
+	ObjectType.Dict.Set("__setattr__", objectSetattr)
+	ObjectType.Dict.Set("__delattr__", objectDelattr)
 }

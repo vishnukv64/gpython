@@ -93,10 +93,8 @@ func TestNegativeLookaheadPositions(t *testing.T) {
 // answer, which is worse than a refusal.
 func TestUnsupportedLookaroundRefuses(t *testing.T) {
 	for _, pattern := range []string{
-		`\d+(?!%)`,     // quantified prefix: needs backtracking
-		`[a-z]+(?=\.)`, // positive lookahead
-		`a(?=b)`,       // positive lookahead
-		`a(?(1)b|c)`,   // conditional
+		`\d+(?!%)`,   // quantified prefix: needs backtracking
+		`a(?(1)b|c)`, // conditional
 		// A lookbehind IS supported now (see lookbehind_test.go), but only
 		// where its position in the match is determined: leading, or followed
 		// by a FIXED-width tail.  A variable tail cannot be anchored.
@@ -122,5 +120,25 @@ func TestNoLookaheadUnaffected(t *testing.T) {
 	}
 	if !searches(t, p, "abc123") || searches(t, p, "123") {
 		t.Error("[a-z]+ does not match CPython")
+	}
+}
+
+// Positive lookahead runs on the backtracking engine (backtrack.go), matching CPython.
+func TestPositiveLookaheadBacktracks(t *testing.T) {
+	for _, c := range []struct {
+		pat, text string
+		want      bool
+	}{
+		{`[a-z]+(?=\.)`, "abc.", true},
+		{`a(?=b)`, "ac", false},
+		{`a(?=b)b`, "ab", true},
+	} {
+		p, err := compile(c.pat, 0)
+		if err != nil {
+			t.Fatalf("compile(%q): %v", c.pat, err)
+		}
+		if got := p.findIndex(c.text) != nil; got != c.want {
+			t.Errorf("%q on %q: got %v want %v", c.pat, c.text, got, c.want)
+		}
 	}
 }

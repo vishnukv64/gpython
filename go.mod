@@ -3,6 +3,7 @@ module github.com/vishnukv64/gpython
 go 1.24
 
 require (
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/google/go-cmp v0.5.8
 	github.com/gopherjs/gopherwasm v1.1.0
 	github.com/peterh/liner v1.2.2

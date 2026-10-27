@@ -203,6 +203,18 @@ func init() {
 			return nil
 		},
 	})
+	FunctionType.Dict.Set("__doc__", &Property{
+		Fget: func(self Object) (Object, error) {
+			if d := self.(*Function).Doc; d != nil {
+				return d, nil
+			}
+			return None, nil
+		},
+		Fset: func(self, value Object) error {
+			self.(*Function).Doc = value
+			return nil
+		},
+	})
 	FunctionType.Dict.Set("__qualname__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Function).Qualname), nil

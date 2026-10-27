@@ -209,7 +209,43 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 		}
 	}
 
+	if it.Frame.DelegateLen != 0 && len(it.Frame.Stack) > 0 {
+		// Suspended in "yield from"/"await": the exception belongs to the
+		// sub-iterator first (this is what makes task.cancel() reach the
+		// innermost awaited future).
+		sub := it.Frame.Stack[len(it.Frame.Stack)-1]
+		var res Object
+		var err error
+		it.Running = true
+		if isGeneratorExit(exc) {
+			if closeFn, e := GetAttrString(sub, "close"); e == nil {
+				_, err = Call(closeFn, nil, StringDict{})
+			}
+			if err == nil {
+				err = exc // now raise GeneratorExit in this frame
+			}
+		} else if throwFn, e := GetAttrString(sub, "throw"); e == nil {
+			res, err = Call(throwFn, Tuple{exc}, StringDict{})
+			if err == nil {
+				it.Running = false
+				return res, nil
+			}
+		} else {
+			err = exc
+		}
+		it.Running = false
+		if IsException(StopIteration, err) {
+			// sub finished: its value is the result of the yield from
+			it.Frame.Stack = append(it.Frame.Stack[:len(it.Frame.Stack)-1], stopIterationValue(err))
+			it.Frame.Lasti += it.Frame.DelegateLen
+			it.Frame.DelegateLen = 0
+			return it.resume()
+		}
+		exc = MakeException(err)
+	}
+
 	it.Frame.Yielded = false
+	it.Frame.DelegateLen = 0
 	it.Running = true
 	it.Frame.PendingException = exc
 
@@ -225,7 +261,29 @@ func (it *Generator) Throw(args Tuple, kwargs StringDict) (Object, error) {
 	if it.Frame.Yielded {
 		return res, nil
 	}
-	return nil, StopIteration
+	return nil, stopIterationWith(res)
+}
+
+// resume runs the frame from where it stands and reports like Send does.
+func (it *Generator) resume() (Object, error) {
+	it.Running = true
+	res, err := VmRunFrame(it.Frame)
+	it.Running = false
+	if err != nil {
+		return nil, err
+	}
+	if it.Frame.Yielded {
+		return res, nil
+	}
+	return nil, stopIterationWith(res)
+}
+
+// stopIterationValue extracts StopIteration.value from err (bare type -> None).
+func stopIterationValue(err error) Object {
+	if args, ok := MakeException(err).Args.(Tuple); ok && len(args) > 0 {
+		return args[0]
+	}
+	return None
 }
 
 // isGeneratorExit reports whether an error is a GeneratorExit.
@@ -301,9 +359,22 @@ func (it *Generator) Close() (Object, error) {
 
 	// GeneratorExit is delivered at the point the generator is suspended, which
 	// is what lets a "finally" or an "except GeneratorExit" inside it run.
+	pending := GeneratorExitInstance()
+	if it.Frame.DelegateLen != 0 && len(it.Frame.Stack) > 0 {
+		sub := it.Frame.Stack[len(it.Frame.Stack)-1]
+		if closeFn, e := GetAttrString(sub, "close"); e == nil {
+			it.Running = true
+			_, cerr := Call(closeFn, nil, StringDict{})
+			it.Running = false
+			if cerr != nil {
+				pending = MakeException(cerr)
+			}
+		}
+	}
 	it.Frame.Yielded = false
+	it.Frame.DelegateLen = 0
 	it.Running = true
-	it.Frame.PendingException = GeneratorExitInstance()
+	it.Frame.PendingException = pending
 	res, err := VmRunFrame(it.Frame)
 
 	it.Running = false

@@ -107,6 +107,7 @@ type SymTable struct {
 	Free              bool      // true if block has free variables
 	ChildFree         bool      // true if a child block has free vars, including free refs to globals
 	Generator         bool      // true if namespace is a generator
+	AsyncComp         bool      // comprehension with "async for" or "await": a coroutine / async generator
 	Coroutine         bool      // true if namespace is a coroutine (contains await)
 	Varargs           bool      // true if block has varargs
 	Varkeywords       bool      // true if block has varkeywords
@@ -470,6 +471,25 @@ func (st *SymTable) parseComprehension(Ast ast.Ast, scopeName string, generators
 	// A comprehension is an implicit function, but a walrus inside it binds
 	// in the scope around it rather than in the comprehension itself.
 	stNew.isComprehension = true
+	// "async for" anywhere, or an await outside the outermost iterable (which
+	// is evaluated by the enclosing function), makes the comprehension async.
+	for i, g := range generators {
+		if g.IsAsync {
+			stNew.AsyncComp = true
+		}
+		nodes := append([]ast.Expr{elt, value}, g.Ifs...)
+		if i > 0 {
+			nodes = append(nodes, g.Iter)
+		}
+		for _, n := range nodes {
+			ast.Walk(n, func(a ast.Ast) bool {
+				if _, ok := a.(*ast.Await); ok {
+					stNew.AsyncComp = true
+				}
+				return !stNew.AsyncComp
+			})
+		}
+	}
 	// Outermost iter is received as an argument
 	id := ast.Identifier(fmt.Sprintf(".%d", 0))
 	stNew.AddDef(Ast, id, DefParam)

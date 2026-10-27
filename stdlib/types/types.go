@@ -74,6 +74,8 @@ func init() {
 		py.DictEntry{Key: "MethodType", Value: py.MethodType},
 		py.DictEntry{Key: "GeneratorType", Value: py.GeneratorType},
 		py.DictEntry{Key: "CoroutineType", Value: py.CoroutineType},
+		py.DictEntry{Key: "AsyncGeneratorType", Value: py.AsyncGeneratorType},
+		py.DictEntry{Key: "coroutine", Value: py.MustNewMethod("coroutine", coroutine, 0, "Convert regular generator function to a coroutine.")},
 		py.DictEntry{Key: "GenericAlias", Value: py.GenericAliasType},
 		py.DictEntry{Key: "CodeType", Value: py.CodeType},
 		py.DictEntry{Key: "FrameType", Value: py.FrameType},
@@ -118,4 +120,18 @@ func newClass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 // metaclass __prepare__ hook is looked for and used when present.
 func prepareClass(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	return py.NewStringDict(), nil
+}
+
+// coroutine marks a generator function's code CO_ITERABLE_COROUTINE so its
+// generators may be awaited.  Non-generator callables are returned as is
+// (CPython wraps them; the observable behaviour is the same).
+func coroutine(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "coroutine() takes exactly one argument")
+	}
+	if fn, ok := args[0].(*py.Function); ok && fn.Code.Flags&py.CO_GENERATOR != 0 {
+		fn.Code.Flags |= py.CO_ITERABLE_COROUTINE // mutates the code object, as CPython does
+		return fn, nil
+	}
+	return args[0], nil
 }

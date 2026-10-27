@@ -30,6 +30,11 @@ func init() {
 		py.DictEntry{Key: "cleandoc", Value: py.MustNewMethod("cleandoc", inspectCleanDoc, 0, cleandoc_doc)},
 		py.DictEntry{Key: "isfunction", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Function); return ok })},
 		py.DictEntry{Key: "isgeneratorfunction", Value: py.MustNewMethod("isgeneratorfunction", inspectIsGeneratorFunction, 0, isgeneratorfunction_doc)},
+		py.DictEntry{Key: "iscoroutinefunction", Value: predicate(func(obj py.Object) bool { return codeHas(obj, py.CO_COROUTINE) })},
+		py.DictEntry{Key: "isasyncgenfunction", Value: predicate(func(obj py.Object) bool { return codeHas(obj, py.CO_ASYNC_GENERATOR) })},
+		py.DictEntry{Key: "isasyncgen", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.AsyncGenerator); return ok })},
+		py.DictEntry{Key: "isawaitable", Value: predicate(isAwaitable)},
+		py.DictEntry{Key: "unwrap", Value: py.MustNewMethod("unwrap", inspectUnwrap, 0, "unwrap(func) -> follow the __wrapped__ chain")},
 		py.DictEntry{Key: "isgenerator", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Generator); return ok })},
 		py.DictEntry{Key: "iscoroutine", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Coroutine); return ok })},
 		py.DictEntry{Key: "isbuiltin", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Method); return ok })},
@@ -40,6 +45,7 @@ func init() {
 		// instance as a class.  rich checks isclass before calling an object's
 		// __rich_console__, so every Text was "not renderable".
 		py.DictEntry{Key: "isclass", Value: predicate(py.IsClassObject)},
+		py.DictEntry{Key: "isabstract", Value: predicate(isabstract)},
 		py.DictEntry{Key: "isdatadescriptor", Value: predicate(func(obj py.Object) bool { _, ok := obj.(*py.Property); return ok })},
 		py.DictEntry{Key: "getmro", Value: py.MustNewMethod("getmro", getmro, 0, getmro_doc)},
 		py.DictEntry{Key: "getdoc", Value: py.MustNewMethod("getdoc", getdoc, 0, getdoc_doc)},
@@ -52,6 +58,9 @@ func init() {
 	globals.Set("CO_VARKEYWORDS", py.Int(py.CO_VARKEYWORDS))
 	globals.Set("CO_OPTIMIZED", py.Int(py.CO_OPTIMIZED))
 	globals.Set("CO_NEWLOCALS", py.Int(py.CO_NEWLOCALS))
+	globals.Set("CO_COROUTINE", py.Int(py.CO_COROUTINE))
+	globals.Set("CO_ITERABLE_COROUTINE", py.Int(py.CO_ITERABLE_COROUTINE))
+	globals.Set("CO_ASYNC_GENERATOR", py.Int(py.CO_ASYNC_GENERATOR))
 	globals.Set("CO_NOFREE", py.Int(py.CO_NOFREE))
 
 	py.RegisterModule(&py.ModuleImpl{
@@ -214,4 +223,51 @@ eval_str=False) -> Signature object`
 
 func notImplemented(self py.Object, args py.Tuple) (py.Object, error) {
 	return nil, py.ExceptionNewf(py.NotImplementedError, "inspect.signature is not implemented: this interpreter does not keep the argument binding needed to report it")
+}
+
+// isabstract: a class whose __abstractmethods__ is non-empty (what abc sets,
+// and what CPython's TPFLAGS_IS_ABSTRACT mirrors).
+func isabstract(obj py.Object) bool {
+	t, ok := obj.(*py.Type)
+	if !ok || !py.IsClassObject(obj) {
+		return false
+	}
+	abs := t.Lookup("__abstractmethods__")
+	if abs == nil {
+		return false
+	}
+	n := 0
+	_ = py.Iterate(abs, func(py.Object) bool { n++; return true })
+	return n > 0
+}
+
+func codeHas(obj py.Object, flag int32) bool {
+	fn, ok := obj.(*py.Function)
+	return ok && fn.Code != nil && fn.Code.Flags&flag != 0
+}
+
+func isAwaitable(obj py.Object) bool {
+	switch g := obj.(type) {
+	case *py.Coroutine:
+		return true
+	case *py.Generator:
+		return g.Code != nil && g.Code.Flags&py.CO_ITERABLE_COROUTINE != 0
+	}
+	_, err := py.GetAttrString(obj, "__await__")
+	return err == nil
+}
+
+func inspectUnwrap(self py.Object, args py.Tuple) (py.Object, error) {
+	var fn py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "unwrap", 1, 1, &fn); err != nil {
+		return nil, err
+	}
+	for i := 0; i < 1000; i++ {
+		next, err := py.GetAttrString(fn, "__wrapped__")
+		if err != nil {
+			return fn, nil
+		}
+		fn = next
+	}
+	return nil, py.ExceptionNewf(py.ValueError, "wrapper loop when unwrapping")
 }

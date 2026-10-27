@@ -1,0 +1,25 @@
+['A', 'B', 'C']
+['b', 'c', 'a']
+X ValueError('boom')
+gather raised boom
+mytask False
+T True T
+wait_for timeout
+timeout ctx
+W
+sleeper cancelled
+sleeper cleanup
+await cancelled True
+[0, 1, 2, 3, 4]
+[0, 1, 2]
+[('in', 0), ('out', 0), ('in', 1), ('out', 1), ('in', 2), ('out', 2)]
+max concurrent 2
+['g2', 'g1', 'g0']
+sleeper cancelled
+sleeper cleanup
+TaskGroup ['boom']
+6
+soon
+later
+1 0
+None

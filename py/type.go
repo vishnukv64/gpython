@@ -470,6 +470,10 @@ func init() {
 	typeHash := MustNewMethod("__hash__", func(self Object, args Tuple) (Object, error) {
 		t, ok := self.(*Type)
 		if !ok {
+			switch self.(type) {
+			case *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
+				return Int(identityHash(self)), nil
+			}
 			return nil, ExceptionNewf(TypeError, "descriptor '__hash__' requires a 'type' object")
 		}
 		return Int(int64(reflect.ValueOf(t).Pointer())), nil

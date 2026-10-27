@@ -1465,6 +1465,13 @@ func math_isqrt(self py.Object, args py.Tuple) (py.Object, error) {
 	if err := py.UnpackTuple(args, py.NewStringDict(), "isqrt", 1, 1, &nObj); err != nil {
 		return nil, err
 	}
+	if b, ok := nObj.(*py.BigInt); ok {
+		bi := (*big.Int)(b)
+		if bi.Sign() < 0 {
+			return nil, py.ExceptionNewf(py.ValueError, "isqrt() argument must be nonnegative")
+		}
+		return (*py.BigInt)(new(big.Int).Sqrt(bi)).MaybeInt(), nil
+	}
 	n, err := py.MakeGoInt64(nObj)
 	if err != nil {
 		return nil, err
@@ -1610,6 +1617,7 @@ func init() {
 		py.MustNewMethod("gamma", math_gamma, 0, math_gamma_doc),
 		py.MustNewMethod("gcd", math_gcd, 0, math_gcd_doc),
 		py.MustNewMethod("hypot", math_hypot, 0, math_hypot_doc),
+		py.MustNewMethod("sumprod", math_sumprod, 0, math_sumprod_doc),
 		py.MustNewMethod("isfinite", math_isfinite, 0, math_isfinite_doc),
 		py.MustNewMethod("isinf", math_isinf, 0, math_isinf_doc),
 		py.MustNewMethod("isclose", math_isclose, 0, math_isclose_doc),
@@ -1645,7 +1653,84 @@ func init() {
 		Methods: methods,
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "pi", Value: py.Float(math.Pi)},
+			py.DictEntry{Key: "tau", Value: py.Float(2 * math.Pi)},
 			py.DictEntry{Key: "e", Value: py.Float(math.E)},
 		),
 	})
+}
+
+const math_sumprod_doc = "Return the sum of products of values from two iterables p and q."
+
+// math_sumprod: ints and Fractions/Decimals go through generic +,*; when any
+// float is present the sum is accumulated exactly (big.Rat) and rounded once.
+// ponytail: CPython uses extended-precision accumulation; differs only in the last ulp on rare inputs.
+func math_sumprod(self py.Object, args py.Tuple) (py.Object, error) {
+	var p, q py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "sumprod", 2, 2, &p, &q); err != nil {
+		return nil, err
+	}
+	pl, err := py.SequenceList(p)
+	if err != nil {
+		return nil, err
+	}
+	ql, err := py.SequenceList(q)
+	if err != nil {
+		return nil, err
+	}
+	if len(pl.Items) != len(ql.Items) {
+		return nil, py.ExceptionNewf(py.ValueError, "Inputs are not the same length")
+	}
+	anyFloat, allNum := false, true
+	for _, it := range append(append([]py.Object{}, pl.Items...), ql.Items...) {
+		switch v := it.(type) {
+		case py.Float:
+			f := float64(v)
+			if math.IsInf(f, 0) || math.IsNaN(f) {
+				allNum = false
+			}
+			anyFloat = true
+		case py.Int, *py.BigInt, py.Bool:
+		default:
+			allNum = false
+		}
+	}
+	if anyFloat && allNum {
+		sum := new(big.Rat)
+		for i := range pl.Items {
+			a, err := ratOf(pl.Items[i])
+			if err != nil {
+				return nil, err
+			}
+			b, err := ratOf(ql.Items[i])
+			if err != nil {
+				return nil, err
+			}
+			sum.Add(sum, a.Mul(a, b))
+		}
+		f, _ := sum.Float64()
+		return py.Float(f), nil
+	}
+	var total py.Object = py.Int(0)
+	for i := range pl.Items {
+		prod, err := py.Mul(pl.Items[i], ql.Items[i])
+		if err != nil {
+			return nil, err
+		}
+		if total, err = py.Add(total, prod); err != nil {
+			return nil, err
+		}
+	}
+	return total, nil
+}
+
+func ratOf(o py.Object) (*big.Rat, error) {
+	if f, ok := o.(py.Float); ok {
+		return new(big.Rat).SetFloat64(float64(f)), nil
+	}
+	s, err := py.StrAsString(o)
+	if err != nil {
+		return nil, err
+	}
+	r, _ := new(big.Rat).SetString(s)
+	return r, nil
 }

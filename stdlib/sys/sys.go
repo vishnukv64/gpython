@@ -171,7 +171,7 @@ Return the encoding used to convert Unicode filenames in
 operating system filenames.`
 
 func sys_getfilesystemencoding(self py.Object) (py.Object, error) {
-	return nil, py.NotImplementedError
+	return py.String("utf-8"), nil
 	// if (Py_FileSystemDefaultEncoding) {
 	//     return PyUnicode_FromString(Py_FileSystemDefaultEncoding);
 	// }
@@ -652,6 +652,9 @@ func init() {
 		py.MustNewMethod("setprofile", sys_setprofile, 0, setprofile_doc),
 		py.MustNewMethod("getprofile", sys_getprofile, 0, getprofile_doc),
 		py.MustNewMethod("setrecursionlimit", sys_setrecursionlimit, 0, setrecursionlimit_doc),
+		py.MustNewMethod("set_asyncgen_hooks", sys_set_asyncgen_hooks, 0, "set_asyncgen_hooks(firstiter=None, finalizer=None)\n\nSet a finalizer for async generators objects."),
+		py.MustNewMethod("get_asyncgen_hooks", sys_get_asyncgen_hooks, 0, "get_asyncgen_hooks()\n\nReturn the installed asynchronous generators hooks (firstiter, finalizer)."),
+		py.MustNewMethod("is_finalizing", func(self py.Object) (py.Object, error) { return py.False, nil }, 0, "Return True if Python is exiting."),
 		py.MustNewMethod("settrace", sys_settrace, 0, settrace_doc),
 		py.MustNewMethod("gettrace", sys_gettrace, 0, gettrace_doc),
 		py.MustNewMethod("call_tracing", sys_call_tracing, 0, call_tracing_doc),
@@ -681,6 +684,7 @@ func init() {
 		py.DictEntry{Key: "maxsize", Value: py.Int(math.MaxInt64)},
 		py.DictEntry{Key: "maxunicode", Value: py.Int(0x10FFFF)},
 		py.DictEntry{Key: "float_info", Value: floatInfo()},
+		py.DictEntry{Key: "hash_info", Value: hashInfo()},
 		py.DictEntry{Key: "hexversion", Value: py.Int(0x030A00F0)},
 		py.DictEntry{Key: "argv", Value: py.NewListFromStrings(os.Args[1:])},
 		// sys.meta_path is the list of finders consulted before built-in
@@ -713,7 +717,7 @@ func init() {
 		py.DictEntry{Key: "builtin_module_names", Value: py.NewListFromStrings(builtinModuleNames())},
 		py.DictEntry{Key: "modules", Value: py.NewStringDict()},
 		py.DictEntry{Key: "dont_write_bytecode", Value: py.False},
-		py.DictEntry{Key: "flags", Value: py.NewStringDict()},
+		py.DictEntry{Key: "flags", Value: newFlags()},
 		py.DictEntry{Key: "warnoptions", Value: py.NewList()},
 		py.DictEntry{Key: "ps1", Value: py.String(">>> ")},
 		py.DictEntry{Key: "ps2", Value: py.String("... ")},
@@ -865,6 +869,21 @@ func floatInfo() py.Object {
 	return d
 }
 
+// hashInfo is sys.hash_info for a 64-bit build (as CPython 3.14 reports).
+func hashInfo() py.Object {
+	d := py.NewStringDict()
+	d.Set("width", py.Int(64))
+	d.Set("modulus", py.Int(2305843009213693951))
+	d.Set("inf", py.Int(314159))
+	d.Set("nan", py.Int(0))
+	d.Set("imag", py.Int(1000003))
+	d.Set("algorithm", py.String("siphash13"))
+	d.Set("hash_bits", py.Int(64))
+	d.Set("seed_bits", py.Int(128))
+	d.Set("cutoff", py.Int(0))
+	return d
+}
+
 // executablePath is the interpreter's own path, read once so that prefix()
 // can reach it.
 var executable = ""
@@ -906,4 +925,41 @@ func implementationInfo() py.Object {
 func builtinModuleNames() []string {
 	return []string{"builtins", "sys", "math", "time", "os", "collections",
 		"json", "re", "itertools", "functools", "yaml"}
+}
+
+// flags backs sys.flags: attribute access to the interpreter flags, all off.
+type flags struct{ fields map[string]int }
+
+var flagsType = py.NewType("sys.flags", "Interpreter flags (all off).")
+
+func (*flags) Type() *py.Type { return flagsType }
+
+func (f *flags) M__getattr__(name string) (py.Object, error) {
+	if v, ok := f.fields[name]; ok {
+		return py.Int(v), nil
+	}
+	return nil, py.ExceptionNewf(py.AttributeError, "sys.flags has no attribute '%s'", name)
+}
+
+func newFlags() py.Object {
+	f := &flags{fields: map[string]int{}}
+	for _, n := range []string{"debug", "inspect", "interactive", "optimize", "dont_write_bytecode", "no_user_site", "no_site", "ignore_environment", "verbose", "bytes_warning", "quiet", "hash_randomization", "isolated", "dev_mode", "utf8_mode", "warn_default_encoding", "safe_path", "int_max_str_digits"} {
+		f.fields[n] = 0
+	}
+	return f
+}
+
+func sys_set_asyncgen_hooks(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var first, final py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OO:set_asyncgen_hooks", []string{"firstiter", "finalizer"}, &first, &final); err != nil {
+		return nil, err
+	}
+	py.SetAsyncGenHooks(first, final)
+	return py.None, nil
+}
+
+func sys_get_asyncgen_hooks(self py.Object) (py.Object, error) {
+	first, final := py.GetAsyncGenHooks()
+	// ponytail: a plain tuple; CPython's is a (firstiter, finalizer) struct sequence
+	return py.Tuple{first, final}, nil
 }

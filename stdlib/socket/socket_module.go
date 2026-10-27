@@ -357,6 +357,9 @@ func registerSocketMethods() {
 				value = v
 			}
 			switch {
+			case level == IPPROTO_TCP && optname == TCP_NODELAY, level == IPPROTO_IPV6 && optname == IPV6_V6ONLY:
+				s.opts[optname] = value // Go's net already sets TCP_NODELAY; recorded for getsockopt
+				return py.None, nil
 			case level == SOL_SOCKET && optname == SO_REUSEADDR:
 				s.opts[SO_REUSEADDR] = value
 				return py.None, nil
@@ -455,6 +458,21 @@ func registerSocketMethods() {
 	d := &SocketType.Dict
 	for _, m := range methods {
 		d.Set(m.Name, m)
+	}
+
+	for name, get := range map[string]func(*sock) py.Object{
+		"family":  func(s *sock) py.Object { return py.Int(s.family) },
+		"type":    func(s *sock) py.Object { return py.Int(s.typ) },
+		"proto":   func(s *sock) py.Object { return py.Int(s.proto) },
+		"timeout": func(s *sock) py.Object { return s.timeout },
+	} {
+		get := get
+		d.Set(name, &py.Property{Fget: func(self py.Object) (py.Object, error) {
+			if s, ok := self.(*sock); ok {
+				return get(s), nil
+			}
+			return nil, py.ExceptionNewf(py.TypeError, "requires a socket")
+		}})
 	}
 
 	registerSocketFile()

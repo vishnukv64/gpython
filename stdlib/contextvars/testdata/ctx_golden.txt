@@ -1,0 +1,13 @@
+v 10 5
+1 True True
+1
+RuntimeError
+10
+LookupError
+None
+b a b True 1
+None True True
+reenter RuntimeError
+KeyError
+['fresh'] a
+x

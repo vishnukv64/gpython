@@ -48,6 +48,13 @@ var pathImpl = &py.ModuleImpl{
 	Methods: []*py.Method{
 		py.MustNewMethod("join", pathJoin, 0, "join(a, *p) -> Join two or more pathname components, inserting '/' as needed."),
 		py.MustNewMethod("split", pathSplit, 0, "split(p) -> Split a pathname into (head, tail)."),
+		py.MustNewMethod("splitdrive", func(self py.Object, args py.Tuple) (py.Object, error) {
+			parts, err := argsToStrings("splitdrive", args, 1, 1)
+			if err != nil {
+				return nil, err
+			}
+			return py.Tuple{py.String(""), py.String(parts[0])}, nil // posix: no drives
+		}, 0, "splitdrive(p) -> ('', p) on posix."),
 		py.MustNewMethod("splitext", pathSplitext, 0, "splitext(p) -> Split the extension from a pathname."),
 		py.MustNewMethod("basename", pathBasename, 0, "basename(p) -> Returns the final component of a pathname."),
 		py.MustNewMethod("dirname", pathDirname, 0, "dirname(p) -> Returns the directory component of a pathname."),
@@ -57,6 +64,7 @@ var pathImpl = &py.ModuleImpl{
 		py.MustNewMethod("isabs", pathIsabs, 0, "isabs(s) -> Test whether a path is absolute."),
 		py.MustNewMethod("exists", pathExists, 0, "exists(path) -> Test whether a path exists."),
 		py.MustNewMethod("lexists", pathLexists, 0, "lexists(path) -> Test whether a path exists, without following a final symlink."),
+		py.MustNewMethod("commonprefix", pathCommonprefix, 0, "commonprefix(m) -> Return the longest common leading component of a list of pathnames."),
 		py.MustNewMethod("commonpath", pathCommonpath, 0, "commonpath(paths) -> Return the longest common sub-path of the given paths."),
 		py.MustNewMethod("isdir", pathIsdir, 0, "isdir(s) -> Return true if the pathname refers to an existing directory."),
 		py.MustNewMethod("isfile", pathIsfile, 0, "isfile(path) -> Test whether a path is a regular file."),
@@ -83,6 +91,7 @@ var pathImpl = &py.ModuleImpl{
 // init() was never seen.
 var pathGlobals = py.NewStringDictFrom(
 	py.DictEntry{Key: "sep", Value: osSep},
+	py.DictEntry{Key: "ALLOW_MISSING", Value: allowMissing},
 	py.DictEntry{Key: "altsep", Value: osAltsep},
 	py.DictEntry{Key: "pathsep", Value: osPathsep},
 	py.DictEntry{Key: "curdir", Value: py.String(".")},
@@ -408,22 +417,36 @@ func pathExpandvars(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.String(expandVars(parts[0])), nil
 }
 
-func pathRealpath(self py.Object, args py.Tuple) (py.Object, error) {
+// allowMissing is os.path.ALLOW_MISSING, the realpath(strict=...) sentinel.
+var allowMissing = py.NewList()
+
+func pathRealpath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	parts, err := argsToStrings("realpath", args, 1, 1)
 	if err != nil {
 		return nil, err
 	}
-	real, err := filepath.EvalSymlinks(parts[0])
-	if err != nil {
-		// A path that does not exist has no resolved form; CPython returns
-		// the absolute version rather than raising.
-		abs, absErr := filepath.Abs(parts[0])
-		if absErr != nil {
-			return py.String(parts[0]), nil
+	if v, ok := kwargs.Get("strict"); ok && v == py.Object(py.True) {
+		if _, err := os.Lstat(parts[0]); err != nil {
+			return nil, py.ExceptionNewf(py.FileNotFoundError, "[Errno 2] No such file or directory: '%s'", parts[0])
 		}
-		return py.String(abs), nil
 	}
-	return py.String(real), nil
+	abs, err := filepath.Abs(parts[0])
+	if err != nil {
+		return py.String(parts[0]), nil
+	}
+	// Resolve the longest existing prefix, then re-append the missing tail.
+	head, tail := abs, ""
+	for {
+		if real, err := filepath.EvalSymlinks(head); err == nil {
+			return py.String(filepath.Join(real, tail)), nil
+		}
+		parent := filepath.Dir(head)
+		if parent == head {
+			return py.String(abs), nil
+		}
+		tail = filepath.Join(filepath.Base(head), tail)
+		head = parent
+	}
 }
 
 func pathRelpath(self py.Object, args py.Tuple) (py.Object, error) {
@@ -527,4 +550,40 @@ func sameFile(a, b string) bool {
 		return false
 	}
 	return os.SameFile(ai, bi)
+}
+
+// pathCommonprefix is the character-wise prefix of a sequence of strings, as
+// os.path.commonprefix does (it does not respect path boundaries).
+func pathCommonprefix(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "commonprefix() takes exactly one argument (%d given)", len(args))
+	}
+	it, err := py.Iter(args[0])
+	if err != nil {
+		return nil, err
+	}
+	var prefix string
+	first := true
+	for {
+		item, err := py.Next(it)
+		if err != nil {
+			if py.IsException(py.StopIteration, err) {
+				break
+			}
+			return nil, err
+		}
+		s, err := py.StrAsString(item)
+		if err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "commonprefix() argument must be str")
+		}
+		if first {
+			prefix, first = s, false
+			continue
+		}
+		n := 0
+		for a, b := []rune(prefix), []rune(s); n < len(a) && n < len(b) && a[n] == b[n]; n++ {
+		}
+		prefix = string([]rune(prefix)[:n])
+	}
+	return py.String(prefix), nil
 }

@@ -44,10 +44,11 @@ func abcType(name string, base *py.Type) *py.Type {
 // The parameters carry no runtime meaning here, so the class itself is
 // returned, which is all that evaluating an annotation needs.
 func subscriptable(t *py.Type) {
-	getitem := func(self py.Object, args py.Tuple) (py.Object, error) {
-		// The parameters carry no runtime meaning here, so the class itself
-		// is returned, which is all that evaluating an annotation needs.
-		return self, nil
+	// Reached through the class the method is unbound: the subscript key
+	// arrives as `key` (the "self" slot). A real alias lets Mapping[str, str]
+	// serve as a base class.
+	getitem := func(key py.Object, args py.Tuple) (py.Object, error) {
+		return py.NewGenericAlias(t, key), nil
 	}
 	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", getitem, 0, "Return the class, ignoring the subscription parameters."))
 }

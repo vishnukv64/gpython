@@ -14,6 +14,7 @@ package collections
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -281,6 +282,142 @@ func init() {
 		return py.String(out), nil
 	}, 0, "Return repr(self)."))
 }
+
+func init() {
+	m := func(name, doc string, f func(d *Deque, args py.Tuple) (py.Object, error)) {
+		DequeType.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+			return f(self.(*Deque), args)
+		}, 0, doc))
+	}
+	find := func(d *Deque, v py.Object) (int, error) {
+		for i, have := range d.items {
+			eq, err := py.Eq(have, v)
+			if err != nil {
+				return 0, err
+			}
+			if ok, err := py.ObjectIsTrue(eq); err != nil {
+				return 0, err
+			} else if ok {
+				return i, nil
+			}
+		}
+		return -1, nil
+	}
+	m("remove", "Remove first occurrence of value.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		var v py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "remove", 1, 1, &v); err != nil {
+			return nil, err
+		}
+		i, err := find(d, v)
+		if err != nil {
+			return nil, err
+		}
+		if i < 0 {
+			return nil, py.ExceptionNewf(py.ValueError, "deque.remove(x): x not in deque")
+		}
+		d.items = append(d.items[:i:i], d.items[i+1:]...)
+		return py.None, nil
+	})
+	m("count", "Return number of occurrences of value.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		var v py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "count", 1, 1, &v); err != nil {
+			return nil, err
+		}
+		n := 0
+		for _, have := range d.items {
+			eq, err := py.Eq(have, v)
+			if err != nil {
+				return nil, err
+			}
+			if ok, _ := py.ObjectIsTrue(eq); ok {
+				n++
+			}
+		}
+		return py.Int(n), nil
+	})
+	m("index", "Return first index of value.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		var v py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "index", 1, 1, &v); err != nil {
+			return nil, err
+		}
+		i, err := find(d, v)
+		if err != nil {
+			return nil, err
+		}
+		if i < 0 {
+			return nil, py.ExceptionNewf(py.ValueError, "%s is not in deque", mustRepr(v))
+		}
+		return py.Int(i), nil
+	})
+	m("reverse", "Reverse *IN PLACE*.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		for i, j := 0, len(d.items)-1; i < j; i, j = i+1, j-1 {
+			d.items[i], d.items[j] = d.items[j], d.items[i]
+		}
+		return py.None, nil
+	})
+	m("rotate", "Rotate the deque n steps to the right (default n=1).", func(d *Deque, args py.Tuple) (py.Object, error) {
+		n := 1
+		if len(args) > 0 {
+			var err error
+			if n, err = py.IndexInt(args[0]); err != nil {
+				return nil, err
+			}
+		}
+		if l := len(d.items); l > 1 {
+			n = ((n % l) + l) % l
+			d.items = append(append([]py.Object{}, d.items[l-n:]...), d.items[:l-n]...)
+		}
+		return py.None, nil
+	})
+	m("copy", "Return a shallow copy of a deque.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		return &Deque{items: append([]py.Object(nil), d.items...), maxlen: d.maxlen}, nil
+	})
+	m("insert", "Insert value before index.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		var iv, v py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "insert", 2, 2, &iv, &v); err != nil {
+			return nil, err
+		}
+		i, err := py.IndexInt(iv)
+		if err != nil {
+			return nil, err
+		}
+		if d.maxlen >= 0 && len(d.items) >= d.maxlen {
+			return nil, py.ExceptionNewf(py.IndexError, "deque already at its maximum size")
+		}
+		if i < 0 {
+			i += len(d.items)
+		}
+		i = max(0, min(i, len(d.items)))
+		d.items = append(d.items[:i:i], append([]py.Object{v}, d.items[i:]...)...)
+		return py.None, nil
+	})
+	m("__delitem__", "Delete self[index].", func(d *Deque, args py.Tuple) (py.Object, error) {
+		var k py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__delitem__", 1, 1, &k); err != nil {
+			return nil, err
+		}
+		i, err := py.IndexInt(k)
+		if err != nil {
+			return nil, err
+		}
+		if i < 0 {
+			i += len(d.items)
+		}
+		if i < 0 || i >= len(d.items) {
+			return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
+		}
+		d.items = append(d.items[:i:i], d.items[i+1:]...)
+		return py.None, nil
+	})
+	DequeType.Dict.Set("maxlen", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		if d := self.(*Deque); d.maxlen >= 0 {
+			return py.Int(d.maxlen), nil
+		}
+		return py.None, nil
+	}})
+}
+
+func mustRepr(o py.Object) string { s, _ := py.ReprAsString(o); return s }
 
 func reprItems(items []py.Object) ([]string, error) {
 	out := make([]string, len(items))
@@ -1814,6 +1951,21 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		fieldItems[i] = py.String(f)
 	}
 	cls.Dict.Set("_fields", py.NewListFromItems(fieldItems))
+	// Class-level field accessors, so "Cls.field.__doc__ = ..." works as in CPython.
+	for i, f := range fields {
+		if _, taken := cls.Dict.Get(f); !taken && !strings.HasPrefix(f, "_") {
+			idx := i
+			cls.Dict.Set(f, &py.Property{
+				Fget: func(self py.Object) (py.Object, error) {
+					if n, ok := self.(*NamedTuple); ok && idx < len(n.values) {
+						return n.values[idx], nil
+					}
+					return nil, py.ExceptionNewf(py.AttributeError, "no field")
+				},
+				Doc: "Alias for field number " + strconv.Itoa(i),
+			})
+		}
+	}
 	// defaults= fills the RIGHTMOST fields, as in CPython.
 	if defaults != py.None {
 		ds, err := py.SequenceList(defaults)
@@ -2464,4 +2616,168 @@ func sameValues(a, b []py.Object) bool {
 		}
 	}
 	return true
+}
+
+func (d *DefaultDict) lookup(key py.Object) (py.Object, string, bool) {
+	enc, err := py.DictKey(key)
+	if err != nil {
+		return nil, "", false
+	}
+	v, ok := d.values.Get(enc)
+	return v, enc, ok
+}
+
+func (d *DefaultDict) remove(enc string) {
+	d.values.Del(enc)
+	for i, k := range d.keys {
+		if k == enc {
+			d.keys = append(d.keys[:i], d.keys[i+1:]...)
+			break
+		}
+	}
+}
+
+func (d *DefaultDict) pairs() ([]py.Object, []py.Object, error) {
+	ks := make([]py.Object, 0, len(d.keys))
+	vs := make([]py.Object, 0, len(d.keys))
+	for _, enc := range d.keys {
+		k, err := py.DictKeyDecode(enc)
+		if err != nil {
+			return nil, nil, err
+		}
+		v, _ := d.values.Get(enc)
+		ks, vs = append(ks, k), append(vs, v)
+	}
+	return ks, vs, nil
+}
+
+func init() {
+	def := func(name string, f func(d *DefaultDict, args py.Tuple, kwargs py.StringDict) (py.Object, error)) {
+		DefaultDictType.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+			d, ok := self.(*DefaultDict)
+			if !ok {
+				return nil, py.ExceptionNewf(py.TypeError, "descriptor '%s' requires a 'collections.defaultdict' object", name)
+			}
+			return f(d, args, kwargs)
+		}, 0, ""))
+	}
+	def("values", func(d *DefaultDict, _ py.Tuple, _ py.StringDict) (py.Object, error) {
+		_, vs, err := d.pairs()
+		return py.NewListFromItems(vs), err
+	})
+	def("items", func(d *DefaultDict, _ py.Tuple, _ py.StringDict) (py.Object, error) {
+		ks, vs, err := d.pairs()
+		items := make([]py.Object, len(ks))
+		for i := range ks {
+			items[i] = py.Tuple{ks[i], vs[i]}
+		}
+		return py.NewListFromItems(items), err
+	})
+	def("pop", func(d *DefaultDict, args py.Tuple, _ py.StringDict) (py.Object, error) {
+		var key, def py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		if v, enc, ok := d.lookup(key); ok {
+			d.remove(enc)
+			return v, nil
+		}
+		if def != nil {
+			return def, nil
+		}
+		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
+	})
+	def("setdefault", func(d *DefaultDict, args py.Tuple, _ py.StringDict) (py.Object, error) {
+		var key py.Object
+		var def py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "setdefault", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		if v, _, ok := d.lookup(key); ok {
+			return v, nil
+		}
+		return def, d.set(key, def)
+	})
+	def("update", func(d *DefaultDict, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) > 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "update expected at most 1 argument, got %d", len(args))
+		}
+		if len(args) == 1 {
+			if src, ok := args[0].(*DefaultDict); ok {
+				ks, vs, err := src.pairs()
+				if err != nil {
+					return nil, err
+				}
+				for i := range ks {
+					if err := d.set(ks[i], vs[i]); err != nil {
+						return nil, err
+					}
+				}
+			} else if keys, err := py.GetAttrString(args[0], "keys"); err == nil {
+				kl, err := py.Call(keys, py.Tuple{}, py.StringDict{})
+				if err != nil {
+					return nil, err
+				}
+				kseq, err := py.SequenceList(kl)
+				if err != nil {
+					return nil, err
+				}
+				for _, k := range kseq.Items {
+					v, err := py.GetItem(args[0], k)
+					if err != nil {
+						return nil, err
+					}
+					if err := d.set(k, v); err != nil {
+						return nil, err
+					}
+				}
+			} else {
+				seq, err := py.SequenceList(args[0])
+				if err != nil {
+					return nil, err
+				}
+				for _, it := range seq.Items {
+					pair, err := py.SequenceList(it)
+					if err != nil || len(pair.Items) != 2 {
+						return nil, py.ExceptionNewf(py.ValueError, "dictionary update sequence element is not a pair")
+					}
+					if err := d.set(pair.Items[0], pair.Items[1]); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
+		for _, e := range kwargs.Items() {
+			if err := d.set(py.String(e.Key), e.Value); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
+	})
+	def("copy", func(d *DefaultDict, _ py.Tuple, _ py.StringDict) (py.Object, error) {
+		n := &DefaultDict{defaultFactory: d.defaultFactory, values: py.NewStringDict()}
+		for _, enc := range d.keys {
+			v, _ := d.values.Get(enc)
+			n.keys = append(n.keys, enc)
+			n.values.Set(enc, v)
+		}
+		return n, nil
+	})
+	def("clear", func(d *DefaultDict, _ py.Tuple, _ py.StringDict) (py.Object, error) {
+		d.keys, d.values = nil, py.NewStringDict()
+		return py.None, nil
+	})
+	def("popitem", func(d *DefaultDict, _ py.Tuple, _ py.StringDict) (py.Object, error) {
+		if len(d.keys) == 0 {
+			return nil, py.ExceptionNewf(py.KeyError, "popitem(): dictionary is empty")
+		}
+		enc := d.keys[len(d.keys)-1]
+		k, err := py.DictKeyDecode(enc)
+		if err != nil {
+			return nil, err
+		}
+		v, _ := d.values.Get(enc)
+		d.remove(enc)
+		return py.Tuple{k, v}, nil
+	})
 }

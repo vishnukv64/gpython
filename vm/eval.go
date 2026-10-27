@@ -120,6 +120,11 @@ func (vm *Vm) SetException(exception py.Object) {
 	// by the interpreter itself.  That is how pip reported its own failures,
 	// so a broken run looked like no error at all.
 	if exc, ok := exception.(*py.Exception); ok {
+		// An error from Go code is raised here; one already chained keeps its
+		// context as it propagates through outer frames.
+		if exc.Context == nil {
+			py.ChainContext(exc, vm.frame)
+		}
 		py.SetCurrentException(exc)
 	}
 }
@@ -809,6 +814,7 @@ func do_YIELD_FROM(vm *Vm, arg int32) error {
 		// "r = yield from sub()" bound the GENERATOR - losing PEP 380's whole
 		// return-value protocol.
 		vm.POP() // drop the exhausted sub-iterator
+		vm.frame.DelegateLen = 0
 		value := py.Object(py.None)
 		if e, ok := err.(*py.Exception); ok {
 			if args, ok := e.Args.(py.Tuple); ok && len(args) > 0 {
@@ -826,6 +832,7 @@ func do_YIELD_FROM(vm *Vm, arg int32) error {
 
 	vm.retval = retval
 	vm.frame.Yielded = true
+	vm.frame.DelegateLen = 1
 	vm.why = whyYield
 	return nil
 }
@@ -833,6 +840,10 @@ func do_YIELD_FROM(vm *Vm, arg int32) error {
 // Pops TOS and yields it from a generator.
 func do_YIELD_VALUE(vm *Vm, arg int32) error {
 	vm.retval = vm.POP()
+	vm.frame.DelegateLen = 0
+	if vm.frame.Code.Flags&py.CO_ASYNC_GENERATOR != 0 {
+		vm.retval = &py.AsyncGenWrappedValue{Value: vm.retval}
+	}
 	vm.frame.Yielded = true
 	vm.why = whyYield
 	return nil
@@ -1398,6 +1409,15 @@ func do_IMPORT_FROM(vm *Vm, namei int32) error {
 	if err != nil {
 		// Catch AttributeError and rethrow as ImportError
 		if py.IsException(py.AttributeError, err) {
+			// circular `from pkg import submodule`: fall back to sys.modules["pkg.submodule"]
+			if pn, e := py.GetAttrString(module, "__name__"); e == nil {
+				if s, ok := pn.(py.String); ok {
+					if m, ok := vm.context.Store().ModuleLike(string(s) + "." + name); ok {
+						vm.PUSH(m)
+						return nil
+					}
+				}
+			}
 			err = py.ExceptionNewf(py.ImportError, "cannot import name %s", name)
 		}
 		return err
@@ -1503,17 +1523,11 @@ func do_GET_AITER(vm *Vm, arg int32) error {
 		return err
 	}
 	vm.SET_TOP(res)
-	// The TOS slot above is reused by FOR_ITER_AEXPR for the value, so the
-	// frame stack must have been sized for 2 entries here even though only
-	// 1 is live for a moment.  (StackEffect counts GET_ANEXT's push.)
-	vm.PUSH(py.None)
 	return nil
 }
 
 func do_GET_ANEXT(vm *Vm, arg int32) error {
-	awaitSlot := vm.TOP() // placeholder pushed by GET_AITER
-	_ = awaitSlot
-	obj := vm.SECOND()
+	obj := vm.TOP()
 	anext, err := py.GetAttrString(obj, "__anext__")
 	if err != nil {
 		return err
@@ -1532,15 +1546,21 @@ func do_GET_ANEXT(vm *Vm, arg int32) error {
 // StopAsyncIteration -> drop iterator and jump to loop end (FOR_ITER's
 // StopIteration case, async-style).  Anything else propagates.
 func do_FOR_ITER_AEXPR(vm *Vm, delta int32) error {
+	u := vm.POP() // value sent in: None the first time, the resumed value after a suspension
 	awaitable := vm.TOP()
 	var res py.Object
 	var err error
-	if c, isCoroutine := awaitable.(*py.Coroutine); isCoroutine {
-		res, err = c.Send(py.None)
+	if u == py.None {
+		if c, isCoroutine := awaitable.(*py.Coroutine); isCoroutine {
+			res, err = c.Send(py.None)
+		} else {
+			res, err = py.Next(awaitable)
+		}
 	} else {
-		res, err = py.Next(awaitable)
+		res, err = py.Send(awaitable, u)
 	}
 	if err != nil {
+		vm.frame.DelegateLen = 0
 		switch {
 		case py.IsException(py.StopAsyncIteration, err):
 			// Loop is over: drop both the awaitable and the iterator.
@@ -1549,31 +1569,36 @@ func do_FOR_ITER_AEXPR(vm *Vm, delta int32) error {
 			vm.frame.Lasti += delta
 			return nil
 		case py.IsException(py.StopIteration, err):
-			// The awaited __anext__ RETURNED: StopIteration's first arg is
-			// the iteration value.  (py.Next returns the StopIteration as
-			// the error; note it may be the bare type when the generator
-			// returned None.)
-			value := py.Object(py.None)
-			if e, ok := err.(*py.Exception); ok {
-				if args, ok := e.Args.(py.Tuple); ok && len(args) > 0 {
-					value = args[0]
-				}
-			} else if ei, ok := err.(py.ExceptionInfo); ok && ei.Value != nil {
-				if args, ok2 := ei.Value.(*py.Exception); ok2 {
-					if t, ok3 := args.Args.(py.Tuple); ok3 && len(t) > 0 {
-						value = t[0]
-					}
-				}
-			}
 			vm.DROP()
-			vm.PUSH(value)
+			vm.PUSH(stopIterationValue(err))
 			return nil
 		}
 		return err
 	}
-	// The awaitable yielded (it is an iterator, not a finished coroutine).
-	vm.SET_TOP(res)
+	// The awaitable suspended (a real await inside __anext__): yield it to
+	// our caller and re-run this instruction when resumed.
+	vm.frame.Lasti -= 3
+	vm.retval = res
+	vm.frame.Yielded = true
+	vm.frame.DelegateLen = 3
+	vm.why = whyYield
 	return nil
+}
+
+// stopIterationValue extracts StopIteration.value from err (bare type -> None).
+func stopIterationValue(err error) py.Object {
+	if e, ok := err.(*py.Exception); ok {
+		if args, ok := e.Args.(py.Tuple); ok && len(args) > 0 {
+			return args[0]
+		}
+	} else if ei, ok := err.(py.ExceptionInfo); ok && ei.Value != nil {
+		if e2, ok := ei.Value.(*py.Exception); ok {
+			if t, ok := e2.Args.(py.Tuple); ok && len(t) > 0 {
+				return t[0]
+			}
+		}
+	}
+	return py.None
 }
 
 // do_BEFORE_AWAIT turns the awaitable (and the __aenter__/__aexit__ call
@@ -1590,10 +1615,14 @@ func do_FOR_ITER_AEXPR(vm *Vm, delta int32) error {
 // conservative permissive case).
 func do_BEFORE_AWAIT(vm *Vm, arg int32) error {
 	obj := vm.TOP()
-	switch obj.(type) {
-	case *py.Coroutine, *py.Generator:
-		// already a driving iterator for the YIELD_FROM machinery
+	switch g := obj.(type) {
+	case *py.Coroutine:
 		return nil
+	case *py.Generator:
+		// only @types.coroutine generators are awaitable
+		if g.Code != nil && g.Code.Flags&py.CO_ITERABLE_COROUTINE != 0 {
+			return nil
+		}
 	}
 	if awaitMethod, err := py.GetAttrString(obj, "__await__"); err == nil {
 		iter, err := py.Call(awaitMethod, nil, py.StringDict{})
@@ -1606,9 +1635,9 @@ func do_BEFORE_AWAIT(vm *Vm, arg int32) error {
 	if obj == py.None {
 		// "await None" is convenient in test doubles; CPython raises
 		// TypeError, so do that rather than silently driving it.
-		return py.ExceptionNewf(py.TypeError, "object NoneType can't be used in 'await' expression")
+		return py.ExceptionNewf(py.TypeError, "'NoneType' object can't be awaited")
 	}
-	return py.ExceptionNewf(py.TypeError, "object %s can't be used in 'await' expression", obj.Type().Name)
+	return py.ExceptionNewf(py.TypeError, "'%s' object can't be awaited", obj.Type().Name)
 }
 
 // do_SETUP_ASYNC_WITH mirrors SETUP_WITH for "async with": __aexit__ is
@@ -1638,7 +1667,7 @@ func do_SETUP_ASYNC_WITH(vm *Vm, delta int32) error {
 					return err
 				}
 			} else {
-				return py.ExceptionNewf(py.TypeError, "object %s can't be used in 'await' expression", res.Type().Name)
+				return py.ExceptionNewf(py.TypeError, "'%s' object can't be awaited", res.Type().Name)
 			}
 		}
 	}
@@ -1847,6 +1876,9 @@ func (vm *Vm) raise(exc, cause py.Object) error {
 			return py.ExceptionNewf(py.RuntimeError, "No active exception to reraise")
 		} else {
 			// Resignal the exception
+			if e, ok := vm.exc.Value.(*py.Exception); ok {
+				py.RestoreTraceback(e)
+			}
 			vm.curexc = vm.exc
 			// Signal the existing exception again
 			vm.why = whyException
@@ -1860,12 +1892,29 @@ func (vm *Vm) raise(exc, cause py.Object) error {
 		// which exception is in play, and nothing clears it until another
 		// raise, so an except clause calling exc_info() sees the exception it
 		// is handling.
+		py.ChainContext(excException, vm.frame)
 		py.SetCurrentException(excException)
 		if debugging {
 			debugf("raise: excException = %v\n", excException)
 		}
 		if cause != nil {
-			excException.Cause = py.MakeException(cause)
+			// "raise X from Y" always suppresses the context; "from None"
+			// leaves __cause__ None.
+			excException.SuppressContext = true
+			excException.Cause = nil
+			if cause != py.None {
+				ok := false
+				switch c := cause.(type) {
+				case *py.Exception:
+					ok = true
+				case *py.Type:
+					ok = c.IsSubtype(py.BaseException)
+				}
+				if !ok {
+					return py.ExceptionNewf(py.TypeError, "exception causes must derive from BaseException")
+				}
+				excException.Cause = py.MakeException(cause)
+			}
 		}
 		return excException
 	}
@@ -2269,10 +2318,23 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	obj := args[0]
 	seen := map[string]bool{}
+	// module.__dir__ is just the module's namespace, not the type's attributes.
+	if m, ok := obj.(*py.Module); ok {
+		names := append([]string(nil), m.Globals.Keys()...)
+		sort.Strings(names)
+		return dirList(names), nil
+	}
+	t0, _ := obj.(*py.Type)
+	isClass := t0 != nil && py.IsClassObject(t0)
 
 	// Attributes supplied by the type and everything it inherits.
 	for t := obj.Type(); t != nil; t = t.Base {
 		for _, name := range t.Dict.Keys() {
+			// Type-only metadata lives on object's dict (see py/type.go); an
+			// instance does not have it, and getattr on it raises.
+			if !isClass && (name == "__bases__" || name == "__mro__" || name == "__qualname__") {
+				continue
+			}
 			seen[name] = true
 		}
 	}
@@ -2418,6 +2480,7 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 	vm.exc.Type, _ = vm.POP().(*py.Type)
 	vm.exc.Value = vm.POP()
 	vm.exc.Traceback, _ = vm.POP().(*py.Traceback)
+	frame.Handling = vm.exc.Value
 	if debugging {
 		debugf("** UnwindExceptHandler exc = (type: %v, value: %v, traceback: %v)\n", vm.exc.Type, vm.exc.Value, vm.exc.Traceback)
 	}
@@ -2493,6 +2556,12 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 			frame.PendingException = nil
 			vm.SetException(pending)
 			injected = true
+		}
+		if py.SignalPending.Load() && py.RunSignalHandlers != nil {
+			if err := py.RunSignalHandlers(); err != nil {
+				vm.SetException(py.MakeException(err))
+				injected = true
+			}
 		}
 		if debugging {
 			debugf("* %4d:", frame.Lasti)
@@ -2857,7 +2926,11 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 				vm.exc.Type = exc
 				vm.exc.Value = val
 				vm.exc.Traceback = tb
+				frame.Handling = val
 				py.SetCurrentExceptionFromValue(val)
+				if e, ok := val.(*py.Exception); ok {
+					py.TrimTraceback(e, frame)
+				}
 				vm.PUSH(tb)
 				vm.PUSH(val)
 				if exc == nil {
@@ -3166,6 +3239,10 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 	}
 	for i := 0; i < len(co.Freevars); i++ {
 		freevars[len(co.Cellvars)+i] = closure[i]
+	}
+
+	if co.Flags&py.CO_ASYNC_GENERATOR != 0 {
+		return py.NewAsyncGenerator(f), nil
 	}
 
 	if co.Flags&py.CO_COROUTINE != 0 {

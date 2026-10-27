@@ -1,0 +1,11 @@
+True
+True True
+['SIGUSR1']
+True
+True
+<Signals.SIGINT: 2> <Handlers.SIG_IGN: 1>
+True
+KeyboardInterrupt
+OSError
+signal number out of range
+True

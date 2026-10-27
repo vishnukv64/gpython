@@ -40,7 +40,7 @@ func init() {
 		py.DictEntry{Key: "count", Value: py.MustNewMethod("count", count, 0, "count(start=0, step=1) --> count object")},
 		py.DictEntry{Key: "repeat", Value: py.MustNewMethod("repeat", repeat, 0, "repeat(object [,times]) -> create an iterator which returns the object for the specified number of times.")},
 		py.DictEntry{Key: "cycle", Value: py.MustNewMethod("cycle", cycle, 0, "cycle(iterable) --> cycle object: repeat the elements of the iterable forever.")},
-		py.DictEntry{Key: "chain", Value: py.MustNewMethod("chain", chain, 0, "chain(*iterables) --> chain object: chain from the first until the last is exhausted.")},
+		py.DictEntry{Key: "chain", Value: chainType},
 		py.DictEntry{Key: "islice", Value: py.MustNewMethod("islice", islice, 0, "islice(iterable, stop) --> islice object")},
 		py.DictEntry{Key: "starmap", Value: py.MustNewMethod("starmap", starmap, 0, "starmap(function, sequence) --> starmap object")},
 		py.DictEntry{Key: "accumulate", Value: py.MustNewMethod("accumulate", accumulate, 0, "accumulate(iterable[, func, *, initial=None]) --> accumulate object")},
@@ -238,17 +238,42 @@ var (
 // ---------------------------------------------------------------------------
 // terminating iterators
 
-func chain(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return &chainIter{sources: args, index: 0}, nil
-}
-
 type chainIter struct {
 	sources py.Tuple
 	index   int
 	current py.Object
 }
 
-var chainType = py.NewType("itertools.chain", "An iterator chaining several iterables.")
+var chainType = py.NewTypeX("itertools.chain", "chain(*iterables) --> chain object: chain from the first until the last is exhausted.",
+	func(_ *py.Type, args py.Tuple, _ py.StringDict) (py.Object, error) {
+		return &chainIter{sources: args}, nil
+	}, nil)
+
+func init() {
+	chainType.Dict.Set("from_iterable", &py.ClassMethod{Dict: py.NewStringDict(), Callable: py.MustNewMethod("from_iterable",
+		func(self py.Object, args py.Tuple) (py.Object, error) {
+			// self is the class (bound by ClassMethod); args[0] the iterable of iterables.
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "from_iterable() takes exactly one argument")
+			}
+			it, err := iterOf(args[0])
+			if err != nil {
+				return nil, err
+			}
+			var all py.Tuple
+			for {
+				v, err := py.Next(it)
+				if err != nil {
+					if py.IsException(py.StopIteration, err) {
+						break
+					}
+					return nil, err
+				}
+				all = append(all, v)
+			}
+			return &chainIter{sources: all}, nil
+		}, 0, "Alternative chain() constructor taking a single iterable argument.")})
+}
 
 func (c *chainIter) Type() *py.Type { return chainType }
 

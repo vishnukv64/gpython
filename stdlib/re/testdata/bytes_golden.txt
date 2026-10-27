@@ -1,0 +1,12 @@
+[(b'a', b'b'), (b'a', b'')] [b'foo', b'bar']
+[b'a', b',', b'b', b',', b'c'] [b'a', b'b']
+b'x<b>' (b'---', 3)
+b'b[a]n[a]n[a]'
+b'a' b'a' b'a' (b'a', None) (b'a', b'd') {'x': b'a'} b'ac'
+(b'a', None)
+TypeError cannot use a bytes pattern on a string-like object
+TypeError cannot use a string pattern on a bytes-like object
+TypeError sequence item 0: expected a bytes-like object, str found
+TypeError sequence item 0: expected str instance, bytes found
+TypeError cannot use a bytes pattern on a string-like object
+[b'\xff', b'\x00'] b'\xfe'

@@ -1,0 +1,10 @@
+boom (3 sub-exceptions) ExceptionGroup('boom', [ValueError(1), TypeError(2), ExceptionGroup('in', [KeyError(3), ValueError(4)])]) ExceptionGroup
+('boom', [ValueError(1), TypeError(2), ExceptionGroup('in', [KeyError(3), ValueError(4)])])
+ExceptionGroup('boom', [ValueError(1), ExceptionGroup('in', [ValueError(4)])])
+ExceptionGroup('boom', [TypeError(2), ExceptionGroup('in', [KeyError(3)])])
+ExceptionGroup('boom', [ExceptionGroup('in', [KeyError(3)])])
+True False
+ExceptionGroup
+caught 3 boom
+second argument (exceptions) must be a non-empty sequence
+Cannot nest BaseExceptions in an ExceptionGroup

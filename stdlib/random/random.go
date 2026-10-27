@@ -16,6 +16,7 @@
 package random
 
 import (
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"math"
@@ -65,11 +66,36 @@ type Random struct {
 	// whose gauss() does the same.
 	haveGauss bool
 	nextGauss float64
+	system    bool // SystemRandom: backed by crypto/rand, seed() is a no-op
 }
 
 var RandomType = py.NewTypeX("random.Random", "Random() -> create a random number generator with its own internal state.", randomNew, nil)
 
-func (r *Random) Type() *py.Type { return RandomType }
+func (r *Random) Type() *py.Type {
+	if r.system {
+		return SystemRandomType
+	}
+	return RandomType
+}
+
+// cryptoSource feeds math/rand from the OS entropy pool.
+type cryptoSource struct{}
+
+func (cryptoSource) Int63() int64 { return int64(cryptoSource{}.Uint64() >> 1) }
+func (cryptoSource) Seed(int64)   {}
+func (cryptoSource) Uint64() uint64 {
+	var b [8]byte
+	if _, err := cryptorand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	return binary.LittleEndian.Uint64(b[:])
+}
+
+// SystemRandomType is random.SystemRandom.
+// ponytail: subclassing is unsupported (Go-typed); getstate/setstate absent.
+var SystemRandomType = py.NewTypeX("random.SystemRandom", "Alternate random number generator using sources provided by the operating system.", func(*py.Type, py.Tuple, py.StringDict) (py.Object, error) {
+	return &Random{src: mathrand.New(cryptoSource{}), system: true}, nil
+}, nil)
 
 func (r *Random) M__repr__() (py.Object, error) {
 	return py.String("<random.Random object>"), nil
@@ -107,6 +133,9 @@ func randomNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Objec
 
 // seed applies one of the seeding forms CPython accepts.
 func (r *Random) seed(x py.Object) error {
+	if r.system {
+		return nil
+	}
 	switch v := x.(type) {
 	case py.NoneType:
 		r.src = mathrand.New(mathrand.NewSource(unpredictableSeed()))
@@ -674,6 +703,7 @@ var methods = []struct {
 	{"randbytes", "Generate n random bytes.", rndRandbytes},
 	{"getrandbits", "getrandbits(k) -> x.  Generates an int with k random bits.", rndGetrandbits},
 	{"randint", "Return random integer in range [a, b], including both end points.", rndRandint},
+	{"_randbelow", "Return a random int in [0, n).", rndRandrange},
 	{"randrange", "Choose a random item from range(start, stop[, step]).", rndRandrange},
 	{"choice", "Choose a random element from a non-empty sequence.", rndChoice},
 	{"choices", "Returns a k sized list of elements chosen from the population with replacement.", rndChoices},
@@ -689,6 +719,7 @@ func init() {
 	moduleMethods := make([]*py.Method, 0, len(methods))
 	for _, m := range methods {
 		RandomType.Dict.Set(m.name, classMethod(m.name, m.doc, m.fn))
+		SystemRandomType.Dict.Set(m.name, classMethod(m.name, m.doc, m.fn))
 		moduleMethods = append(moduleMethods, moduleFn(m.name, m.doc, m.fn))
 	}
 
@@ -700,6 +731,7 @@ func init() {
 		Methods: moduleMethods,
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "Random", Value: RandomType},
+			py.DictEntry{Key: "SystemRandom", Value: SystemRandomType},
 		),
 	})
 }

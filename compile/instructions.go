@@ -137,7 +137,7 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 	case vm.GET_ANEXT:
 		return 1
 	case vm.FOR_ITER_AEXPR:
-		return 0 /* -2 if the iterator ended */
+		return -1 /* the sent None; -2 more if the iterator ended */
 	case vm.WITH_CLEANUP:
 		return -1 /* XXX Sometimes more */
 	case vm.RETURN_VALUE:

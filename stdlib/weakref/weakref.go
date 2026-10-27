@@ -353,7 +353,7 @@ var WeakSetType = py.NewTypeX("weakref.WeakSet", "A set that holds weak referenc
 			for _, item := range items.Items {
 				encoded, kerr := py.DictKey(item)
 				if kerr == nil {
-					s.items.Set(encoded, py.True)
+					s.items.Set(encoded, item) // the value is the member, so the set can be iterated
 				}
 			}
 		}
@@ -388,7 +388,7 @@ func init() {
 		}
 		switch v := self.(type) {
 		case *WeakSet:
-			v.items.Set(encoded, py.True)
+			v.items.Set(encoded, item)
 		case *WeakValueDictionary:
 			// add() on a WeakValueDictionary is a setitem with the value.
 			if len(args) >= 2 {
@@ -410,6 +410,37 @@ func init() {
 		self.(*WeakSet).items.Del(encoded)
 		return py.None, nil
 	}, 0, "Discard an item."))
+	WeakSetType.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var out py.Tuple
+		self.(*WeakSet).items.Range(func(_ string, v py.Object) bool {
+			out = append(out, v)
+			return false
+		})
+		return py.NewIterator(out), nil
+	}, 0, "Implement iter(self)."))
+	WeakSetType.Dict.Set("clear", py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
+		s := self.(*WeakSet)
+		for _, k := range s.items.Keys() {
+			s.items.Del(k)
+		}
+		return py.None, nil
+	}, 0, "Remove all elements."))
+	WeakSetType.Dict.Set("remove", py.MustNewMethod("remove", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var item py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "remove", 1, 1, &item); err != nil {
+			return nil, err
+		}
+		encoded, err := py.DictKey(item)
+		if err != nil {
+			return nil, err
+		}
+		s := self.(*WeakSet)
+		if _, ok := s.items.Get(encoded); !ok {
+			return nil, py.ExceptionNewf(py.KeyError, "%s", mustRepr(item))
+		}
+		s.items.Del(encoded)
+		return py.None, nil
+	}, 0, "Remove an element; raise KeyError if absent."))
 	WeakValueDictionaryType.Dict.Set("keys", py.MustNewMethod("keys", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*WeakValueDictionary)
 		out := []py.Object{}
@@ -473,3 +504,5 @@ var (
 	_ py.I__contains__     = (*WeakValueDictionary)(nil)
 	_ py.I__iter__         = (*WeakValueDictionary)(nil)
 )
+
+func mustRepr(o py.Object) string { r, _ := py.ReprAsString(o); return r }

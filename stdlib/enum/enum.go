@@ -16,6 +16,7 @@
 package enum
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -133,6 +134,10 @@ func init() {
 		return self.(*EnumMember).M__ne__(other)
 	}, 0, "Return self!=value."))
 
+	for _, t := range []*py.Type{EnumType, IntEnumType, FlagType, IntFlagType} {
+		t.Dict.Set("_convert_", py.MustNewMethod("_convert_", enumConvert, py.METH_CLASS, "Create a new Enum subclass that replaces a collection of global constants."))
+	}
+
 	py.BuildEnumClass = buildEnumClass
 
 	// An enum member is an instance of the enum class for isinstance, which
@@ -165,6 +170,78 @@ func init() {
 		},
 		Globals: globals,
 	})
+}
+
+// enumConvert is Enum._convert_(name, module, filter, source=None, *, boundary=None, as_global=False).
+func enumConvert(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var name, module, filter, source, boundary, asGlobal py.Object = nil, nil, nil, py.None, py.None, py.False
+	err := py.ParseTupleAndKeywords(args, kwargs, "OOO|O$OO:_convert_", []string{"name", "module", "filter", "source", "boundary", "as_global"},
+		&name, &module, &filter, &source, &boundary, &asGlobal)
+	if err != nil {
+		return nil, err
+	}
+	modName, ok := module.(py.String)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "_convert_() argument 'module' must be str")
+	}
+	frame := py.CurrentFrame()
+	if frame == nil {
+		return nil, py.ExceptionNewf(py.RuntimeError, "_convert_: no running frame")
+	}
+	mod, err := frame.Context.GetModule(string(modName))
+	if err != nil {
+		return nil, py.ExceptionNewf(py.KeyError, "%q", string(modName))
+	}
+	src := mod.Globals
+	if source != py.None {
+		d, ok := source.(py.StringDict)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "_convert_: source must be a dict")
+		}
+		src = d
+	}
+	var picked []string
+	for _, k := range src.Keys() {
+		r, err := py.Call(filter, py.Tuple{py.String(k)}, py.NewStringDict())
+		if err != nil {
+			return nil, err
+		}
+		if ok, err := py.ObjectIsTrue(r); err != nil {
+			return nil, err
+		} else if ok {
+			picked = append(picked, k)
+		}
+	}
+	// CPython orders converted members by (value, name).
+	var sortErr error
+	sort.SliceStable(picked, func(i, j int) bool {
+		a := py.Tuple{src.GetOrNil(picked[i]), py.String(picked[i])}
+		b := py.Tuple{src.GetOrNil(picked[j]), py.String(picked[j])}
+		lt, err := py.Lt(a, b)
+		if err != nil {
+			sortErr = err
+			return false
+		}
+		return lt == py.True
+	})
+	if sortErr != nil {
+		return nil, sortErr
+	}
+	ns := py.NewStringDict()
+	for _, k := range picked {
+		ns.Set(k, src.GetOrNil(k))
+	}
+	cls, err := buildEnumClass(string(name.(py.String)), []py.Object{self}, ns)
+	if err != nil {
+		return nil, err
+	}
+	t := cls.(*py.Type)
+	t.Dict.Set("__module__", modName)
+	for _, k := range ns.Keys() {
+		mod.Globals.Set(k, t.Dict.GetOrNil(k))
+	}
+	mod.Globals.Set(string(name.(py.String)), t)
+	return t, nil
 }
 
 func enumUnique(fn py.Object) (py.Object, error) { return fn, nil }
@@ -220,13 +297,8 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 	byValue := map[string]*EnumMember{}
 	autoValue := int64(1)
 
-	// Members keep the order they were written in, so iterate the sorted
-	// keys of a temporary list rather than map order... but the namespace is
-	// a map with no order.  Member order therefore follows the order the
-	// class body produced the names, which the compiler records for us in
-	// the insertion-ordered string dict used for a class body; failing that,
-	// sorted order is deterministic and at least stable.
-	for _, key := range orderedNames(ns) {
+	// Members keep definition order: the class-body namespace is insertion-ordered.
+	for _, key := range ns.Keys() {
 		value := ns.GetOrNil(key)
 		if isMeta(key) {
 			cls.Dict.Set(key, value)
@@ -274,7 +346,7 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 
 	// The members cannot be stored in the class Dict: that holds py.Object
 	// values, and these are Go values.  They live in a side table instead.
-	enumDataFor[cls] = &enumData{members: members, byValue: byValue, names: memberNames}
+	enumDataFor[cls] = &enumData{members: members, byValue: byValue, names: memberNames, repr: cls.Dict.GetOrNil("__repr__")}
 	installClassMethods(cls)
 	return cls, nil
 }
@@ -284,6 +356,9 @@ type enumData struct {
 	members []*EnumMember
 	byValue map[string]*EnumMember
 	names   []string
+	// repr is the __repr__ the class body defined, which the class-level
+	// __repr__ installed by installClassMethods would otherwise replace.
+	repr py.Object
 }
 
 // enumDataFor maps an enum class to its members.  A map keyed by the class
@@ -302,29 +377,6 @@ func mustInt(value py.Object) int64 {
 		return int64(i)
 	}
 	return 0
-}
-
-// orderedNames returns the namespace keys, putting the ones that are members
-// in their natural order.  A class body namespace is unordered here, so the
-// member order is the sorted order of the names - deterministic, and enough
-// for the names Python code compares against.
-func orderedNames(ns py.StringDict) []string {
-	names := make([]string, 0, ns.Len())
-	names = append(names, ns.Keys()...)
-	// Sort with dunders and private names first, then the members, so the
-	// class attributes are set up before the members reference them.
-	sortStrings(names)
-	return names
-}
-
-func sortStrings(items []string) {
-	// A small insertion sort: the namespaces are tiny, and this avoids
-	// pulling in sort and its closure allocation for a handful of strings.
-	for i := 1; i < len(items); i++ {
-		for j := i; j > 0 && items[j] < items[j-1]; j-- {
-			items[j], items[j-1] = items[j-1], items[j]
-		}
-	}
 }
 
 // installClassMethods gives the enum class the behaviour Python code expects
@@ -414,12 +466,48 @@ func installClassMethods(cls *py.Type) {
 	}
 }
 
+// M__getattr__ reaches what the class body defined (methods, properties,
+// classmethods, staticmethods, plain attributes) through the member.
+func (m *EnumMember) M__getattr__(name string) (py.Object, error) {
+	if v := m.enum.Lookup(name); v != nil {
+		if g, ok := v.(py.I__get__); ok {
+			return g.M__get__(m, m.enum)
+		}
+		return v, nil
+	}
+	return nil, py.ExceptionNewf(py.AttributeError, "'%s' object has no attribute '%s'", m.enum.Name, name)
+}
+
+// override calls a user-defined dunder from the class body, if there is one.
+func (m *EnumMember) override(name string) (py.Object, bool, error) {
+	var v py.Object
+	if name == "__repr__" {
+		if d := dataOf(m.enum); d != nil {
+			v = d.repr
+		}
+	} else {
+		v = m.enum.Lookup(name)
+	}
+	f, ok := v.(*py.Function)
+	if !ok {
+		return nil, false, nil
+	}
+	r, err := py.Call(f, py.Tuple{m}, py.NewStringDict())
+	return r, true, err
+}
+
 // memberRepr is the "Color.RED" form Python prints.
 func (m *EnumMember) M__repr__() (py.Object, error) {
+	if r, ok, err := m.override("__repr__"); ok {
+		return r, err
+	}
 	return py.String("<" + m.enum.Name + "." + m.name + ": " + debugStr(m.value) + ">"), nil
 }
 
 func (m *EnumMember) M__str__() (py.Object, error) {
+	if r, ok, err := m.override("__str__"); ok {
+		return r, err
+	}
 	if m.enum.Base == py.IntType {
 		// An IntEnum prints like the int it is, as in Python.
 		return py.Str(m.value)
@@ -469,10 +557,11 @@ func debugStr(v py.Object) string {
 }
 
 var (
-	_ py.I__repr__  = (*EnumMember)(nil)
-	_ py.I__str__   = (*EnumMember)(nil)
-	_ py.I__eq__    = (*EnumMember)(nil)
-	_ py.I__ne__    = (*EnumMember)(nil)
-	_ py.I__hash__  = (*EnumMember)(nil)
-	_ py.I__index__ = (*EnumMember)(nil)
+	_ py.I__getattr__ = (*EnumMember)(nil)
+	_ py.I__repr__    = (*EnumMember)(nil)
+	_ py.I__str__     = (*EnumMember)(nil)
+	_ py.I__eq__      = (*EnumMember)(nil)
+	_ py.I__ne__      = (*EnumMember)(nil)
+	_ py.I__hash__    = (*EnumMember)(nil)
+	_ py.I__index__   = (*EnumMember)(nil)
 )

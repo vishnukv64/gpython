@@ -13,7 +13,6 @@ package zlib
 
 import (
 	"bytes"
-	"compress/zlib"
 	"hash/crc32"
 	"io"
 
@@ -48,7 +47,7 @@ var (
 
 // compressObj is the streaming compressor.
 type compressObj struct {
-	w       *zlib.Writer
+	w       io.WriteCloser
 	buf     bytes.Buffer
 	flushed bool
 	Dict    py.StringDict
@@ -57,21 +56,12 @@ type compressObj struct {
 func (c *compressObj) Type() *py.Type         { return compressObjType }
 func (c *compressObj) GetDict() py.StringDict { return c.Dict }
 
-// decompressObj is the streaming decompressor.
-type decompressObj struct {
-	r      io.ReadCloser
-	unused []byte
-	Dict   py.StringDict
-}
-
-func (d *decompressObj) Type() *py.Type         { return decompressObjType }
-func (d *decompressObj) GetDict() py.StringDict { return d.Dict }
-
 func zlibCompress(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var data py.Object
 	var level py.Object = py.Int(-1)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:compress",
-		[]string{"data", "level"}, &data, &level); err != nil {
+	var wb py.Object = py.Int(maxWBits)
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OO:compress",
+		[]string{"data", "level", "wbits"}, &data, &level, &wb); err != nil {
 		return nil, err
 	}
 	b, err := py.BytesFromObject(data)
@@ -79,8 +69,9 @@ func zlibCompress(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, err
 	}
 	lvl, _ := py.IndexInt(level)
+	wbits, _ := py.IndexInt(wb)
 	var buf bytes.Buffer
-	w, err := zlib.NewWriterLevel(&buf, lvl)
+	w, err := newWriter(&buf, wbits, lvl)
 	if err != nil {
 		return nil, py.ExceptionNewf(py.ValueError, "Invalid initialization option")
 	}
@@ -105,11 +96,14 @@ func zlibDecompress(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	if err != nil {
 		return nil, err
 	}
-	r, err := zlib.NewReader(bytes.NewReader(b))
+	wb, err := py.IndexInt(wbits)
+	if err != nil {
+		return nil, err
+	}
+	r, err := newReader(bytes.NewReader(b), wb)
 	if err != nil {
 		return nil, py.ExceptionNewf(errorType, "%s", err)
 	}
-	defer r.Close()
 	out, err := io.ReadAll(r)
 	if err != nil {
 		return nil, py.ExceptionNewf(errorType, "%s", err)
@@ -133,7 +127,8 @@ func zlibCompressObj(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	}
 	lvl, _ := py.IndexInt(level)
 	c := &compressObj{Dict: py.NewStringDict()}
-	w, err := zlib.NewWriterLevel(&c.buf, lvl)
+	wb, _ := py.IndexInt(wbits)
+	w, err := newWriter(&c.buf, wb, lvl)
 	if err != nil {
 		return nil, py.ExceptionNewf(py.ValueError, "Invalid initialization option")
 	}
@@ -190,44 +185,15 @@ func zlibDecompressObj(self py.Object, args py.Tuple, kwargs py.StringDict) (py.
 		[]string{"wbits", "zdict"}, &wbits, &zdict); err != nil {
 		return nil, err
 	}
-	return &decompressObj{Dict: py.NewStringDict()}, nil
-}
-
-func decompressObjDecompress(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	d := self.(*decompressObj)
-	var data py.Object
-	var maxLength py.Object = py.Int(0)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:decompress",
-		[]string{"data", "max_length"}, &data, &maxLength); err != nil {
-		return nil, err
-	}
-	b, err := py.BytesFromObject(data)
+	w, err := py.IndexInt(wbits)
 	if err != nil {
 		return nil, err
 	}
-	if d.r == nil {
-		r, err := zlib.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil, py.ExceptionNewf(errorType, "%s", err)
-		}
-		d.r = r
-	} else {
-		// Continue decompressing; the reader is refilled from a fresh buffer.
-		r, err := zlib.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil, py.ExceptionNewf(errorType, "%s", err)
-		}
-		d.r = r
-	}
-	out, err := io.ReadAll(d.r)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return nil, py.ExceptionNewf(errorType, "%s", err)
-	}
-	return py.Bytes(out), nil
+	return &decompressor{wbits: w, Dict: py.NewStringDict()}, nil
 }
 
 func decompressObjFlush(self py.Object, args py.Tuple) (py.Object, error) {
-	return py.Bytes(nil), nil
+	return self.(*decompressor).take(0), nil
 }
 
 func zlibCRC32(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -280,20 +246,11 @@ func init() {
 	compressObjType.Dict.Set("flush", py.MustNewMethod("flush", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 		return compressObjFlush(self, args, kw)
 	}, 0, "Return a bytes object containing any remaining compressed data."))
-	decompressObjType.Dict.Set("decompress", py.MustNewMethod("decompress", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
-		return decompressObjDecompress(self, args, kw)
-	}, 0, "Return a bytes object containing the decompressed data."))
 	decompressObjType.Dict.Set("flush", py.MustNewMethod("flush", decompressObjFlush, 0,
 		"Return the bytes remaining after a streaming decompress."))
-	decompressObjType.Dict.Set("unused_data", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.Bytes(self.(*decompressObj).unused), nil
-	}})
-	decompressObjType.Dict.Set("eof", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.Bool(false), nil
-	}})
-
 	globals := py.NewStringDict()
 	globals.Set("error", errorType)
+	globals.Set("_ZlibDecompressor", decompressorType)
 	globals.Set("compress", py.MustNewMethod("compress", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 		return zlibCompress(self, args, kw)
 	}, 0, "compress(data, level=-1) - return the compressed data."))

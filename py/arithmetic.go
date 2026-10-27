@@ -9,6 +9,8 @@
 
 package py
 
+import "reflect"
+
 // Neg the python Object returning an Object
 //
 // Will raise TypeError if Neg can't be run on this object
@@ -24,6 +26,11 @@ func Neg(a Object) (Object, error) {
 		}
 	}
 
+	if res, ok, err := callPyUnary(a, "__neg__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for -: '%s'", a.Type().Name)
 }
 
@@ -42,6 +49,11 @@ func Pos(a Object) (Object, error) {
 		}
 	}
 
+	if res, ok, err := callPyUnary(a, "__pos__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for +: '%s'", a.Type().Name)
 }
 
@@ -60,6 +72,11 @@ func Abs(a Object) (Object, error) {
 		}
 	}
 
+	if res, ok, err := callPyUnary(a, "__abs__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for abs: '%s'", a.Type().Name)
 }
 
@@ -78,6 +95,11 @@ func Invert(a Object) (Object, error) {
 		}
 	}
 
+	if res, ok, err := callPyUnary(a, "__invert__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ~: '%s'", a.Type().Name)
 }
 
@@ -100,6 +122,12 @@ func MakeComplex(a Object) (Object, error) {
 		}
 	}
 
+	if res, ok, err := callPyUnary(a, "__complex__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
+
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for complex: '%s'", a.Type().Name)
 }
 
@@ -120,6 +148,12 @@ func MakeInt(a Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+
+	if res, ok, err := callPyUnary(a, "__int__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	// CPython's wording, which says what IS accepted.  "unsupported operand
@@ -147,6 +181,12 @@ func MakeFloat(a Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+
+	if res, ok, err := callPyUnary(a, "__float__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for float: '%s'", a.Type().Name)
@@ -268,6 +308,11 @@ func Sub(a, b Object) (Object, error) {
 			}
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__sub__", "__rsub__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for -: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -311,6 +356,11 @@ func Mul(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if res, ok, err := pyBinary(a, b, "__mul__", "__rmul__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for *: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -356,6 +406,11 @@ func TrueDiv(a, b Object) (Object, error) {
 			}
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__truediv__", "__rtruediv__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for /: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -399,6 +454,11 @@ func FloorDiv(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if res, ok, err := pyBinary(a, b, "__floordiv__", "__rfloordiv__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for //: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -444,6 +504,11 @@ func Mod(a, b Object) (Object, error) {
 			}
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__mod__", "__rmod__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for %%: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -488,6 +553,14 @@ func DivMod(a, b Object) (Object, Object, error) {
 			}
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__divmod__", "__rdivmod__"); err != nil {
+		return nil, nil, err
+	} else if ok {
+		if t, isT := res.(Tuple); isT && len(t) == 2 {
+			return t[0], t[1], nil
+		}
+		return nil, nil, ExceptionNewf(TypeError, "__divmod__ must return a 2-tuple")
+	}
 	return nil, nil, ExceptionNewf(TypeError, "unsupported operand type(s) for divmod: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -517,6 +590,11 @@ func Lshift(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if res, ok, err := pyBinary(a, b, "__lshift__", "__rlshift__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for <<: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -561,6 +639,11 @@ func Rshift(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if res, ok, err := pyBinary(a, b, "__rshift__", "__rrshift__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for >>: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -621,6 +704,11 @@ func And(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__and__", "__rand__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for &: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -680,6 +768,11 @@ func Xor(a, b Object) (Object, error) {
 			}
 		}
 	}
+	if res, ok, err := pyBinary(a, b, "__xor__", "__rxor__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ^: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
 
@@ -723,6 +816,11 @@ func Or(a, b Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if res, ok, err := pyBinary(a, b, "__or__", "__ror__"); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for |: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -769,6 +867,17 @@ func Pow(a, b, c Object) (Object, error) {
 				return res, nil
 			}
 		}
+	}
+	if c == None {
+		if res, ok, err := pyBinary(a, b, "__pow__", "__rpow__"); err != nil {
+			return nil, err
+		} else if ok {
+			return res, nil
+		}
+	} else if res, found, err := a.Type().CallMethod("__pow__", Tuple{a, b, c}, NewStringDict()); err != nil {
+		return nil, err
+	} else if found && res != NotImplemented {
+		return res, nil
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ** or pow(): '%s' and '%s'", a.Type().Name, b.Type().Name)
 }
@@ -1044,7 +1153,8 @@ func Eq(a Object, b Object) (Object, error) {
 		return False, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ==: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	// Same type, no __eq__ anywhere: object's default, identity.
+	return NewBool(sameObject(a, b)), nil
 }
 
 // Ne two python objects returning a boolean result
@@ -1089,5 +1199,36 @@ func Ne(a Object, b Object) (Object, error) {
 		return True, nil
 	}
 
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for !=: '%s' and '%s'", a.Type().Name, b.Type().Name)
+	return NewBool(!sameObject(a, b)), nil
+}
+
+// pyBinary tries a binary operator implemented in PYTHON (the class keeps it in
+// its Dict, so no Go interface matches): a.__op__(b), then b.__rop__(a) when
+// the types differ. ok is false when neither exists or both returned
+// NotImplemented.
+func pyBinary(a, b Object, name, rname string) (Object, bool, error) {
+	if res, ok, err := callPyReflected(a, name, b); err != nil || ok {
+		return res, ok, err
+	}
+	if a.Type() != b.Type() {
+		return callPyReflected(b, rname, a)
+	}
+	return nil, false, nil
+}
+
+func callPyUnary(a Object, name string) (Object, bool, error) {
+	if a == nil {
+		return nil, false, nil
+	}
+	res, found, err := a.Type().CallMethod(name, Tuple{a}, NewStringDict())
+	if err != nil || !found || res == NotImplemented {
+		return nil, false, err
+	}
+	return res, true, nil
+}
+
+// sameObject is identity for objects of the same Go type (Go == on an
+// uncomparable dynamic type would panic).
+func sameObject(a, b Object) bool {
+	return reflect.TypeOf(a).Comparable() && a == b
 }

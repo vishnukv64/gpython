@@ -53,13 +53,15 @@ var _ Object = (*Code)(nil)
 
 const (
 	// Masks for flags above
-	CO_OPTIMIZED   = 0x0001
-	CO_NEWLOCALS   = 0x0002
-	CO_VARARGS     = 0x0004
-	CO_VARKEYWORDS = 0x0008
-	CO_NESTED      = 0x0010
-	CO_GENERATOR   = 0x0020
-	CO_COROUTINE   = 0x0080 // function is a coroutine (async def), not a generator
+	CO_OPTIMIZED          = 0x0001
+	CO_NEWLOCALS          = 0x0002
+	CO_VARARGS            = 0x0004
+	CO_VARKEYWORDS        = 0x0008
+	CO_NESTED             = 0x0010
+	CO_GENERATOR          = 0x0020
+	CO_ITERABLE_COROUTINE = 0x0100
+	CO_ASYNC_GENERATOR    = 0x0200
+	CO_COROUTINE          = 0x0080 // function is a coroutine (async def), not a generator
 
 	// The CO_NOFREE flag is set if there are no free or cell
 	// variables.  This information is redundant, but it allows a
