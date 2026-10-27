@@ -13,8 +13,9 @@ assert issubclass(shutil.Error, OSError), shutil.Error.__mro__
 assert issubclass(shutil.SameFileError, shutil.Error), shutil.SameFileError.__mro__
 
 # ---- which finds a binary that is definitely on PATH
-found = shutil.which('ls')
-assert found is not None, "which('ls') found nothing on PATH"
+PROG = 'cmd' if os.name == 'nt' else 'ls'
+found = shutil.which(PROG)
+assert found is not None, "which(PROG) found nothing on PATH"
 assert os.path.isabs(found), found
 assert os.path.exists(found), found
 assert not os.path.isdir(found), found
@@ -23,10 +24,10 @@ assert not os.path.isdir(found), found
 assert shutil.which('definitely-not-a-command-xyzzy') is None
 
 # An explicit path argument overrides PATH.
-assert shutil.which('ls', path='/bin') is not None or shutil.which('ls', path='/usr/bin') is not None
-assert shutil.which('ls', path='/definitely-not-here') is None
+assert shutil.which(PROG, path=os.path.dirname(found)) is not None
+assert shutil.which(PROG, path='/definitely-not-here') is None
 # An empty PATH matches nothing at all, unlike PATH=':'.
-assert shutil.which('ls', path='') is None
+assert shutil.which(PROG, path='') is None
 # A directory is never a result, even though /usr contains bin/.
 assert shutil.which('bin', path='/usr') is None, shutil.which('bin', path='/usr')
 

@@ -32,6 +32,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -241,16 +242,42 @@ func which(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 	}
 
 	cmd = filepath.Base(cmd)
+	files := []string{cmd}
+	if runtime.GOOS == "windows" {
+		// CPython: PATHEXT decides what is executable.  With X_OK the bare
+		// name counts only if it already ends in a PATHEXT extension.
+		ext := os.Getenv("PATHEXT")
+		if ext == "" {
+			ext = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC"
+		}
+		files = files[:0]
+		direct := modeInt&X_OK == 0
+		for _, e := range strings.Split(ext, string(os.PathListSeparator)) {
+			if e = strings.TrimRight(e, "."); e != "" {
+				files = append(files, cmd+e)
+				direct = direct || strings.HasSuffix(strings.ToUpper(cmd), strings.ToUpper(e))
+			}
+		}
+		if direct {
+			files = append([]string{cmd}, files...)
+		}
+		// ponytail: CPython also prepends cwd (NeedCurrentDirectoryForExePath); not done.
+	}
 	seen := make(map[string]bool, len(dirs))
 	for _, dir := range dirs {
 		norm := filepath.Clean(dir)
+		if runtime.GOOS == "windows" {
+			norm = strings.ToLower(norm)
+		}
 		if seen[norm] {
 			continue
 		}
 		seen[norm] = true
-		candidate := filepath.Join(dir, cmd)
-		if modeCheck(candidate, modeInt) {
-			return py.String(candidate), nil
+		for _, f := range files {
+			candidate := filepath.Join(dir, f)
+			if modeCheck(candidate, modeInt) {
+				return py.String(candidate), nil
+			}
 		}
 	}
 	return py.None, nil
@@ -276,6 +303,10 @@ func modeCheck(path string, mode int) bool {
 	}
 	if mode == F_OK {
 		return true
+	}
+	if runtime.GOOS == "windows" {
+		// os.access has no execute bit there; existence is enough.
+		return mode&W_OK == 0 || fi.Mode().Perm()&0o222 != 0
 	}
 	perm := int(fi.Mode().Perm())
 	if mode&R_OK != 0 && perm&0o444 == 0 {

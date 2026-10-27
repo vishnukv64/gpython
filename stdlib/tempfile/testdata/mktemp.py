@@ -6,8 +6,9 @@ p = tempfile.mktemp()
 assert isinstance(p, str), p
 assert not os.path.exists(p), p
 
-p = tempfile.mktemp(dir="/tmp")
-assert p.startswith("/tmp/"), p
+d = tempfile.gettempdir()
+p = tempfile.mktemp(dir=d)
+assert p.startswith(d), p
 assert not os.path.exists(p), p
 
 p = tempfile.mktemp(suffix=".suf")

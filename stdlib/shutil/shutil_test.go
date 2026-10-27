@@ -7,6 +7,7 @@ package shutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/vishnukv64/gpython/py"
@@ -28,6 +29,11 @@ func TestWhichFindsAnExecutable(t *testing.T) {
 	// and puts on PATH, so the answer does not depend on the host's PATH.
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "gpy-test-prog")
+	if runtime.GOOS == "windows" {
+		// Only PATHEXT-suffixed files are executable there; which() returns
+		// the name with the extension.
+		exe += ".exe"
+	}
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-import os, json
+import os, json, posixpath
 class S(str): pass
 class I(int): pass
 class F(float): pass
@@ -16,7 +16,7 @@ print(type(s + "c").__name__, type(i + 1).__name__, type(s.upper()).__name__)
 print(bool(S("")), bool(I(0)), int("1" + s[:0] + "2"), s.encode(), s.startswith("a"))
 d = {}; d[i] = "v"; print(d[5], 5 in d, list(d))
 print(chr(I(65)), "abc"[I(1)], [0]*I(2), divmod(I(7), 2), pow(I(2), 3), I(3).bit_length(), I(5).to_bytes(1, "big"))
-print(open(os.devnull, S("r")).read(), os.path.exists(S("/tmp")), os.fspath(S("q")))
+print(open(os.devnull, S("r")).read(), os.path.exists(S(".")), os.fspath(S("q")))
 class P(S):
     def __str__(self): return "P!"
     def __repr__(self): return "Prepr"
@@ -91,8 +91,9 @@ t("fstr", lambda: f"{ss}|{ss:>5}|{ii:03d}|{ii!r}|{fs:.2f}|{bs!r}|{ss=}")
 t("format()", lambda: (format(ss, ">4"), format(ii, "x"), format(fs, ".3"), format(ss)))
 t("json", lambda: (json.dumps({ss: ii, "f": fs}), json.dumps([ss, bs.decode()]), json.loads(json.dumps(ss)), ))
 t("json-sort", lambda: json.dumps({SS("b"): 1, "a": 2}, sort_keys=True))
-t("os.path", lambda: (os.path.join(ss, "x"), os.path.join("a", ss), os.path.basename(SS("/a/b.c")), os.path.dirname(SS("/a/b")), os.path.splitext(SS("f.txt")), os.path.abspath(SS("/q/../r")), os.path.isabs(SS("/x")), os.path.normpath(SS("a//b")), os.path.expanduser(SS("x"))))
-t("os", lambda: (os.fspath(ss), os.path.exists(SS("/tmp")), os.path.isdir(SS("/tmp")), os.fsencode(SS("a")), os.listdir(SS("/dev"))[:0], os.getenv(SS("NOPE_XYZ"), "d"), os.environ.get(SS("NOPE_XYZ")), 0))
+# posixpath: the subclass handling is under test, not the host's separator.
+t("os.path", lambda: (posixpath.join(ss, "x"), posixpath.join("a", ss), posixpath.basename(SS("/a/b.c")), posixpath.dirname(SS("/a/b")), posixpath.splitext(SS("f.txt")), posixpath.abspath(SS("/q/../r")), posixpath.isabs(SS("/x")), posixpath.normpath(SS("a//b")), posixpath.expanduser(SS("x"))))
+t("os", lambda: (os.fspath(ss), os.path.exists(SS(".")), os.path.isdir(SS(".")), os.fsencode(SS("a")), os.listdir(SS("."))[:0], os.getenv(SS("NOPE_XYZ"), "d"), os.environ.get(SS("NOPE_XYZ")), 0))
 t("os-fspath-obj", lambda: (os.fspath(Pth("p")), os.path.join(Pth("p"), "q")))
 t("open", lambda: open(os.devnull, SS("r")).read() + open(SS(os.devnull)).read())
 t("pathlib", lambda: (str(pathlib.Path(SS("/a/b"))), pathlib.PurePosixPath(SS("/a")) / SS("b"), pathlib.PurePosixPath("/a").joinpath(SS("c")).name))
