@@ -91,7 +91,7 @@ t("fstr", lambda: f"{ss}|{ss:>5}|{ii:03d}|{ii!r}|{fs:.2f}|{bs!r}|{ss=}")
 t("format()", lambda: (format(ss, ">4"), format(ii, "x"), format(fs, ".3"), format(ss)))
 t("json", lambda: (json.dumps({ss: ii, "f": fs}), json.dumps([ss, bs.decode()]), json.loads(json.dumps(ss)), ))
 t("json-sort", lambda: json.dumps({SS("b"): 1, "a": 2}, sort_keys=True))
-# posixpath: the subclass handling is under test, not the host's separator.
+# posixpath is POSIX on every host, so this row's golden is host independent.
 t("os.path", lambda: (posixpath.join(ss, "x"), posixpath.join("a", ss), posixpath.basename(SS("/a/b.c")), posixpath.dirname(SS("/a/b")), posixpath.splitext(SS("f.txt")), posixpath.abspath(SS("/q/../r")), posixpath.isabs(SS("/x")), posixpath.normpath(SS("a//b")), posixpath.expanduser(SS("x"))))
 t("os", lambda: (os.fspath(ss), os.path.exists(SS(".")), os.path.isdir(SS(".")), os.fsencode(SS("a")), os.listdir(SS("."))[:0], os.getenv(SS("NOPE_XYZ"), "d"), os.environ.get(SS("NOPE_XYZ")), 0))
 t("os-fspath-obj", lambda: (os.fspath(Pth("p")), os.path.join(Pth("p"), "q")))

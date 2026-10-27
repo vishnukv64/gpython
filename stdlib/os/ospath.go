@@ -1,481 +1,564 @@
-// Copyright 2022 The go-python Authors.  All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// os.path: common pathname manipulations.
-//
-// This is the posixpath module, which os.path is bound to on a posix host
-// (and ntpath elsewhere, but this interpreter targets the host it runs on).
-// It is registered as both "posixpath" and "ntpath" so that either import
-// resolves, and os binds the module as its "path" attribute.
 package os
 
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/vishnukv64/gpython/py"
 )
 
-const pathModule_doc = `Common pathname manipulations, os.path.
+// os.path: posixpath and ntpath, two modules that behave the same on every
+// host (pathcore.go).  os.path is whichever one matches GOOS, and it is the
+// very module object "import posixpath" / "import ntpath" returns.
 
-This module implements some useful functions on pathnames.`
+// flavor is the string logic that differs between posixpath and ntpath.
+type flavor struct {
+	name       string
+	nt         bool
+	join       func([]string) string
+	split      func(string) (string, string)
+	splitroot  func(string) (string, string, string)
+	splitext   func(string) (string, string)
+	normpath   func(string) string
+	normcase   func(string) string
+	isabs      func(string) bool
+	abs        func(p, cwd string) string
+	expanduser func(string) string
+	expandvars func(string) string
+	commonpath func([]string) (string, error)
+	relpath    func(path, start, cwd string) (string, error)
+	globals    []py.DictEntry
+}
 
-// pathModule is the module object that os.path is bound to.  It is built
-// once and shared, so that "os.path is posixpath" holds as it does in
-// CPython.
-//
-// It is built lazily because Go runs the init functions of a package in file
-// order, and os.go comes before this file: binding os.path there would read
-// a module that has not been built yet.  Building on first use removes the
-// dependency on that order entirely.
+var posixFlavor = &flavor{
+	name:       "posixpath",
+	join:       posixJoin,
+	split:      posixSplit,
+	splitroot:  posixSplitroot,
+	splitext:   func(p string) (string, string) { return splitExt(p, false, '/') },
+	normpath:   posixNormpath,
+	normcase:   func(s string) string { return s },
+	isabs:      func(s string) bool { return strings.HasPrefix(s, "/") },
+	abs:        posixAbs,
+	expanduser: posixExpanduser,
+	expandvars: posixExpandvars,
+	commonpath: posixCommonpath,
+	relpath: func(path, start, cwd string) (string, error) {
+		return posixRelpath(path, start, cwd), nil
+	},
+	globals: []py.DictEntry{
+		{Key: "sep", Value: py.String("/")}, {Key: "altsep", Value: py.None},
+		{Key: "pathsep", Value: py.String(":")}, {Key: "defpath", Value: py.String(":/bin:/usr/bin")},
+		{Key: "devnull", Value: py.String("/dev/null")},
+		{Key: "supports_unicode_filenames", Value: py.NewBool(runtime.GOOS == "darwin")},
+	},
+}
+
+var ntFlavor = &flavor{
+	name:       "ntpath",
+	nt:         true,
+	join:       ntJoin,
+	split:      ntSplit,
+	splitroot:  ntSplitroot,
+	splitext:   func(p string) (string, string) { return splitExt(p, true, '\\') },
+	normpath:   ntNormpath,
+	normcase:   ntNormcase,
+	isabs:      ntIsabs,
+	abs:        ntAbs,
+	expanduser: ntExpanduser,
+	expandvars: ntExpandvars,
+	commonpath: ntCommonpath,
+	relpath:    ntRelpath,
+	globals: []py.DictEntry{
+		{Key: "sep", Value: py.String(`\`)}, {Key: "altsep", Value: py.String("/")},
+		{Key: "pathsep", Value: py.String(";")}, {Key: "defpath", Value: py.String(`.;C:\bin`)},
+		{Key: "devnull", Value: py.String("nul")},
+		{Key: "supports_unicode_filenames", Value: py.True},
+	},
+}
+
 var (
-	pathModuleOnce sync.Once
-	pathModule     *py.Module
+	pathImpls = [...]*py.ModuleImpl{newPathImpl(posixFlavor), newPathImpl(ntFlavor)}
+	hostPath  = pathImpls[0]
 )
 
-// pathImpl and its registration happen at package variable initialisation
-// time, which Go runs before any init function - including os.go's, which
-// binds os.path.  Registering inside init() was too late: os.go's init ran
-// first and bound a nil module.
-var pathImpl = &py.ModuleImpl{
-	Info: py.ModuleInfo{
-		Name: "posixpath",
-		Doc:  pathModule_doc,
-	},
-	Methods: []*py.Method{
-		py.MustNewMethod("join", pathJoin, 0, "join(a, *p) -> Join two or more pathname components, inserting '/' as needed."),
-		py.MustNewMethod("split", pathSplit, 0, "split(p) -> Split a pathname into (head, tail)."),
-		py.MustNewMethod("splitdrive", func(self py.Object, args py.Tuple) (py.Object, error) {
-			parts, err := argsToStrings("splitdrive", args, 1, 1)
-			if err != nil {
-				return nil, err
+// allowMissing is os.path.ALLOW_MISSING, the sentinel realpath(strict=) takes.
+var allowMissing = py.NewList()
+
+func init() {
+	if runtime.GOOS == "windows" {
+		hostPath = pathImpls[1]
+	}
+	for _, impl := range pathImpls {
+		py.RegisterModule(impl)
+	}
+}
+
+// PathModule is the module object os.path refers to.
+func PathModule() *py.Module { return hostPath.Shared() }
+
+func newPathImpl(f *flavor) *py.ModuleImpl {
+	impl := &py.ModuleImpl{
+		Info: py.ModuleInfo{Name: f.name, Doc: "Common pathname manipulations, " + f.name + "."},
+		Globals: py.NewStringDictFrom(append([]py.DictEntry{
+			{Key: "curdir", Value: py.String(".")}, {Key: "pardir", Value: py.String("..")},
+			{Key: "extsep", Value: py.String(".")}, {Key: "ALLOW_MISSING", Value: allowMissing},
+		}, f.globals...)...),
+		Methods: f.methods(),
+	}
+	// The module is stateless, so one object serves every interpreter: that
+	// is what makes "os.path is posixpath" true.
+	var once sync.Once
+	var mod *py.Module
+	impl.Shared = func() *py.Module {
+		once.Do(func() {
+			plain := *impl
+			plain.Shared = nil
+			var err error
+			if mod, err = py.NewModuleStore().NewModule(nil, &plain); err != nil {
+				panic(err)
 			}
-			return py.Tuple{py.String(""), py.String(parts[0])}, nil // posix: no drives
-		}, 0, "splitdrive(p) -> ('', p) on posix."),
-		py.MustNewMethod("splitext", pathSplitext, 0, "splitext(p) -> Split the extension from a pathname."),
-		py.MustNewMethod("basename", pathBasename, 0, "basename(p) -> Returns the final component of a pathname."),
-		py.MustNewMethod("dirname", pathDirname, 0, "dirname(p) -> Returns the directory component of a pathname."),
-		py.MustNewMethod("abspath", pathAbspath, 0, "abspath(path) -> Return the absolute version of a path."),
-		py.MustNewMethod("normpath", pathNormpath, 0, "normpath(path) -> Normalize path, eliminating double slashes, etc."),
-		py.MustNewMethod("normcase", pathNormcase, 0, "normcase(s) -> Normalize case of pathname."),
-		py.MustNewMethod("isabs", pathIsabs, 0, "isabs(s) -> Test whether a path is absolute."),
-		py.MustNewMethod("exists", pathExists, 0, "exists(path) -> Test whether a path exists."),
-		py.MustNewMethod("lexists", pathLexists, 0, "lexists(path) -> Test whether a path exists, without following a final symlink."),
-		py.MustNewMethod("commonprefix", pathCommonprefix, 0, "commonprefix(m) -> Return the longest common leading component of a list of pathnames."),
-		py.MustNewMethod("commonpath", pathCommonpath, 0, "commonpath(paths) -> Return the longest common sub-path of the given paths."),
-		py.MustNewMethod("isdir", pathIsdir, 0, "isdir(s) -> Return true if the pathname refers to an existing directory."),
-		py.MustNewMethod("isfile", pathIsfile, 0, "isfile(path) -> Test whether a path is a regular file."),
-		py.MustNewMethod("islink", pathIslink, 0, "islink(path) -> Test whether a path is a symbolic link."),
-		py.MustNewMethod("getsize", pathGetsize, 0, "getsize(filename) -> Return the size of a file."),
-		py.MustNewMethod("getmtime", pathGetmtime, 0, "getmtime(filename) -> Return the last modification time of a file."),
-		py.MustNewMethod("expanduser", pathExpanduser, 0, "expanduser(path) -> Expand ~ and ~user constructs."),
-		py.MustNewMethod("expandvars", pathExpandvars, 0, "expandvars(path) -> Expand shell variables."),
-		py.MustNewMethod("realpath", pathRealpath, 0, "realpath(filename) -> Return the canonical path."),
-		py.MustNewMethod("relpath", pathRelpath, 0, "relpath(path, start=os.curdir) -> Return a relative filepath."),
-		py.MustNewMethod("samefile", pathSamefile, 0, "samefile(f1, f2) -> Test whether two pathnames reference the same file."),
-	},
+		})
+		return mod
+	}
+	return impl
 }
 
-// A program may import either name, and os.path is the module object both
-// refer to, so a single registration is shared rather than one per name.
-//
-// This runs as a package variable initialiser rather than in init(): Go runs
-// every package variable initialiser before any init function, and os.go's
-// init binds os.path.  Registering in init() would be too late, because init
-// functions run in file order and os.go comes first.
-// pathGlobals holds the constants, and is attached before registration so
-// that the module os.path resolves to has them: a Globals map built later in
-// init() was never seen.
-var pathGlobals = py.NewStringDictFrom(
-	py.DictEntry{Key: "sep", Value: osSep},
-	py.DictEntry{Key: "ALLOW_MISSING", Value: allowMissing},
-	py.DictEntry{Key: "altsep", Value: osAltsep},
-	py.DictEntry{Key: "pathsep", Value: osPathsep},
-	py.DictEntry{Key: "curdir", Value: py.String(".")},
-	py.DictEntry{Key: "pardir", Value: py.String("..")},
-	py.DictEntry{Key: "extsep", Value: py.String(".")},
-	py.DictEntry{Key: "defpath", Value: osDefpath},
-	py.DictEntry{Key: "devnull", Value: osDevnull},
-)
+// ---------------------------------------------------------------- arguments
 
-var _ = func() bool {
-	pathImpl.Globals = pathGlobals
-	py.RegisterModule(pathImpl)
-	py.RegisterModuleAlias("ntpath", "posixpath")
-	return true
-}()
-
-// PathModule returns the module object that os.path refers to, building it
-// on first use so that the result does not depend on init order.
-//
-// Note: "import posixpath" produces a second module object built from the
-// same implementation, so "os.path is posixpath" is False here where CPython
-// makes it True.  They share the implementation, so behaviour is identical;
-// only object identity differs, and only code comparing the modules by
-// identity would notice.
-func PathModule() *py.Module {
-	pathModuleOnce.Do(func() {
-		impl := py.GetModuleImpl("posixpath")
-		if impl == nil {
-			return
-		}
-		mod, err := py.NewModuleStore().NewModule(nil, impl)
-		if err != nil {
-			panic(err)
-		}
-		pathModule = mod
-	})
-	return pathModule
+func badPath(o py.Object) error {
+	return py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", o.Type().Name)
 }
 
-// argsToStrings unpacks the argument tuple into Go strings, accepting the
-// path-like objects that Python allows (str and bytes).
+// fsRaw is os.fspath: the path as a Go string, and whether it was bytes.
+func fsRaw(o py.Object) (string, bool, error) {
+	switch v := o.(type) {
+	case py.String:
+		return string(v), false, nil
+	case py.Bytes:
+		return string(v), true, nil
+	}
+	r, err := fspath(nil, py.Tuple{o})
+	if err != nil {
+		return "", false, badPath(o)
+	}
+	switch v := r.(type) {
+	case py.String:
+		return string(v), false, nil
+	case py.Bytes:
+		return string(v), true, nil
+	}
+	return "", false, badPath(o)
+}
+
+// fsArg is fsRaw for the pure string logic.  Bytes are widened to one rune
+// per byte so that "character" offsets mean what they mean in CPython.
+func fsArg(o py.Object) (string, bool, error) {
+	s, isB, err := fsRaw(o)
+	if isB && !isASCII(s) {
+		rs := make([]rune, len(s))
+		for i := 0; i < len(s); i++ {
+			rs[i] = rune(s[i])
+		}
+		s = string(rs)
+	}
+	return s, isB, err
+}
+
+func out(s string, isB bool) py.Object {
+	if !isB {
+		return py.String(s)
+	}
+	if isASCII(s) {
+		return py.Bytes(s)
+	}
+	b := make([]byte, 0, len(s))
+	for _, r := range s {
+		if r < 256 {
+			b = append(b, byte(r))
+		} else {
+			b = utf8.AppendRune(b, r)
+		}
+	}
+	return py.Bytes(b)
+}
+
+func outRaw(s string, isB bool) py.Object {
+	if isB {
+		return py.Bytes(s)
+	}
+	return py.String(s)
+}
+
+// argsToStrings is for the functions that go to the OS: raw paths, no types.
 func argsToStrings(name string, args py.Tuple, min, max int) ([]string, error) {
 	if len(args) < min || (max >= 0 && len(args) > max) {
 		return nil, py.ExceptionNewf(py.TypeError, "%s: expected %d to %d arguments, got %d", name, min, max, len(args))
 	}
 	out := make([]string, len(args))
-	for i, arg := range args {
-		s, err := py.StrAsString(arg)
+	for i, a := range args {
+		s, _, err := fsRaw(a)
 		if err != nil {
-			return nil, py.ExceptionNewf(py.TypeError, "%s: argument must be a path string", name)
+			return nil, err
 		}
 		out[i] = s
 	}
 	return out, nil
 }
 
-func pathJoin(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("join", args, 0, -1)
-	if err != nil {
-		return nil, err
-	}
-	return py.String(posixJoin(parts)), nil
-}
-
-// posixJoin joins path components by POSIX's rule, which filepath.Join does
-// not follow.
-//
-// The rule that matters: an ABSOLUTE component DISCARDS everything before it,
-// so join("/base", "/opt/x") is "/opt/x".  filepath.Join keeps the first part
-// and appends, giving "/base/opt/x" - which is an entirely different path, and
-// a path that does not exist.  pkg_resources joins a directory onto an entry it
-// has already made absolute, so every distribution it looked for was reported
-// missing: 'pip list' found ZERO installed packages and printed nothing.
-//
-// An empty component is ignored, and if the result is empty the answer is ".",
-// both of which are CPython's rules as well.
-func posixJoin(parts []string) string {
-	var b strings.Builder
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		if strings.HasPrefix(p, "/") {
-			// Absolute: it replaces everything gathered so far.
-			b.Reset()
-		} else if b.Len() > 0 {
-			if !strings.HasSuffix(b.String(), "/") {
-				b.WriteByte('/')
-			}
-		}
-		b.WriteString(p)
-	}
-	if b.Len() == 0 {
-		// Every component was empty, and an empty RESULT stays empty - CPython
-		// gives "" for join("") and "." only for join() with no arguments at
-		// all, which this function cannot be reached with.
-		return ""
-	}
-	return b.String()
-}
-
-func pathSplit(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("split", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	dir, file := filepath.Split(parts[0])
-	// filepath.Split leaves the separator on the directory; Python strips it
-	// except when the path is all separators.
-	dir = strings.TrimSuffix(dir, "/")
-	if dir == "" && strings.HasPrefix(parts[0], "/") {
-		dir = "/"
-	}
-	return py.Tuple{py.String(dir), py.String(file)}, nil
-}
-
-func pathSplitext(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("splitext", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	ext := filepath.Ext(parts[0])
-	return py.Tuple{py.String(strings.TrimSuffix(parts[0], ext)), py.String(ext)}, nil
-}
-
-func pathBasename(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("basename", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.String(filepath.Base(parts[0])), nil
-}
-
-func pathDirname(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("dirname", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.String(filepath.Dir(parts[0])), nil
-}
-
-func pathAbspath(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("abspath", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	abs, err := filepath.Abs(parts[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err)
-	}
-	return py.String(abs), nil
-}
-
-func pathNormpath(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("normpath", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.String(filepath.Clean(parts[0])), nil
-}
-
-func pathNormcase(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("normcase", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	// On a case-sensitive filesystem this is the identity, as in CPython on
-	// posix.
-	return py.String(parts[0]), nil
-}
-
-func pathIsabs(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("isabs", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(filepath.IsAbs(parts[0])), nil
-}
-
-func pathExists(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("exists", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(fileExists(parts[0])), nil
-}
-
-// pathLexists reports whether a path exists WITHOUT following a final symlink,
-// which is the difference from exists(): a dangling link is lexists-true and
-// exists-false.  pip calls it to decide whether it may write somewhere.
-func pathLexists(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("lexists", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	_, lerr := os.Lstat(parts[0])
-	return py.NewBool(lerr == nil), nil
-}
-
-// pathCommonpath is the longest common sub-path, compared COMPONENT-wise (unlike
-// commonprefix, which is character-wise): "/a/bc" and "/a/bd" share "/a".
-// Empty and "." components are dropped first, as CPython does, so
-// "a//b/./c" and "a/b/c" agree.  pip's network/auth imports it at module
-// level, so its absence stopped every "pip install".
-func pathCommonpath(self py.Object, args py.Tuple) (py.Object, error) {
+func oneArg(name string, args py.Tuple) error {
 	if len(args) != 1 {
-		return nil, py.ExceptionNewf(py.TypeError, "commonpath() takes exactly one argument (%d given)", len(args))
+		return py.ExceptionNewf(py.TypeError, "%s() takes exactly one argument (%d given)", name, len(args))
 	}
-	var paths []string
-	var ierr error
-	err := py.Iterate(args[0], func(o py.Object) bool {
-		s, ok := o.(py.String)
-		if !ok {
-			ierr = py.ExceptionNewf(py.TypeError, "commonpath() argument must be str, not '%s'", o.Type().Name)
-			return true
+	return nil
+}
+
+// pure registers a path -> path function over the widened (character) view.
+func pure(name string, f func(string) string) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
 		}
-		paths = append(paths, string(s))
-		return false
-	})
-	if err != nil {
-		return nil, err
-	}
-	if ierr != nil {
-		return nil, ierr
-	}
-	if len(paths) == 0 {
-		return nil, py.ExceptionNewf(py.ValueError, "commonpath() arg is an empty sequence")
-	}
-	abs := strings.HasPrefix(paths[0], "/")
-	var common []string
+		s, isB, err := fsArg(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return out(f(s), isB), nil
+	}, 0, name+"(path)")
+}
+
+// raw is pure for functions that read the environment or case-fold, where the
+// real bytes matter more than character offsets.
+func raw(name string, f func(string) string) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
+		}
+		s, isB, err := fsRaw(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return outRaw(f(s), isB), nil
+	}, 0, name+"(path)")
+}
+
+// pair registers a path -> (str, str) function.
+func pair(name string, f func(string) (string, string)) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
+		}
+		s, isB, err := fsArg(args[0])
+		if err != nil {
+			return nil, err
+		}
+		a, b := f(s)
+		return py.Tuple{out(a, isB), out(b, isB)}, nil
+	}, 0, name+"(path)")
+}
+
+// test registers a path -> bool function that asks the OS.
+func test(name string, f func(string) bool) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
+		}
+		s, _, err := fsRaw(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return py.NewBool(f(s)), nil
+	}, 0, name+"(path)")
+}
+
+func mixErr() error {
+	return py.ExceptionNewf(py.TypeError, "Can't mix strings and bytes in path components")
+}
+
+// widenAll reads several paths, all of which must be str or all bytes.
+func widenAll(paths []py.Object) ([]string, bool, error) {
+	ss := make([]string, len(paths))
+	var isB bool
 	for i, p := range paths {
-		if strings.HasPrefix(p, "/") != abs {
-			return nil, py.ExceptionNewf(py.ValueError, "Can't mix absolute and relative paths")
+		s, b, err := fsArg(p)
+		if err != nil {
+			return nil, false, err
 		}
-		var parts []string
-		for _, c := range strings.Split(p, "/") {
-			if c != "" && c != "." {
-				parts = append(parts, c)
+		if i > 0 && b != isB {
+			return nil, false, mixErr()
+		}
+		ss[i], isB = s, b
+	}
+	return ss, isB, nil
+}
+
+// cwdFor is os.getcwd() in the same view as the path it is joined to.
+func cwdFor(isB bool) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", py.ExceptionNewf(py.OSError, "%s", err)
+	}
+	if isB && !isASCII(cwd) {
+		rs := make([]rune, len(cwd))
+		for i := 0; i < len(cwd); i++ {
+			rs[i] = rune(cwd[i])
+		}
+		cwd = string(rs)
+	}
+	return cwd, nil
+}
+
+func (f *flavor) host() bool { return f.nt == (runtime.GOOS == "windows") }
+
+func (f *flavor) abspath(s string, isB bool) (string, error) {
+	if f.nt && f.host() && !isB { // GetFullPathName, as CPython does on Windows
+		if a, err := filepath.Abs(f.normpath(s)); err == nil {
+			return a, nil
+		}
+	}
+	cwd, err := cwdFor(isB)
+	if err != nil {
+		return "", err
+	}
+	return f.abs(s, cwd), nil
+}
+
+func valueErr(err error) error { return py.ExceptionNewf(py.ValueError, "%s", err) }
+
+func (f *flavor) methods() []*py.Method {
+	ms := []*py.Method{
+		py.MustNewMethod("join", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if len(args) == 0 {
+				return nil, py.ExceptionNewf(py.TypeError, "join() missing 1 required positional argument: 'a'")
 			}
+			ss, isB, err := widenAll(args)
+			if err != nil {
+				return nil, err
+			}
+			return out(f.join(ss), isB), nil
+		}, 0, "join(a, *p) -> Join two or more pathname components."),
+		pair("split", f.split),
+		pair("splitdrive", func(p string) (string, string) {
+			d, r, t := f.splitroot(p)
+			return d, r + t
+		}),
+		py.MustNewMethod("splitroot", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("splitroot", args); err != nil {
+				return nil, err
+			}
+			s, isB, err := fsArg(args[0])
+			if err != nil {
+				return nil, err
+			}
+			d, r, t := f.splitroot(s)
+			return py.Tuple{out(d, isB), out(r, isB), out(t, isB)}, nil
+		}, 0, "splitroot(p) -> (drive, root, tail)"),
+		pair("splitext", f.splitext),
+		pure("basename", func(p string) string { _, t := f.split(p); return t }),
+		pure("dirname", func(p string) string { h, _ := f.split(p); return h }),
+		pure("normpath", f.normpath),
+		raw("normcase", f.normcase),
+		py.MustNewMethod("isabs", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("isabs", args); err != nil {
+				return nil, err
+			}
+			s, _, err := fsArg(args[0])
+			if err != nil {
+				return nil, err
+			}
+			return py.NewBool(f.isabs(s)), nil
+		}, 0, "isabs(s) -> Test whether a path is absolute."),
+		py.MustNewMethod("abspath", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("abspath", args); err != nil {
+				return nil, err
+			}
+			s, isB, err := fsArg(args[0])
+			if err != nil {
+				return nil, err
+			}
+			a, err := f.abspath(s, isB)
+			if err != nil {
+				return nil, err
+			}
+			return out(a, isB), nil
+		}, 0, "abspath(path) -> Return the absolute version of a path."),
+		raw("expanduser", f.expanduser),
+		raw("expandvars", f.expandvars),
+		py.MustNewMethod("commonpath", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("commonpath", args); err != nil {
+				return nil, err
+			}
+			var items []py.Object
+			if err := py.Iterate(args[0], func(o py.Object) bool { items = append(items, o); return false }); err != nil {
+				return nil, err
+			}
+			if len(items) == 0 {
+				if !f.nt { // posixpath words it differently
+					return nil, py.ExceptionNewf(py.ValueError, "commonpath() arg is an empty sequence")
+				}
+				return nil, py.ExceptionNewf(py.ValueError, "commonpath() arg is an empty iterable")
+			}
+			ss, isB, err := widenAll(items)
+			if err != nil {
+				return nil, err
+			}
+			r, err := f.commonpath(ss)
+			if err != nil {
+				return nil, valueErr(err)
+			}
+			return out(r, isB), nil
+		}, 0, "commonpath(paths) -> Return the longest common sub-path of the given paths."),
+		py.MustNewMethod("relpath", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+			if len(args) < 1 || len(args) > 2 {
+				return nil, py.ExceptionNewf(py.TypeError, "relpath() takes from 1 to 2 arguments (%d given)", len(args))
+			}
+			objs := []py.Object{args[0]}
+			if len(args) == 2 {
+				objs = append(objs, args[1])
+			} else if v, ok := kwargs.Get("start"); ok && v != py.None {
+				objs = append(objs, v)
+			}
+			ss, isB, err := widenAll(objs)
+			if err != nil {
+				return nil, err
+			}
+			if ss[0] == "" {
+				return nil, py.ExceptionNewf(py.ValueError, "no path specified")
+			}
+			start := "."
+			if len(ss) == 2 {
+				start = ss[1]
+			}
+			cwd, err := cwdFor(isB)
+			if err != nil {
+				return nil, err
+			}
+			r, err := f.relpath(ss[0], start, cwd)
+			if err != nil {
+				return nil, valueErr(err)
+			}
+			return out(r, isB), nil
+		}, 0, "relpath(path, start=os.curdir) -> Return a relative version of a path."),
+		py.MustNewMethod("realpath", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "realpath() takes exactly one positional argument (%d given)", len(args))
+			}
+			s, isB, err := fsRaw(args[0])
+			if err != nil {
+				return nil, err
+			}
+			strict, _ := kwargs.Get("strict")
+			return f.realpath(s, isB, strict)
+		}, 0, "realpath(filename, *, strict=False) -> Return the canonical path."),
+		py.MustNewMethod("commonprefix", pathCommonprefix, 0, "commonprefix(m) -> Return the longest common leading component of a list of pathnames."),
+		test("exists", fileExists),
+		test("lexists", func(p string) bool { _, err := os.Lstat(p); return err == nil }),
+		test("isdir", fileIsDir),
+		test("isfile", fileIsFile),
+		test("islink", fileIsLink),
+		test("isjunction", func(string) bool { return false }), // ponytail: junctions are Windows-only; always False
+		test("ismount", f.ismount),
+		py.MustNewMethod("getsize", func(self py.Object, args py.Tuple) (py.Object, error) {
+			ps, err := argsToStrings("getsize", args, 1, 1)
+			if err != nil {
+				return nil, err
+			}
+			size, err := fileSize(ps[0])
+			if err != nil {
+				return nil, py.OSErrorFrom(err, ps[0])
+			}
+			return py.Int(size), nil
+		}, 0, "getsize(filename) -> Return the size of a file."),
+		py.MustNewMethod("getmtime", func(self py.Object, args py.Tuple) (py.Object, error) {
+			ps, err := argsToStrings("getmtime", args, 1, 1)
+			if err != nil {
+				return nil, err
+			}
+			secs, err := fileModTime(ps[0])
+			if err != nil {
+				return nil, py.OSErrorFrom(err, ps[0])
+			}
+			return py.Float(secs), nil
+		}, 0, "getmtime(filename) -> Return the last modification time of a file."),
+		py.MustNewMethod("samefile", func(self py.Object, args py.Tuple) (py.Object, error) {
+			ps, err := argsToStrings("samefile", args, 2, 2)
+			if err != nil {
+				return nil, err
+			}
+			return py.NewBool(sameFile(ps[0], ps[1])), nil
+		}, 0, "samefile(f1, f2) -> Test whether two pathnames reference the same file."),
+	}
+	if f.nt {
+		ms = append(ms, test("isreserved", ntIsreserved))
+	}
+	return ms
+}
+
+// realpath resolves symlinks.  Only the host flavour can: the other has no
+// filesystem to ask, so (like ntpath off Windows) it is abspath.
+func (f *flavor) realpath(s string, isB bool, strict py.Object) (py.Object, error) {
+	if !f.host() {
+		w, _, _ := fsArg(outRaw(s, isB))
+		a, err := f.abspath(w, isB)
+		if err != nil {
+			return nil, err
 		}
-		if i == 0 {
-			common = parts
-			continue
-		}
-		n := 0
-		for n < len(common) && n < len(parts) && common[n] == parts[n] {
-			n++
-		}
-		common = common[:n]
+		return out(a, isB), nil
 	}
-	out := strings.Join(common, "/")
-	if abs {
-		out = "/" + out
-	}
-	return py.String(out), nil
-}
-
-func pathIsdir(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("isdir", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(fileIsDir(parts[0])), nil
-}
-
-func pathIsfile(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("isfile", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(fileIsFile(parts[0])), nil
-}
-
-func pathIslink(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("islink", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(fileIsLink(parts[0])), nil
-}
-
-func pathGetsize(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("getsize", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	size, err := fileSize(parts[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err)
-	}
-	return py.Int(size), nil
-}
-
-func pathGetmtime(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("getmtime", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	secs, err := fileModTime(parts[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err)
-	}
-	return py.Float(secs), nil
-}
-
-func pathExpanduser(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("expanduser", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	expanded, err := expandUser(parts[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.OSError, "%s", err)
-	}
-	return py.String(expanded), nil
-}
-
-func pathExpandvars(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("expandvars", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return py.String(expandVars(parts[0])), nil
-}
-
-// allowMissing is os.path.ALLOW_MISSING, the realpath(strict=...) sentinel.
-var allowMissing = py.NewList()
-
-func pathRealpath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	parts, err := argsToStrings("realpath", args, 1, 1)
-	if err != nil {
-		return nil, err
-	}
-	if v, ok := kwargs.Get("strict"); ok && v == py.Object(py.True) {
-		if _, err := os.Lstat(parts[0]); err != nil {
-			return nil, py.ExceptionNewf(py.FileNotFoundError, "[Errno 2] No such file or directory: '%s'", parts[0])
+	if strict == py.Object(py.True) {
+		if _, err := os.Lstat(s); err != nil {
+			return nil, py.OSErrorFrom(err, s)
 		}
 	}
-	abs, err := filepath.Abs(parts[0])
+	abs, err := filepath.Abs(s)
 	if err != nil {
-		return py.String(parts[0]), nil
+		return outRaw(s, isB), nil
 	}
-	// Resolve the longest existing prefix, then re-append the missing tail.
 	head, tail := abs, ""
 	for {
 		if real, err := filepath.EvalSymlinks(head); err == nil {
-			return py.String(filepath.Join(real, tail)), nil
+			return outRaw(filepath.Join(real, tail), isB), nil
 		}
 		parent := filepath.Dir(head)
 		if parent == head {
-			return py.String(abs), nil
+			return outRaw(abs, isB), nil
 		}
 		tail = filepath.Join(filepath.Base(head), tail)
 		head = parent
 	}
 }
 
-func pathRelpath(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("relpath", args, 1, 2)
+func (f *flavor) ismount(p string) bool {
+	if f.nt {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return false
+		}
+		d, r, rest := ntSplitroot(ntAbs(p, cwd))
+		if d != "" && isNTSep(d[0]) {
+			return rest == ""
+		}
+		return r != "" && rest == ""
+	}
+	s1, err := os.Lstat(p)
+	if err != nil || s1.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	s2, err := os.Lstat(posixJoin([]string{p, ".."}))
 	if err != nil {
-		return nil, err
+		return false
 	}
-	start := "."
-	if len(parts) == 2 {
-		start = parts[1]
+	f1, ok1 := sysStatFields(s1)
+	f2, ok2 := sysStatFields(s2)
+	if ok1 && ok2 && f1.dev != f2.dev {
+		return true
 	}
-	rel, err := filepath.Rel(start, parts[0])
-	if err != nil {
-		return nil, py.ExceptionNewf(py.ValueError, "%s", err)
-	}
-	return py.String(rel), nil
+	return os.SameFile(s1, s2)
 }
-
-func pathSamefile(self py.Object, args py.Tuple) (py.Object, error) {
-	parts, err := argsToStrings("samefile", args, 2, 2)
-	if err != nil {
-		return nil, err
-	}
-	return py.NewBool(sameFile(parts[0], parts[1])), nil
-}
-
-// The small filesystem questions below are answered here rather than through
-// helpers, because each is a single os call and naming them all would add
-// more surface than it removes.
 
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
@@ -513,36 +596,6 @@ func fileModTime(p string) (float64, error) {
 	return float64(info.ModTime().UnixNano()) / 1e9, nil
 }
 
-func expandUser(p string) (string, error) {
-	if !strings.HasPrefix(p, "~") {
-		return p, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return p, err
-	}
-	if p == "~" {
-		return home, nil
-	}
-	// "~user" is expanded through the user database, which this interpreter
-	// does not read; leaving it alone is what CPython does for an unknown
-	// user, and is honest about not knowing.
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(home, p[2:]), nil
-	}
-	return p, nil
-}
-
-// expandVars expands $var and ${var}, which is the posix form.
-func expandVars(p string) string {
-	return os.Expand(p, func(name string) string {
-		if value, ok := os.LookupEnv(name); ok {
-			return value
-		}
-		return "${" + name + "}"
-	})
-}
-
 func sameFile(a, b string) bool {
 	ai, aerr := os.Stat(a)
 	bi, berr := os.Stat(b)
@@ -554,36 +607,39 @@ func sameFile(a, b string) bool {
 
 // pathCommonprefix is the character-wise prefix of a sequence of strings, as
 // os.path.commonprefix does (it does not respect path boundaries).
+
+// pathCommonprefix is genericpath.commonprefix: the character-wise prefix of
+// a sequence of paths (it does not respect path boundaries).
 func pathCommonprefix(self py.Object, args py.Tuple) (py.Object, error) {
-	if len(args) != 1 {
-		return nil, py.ExceptionNewf(py.TypeError, "commonprefix() takes exactly one argument (%d given)", len(args))
+	if err := oneArg("commonprefix", args); err != nil {
+		return nil, err
 	}
-	it, err := py.Iter(args[0])
+	var items []string
+	var isB bool
+	err := py.Iterate(args[0], func(o py.Object) bool {
+		s, b, err := fsRaw(o)
+		if err != nil {
+			return true
+		}
+		items, isB = append(items, s), b
+		return false
+	})
 	if err != nil {
 		return nil, err
 	}
-	var prefix string
-	first := true
-	for {
-		item, err := py.Next(it)
-		if err != nil {
-			if py.IsException(py.StopIteration, err) {
-				break
-			}
-			return nil, err
-		}
-		s, err := py.StrAsString(item)
-		if err != nil {
-			return nil, py.ExceptionNewf(py.TypeError, "commonprefix() argument must be str")
-		}
-		if first {
-			prefix, first = s, false
-			continue
-		}
-		n := 0
-		for a, b := []rune(prefix), []rune(s); n < len(a) && n < len(b) && a[n] == b[n]; n++ {
-		}
-		prefix = string([]rune(prefix)[:n])
+	if len(items) == 0 {
+		return py.String(""), nil
 	}
-	return py.String(prefix), nil
+	s1, s2 := items[0], items[0]
+	for _, s := range items[1:] {
+		s1, s2 = min(s1, s), max(s2, s)
+	}
+	n := 0
+	for n < len(s1) && n < len(s2) && s1[n] == s2[n] {
+		n++
+	}
+	for !isB && n > 0 && n < len(s1) && !utf8.RuneStart(s1[n]) {
+		n--
+	}
+	return outRaw(s1[:n], isB), nil
 }

@@ -113,7 +113,9 @@ async def main():
     async with asyncio.TaskGroup() as tg:
         for i in range(3):
             tg.create_task(worker(f"g{i}", 0.1 * (3 - i), results))
-    print(results)
+    # The group waits for all three; their finishing order rides on 0.1s
+    # wall-clock gaps a loaded machine can invert, so it is not pinned.
+    print(sorted(results, reverse=True))
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(failing())

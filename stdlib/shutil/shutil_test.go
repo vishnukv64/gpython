@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/vishnukv64/gpython/py"
@@ -51,7 +52,9 @@ func TestWhichFindsAnExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, ok := got.(py.String); !ok || string(s) != exe {
+	// On Windows the extension comes back in PATHEXT's case (".EXE"), and the
+	// file system does not care which.
+	if s, ok := got.(py.String); !ok || (string(s) != exe && !(runtime.GOOS == "windows" && strings.EqualFold(string(s), exe))) {
 		t.Errorf("which('gpy-test-prog', path=%q) = %v, want %q", dir, got, exe)
 	}
 

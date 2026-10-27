@@ -38,7 +38,7 @@ func initGlobals() {
 		osName = py.String("nt")
 		osPathsep = py.String(";")
 		osLinesep = py.String("\r\n")
-		osDefpath = py.String(`C:\bin`)
+		osDefpath = py.String(`.;C:\bin`)
 		osDevnull = py.String("nul")
 		osAltsep = py.String("/")
 	}
@@ -141,8 +141,7 @@ func init() {
 		py.DictEntry{Key: "defpath", Value: osDefpath},
 		py.DictEntry{Key: "devnull", Value: osDevnull},
 	)
-	// os.path is the posixpath module object, so os.path.join and friends
-	// reach the functions registered there, and "os.path is posixpath" holds.
+	// os.path is the posixpath (ntpath on Windows) module object itself.
 	globals.Set("path", PathModule())
 	// The separator constants, which code joins paths with.
 	// The os.access mode flags are part of the module's interface: a program

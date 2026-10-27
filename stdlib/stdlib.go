@@ -9,7 +9,6 @@ package stdlib
 import (
 	"bytes"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,13 +26,13 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/calendar"
 	_ "github.com/vishnukv64/gpython/stdlib/codecs"
 	_ "github.com/vishnukv64/gpython/stdlib/collections"
-	_ "github.com/vishnukv64/gpython/stdlib/ctypes"
 	_ "github.com/vishnukv64/gpython/stdlib/colorsys"
 	_ "github.com/vishnukv64/gpython/stdlib/configparser"
 	_ "github.com/vishnukv64/gpython/stdlib/contextlib"
 	_ "github.com/vishnukv64/gpython/stdlib/contextvars"
 	_ "github.com/vishnukv64/gpython/stdlib/copy"
 	_ "github.com/vishnukv64/gpython/stdlib/csv"
+	_ "github.com/vishnukv64/gpython/stdlib/ctypes"
 	_ "github.com/vishnukv64/gpython/stdlib/datetime"
 	_ "github.com/vishnukv64/gpython/stdlib/email"
 	_ "github.com/vishnukv64/gpython/stdlib/encodings"
@@ -80,11 +79,11 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/re"
 	_ "github.com/vishnukv64/gpython/stdlib/reprlib"
 	_ "github.com/vishnukv64/gpython/stdlib/select"
-	_ "github.com/vishnukv64/gpython/stdlib/signal"
 	_ "github.com/vishnukv64/gpython/stdlib/shlex"
-	_ "github.com/vishnukv64/gpython/stdlib/sqlite3"
 	_ "github.com/vishnukv64/gpython/stdlib/shutil"
+	_ "github.com/vishnukv64/gpython/stdlib/signal"
 	_ "github.com/vishnukv64/gpython/stdlib/site"
+	_ "github.com/vishnukv64/gpython/stdlib/sqlite3"
 	_ "github.com/vishnukv64/gpython/stdlib/ssl"
 	_ "github.com/vishnukv64/gpython/stdlib/stat"
 	_ "github.com/vishnukv64/gpython/stdlib/string"
@@ -108,9 +107,9 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/zlib"
 
 	_ "github.com/vishnukv64/gpython/stdlib/atexit"
-	_ "github.com/vishnukv64/gpython/stdlib/gc"
 	_ "github.com/vishnukv64/gpython/stdlib/bisect"
 	_ "github.com/vishnukv64/gpython/stdlib/dataclasses"
+	_ "github.com/vishnukv64/gpython/stdlib/gc"
 	_ "github.com/vishnukv64/gpython/stdlib/imp"
 	_ "github.com/vishnukv64/gpython/stdlib/importlib"
 	_ "github.com/vishnukv64/gpython/stdlib/importlibabc"
@@ -222,7 +221,7 @@ func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.
 		stat, err := py.StatPath(fpath)
 		if err == nil && stat.IsDir() {
 			// FIXME this is a massive simplification!
-			fpath = path.Join(fpath, "__init__.py")
+			fpath = filepath.Join(fpath, "__init__.py")
 			_, err = py.StatPath(fpath)
 		}
 
@@ -350,19 +349,19 @@ func resolveRunPath(runPath string, opts py.CompileOpts, pathObjs []py.Object, t
 
 		// If an absolute path, just try that.
 		// Otherwise, check from the passed current dir then check from the current working dir.
-		fpath := path.Join(string(pathStr), runPath)
+		fpath := filepath.Join(string(pathStr), runPath)
 		if filepath.IsAbs(fpath) || py.IsEmbeddedPath(fpath) {
 			cont, err = tryPath(fpath)
 		} else {
 			if len(opts.CurDir) > 0 {
-				subPath := path.Join(opts.CurDir, fpath)
+				subPath := filepath.Join(opts.CurDir, fpath)
 				cont, err = tryPath(subPath)
 			}
 			if cont && err == nil {
 				if cwd == "" {
 					cwd, _ = os.Getwd()
 				}
-				subPath := path.Join(cwd, fpath)
+				subPath := filepath.Join(cwd, fpath)
 				cont, err = tryPath(subPath)
 			}
 		}

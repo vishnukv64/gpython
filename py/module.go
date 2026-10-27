@@ -46,7 +46,11 @@ type ModuleImpl struct {
 	// PreSetGlobals, when set, is given the module's globals BEFORE the body
 	// runs, so a module can be given __spec__ (or anything else) in time for
 	// its first statement to use it.
-	PreSetGlobals   func(StringDict)
+	PreSetGlobals func(StringDict)
+	// Shared, when set, returns the one module object every context uses for
+	// this implementation (stateless modules such as posixpath), so identities
+	// like "os.path is posixpath" hold.
+	Shared          func() *Module
 	OnContextClosed func(*Module) // Callback for when a py.Context is closing to release resources
 }
 
@@ -214,6 +218,12 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 	name := impl.Info.Name
 	if name == "" {
 		name = MainModuleName
+	}
+	if impl.Shared != nil {
+		m := impl.Shared()
+		store.modules[name] = m
+		delete(store.moduleLike, name)
+		return m, nil
 	}
 	m := &Module{
 		ModuleImpl: impl,
