@@ -77,17 +77,16 @@ func MemoryViewNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error
 // a readonly view, the second a writable one that aliases the bytearray, which
 // is the behaviour the whole object exists for.
 func NewMemoryView(obj Object) (Object, error) {
+	b, writable, ok := BufferBytes(obj)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "memoryview: a bytes-like object is required, not '%s'", obj.Type().Name)
+	}
 	switch o := obj.(type) {
 	case *MemoryView:
-		// A view of a view is another view of the same storage, carrying the
-		// same readonly-ness.
-		return &MemoryView{b: o.b, source: o.source, readonly: o.readonly}, nil
-	case Bytes:
-		return &MemoryView{b: []byte(o), source: obj, readonly: true}, nil
-	case *ByteArray:
-		return &MemoryView{b: o.b, source: obj, readonly: false}, nil
+		// A view of a view shares the storage and the original source.
+		return &MemoryView{b: b, source: o.source, readonly: !writable}, nil
 	case MemoryViewBytesLike:
-		v := &MemoryView{b: o.MemoryViewBytes(), source: obj, readonly: o.MemoryViewReadOnly(), closeFunc: o.MemoryViewCloseFunc(), mapped: true}
+		v := &MemoryView{b: b, source: obj, readonly: !writable, closeFunc: o.MemoryViewCloseFunc(), mapped: true}
 		if v.closeFunc != nil {
 			// Once the view itself is unreachable nothing holds the mapping
 			// alive, so the deferred unmap (see closeFunc) fires here.
@@ -95,7 +94,7 @@ func NewMemoryView(obj Object) (Object, error) {
 		}
 		return v, nil
 	}
-	return nil, ExceptionNewf(TypeError, "memoryview: a bytes-like object is required, not '%s'", obj.Type().Name)
+	return &MemoryView{b: b, source: obj, readonly: !writable}, nil
 }
 
 // M__len__ is the number of ITEMS, which for a byte view is the byte count.

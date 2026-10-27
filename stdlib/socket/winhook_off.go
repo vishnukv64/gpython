@@ -4,4 +4,6 @@ package socket
 
 func noteFileno(fd int, s *sock) {}
 
+func forgetSock(s *sock) {}
+
 func ignoredSockopt(level, optname int) bool { return false }

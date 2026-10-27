@@ -1,6 +1,7 @@
 package winapi
 
 import (
+	"runtime"
 	"syscall"
 	"time"
 	"unsafe"
@@ -95,7 +96,23 @@ func newOverlapped(h windows.Handle) (*Overlapped, error) {
 	}
 	o := &Overlapped{handle: h, event: ev}
 	o.ov.HEvent = ev
+	// Released when Python drops the object, as CPython's dealloc does: the
+	// event stays valid for as long as Python can wait on o.event.
+	runtime.SetFinalizer(o, (*Overlapped).release)
 	return o, nil
+}
+
+// release is the finalizer.  An operation still in flight would write into
+// o.ov and o.buf after they are reclaimed, so it is cancelled and waited for
+// first, exactly as CPython's Overlapped dealloc does.
+func (o *Overlapped) release() {
+	if !o.completed && o.handle != 0 {
+		if windows.CancelIoEx(o.handle, &o.ov) == nil {
+			var n uint32
+			_ = windows.GetOverlappedResult(o.handle, &o.ov, &n, true)
+		}
+	}
+	o.free()
 }
 
 func (o *Overlapped) free() {
@@ -322,6 +339,9 @@ func platformFuncs() []py.DictEntry {
 			return py.None, nil
 		}),
 		fn("WaitNamedPipe", func(a py.Tuple) (py.Object, error) {
+			if len(a) < 2 {
+				return nil, py.ExceptionNewf(py.TypeError, "WaitNamedPipe() takes exactly 2 arguments (%d given)", len(a))
+			}
 			name, err := utf16Opt(a[0])
 			if err != nil {
 				return nil, err

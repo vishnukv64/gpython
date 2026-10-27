@@ -675,6 +675,7 @@ func (s *sock) close() (py.Object, error) {
 	}
 	s.closed = true
 	s.dropPlaceholder()
+	forgetSock(s)
 	if s.listener != nil {
 		_ = s.listener.Close()
 	}
@@ -1160,6 +1161,9 @@ func socketpairMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 		return nil, err
 	}
 	family := AF_UNIX
+	if runtime.GOOS == "windows" {
+		family = AF_INET // CPython's default there, where socketpair is loopback TCP
+	}
 	if v, ok := asInt(famObj); ok {
 		family = v
 	}

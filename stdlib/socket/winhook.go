@@ -25,6 +25,18 @@ func noteFileno(fd int, s *sock) {
 	byFilenoMu.Unlock()
 }
 
+// forgetSock drops every number recorded for s once it is closed, so the
+// table does not keep closed sockets alive.
+func forgetSock(s *sock) {
+	byFilenoMu.Lock()
+	for fd, have := range byFileno {
+		if have == s {
+			delete(byFileno, fd)
+		}
+	}
+	byFilenoMu.Unlock()
+}
+
 // SO_UPDATE_ACCEPT_CONTEXT and SO_UPDATE_CONNECT_CONTEXT: the connection is
 // already complete in Go's net, so there is nothing to update.
 func ignoredSockopt(level, optname int) bool {
