@@ -202,7 +202,9 @@ start()
 	if len(probe.depths) != 1 {
 		t.Fatalf("probe called %d times, want 1", len(probe.depths))
 	}
-	if got, want := probe.depths[0], 1; got != want {
+	// work <- Thread.run <- _bootstrap_inner <- _bootstrap, all CPython's own
+	// threading.py frames; start() and the module body must not be in the chain.
+	if got, want := probe.depths[0], 4; got != want {
 		t.Errorf("depth inside the thread = %d, want %d (linked into the starting goroutine)", got, want)
 	}
 }

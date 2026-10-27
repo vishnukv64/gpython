@@ -1,7 +1,13 @@
 import asyncio
 
 async def worker(name, delay, out):
-    await asyncio.sleep(delay)
+    if isinstance(delay, tuple):  # (wait_event, set_event): deterministic ordering
+        wait, done = delay
+        if wait: await wait.wait()
+        await asyncio.sleep(0)
+        if done: done.set()
+    else:
+        await asyncio.sleep(delay)
     out.append(name)
     return name.upper()
 
@@ -11,7 +17,8 @@ async def failing():
 
 async def main():
     out = []
-    print(await asyncio.gather(worker("a", 0.3, out), worker("b", 0.1, out), worker("c", 0.2, out)))
+    eb, ec = asyncio.Event(), asyncio.Event()
+    print(await asyncio.gather(worker("a", (ec, None), out), worker("b", (None, eb), out), worker("c", (eb, ec), out)))
     print(out)
 
     r = await asyncio.gather(worker("x", 0, out), failing(), return_exceptions=True)

@@ -17,8 +17,8 @@
 // no sys.path_hooks and its importlib.machinery.FileFinder carries no working
 // find_spec, so get_importer returns the module_finder marker object pkgutil's
 // own results carry - a finder with a path and iter_modules, but no find_spec.
-// read_code, the PEP 302 bytecode reader, is absent for the same reason: there
-// is no marshal reader to build it on.
+// read_code, the PEP 302 bytecode reader, always answers None for the same
+// reason: there is no marshal reader to build it on.
 package pkgutil
 
 import (
@@ -52,6 +52,11 @@ func init() {
 			py.MustNewMethod("walk_packages", walkPackagesFn, 0, walk_packages_doc),
 			py.MustNewMethod("get_data", getDataFn, 0, get_data_doc),
 			py.MustNewMethod("resolve_name", resolveNameFn, 0, resolve_name_doc),
+			py.MustNewMethod("read_code", func(self py.Object, args py.Tuple) (py.Object, error) {
+				// There is no bytecode format here, so no stream ever holds
+				// code to load: callers (runpy) fall back to compiling source.
+				return py.None, nil
+			}, 0, "Return the code object in a .pyc stream, or None; always None, as there is no marshal reader."),
 		},
 		Globals: globals,
 	})

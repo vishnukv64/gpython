@@ -720,6 +720,33 @@ func init() {
 		},
 	})
 
+	BaseException.Dict.Set("__reduce__", MustNewMethod("__reduce__", func(self Object, args Tuple) (Object, error) {
+		e := self.(*Exception)
+		a, err := GetAttrString(e, "args")
+		if err != nil {
+			return nil, err
+		}
+		if d := e.Dict; d.Len() > 0 {
+			return Tuple{e.Type(), a, d}, nil
+		}
+		return Tuple{e.Type(), a}, nil
+	}, 0, "Helper for pickle."))
+	BaseException.Dict.Set("add_note", MustNewMethod("add_note", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "add_note() takes exactly one argument (%d given)", len(args))
+		}
+		if _, ok := args[0].(String); !ok {
+			return nil, ExceptionNewf(TypeError, "note must be a str, not '%s'", args[0].Type().Name)
+		}
+		e := self.(*Exception)
+		notes, ok := e.Dict.GetOrNil("__notes__").(*List)
+		if !ok {
+			notes = NewList()
+			e.Dict.Set("__notes__", notes)
+		}
+		notes.Append(args[0])
+		return None, nil
+	}, 0, "Add a note to the exception."))
 	BaseException.Dict.Set("with_traceback", MustNewMethod("with_traceback", func(self Object, args Tuple) (Object, error) {
 		return self.(*Exception).M__with_traceback(args)
 	}, 1, `with_traceback(tb) -> set the traceback and return self.

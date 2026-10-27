@@ -255,7 +255,13 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 			// __main__.py tests it on its first statement, so setting it
 			// afterwards is too late.
 			PreSetGlobals: func(g StringDict) {
-				g.Set("__spec__", NewModuleSpec(specName, String(codeDesc), false))
+				// A script or -c has no spec: __main__.__spec__ is None, which
+				// multiprocessing uses to tell a script from "-m module".
+				if specName == "" {
+					g.Set("__spec__", None)
+				} else {
+					g.Set("__spec__", NewModuleSpec(specName, String(codeDesc), false))
+				}
 				g.Set("__package__", String(pkg))
 			},
 		}

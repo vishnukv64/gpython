@@ -56,6 +56,7 @@ func init() {
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "tempdir", Value: gblTempDir},
+			py.DictEntry{Key: "_RandomNameSequence", Value: RandomNameSequenceType},
 		),
 	})
 }

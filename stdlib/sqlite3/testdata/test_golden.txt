@@ -1,0 +1,184 @@
+api 2.0 qmark 3
+version True True
+consts 1 2 0 2067 -1
+Warning Warning sqlite3 ['Exception', 'BaseException', 'object']
+Error Error sqlite3 ['Exception', 'BaseException', 'object']
+InterfaceError InterfaceError sqlite3 ['Error', 'Exception', 'BaseException', 'object']
+DatabaseError DatabaseError sqlite3 ['Error', 'Exception', 'BaseException', 'object']
+DataError DataError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+OperationalError OperationalError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+IntegrityError IntegrityError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+InternalError InternalError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+ProgrammingError ProgrammingError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+NotSupportedError NotSupportedError sqlite3 ['DatabaseError', 'Error', 'Exception', 'BaseException', 'object']
+types sqlite3 sqlite3 sqlite3
+complete True False
+fresh -1 None None
+create -1 0 None
+insert 1 1 True
+many 3 1
+select -1 4 (('a', None, None, None, None, None, None), ('b', None, None, None, None, None, None))
+fetchone (1, 'x') [(2, 'a'), (3, 'b')] [(4, 'c')] None
+arraysize [(1,), (2,)] [(3,), (4,)]
+update 3 4
+delete none 0
+returning 0 [(5, 'z')] 1
+iter [(1,), (2,)]
+commit False
+row (4611686018427387904, -0.25, 'héllo 世界', b'\xff\x00\xfe', None) ['int', 'float', 'str', 'bytes', 'NoneType']
+row (1, 1e+300, '', b'', None) ['int', 'float', 'str', 'bytes', 'NoneType']
+row (b'ab', 3, 'a\x00b', b'mv', None) ['bytes', 'int', 'str', 'bytes', 'NoneType']
+typeof -> [('integer', 'real', 'text', 'blob', 'null'), ('integer', 'real', 'text', 'blob', 'null'), ('blob', 'integer', 'text', 'blob', 'null')]
+bigint -> OverflowError: Python int too large to convert to SQLite INTEGER 
+neg64 -> [(-9223372036854775808,)]
+unsupported -> ProgrammingError: Error binding parameter 1: type 'object' is not supported 
+set -> ProgrammingError: Error binding parameter 1: type 'set' is not supported 
+qmark -> [(1, 2)]
+named -> [(1, 'z', 1)]
+numbered -> [('b', 'a')]
+list -> [(1, 2)]
+too many -> ProgrammingError: Incorrect number of bindings supplied. The current statement uses 1, and there are 2 supplied. 
+too few -> ProgrammingError: Incorrect number of bindings supplied. The current statement uses 2, and there are 1 supplied. 
+missing key -> ProgrammingError: You did not supply a value for binding parameter :a. 
+dict for qmark -> ProgrammingError: Binding 1 has no name, but you supplied a dictionary (which has only names). 
+seq for named -> ProgrammingError: Binding 1 (':a') is a named parameter, but you supplied a sequence which requires nameless (qmark) placeholders. 
+int params -> ProgrammingError: parameters are of unsupported type 
+none params -> ProgrammingError: parameters are of unsupported type 
+extra dict key -> [(1,)]
+two statements -> ProgrammingError: You can only execute one statement at a time. 
+trailing comment -> [(1,)]
+empty sql -> (True, None, [])
+sql type -> TypeError: execute() argument 1 must be str, not int 
+executemany select -> ProgrammingError: executemany() can only execute DML statements. 
+executemany dict -> 2
+executemany gen -> 5
+syntax -> OperationalError: near "selec": syntax error SQLITE_ERROR
+no table -> OperationalError: no such table: nope SQLITE_ERROR
+no column -> OperationalError: no such column: zz SQLITE_ERROR
+unique -> IntegrityError: UNIQUE constraint failed: t.a SQLITE_CONSTRAINT_PRIMARYKEY
+notnull -> IntegrityError: NOT NULL constraint failed: nn.x SQLITE_CONSTRAINT_NOTNULL
+unique2 -> IntegrityError: UNIQUE constraint failed: nn.y SQLITE_CONSTRAINT_UNIQUE
+check -> IntegrityError: CHECK constraint failed: z > 0 SQLITE_CONSTRAINT_CHECK
+fk -> True
+integrity 2067 SQLITE_CONSTRAINT_UNIQUE True True
+readonly fn -> []
+readonly write -> OperationalError: attempt to write a readonly database SQLITE_READONLY
+isolation '' -1
+ddl in tx False
+dml starts tx True
+rolled back (0,) False
+committed (1,)
+ctx commit (2,) False
+ctx rollback (2,) False
+level None
+level ''
+level 'DEFERRED'
+level 'IMMEDIATE'
+level 'EXCLUSIVE'
+bad level -> ValueError: isolation_level string must be '', 'DEFERRED', 'IMMEDIATE', or 'EXCLUSIVE' 
+manual begin True
+manual rollback (2,) False
+total_changes True
+ac False False True
+ac rollback True (0,)
+ac commit True [('z',)]
+ac True True False
+ac auto False
+ac rollback noop [(5,)]
+ac bad -> ValueError: autocommit must be True, False, or sqlite3.LEGACY_TRANSACTION_CONTROL 
+ac bad ctor -> ValueError: autocommit must be True, False, or sqlite3.LEGACY_TRANSACTION_CONTROL 
+Row 1 two 3.0 3.0 (1, 'two') ['one', 'Two', 'three'] 3 (1, 'two', 3.0) [1, 'two', 3.0]
+Row bad key -> IndexError: No item with that key 
+Row bad idx -> IndexError: tuple index out of range 
+Row bad type -> IndexError: Index must be int or string 
+Row eq True True True
+Row seq True
+dict factory [{'a': 1, 'b': 2}]
+cursor factory Row None
+text bytes (b'abc', 5, b'\x00')
+text custom ('ABC', 5, b'\x00')
+bad utf8 -> OperationalError: Could not decode to UTF-8 column 'x' with text '�' 
+bad utf8 bytes [(b'\xff',)]
+conform ('1.500000;-2.000000',)
+adapter ('pt2:4',)
+adapt() pt2:7 alt
+adapt none -> ProgrammingError: can't adapt 
+decltypes Point (4.0, 5.0) (('w', b'raw'), 7, 'txt')
+null conv (None, None)
+colnames (('t', None, None, None, None, None, None), ('w', None, None, None, None, None, None), ('n', None, None, None, None, None, None)) (('w', b'4.000000;5.000000'), ('w', b'raw'), 7)
+colname nospace x (('w', b'txt'),)
+colname mid a (('w', b'1'),)
+decl only Point x [point]
+no detect ('1.0;2.0',)
+register_converter type -> TypeError: register_converter() argument 1 must be str, not int 
+date/timestamp (datetime.date(2024, 2, 29), datetime.datetime(2024, 2, 29, 13, 5, 9, 250))
+stored True
+stored text ('2024-02-29', '2024-02-29 13:05:09')
+udf (42, 'abab', 3.0, '1-a-None', None, b'\x01\x02')
+udf exc -> OperationalError: user-defined function raised exception SQLITE_ERROR
+udf badret -> OperationalError: user-defined function raised exception SQLITE_ERROR
+udf big -> DataError: string or blob too big SQLITE_TOOBIG
+udf unknown -> OperationalError: no such function: nosuch SQLITE_ERROR
+udf argc -> OperationalError: wrong number of arguments to function twice() SQLITE_ERROR
+udf det (2,)
+udf not callable -> None
+udf in where [(2,)]
+aggregate (15, 15)
+aggregate empty (None,)
+aggregate group [('q', 9), ('x', 1), ('z', 5)]
+agg badinit -> OperationalError: user-defined aggregate's '__init__' method raised error SQLITE_ERROR
+agg badstep -> OperationalError: user-defined aggregate's 'step' method raised error SQLITE_ERROR
+agg badfinal -> OperationalError: user-defined aggregate's 'finalize' method raised error SQLITE_ERROR
+window [(1, 1), (2, 3), (3, 5), (4, 7), (5, 9)]
+collation [('z',), ('x',), ('q',), ('q',), ('q',)]
+bad collation name -> None
+collation removed -> OperationalError: no such collation sequence: rev SQLITE_ERROR_MISSING_COLLSEQ
+authorizer saw read True True
+authorizer deny -> DatabaseError: not authorized SQLITE_AUTH
+authorizer off (5,)
+progress called True
+progress abort -> OperationalError: interrupted SQLITE_INTERRUPT
+trace ['select 42']
+script [(1, 'x'), (2, 'y')] False
+script error -> OperationalError: near "bogus": syntax error SQLITE_ERROR
+script partial (3,)
+script type -> TypeError: executescript() argument must be str, not bytes 
+script commits False (4,)
+closed cursor -> ProgrammingError: Cannot operate on a closed cursor. 
+closed cursor fetch -> ProgrammingError: Cannot operate on a closed cursor. 
+closed cursor close -> None
+closed con execute -> ProgrammingError: Cannot operate on a closed database. 
+closed con cursor -> ProgrammingError: Cannot operate on a closed database. 
+closed con commit -> ProgrammingError: Cannot operate on a closed database. 
+closed con total -> ProgrammingError: Cannot operate on a closed database. 
+closed in_tx -> ProgrammingError: Cannot operate on a closed database. 
+cursor after con close -> ProgrammingError: Cannot operate on a closed database. 
+factory MyCon Cursor True
+bad cursor factory -> TypeError: factory must return a cursor, not int 
+connect type -> TypeError: expected str, bytes or os.PathLike object, not int 
+cursor type -> TypeError: Cursor() argument 1 must be sqlite3.Connection, not int 
+file db [('persist',)]
+uri ro [('persist',)]
+uri ro write -> OperationalError: attempt to write a readonly database SQLITE_READONLY
+uri bad -> OperationalError: unable to open database file SQLITE_CANTOPEN
+cannot open -> OperationalError: unable to open database file SQLITE_CANTOPEN
+pathlike (1,)
+bytes path (1,)
+limits True
+limit hit -> DataError: query string is too large 
+getconfig False
+setconfig False
+backup (100, 4950) True 101
+backup self -> ValueError: target cannot be the same connection instance 
+backup type -> TypeError: backup() argument 'target' must be sqlite3.Connection, not int 
+serialize True True
+deserialize (100,)
+iterdump ['BEGIN TRANSACTION;', 'CREATE TABLE b(x);', 'INSERT INTO "b" VALUES(0);', 'INSERT INTO "b" VALUES(1);', 'INSERT INTO "b" VALUES(2);', 'INSERT INTO "b" VALUES(3);', 'INSERT INTO "b" VALUES(4);', 'INSERT INTO "b" VALUES(5);', 'INSERT INTO "b" VALUES(6);', 'INSERT INTO "b" VALUES(7);', 'INSERT INTO "b" VALUES(8);', 'INSERT INTO "b" VALUES(9);', 'INSERT INTO "b" VALUES(10);', 'INSERT INTO "b" VALUES(11);', 'INSERT INTO "b" VALUES(12);', 'INSERT INTO "b" VALUES(13);', 'INSERT INTO "b" VALUES(14);', 'INSERT INTO "b" VALUES(15);', 'INSERT INTO "b" VALUES(16);', 'INSERT INTO "b" VALUES(17);', 'INSERT INTO "b" VALUES(18);', 'INSERT INTO "b" VALUES(19);', 'INSERT INTO "b" VALUES(20);', 'INSERT INTO "b" VALUES(21);', 'INSERT INTO "b" VALUES(22);', 'INSERT INTO "b" VALUES(23);', 'INSERT INTO "b" VALUES(24);', 'INSERT INTO "b" VALUES(25);', 'INSERT INTO "b" VALUES(26);', 'INSERT INTO "b" VALUES(27);', 'INSERT INTO "b" VALUES(28);', 'INSERT INTO "b" VALUES(29);', 'INSERT INTO "b" VALUES(30);', 'INSERT INTO "b" VALUES(31);', 'INSERT INTO "b" VALUES(32);', 'INSERT INTO "b" VALUES(33);', 'INSERT INTO "b" VALUES(34);', 'INSERT INTO "b" VALUES(35);', 'INSERT INTO "b" VALUES(36);', 'INSERT INTO "b" VALUES(37);', 'INSERT INTO "b" VALUES(38);', 'INSERT INTO "b" VALUES(39);', 'INSERT INTO "b" VALUES(40);', 'INSERT INTO "b" VALUES(41);', 'INSERT INTO "b" VALUES(42);', 'INSERT INTO "b" VALUES(43);', 'INSERT INTO "b" VALUES(44);', 'INSERT INTO "b" VALUES(45);', 'INSERT INTO "b" VALUES(46);', 'INSERT INTO "b" VALUES(47);', 'INSERT INTO "b" VALUES(48);', 'INSERT INTO "b" VALUES(49);', 'INSERT INTO "b" VALUES(50);', 'INSERT INTO "b" VALUES(51);', 'INSERT INTO "b" VALUES(52);', 'INSERT INTO "b" VALUES(53);', 'INSERT INTO "b" VALUES(54);', 'INSERT INTO "b" VALUES(55);', 'INSERT INTO "b" VALUES(56);', 'INSERT INTO "b" VALUES(57);', 'INSERT INTO "b" VALUES(58);', 'INSERT INTO "b" VALUES(59);', 'INSERT INTO "b" VALUES(60);', 'INSERT INTO "b" VALUES(61);', 'INSERT INTO "b" VALUES(62);', 'INSERT INTO "b" VALUES(63);', 'INSERT INTO "b" VALUES(64);', 'INSERT INTO "b" VALUES(65);', 'INSERT INTO "b" VALUES(66);', 'INSERT INTO "b" VALUES(67);', 'INSERT INTO "b" VALUES(68);', 'INSERT INTO "b" VALUES(69);', 'INSERT INTO "b" VALUES(70);', 'INSERT INTO "b" VALUES(71);', 'INSERT INTO "b" VALUES(72);', 'INSERT INTO "b" VALUES(73);', 'INSERT INTO "b" VALUES(74);', 'INSERT INTO "b" VALUES(75);', 'INSERT INTO "b" VALUES(76);', 'INSERT INTO "b" VALUES(77);', 'INSERT INTO "b" VALUES(78);', 'INSERT INTO "b" VALUES(79);', 'INSERT INTO "b" VALUES(80);', 'INSERT INTO "b" VALUES(81);', 'INSERT INTO "b" VALUES(82);', 'INSERT INTO "b" VALUES(83);', 'INSERT INTO "b" VALUES(84);', 'INSERT INTO "b" VALUES(85);', 'INSERT INTO "b" VALUES(86);', 'INSERT INTO "b" VALUES(87);', 'INSERT INTO "b" VALUES(88);', 'INSERT INTO "b" VALUES(89);', 'INSERT INTO "b" VALUES(90);', 'INSERT INTO "b" VALUES(91);', 'INSERT INTO "b" VALUES(92);', 'INSERT INTO "b" VALUES(93);', 'INSERT INTO "b" VALUES(94);', 'INSERT INTO "b" VALUES(95);', 'INSERT INTO "b" VALUES(96);', 'INSERT INTO "b" VALUES(97);', 'INSERT INTO "b" VALUES(98);', 'INSERT INTO "b" VALUES(99);', 'COMMIT;']
+blob 8 b'\x00\x00\x00\x00\x00\x00\x00\x00' 8
+blob rw b'\x00\x00abc\x00\x00\x00' 0 b'abc' 0
+blob long write -> ValueError: data longer than blob length 
+blob seek -> ValueError: offset out of blob range 
+blob setitem b'\x07\x00a'
+blob closed -> ProgrammingError: Cannot operate on a closed blob. 
+blob missing -> OperationalError: no such rowid: 99 SQLITE_ERROR
+done

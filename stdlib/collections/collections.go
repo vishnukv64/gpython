@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -52,19 +53,52 @@ A list-like sequence optimized for data accesses near its endpoints.`
 // This is the Go container/list style doubly linked list rather than a
 // circular buffer: the access patterns that matter here are the ends, and a
 // linked list gives O(1) for both without the resize logic.
+//
+// mu makes each operation atomic, as the GIL does in CPython: queue.Queue
+// and asyncio's call_soon_threadsafe append from one thread while another
+// pops.  It is never held while Python code (__eq__, __repr__) runs.
 type Deque struct {
+	mu     sync.Mutex
 	items  []py.Object
 	maxlen int // -1 when unbounded
+}
+
+// snapshot returns a copy of the items, to walk without holding the lock.
+func (d *Deque) snapshot() []py.Object {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]py.Object(nil), d.items...)
+}
+
+// index resolves a possibly negative index under the lock held by the caller.
+func (d *Deque) index(key py.Object) (int, error) {
+	i, err := py.IndexInt(key)
+	if err != nil {
+		return 0, py.ExceptionNewf(py.TypeError, "sequence index must be integer, not '%s'", key.Type().Name)
+	}
+	if i < 0 {
+		i += len(d.items)
+	}
+	if i < 0 || i >= len(d.items) {
+		return 0, py.ExceptionNewf(py.IndexError, "deque index out of range")
+	}
+	return i, nil
 }
 
 var DequeType = py.NewTypeX("collections.deque", deque_doc, DequeNew, nil)
 
 func (d *Deque) Type() *py.Type { return DequeType }
 
-func (d *Deque) M__len__() (py.Object, error) { return py.Int(len(d.items)), nil }
+func (d *Deque) M__len__() (py.Object, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return py.Int(len(d.items)), nil
+}
 
 // append and trim in one place so maxlen is enforced everywhere.
 func (d *Deque) add(item py.Object, front bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if front {
 		d.items = append([]py.Object{item}, d.items...)
 	} else {
@@ -139,6 +173,8 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 0, 0); err != nil {
 			return nil, err
 		}
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		if len(d.items) == 0 {
 			return nil, py.ExceptionNewf(py.IndexError, "pop from an empty deque")
 		}
@@ -152,6 +188,8 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "popleft", 0, 0); err != nil {
 			return nil, err
 		}
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		if len(d.items) == 0 {
 			return nil, py.ExceptionNewf(py.IndexError, "pop from an empty deque")
 		}
@@ -197,7 +235,9 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "clear", 0, 0); err != nil {
 			return nil, err
 		}
+		d.mu.Lock()
 		d.items = nil
+		d.mu.Unlock()
 		return py.None, nil
 	}, 0, "Remove all elements from the deque."))
 
@@ -206,7 +246,7 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__iter__", 0, 0); err != nil {
 			return nil, err
 		}
-		return newIteratorFromItems(d.items), nil
+		return d.M__iter__()
 	}, 0, "Implement iter(self)."))
 
 	DequeType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -215,17 +255,7 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
-		i, err := py.IndexInt(key)
-		if err != nil {
-			return nil, py.ExceptionNewf(py.TypeError, "sequence index must be integer, not '%s'", key.Type().Name)
-		}
-		if i < 0 {
-			i += len(d.items)
-		}
-		if i < 0 || i >= len(d.items) {
-			return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
-		}
-		return d.items[i], nil
+		return d.M__getitem__(key)
 	}, 0, "Return self[index]."))
 
 	DequeType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -234,18 +264,7 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__setitem__", 2, 2, &key, &value); err != nil {
 			return nil, err
 		}
-		i, err := py.IndexInt(key)
-		if err != nil {
-			return nil, py.ExceptionNewf(py.TypeError, "sequence index must be integer, not '%s'", key.Type().Name)
-		}
-		if i < 0 {
-			i += len(d.items)
-		}
-		if i < 0 || i >= len(d.items) {
-			return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
-		}
-		d.items[i] = value
-		return py.None, nil
+		return d.M__setitem__(key, value)
 	}, 0, "Set self[index] to value."))
 
 	DequeType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -254,16 +273,7 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &item); err != nil {
 			return nil, err
 		}
-		for _, have := range d.items {
-			eq, err := py.Eq(have, item)
-			if err != nil {
-				return nil, err
-			}
-			if eq == py.True {
-				return py.True, nil
-			}
-		}
-		return py.False, nil
+		return d.M__contains__(item)
 	}, 0, "Implement 'in'."))
 
 	DequeType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -271,15 +281,7 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__repr__", 0, 0); err != nil {
 			return nil, err
 		}
-		parts, err := reprItems(d.items)
-		if err != nil {
-			return nil, err
-		}
-		out := "deque([" + strings.Join(parts, ", ") + "])"
-		if d.maxlen >= 0 {
-			out = "deque([" + strings.Join(parts, ", ") + "], maxlen=" + itoa(d.maxlen) + ")"
-		}
-		return py.String(out), nil
+		return d.M__repr__()
 	}, 0, "Return repr(self)."))
 }
 
@@ -290,7 +292,7 @@ func init() {
 		}, 0, doc))
 	}
 	find := func(d *Deque, v py.Object) (int, error) {
-		for i, have := range d.items {
+		for i, have := range d.snapshot() {
 			eq, err := py.Eq(have, v)
 			if err != nil {
 				return 0, err
@@ -315,6 +317,11 @@ func init() {
 		if i < 0 {
 			return nil, py.ExceptionNewf(py.ValueError, "deque.remove(x): x not in deque")
 		}
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if i >= len(d.items) {
+			return nil, py.ExceptionNewf(py.IndexError, "deque mutated during remove().")
+		}
 		d.items = append(d.items[:i:i], d.items[i+1:]...)
 		return py.None, nil
 	})
@@ -324,7 +331,7 @@ func init() {
 			return nil, err
 		}
 		n := 0
-		for _, have := range d.items {
+		for _, have := range d.snapshot() {
 			eq, err := py.Eq(have, v)
 			if err != nil {
 				return nil, err
@@ -350,6 +357,8 @@ func init() {
 		return py.Int(i), nil
 	})
 	m("reverse", "Reverse *IN PLACE*.", func(d *Deque, args py.Tuple) (py.Object, error) {
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		for i, j := 0, len(d.items)-1; i < j; i, j = i+1, j-1 {
 			d.items[i], d.items[j] = d.items[j], d.items[i]
 		}
@@ -363,6 +372,8 @@ func init() {
 				return nil, err
 			}
 		}
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		if l := len(d.items); l > 1 {
 			n = ((n % l) + l) % l
 			d.items = append(append([]py.Object{}, d.items[l-n:]...), d.items[:l-n]...)
@@ -370,7 +381,7 @@ func init() {
 		return py.None, nil
 	})
 	m("copy", "Return a shallow copy of a deque.", func(d *Deque, args py.Tuple) (py.Object, error) {
-		return &Deque{items: append([]py.Object(nil), d.items...), maxlen: d.maxlen}, nil
+		return &Deque{items: d.snapshot(), maxlen: d.maxlen}, nil
 	})
 	m("insert", "Insert value before index.", func(d *Deque, args py.Tuple) (py.Object, error) {
 		var iv, v py.Object
@@ -381,6 +392,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		if d.maxlen >= 0 && len(d.items) >= d.maxlen {
 			return nil, py.ExceptionNewf(py.IndexError, "deque already at its maximum size")
 		}
@@ -396,15 +409,11 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__delitem__", 1, 1, &k); err != nil {
 			return nil, err
 		}
-		i, err := py.IndexInt(k)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		i, err := d.index(k)
 		if err != nil {
 			return nil, err
-		}
-		if i < 0 {
-			i += len(d.items)
-		}
-		if i < 0 || i >= len(d.items) {
-			return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
 		}
 		d.items = append(d.items[:i:i], d.items[i+1:]...)
 		return py.None, nil
@@ -2075,10 +2084,10 @@ func (c *Counter) M__repr__() (py.Object, error) {
 	return py.String("Counter({" + strings.Join(parts, ", ") + "})"), nil
 }
 
-func (d *Deque) M__iter__() (py.Object, error) { return newIteratorFromItems(d.items), nil }
+func (d *Deque) M__iter__() (py.Object, error) { return py.NewIterator(py.Tuple(d.snapshot())), nil }
 
 func (d *Deque) M__contains__(item py.Object) (py.Object, error) {
-	for _, have := range d.items {
+	for _, have := range d.snapshot() {
 		eq, err := py.Eq(have, item)
 		if err != nil {
 			return nil, err
@@ -2091,36 +2100,28 @@ func (d *Deque) M__contains__(item py.Object) (py.Object, error) {
 }
 
 func (d *Deque) M__getitem__(key py.Object) (py.Object, error) {
-	i, err := py.IndexInt(key)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	i, err := d.index(key)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.TypeError, "sequence index must be integer, not '%s'", key.Type().Name)
-	}
-	if i < 0 {
-		i += len(d.items)
-	}
-	if i < 0 || i >= len(d.items) {
-		return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
+		return nil, err
 	}
 	return d.items[i], nil
 }
 
 func (d *Deque) M__setitem__(key, value py.Object) (py.Object, error) {
-	i, err := py.IndexInt(key)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	i, err := d.index(key)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.TypeError, "sequence index must be integer, not '%s'", key.Type().Name)
-	}
-	if i < 0 {
-		i += len(d.items)
-	}
-	if i < 0 || i >= len(d.items) {
-		return nil, py.ExceptionNewf(py.IndexError, "deque index out of range")
+		return nil, err
 	}
 	d.items[i] = value
 	return py.None, nil
 }
 
 func (d *Deque) M__repr__() (py.Object, error) {
-	parts, err := reprItems(d.items)
+	parts, err := reprItems(d.snapshot())
 	if err != nil {
 		return nil, err
 	}

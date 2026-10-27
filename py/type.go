@@ -366,6 +366,18 @@ func init() {
 	}
 	typeMeta("__name__", "The name of the type.", func(t *Type) Object { return String(t.Name) })
 	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object { return String(t.Name) })
+	// A type declared natively has no __module__ in its dict: the module is the
+	// "pkg." prefix of its name ("itertools.batched"), else "builtins".  A class
+	// statement sets __module__ itself, and its own dict is looked at first.
+	typeMeta("__module__", "The name of the module the type was defined in.", func(t *Type) Object {
+		if m, ok := t.Dict.GetOrNil("__module__").(String); ok {
+			return m
+		}
+		if i := strings.LastIndexByte(t.Name, '.'); i > 0 {
+			return String(t.Name[:i])
+		}
+		return String("builtins")
+	})
 	typeMeta("__doc__", "The documentation string of the type.", func(t *Type) Object { return String(t.Doc) })
 	typeMeta("__bases__", "The base classes of the type.", func(t *Type) Object { return t.Bases })
 	// __mro__ is a standard attribute of every class, and inspect.getmro is
@@ -428,6 +440,7 @@ func init() {
 		return NotImplemented, nil
 	}, 0, "Abstract classes can override this to customize issubclass()."))
 
+	registerReduce()
 	ObjectType.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return None, nil
 	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
@@ -2706,13 +2719,11 @@ func init() {
 //
 // "tuple[int, ...]" and "list[str]" appear in evaluated positions - a class
 // base, a default value - where deferring annotations does not help, so the
-// builtin types have to answer "[" rather than raising.  The parameters only
-// matter to a type checker, so the class itself is the result, exactly as it
-// is for the abstract base classes.
+// builtin types have to answer "[" rather than raising.  As in CPython the
+// result is a types.GenericAlias: list[int] keeps its args, so a later
+// subscript can substitute a TypeVar in it (dict[T, int][str]), and calling
+// it, subclassing it and its attributes still reach the class.
 func init() {
-	getitem := MustNewMethod("__class_getitem__", func(self Object, args Tuple) (Object, error) {
-		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters.")
 
 	// ObjectType is deliberately NOT in this list: every class's MRO includes
 	// object, so putting the hook there made EVERY class subscriptable-as-
@@ -2729,7 +2740,11 @@ func init() {
 		SliceType, ComplexType, TypeType, StringDictType,
 	} {
 		if t != nil && !t.Dict.IsNil() {
-			t.Dict.Set("__class_getitem__", getitem)
+			t := t
+			// Reached unbound through the class, so the key arrives as self.
+			t.Dict.Set("__class_getitem__", MustNewMethod("__class_getitem__", func(key Object, _ Tuple) (Object, error) {
+				return NewGenericAlias(t, key), nil
+			}, 0, "Represent a PEP 585 generic type."))
 		}
 	}
 }

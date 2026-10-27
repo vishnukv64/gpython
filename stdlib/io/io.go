@@ -117,6 +117,12 @@ func init() {
 		py.DictEntry{Key: "TextIOWrapper", Value: TextIOBaseType},
 		py.DictEntry{Key: "FileIO", Value: RawIOBaseType},
 		py.DictEntry{Key: "open", Value: py.MustNewMethod("open", pyOpen, 0, "Open a file and return a stream.")},
+		py.DictEntry{Key: "open_code", Value: py.MustNewMethod("open_code", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "open_code() takes exactly one argument (%d given)", len(args))
+			}
+			return pyOpen(self, py.Tuple{args[0], py.String("rb")}, py.NewStringDict())
+		}, 0, "Open the file pointed to by path for reading in binary mode, as the importer does.")},
 	)
 
 	py.RegisterModule(&py.ModuleImpl{

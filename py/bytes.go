@@ -228,6 +228,8 @@ func convertToBytes(other Object) (Bytes, bool) {
 		return b, true
 	case *ByteArray:
 		return Bytes(b.b), true
+	case *MemoryView:
+		return Bytes(b.b), true
 	}
 	return []byte(nil), false
 }
@@ -240,6 +242,8 @@ func bytesLikeData(other Object) ([]byte, bool) {
 	case Bytes:
 		return b, true
 	case *ByteArray:
+		return b.b, true
+	case *MemoryView:
 		return b.b, true
 	}
 	return nil, false
@@ -1692,6 +1696,15 @@ var (
 
 // M__len__ implements len(b), which was missing: bytes had no __len__ at all, so
 // len(b"abc") raised "object of type 'bytes' has no len()".
+// M__iter__ walks the bytes as ints.
+func (a Bytes) M__iter__() (Object, error) {
+	objs := make(Tuple, len(a))
+	for i, c := range a {
+		objs[i] = Int(c)
+	}
+	return NewIterator(objs), nil
+}
+
 func (a Bytes) M__len__() (Object, error) {
 	return Int(len(a)), nil
 }

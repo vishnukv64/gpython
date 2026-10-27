@@ -303,6 +303,31 @@ func formatExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	return py.String(sb.String()), nil
 }
 
+// printException is print_exception(exc) / print_exception(type, value, tb),
+// with the file= keyword; limit and chain are accepted and ignored.
+func printException(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	file := py.Object(py.None)
+	if v, ok := kwargs.Get("file"); ok {
+		file = v
+	}
+	exc, tb, err := resolveExcArgs("print_exception", args)
+	if err != nil {
+		return nil, err
+	}
+	var sb strings.Builder
+	formatExceptionInto(&sb, exc, tb, nil)
+	if file == py.None {
+		_, err = os.Stderr.WriteString(sb.String())
+		return py.None, err
+	}
+	w, err := py.GetAttrString(file, "write")
+	if err != nil {
+		return nil, err
+	}
+	_, err = py.Call(w, py.Tuple{py.String(sb.String())}, py.NewStringDict())
+	return py.None, err
+}
+
 func printExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
 		limit py.Object = py.None
@@ -464,6 +489,7 @@ func init() {
 	globals.Set("format_exception_only", py.MustNewMethod("format_exception_only", formatExceptionOnly, 0, "Format the exception part of a traceback."))
 	globals.Set("format_exc", py.MustNewMethod("format_exc", formatExc, 0, "Like print_exc() but return a string."))
 	globals.Set("print_exc", py.MustNewMethod("print_exc", printExc, 0, "Shorthand for print_exception(*sys.exc_info())."))
+	globals.Set("print_exception", py.MustNewMethod("print_exception", printException, 0, "Print exception information and the traceback to file (default sys.stderr)."))
 	globals.Set("format_stack", py.MustNewMethod("format_stack", formatStack, 0, "Format a stack trace and its source code, as a list of strings."))
 	globals.Set("walk_tb", py.MustNewMethod("walk_tb", walkTb, 0, "Walk a traceback, yielding each frame and line number."))
 	globals.Set("extract_tb", py.MustNewMethod("extract_tb", extractTb, 0, "Return a list of FrameSummary for a traceback."))

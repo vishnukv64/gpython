@@ -484,6 +484,14 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 		return res, err
 	}
 
+	// PEP 562: a module may define __getattr__ to supply missing names
+	// (concurrent.futures resolves ThreadPoolExecutor this way).
+	if m, ok := self.(*Module); ok && key != "__getattr__" {
+		if hook, ok := m.Globals.Get("__getattr__"); ok {
+			return Call(hook, Tuple{String(key)}, NewStringDict())
+		}
+	}
+
 	// Not found - return nil
 	// The name of the CLASS, not the metatype: for a class this prints
 	// "type object 'V' has no attribute 'x'", which is CPython's wording and

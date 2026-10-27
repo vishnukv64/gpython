@@ -133,6 +133,24 @@ var ModuleType = NewType("module", "module object")
 // so without __dict__ the lexer package raised "'module' object has no
 // attribute '__dict__'" and pip could not import pygments.
 func init() {
+	// types.ModuleType(name, doc=None) makes an empty module.
+	ModuleType.New = func(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
+		var name, doc Object = nil, None
+		if err := ParseTupleAndKeywords(args, kwargs, "O|O:module", []string{"name", "doc"}, &name, &doc); err != nil {
+			return nil, err
+		}
+		n, ok := name.(String)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "module.__init__() argument 'name' must be str, not %s", name.Type().Name)
+		}
+		g := NewStringDict()
+		g.Set("__name__", n)
+		g.Set("__doc__", doc)
+		g.Set("__package__", None)
+		g.Set("__loader__", None)
+		g.Set("__spec__", None)
+		return &Module{ModuleImpl: &ModuleImpl{Info: ModuleInfo{Name: string(n)}}, Globals: g}, nil
+	}
 	ModuleType.Dict.Set("__dict__", &Property{
 		Fget: func(self Object) (Object, error) {
 			// A *Module carries its globals directly.  A SUBCLASS of
@@ -462,6 +480,45 @@ func init() {
 		}
 		return def, nil
 	}, 0, "get(name[, default]) -> the module, or default"))
+	// snapshot is a plain dict of the loaded modules.
+	snapshot := func(self Object) StringDict {
+		store := m0(self).store
+		d := NewStringDict()
+		for _, n := range store.ModuleNames() {
+			if mod, ok := store.ModuleLike(n); ok {
+				d.Set(n, mod)
+			}
+		}
+		return d
+	}
+	ModulesViewType.Dict.Set("copy", MustNewMethod("copy", func(self Object, args Tuple) (Object, error) {
+		return snapshot(self), nil
+	}, 0, "copy() -> a plain dict of the loaded modules"))
+	for _, name := range []string{"items", "values"} {
+		name := name
+		ModulesViewType.Dict.Set(name, MustNewMethod(name, func(self Object, args Tuple) (Object, error) {
+			return GetAttrString(snapshot(self), name)
+		}, 0, name+"() -> a view over a snapshot of the loaded modules"))
+	}
+	ModulesViewType.Dict.Set("pop", MustNewMethod("pop", func(self Object, args Tuple) (Object, error) {
+		if len(args) < 1 || len(args) > 2 {
+			return nil, ExceptionNewf(TypeError, "pop expected 1 or 2 arguments, got %d", len(args))
+		}
+		mv := m0(self)
+		name, err := StrAsString(args[0])
+		if err != nil {
+			return nil, err
+		}
+		mod, ok := mv.store.ModuleLike(name)
+		if !ok {
+			if len(args) == 2 {
+				return args[1], nil
+			}
+			return nil, ExceptionNewf(KeyError, "'%s'", name)
+		}
+		delete(mv.store.Modules(), name)
+		return mod, nil
+	}, 0, "pop(name[, default]) -> remove and return the module"))
 	ModulesViewType.Dict.Set("keys", MustNewMethod("keys", func(self Object, args Tuple) (Object, error) {
 		names := m0(self).store.ModuleNames()
 		items := make([]Object, 0, len(names))

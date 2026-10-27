@@ -87,6 +87,19 @@ func Next(self Object) (obj Object, err error) {
 	return nil, ExceptionNewf(TypeError, "'%s' object is not iterable", self.Type().Name)
 }
 
+// isStopIteration reports whether err is a StopIteration, whether the Go
+// sentinel or an instance a Python __next__ raised.  (It avoids IsException,
+// which would make an initialisation cycle through BytesNew.)
+func isStopIteration(err error) bool {
+	switch e := err.(type) {
+	case *Exception:
+		return e.Type() == StopIteration
+	case ExceptionInfo:
+		return e.Type == StopIteration
+	}
+	return err == StopIteration
+}
+
 // Create an iterator from obj and iterate the iterator until finished
 // calling the function passed in on each object.  The iteration is
 // finished if the function returns true
@@ -124,7 +137,7 @@ func Iterate(obj Object, fn func(Object) bool) error {
 		}
 		for {
 			item, err := Next(iterator)
-			if err == StopIteration {
+			if isStopIteration(err) {
 				break
 			}
 			if err != nil {

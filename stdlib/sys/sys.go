@@ -188,20 +188,14 @@ Return the string itself or the previously interned string object with the
 same value.`
 
 func sys_intern(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.NotImplementedError
-	// py.Object s;
-	// if (!PyArg_ParseTuple(args, "U:intern", &s)) {
-	//     return nil;
-	// }
-	// if (PyUnicode_CheckExact(s)) {
-	//     Py_INCREF(s);
-	//     PyUnicode_InternInPlace(&s);
-	//     return s;
-	// } else {
-	//     PyErr_Format(PyExc_TypeError,
-	//                  "can't intern %.400s", s->ob_type->tp_name);
-	//     return nil;
-	// }
+	// Strings are Go values, compared by content: interning is the identity.
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "intern() takes exactly one argument (%d given)", len(args))
+	}
+	if _, ok := args[0].(py.String); !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "intern() argument must be str, not %s", args[0].Type().Name)
+	}
+	return args[0], nil
 }
 
 const settrace_doc = `settrace(function)
@@ -631,6 +625,8 @@ func sys_clear_type_cache(self py.Object, args py.Tuple) (py.Object, error) {
 // Initialise the module
 func init() {
 	methods := []*py.Method{
+		py.MustNewMethod("audit", func(self py.Object, args py.Tuple) (py.Object, error) { return py.None, nil }, 0, "audit(event, *args): no audit hooks are installed, so nothing happens."),
+		py.MustNewMethod("addaudithook", func(self py.Object, args py.Tuple) (py.Object, error) { return py.None, nil }, 0, "addaudithook(hook): hooks are never called."),
 		py.MustNewMethod("callstats", sys_callstats, 0, callstats_doc),
 		py.MustNewMethod("_clear_type_cache", sys_clear_type_cache, 0, sys_clear_type_cache__doc__),
 		py.MustNewMethod("_current_frames", sys_current_frames, 0, current_frames_doc),
@@ -943,7 +939,7 @@ func (f *flags) M__getattr__(name string) (py.Object, error) {
 
 func newFlags() py.Object {
 	f := &flags{fields: map[string]int{}}
-	for _, n := range []string{"debug", "inspect", "interactive", "optimize", "dont_write_bytecode", "no_user_site", "no_site", "ignore_environment", "verbose", "bytes_warning", "quiet", "hash_randomization", "isolated", "dev_mode", "utf8_mode", "warn_default_encoding", "safe_path", "int_max_str_digits"} {
+	for _, n := range []string{"debug", "inspect", "interactive", "optimize", "dont_write_bytecode", "no_user_site", "no_site", "ignore_environment", "verbose", "bytes_warning", "quiet", "hash_randomization", "isolated", "dev_mode", "utf8_mode", "warn_default_encoding", "safe_path", "int_max_str_digits", "thread_inherit_context", "context_aware_warnings", "gil", "lazy_imports"} {
 		f.fields[n] = 0
 	}
 	return f

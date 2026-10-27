@@ -52,6 +52,7 @@ func init() {
 		py.DictEntry{Key: "zip_longest", Value: py.MustNewMethod("zip_longest", zipLongest, 0, "zip_longest(iter1 [,iter2 [...]], [fillvalue=None]) --> zip_longest object")},
 		py.DictEntry{Key: "tee", Value: py.MustNewMethod("tee", tee, 0, "tee(iterable, n=2) --> tuple of n independent iterators.")},
 		py.DictEntry{Key: "pairwise", Value: py.MustNewMethod("pairwise", pairwise, 0, "pairwise(iterable) --> pairwise object")},
+		py.DictEntry{Key: "batched", Value: py.MustNewMethod("batched", batched, 0, "batched(iterable, n, *, strict=False) --> batched object")},
 		py.DictEntry{Key: "product", Value: py.MustNewMethod("product", product, 0, "product(*iterables, repeat=1) --> product object")},
 		py.DictEntry{Key: "permutations", Value: py.MustNewMethod("permutations", permutations, 0, "permutations(iterable[, r]) --> permutations object")},
 		py.DictEntry{Key: "combinations", Value: py.MustNewMethod("combinations", combinations, 0, "combinations(iterable, r) --> combinations object")},
@@ -1318,3 +1319,65 @@ var (
 	_ py.I__iter__ = (*combIter)(nil)
 	_ py.I__next__ = (*combIter)(nil)
 )
+
+func batched(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var iterable, nObj py.Object
+	strict := py.Object(py.False)
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|$O:batched", []string{"iterable", "n", "strict"}, &iterable, &nObj, &strict); err != nil {
+		return nil, err
+	}
+	n, err := py.IndexInt(nObj)
+	if err != nil {
+		return nil, err
+	}
+	if n < 1 {
+		return nil, py.ExceptionNewf(py.ValueError, "n must be at least one")
+	}
+	it, err := iterOf(iterable)
+	if err != nil {
+		return nil, err
+	}
+	s, err := py.ObjectIsTrue(strict)
+	if err != nil {
+		return nil, err
+	}
+	return &batchedIter{it: it, n: n, strict: s}, nil
+}
+
+type batchedIter struct {
+	it     py.Object
+	n      int
+	strict bool
+	done   bool
+}
+
+var batchedType = py.NewType("itertools.batched", "Batch data into tuples of length n.")
+
+func (b *batchedIter) Type() *py.Type { return batchedType }
+
+func (b *batchedIter) M__iter__() (py.Object, error) { return b, nil }
+
+func (b *batchedIter) M__next__() (py.Object, error) {
+	if b.done {
+		return nil, py.StopIteration
+	}
+	batch := make(py.Tuple, 0, b.n)
+	for len(batch) < b.n {
+		v, ok, err := nextOf(b.it)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			b.done = true
+			break
+		}
+		batch = append(batch, v)
+	}
+	if len(batch) == 0 {
+		return nil, py.StopIteration
+	}
+	if len(batch) < b.n && b.strict {
+		return nil, py.ExceptionNewf(py.ValueError, "batched(): incomplete batch")
+	}
+	return batch, nil
+}

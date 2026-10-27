@@ -1,0 +1,8 @@
+queue [0, 10, 20, 30] 0
+('echo', 1)
+('echo', 'two')
+('echo', [3, 4])
+('echo', {'five': 5})
+pipe 0
+b'raw bytes'
+simple

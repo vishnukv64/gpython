@@ -135,7 +135,12 @@ func init() {
 	}, 0, "Return self!=value."))
 
 	for _, t := range []*py.Type{EnumType, IntEnumType, FlagType, IntFlagType} {
-		t.Dict.Set("_convert_", py.MustNewMethod("_convert_", enumConvert, py.METH_CLASS, "Create a new Enum subclass that replaces a collection of global constants."))
+		// A METH_CLASS method read off the class is handed no self, so each
+		// class gets a method that closes over itself.
+		t := t
+		t.Dict.Set("_convert_", py.MustNewMethod("_convert_", func(_ py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+			return enumConvert(t, args, kwargs)
+		}, py.METH_CLASS, "Create a new Enum subclass that replaces a collection of global constants."))
 	}
 
 	py.BuildEnumClass = buildEnumClass

@@ -919,9 +919,11 @@ func init() {
 func (d *DateTime) M__str__() (py.Object, error) { return py.String(d.isoformat(" ")), nil }
 
 func (d *DateTime) M__repr__() (py.Object, error) {
-	return py.String("datetime.datetime(" +
-		fmt.Sprintf("%d, %d, %d, %d, %d", d.Year, d.Month, d.Day, d.Hour, d.Minute) +
-		microPart(d.Micro) + ")"), nil
+	out := fmt.Sprintf("datetime.datetime(%d, %d, %d, %d, %d", d.Year, d.Month, d.Day, d.Hour, d.Minute)
+	if d.Second != 0 || d.Micro != 0 {
+		out += fmt.Sprintf(", %d", d.Second)
+	}
+	return py.String(out + microPart(d.Micro) + ")"), nil
 }
 
 func (d *Date) M__str__() (py.Object, error) {

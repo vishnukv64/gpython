@@ -78,6 +78,10 @@ func init() {
 		py.DictEntry{Key: "TimeoutExpired", Value: TimeoutExpiredType},
 		py.DictEntry{Key: "CompletedProcess", Value: CompletedProcessType},
 		py.DictEntry{Key: "Popen", Value: PopenType},
+		py.DictEntry{Key: "_args_from_interpreter_flags", Value: py.MustNewMethod("_args_from_interpreter_flags", func(self py.Object, args py.Tuple) (py.Object, error) {
+			// gpython has no -O/-B/-W style flags a child must repeat.
+			return py.NewListFromItems(nil), nil
+		}, 0, "Return the command line flags a child interpreter needs to match this one.")},
 		py.DictEntry{Key: "call", Value: py.MustNewMethod("call", call, 0, "Run the command described by args and wait for it to complete, returning the return code.")},
 		py.DictEntry{Key: "check_call", Value: py.MustNewMethod("check_call", checkCall, 0, "Run a command and raise CalledProcessError if it returns non-zero.")},
 		py.DictEntry{Key: "check_output", Value: py.MustNewMethod("check_output", checkOutput, 0, "Run a command and return its output.")},

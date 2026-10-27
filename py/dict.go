@@ -473,12 +473,15 @@ type dictShared struct {
 	// it.  A dict of plain string keys - nearly all of them - never touches
 	// it, and its two maps stay nil.
 	ht hashTable
-	// boolKeys marks an int-encoded key whose FIRST insertion was a bool.  A
-	// bool is encoded as the int it equals, so True and 1 are one key - but
-	// CPython keeps the key object first inserted, so {True: 1} prints as
-	// {True: 1}, not {1: 1}.  Nil until a bool key is stored.
-	boolKeys map[string]bool
-	// mu guards m, order, ht and boolKeys.  There is no GIL, so a dict is read and
+	// keyObjs holds the key object first inserted under an encoding that would
+	// decode to something else: a bool (encoded as the int it equals, so True
+	// and 1 are one key) or an instance of a str/int/tuple subclass (encoded as
+	// its payload).  CPython keeps the first-inserted object, so {True: 1}
+	// prints as {True: 1} and iterating yields the subclass instance.  Nil until
+	// such a key is stored.
+	// ponytail: only top-level keys; a subclass nested in a tuple key decodes as its base.
+	keyObjs map[string]Object
+	// mu guards m, order, ht and keyObjs.  There is no GIL, so a dict is read and
 	// written from several goroutines at once - a module's globals by every
 	// thread running a function from it - and an unguarded Go map does not
 	// merely give a wrong answer then: the runtime aborts the process with
@@ -602,7 +605,7 @@ func (d *StringDict) Del(key string) bool {
 	}
 	// A key whose type defines __hash__ also owns a slot in the bucket table.
 	d.shared.ht.forget(key)
-	delete(d.shared.boolKeys, key)
+	delete(d.shared.keyObjs, key)
 	return true
 }
 
@@ -669,16 +672,20 @@ func (d StringDict) setItem(key, value Object) error {
 	if isHashKey(encoded) {
 		return d.hashSet(encoded, key, value)
 	}
-	if _, isBool := key.(Bool); isBool {
-		d.noteBoolKey(encoded)
-	}
+	d.noteKeyObj(encoded, key)
 	d.Set(encoded, value)
 	return nil
 }
 
-// noteBoolKey records that encoded is being inserted as a bool, unless the
-// slot already holds a key - which keeps its original object, as in CPython.
-func (d StringDict) noteBoolKey(encoded string) {
+// noteKeyObj records key as the object behind encoded when decoding would not
+// give it back (a bool, or a builtin subclass instance), unless the slot
+// already holds a key - which keeps its original object, as in CPython.
+func (d StringDict) noteKeyObj(encoded string, key Object) {
+	if _, isBool := key.(Bool); !isBool {
+		if _, isPayload := payloadOf(key); !isPayload {
+			return
+		}
+	}
 	if d.shared == nil {
 		return
 	}
@@ -687,20 +694,21 @@ func (d StringDict) noteBoolKey(encoded string) {
 	if _, exists := d.m[encoded]; exists {
 		return
 	}
-	if d.shared.boolKeys == nil {
-		d.shared.boolKeys = map[string]bool{}
+	if d.shared.keyObjs == nil {
+		d.shared.keyObjs = map[string]Object{}
 	}
-	d.shared.boolKeys[encoded] = true
+	d.shared.keyObjs[encoded] = key
 }
 
-// isBoolKey reports whether encoded was first inserted as a bool.
-func (d StringDict) isBoolKey(encoded string) bool {
+// keyObj returns the recorded key object for encoded, if any.
+func (d StringDict) keyObj(encoded string) (Object, bool) {
 	if d.shared == nil {
-		return false
+		return nil, false
 	}
 	d.shared.mu.RLock()
 	defer d.shared.mu.RUnlock()
-	return d.shared.boolKeys[encoded]
+	obj, ok := d.shared.keyObjs[encoded]
+	return obj, ok
 }
 
 // DecodeKey recovers the object an encoded key stands for.
@@ -710,8 +718,8 @@ func (d StringDict) isBoolKey(encoded string) bool {
 // object lives in this dict's table - hashing is not reversible - so it takes
 // the dict to decode it.  See hashTable.
 func (d StringDict) DecodeKey(encoded string) (Object, error) {
-	if d.isBoolKey(encoded) {
-		return NewBool(strings.HasSuffix(encoded, "1")), nil
+	if obj, ok := d.keyObj(encoded); ok {
+		return obj, nil
 	}
 	if isHashKey(encoded) && d.shared != nil {
 		d.shared.mu.RLock()
@@ -730,8 +738,8 @@ func (d StringDict) DecodeKey(encoded string) (Object, error) {
 // and filed anew in d.
 func (d *StringDict) copyEntryFrom(src StringDict, code string, value Object) error {
 	if !isHashKey(code) {
-		if src.isBoolKey(code) {
-			d.noteBoolKey(code)
+		if obj, ok := src.keyObj(code); ok {
+			d.noteKeyObj(code, obj)
 		}
 		d.Set(code, value)
 		return nil
@@ -827,7 +835,7 @@ func (d *StringDict) Clear() {
 	}
 	d.shared.order = d.shared.order[:0]
 	d.shared.ht = hashTable{}
-	d.shared.boolKeys = nil
+	d.shared.keyObjs = nil
 }
 
 // DictEntry is one key/value pair for NewStringDictFrom.

@@ -1,0 +1,4 @@
+module level in __main__
+module level in __mp_main__
+child sees __mp_main__
+done 0

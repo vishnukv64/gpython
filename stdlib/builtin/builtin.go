@@ -712,7 +712,7 @@ func builtin_open(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		opener    py.Object = py.None
 	)
 
-	err := py.ParseTupleAndKeywords(args, kwargs, "s|sizzzpO:open", kwlist,
+	err := py.ParseTupleAndKeywords(args, kwargs, "O|sizzzpO:open", kwlist,
 		&filename,
 		&mode,
 		&buffering,
@@ -741,6 +741,18 @@ func builtin_open(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, py.ExceptionNewf(py.NotImplementedError, "opener not implemented yet")
 	}
 
+	// open(fd, ...) wraps an existing descriptor; closefd=False leaves the
+	// caller's descriptor open by working on a duplicate.
+	if fd, ok := filename.(py.Int); ok {
+		cf, err := py.ObjectIsTrue(closefd)
+		if err != nil {
+			return nil, err
+		}
+		return py.FileFromFD(int(fd), string(mode.(py.String)), cf)
+	}
+	if _, ok := filename.(py.String); !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "open() argument 1 must be str, not %s", filename.Type().Name)
+	}
 	return py.OpenFile(string(filename.(py.String)),
 		string(mode.(py.String)),
 		int(buffering.(py.Int)))
@@ -925,7 +937,10 @@ func builtin_setattr(self py.Object, args py.Tuple) (py.Object, error) {
 
 // Reads the source as a string
 func source_as_string(cmd py.Object, funcname, what string /*, PyCompilerFlags *cf */) (string, error) {
-	// FIXME only understands strings, not bytes etc at the moment
+	switch b := cmd.(type) {
+	case py.Bytes: // source read from a file in binary mode (runpy does)
+		return string(b), nil
+	}
 	if str, ok := cmd.(py.String); ok {
 		// FIXME cf->cf_flags |= PyCF_IGNORE_COOKIE;
 		return string(str), nil

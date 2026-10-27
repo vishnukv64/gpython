@@ -121,6 +121,7 @@ func init() {
 		py.MustNewMethod("system", system, 0, "Run shell commands, prints stdout directly to default"),
 		py.MustNewMethod("unsetenv", unsetenv, 0, "Unset (delete) the environment variable named key."),
 	}
+	methods = append(methods, procMethods()...)
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "error", Value: py.OSError},
 		py.DictEntry{Key: "environ", Value: Environ},
@@ -145,6 +146,9 @@ func init() {
 	// The separator constants, which code joins paths with.
 	// The os.access mode flags are part of the module's interface: a program
 	// passes os.W_OK, so they must be there and must have CPython's values.
+	for k, v := range procConsts() {
+		globals.Set(k, py.Int(v))
+	}
 	globals.Set("F_OK", py.Int(F_OK))
 	globals.Set("X_OK", py.Int(X_OK))
 	globals.Set("W_OK", py.Int(W_OK))
@@ -221,14 +225,24 @@ func fdopen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 		pymode      py.Object = py.String("r")
 		pybuffering py.Object = py.Int(-1)
 		pyencoding  py.Object = py.None
+		pyerrors    py.Object = py.None
+		pynewline   py.Object = py.None
+		pyclosefd   py.Object = py.True
 	)
 	err := py.ParseTupleAndKeywords(
 		args, kwargs,
-		"i|s#is#", []string{"fd", "mode", "buffering", "encoding"},
-		&pyfd, &pymode, &pybuffering, &pyencoding,
+		"i|s#is#zzp", []string{"fd", "mode", "buffering", "encoding", "errors", "newline", "closefd"},
+		&pyfd, &pymode, &pybuffering, &pyencoding, &pyerrors, &pynewline, &pyclosefd,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if cf, _ := py.ObjectIsTrue(pyclosefd); !cf {
+		mode := "r"
+		if s, ok := pymode.(py.String); ok {
+			mode = string(s)
+		}
+		return py.FileFromFD(int(pyfd.(py.Int)), mode, false)
 	}
 
 	// FIXME(sbinet): handle buffering
@@ -1007,32 +1021,10 @@ func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	return py.Int(py.OwnFD(fd)), nil
 }
 
-// flagsFor translates the POSIX open flags a program passes into the Go ones.
-func flagsFor(flags int) int {
-	mode := 0
-	// The access mode is the low two bits: O_RDONLY 0, O_WRONLY 1, O_RDWR 2.
-	switch flags & 3 {
-	case 1:
-		mode |= os.O_WRONLY
-	case 2:
-		mode |= os.O_RDWR
-	default:
-		mode |= os.O_RDONLY
-	}
-	if flags&0x40 != 0 { // O_CREAT
-		mode |= os.O_CREATE
-	}
-	if flags&0x80 != 0 { // O_EXCL
-		mode |= os.O_EXCL
-	}
-	if flags&0x200 != 0 { // O_TRUNC
-		mode |= os.O_TRUNC
-	}
-	if flags&0x400 != 0 { // O_APPEND
-		mode |= os.O_APPEND
-	}
-	return mode
-}
+// flagsFor translates the open flags a program passes into Go's.  The O_*
+// constants this module exports ARE Go's own (which equal the host's on
+// POSIX), so a flag word needs no translation.
+func flagsFor(flags int) int { return flags }
 
 const access_doc = `access(path, mode, *, dir_fd=None, effective_ids=False, follow_symlinks=True)
 

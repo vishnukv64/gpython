@@ -16,9 +16,11 @@ package logging
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/thread"
 )
 
 const logging_doc = `Logging facility for Python.
@@ -717,14 +719,8 @@ func lastResortEmit(record *LogRecord) {
 	_, _ = py.Call(write, py.Tuple{py.String(text)}, py.NewStringDict())
 }
 
-// handle makes a record and dispatches it, returning whether it was passed
-// to a handler at all.
-// handle is handleWith with no exc_info or extra, which is what the internal
-// callers want.
-func (l *Logger) handle(level int, msg py.Object, args py.Object) (bool, error) {
-	return l.handleWith(level, msg, args, py.False, nil)
-}
-
+// handleWith makes a record and dispatches it, returning whether it was
+// passed to a handler at all.
 func (l *Logger) handleWith(level int, msg py.Object, args py.Object, excInfo, extra py.Object) (bool, error) {
 	if !l.isEnabledFor(level) {
 		return false, nil
@@ -879,46 +875,20 @@ const loggerLog_doc = `log(level, msg, *args, **kwargs)
 Log 'msg % args' with the integer severity 'level'.`
 
 func loggerLogMethod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if err := checkArgs(args, kwargs, "log", 1, -1); err != nil {
-		return nil, err
+	if len(args) < 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "log() missing required arguments: 'level' and 'msg'")
 	}
-	levelObj := args[0]
-	var level int
-	switch v := levelObj.(type) {
-	case py.Int:
-		n, err := v.GoInt()
-		if err != nil {
-			return nil, err
-		}
-		level = n
-	default:
+	level, ok := args[0].(py.Int)
+	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "level must be an integer")
 	}
-	l := self.(*Logger)
-	if err := checkArgs(args, kwargs, "log", 2, -1); err != nil {
-		return nil, err
-	}
-	if !l.isEnabledFor(level) {
-		return py.None, nil
-	}
-	msg, err := py.Str(args[1])
+	n, err := level.GoInt()
 	if err != nil {
 		return nil, err
 	}
-	if len(args) == 2 && msg.Type().IsSubtype(py.StringType) {
-		if _, err := l.handle(level, msg, py.None); err != nil {
-			return nil, err
-		}
-		return py.None, nil
-	}
-	rest := args[1:]
-	if len(rest) == 1 {
-		rest = py.Tuple{rest[0]}
-	}
-	if _, err := l.handle(level, rest[0], rest[1]); err != nil {
-		return nil, err
-	}
-	return py.None, nil
+	// Same path as debug()/info(): keywords (stacklevel, extra, ...) and
+	// %-arguments included.
+	return loggerLog(self.(*Logger), args[1:], kwargs, n, "log")
 }
 
 const loggerIsEnabledFor_doc = `isEnabledFor(level)
@@ -1213,8 +1183,45 @@ func recordField(record *LogRecord, field string) (py.Object, error) {
 		return py.String(record.FuncName), nil
 	case "created":
 		return py.Float(record.Created), nil
+	case "process":
+		return py.Int(os.Getpid()), nil
+	case "processName":
+		return py.String(currentName("multiprocessing.process", "current_process", "MainProcess")), nil
+	case "thread":
+		return py.Int(thread.Ident()), nil
+	case "threadName":
+		return py.String(currentName("threading", "current_thread", "MainThread")), nil
 	}
 	return nil, py.ExceptionNewf(py.KeyError, "%s", field)
+}
+
+// currentName is module.fn().name when that module has been imported (the
+// multiprocessing Process or threading Thread running now), else def.
+func currentName(module, fn, def string) string {
+	f := py.CurrentFrame()
+	if f == nil {
+		return def
+	}
+	m, ok := f.Context.Store().ModuleLike(module)
+	if !ok {
+		return def
+	}
+	call, err := py.GetAttrString(m, fn)
+	if err != nil {
+		return def
+	}
+	cur, err := py.Call(call, py.Tuple{}, py.NewStringDict())
+	if err != nil {
+		return def
+	}
+	n, err := py.GetAttrString(cur, "name")
+	if err != nil {
+		return def
+	}
+	if s, ok := n.(py.String); ok {
+		return string(s)
+	}
+	return def
 }
 
 // mustMessage renders the message; the error is reported by the caller of
@@ -2010,6 +2017,9 @@ define __init__ such that it requires only a name argument.`),
 			py.MustNewMethod("disable", disable, 0, disable_doc),
 		},
 		Globals: py.NewStringDictFrom(
+			// logging._lock guards the logging configuration; code that
+			// configures loggers (multiprocessing.util) takes it directly.
+			py.DictEntry{Key: "_lock", Value: thread.NewRLock()},
 			py.DictEntry{Key: "DEBUG", Value: py.Int(DEBUG)},
 			py.DictEntry{Key: "shutdown", Value: py.MustNewMethod("shutdown", loggingShutdown, 0, shutdown_doc)},
 			py.DictEntry{Key: "INFO", Value: py.Int(INFO)},

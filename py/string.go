@@ -564,13 +564,34 @@ func StrNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		encoding Object
 		errors   Object
 	)
-	// FIXME ignoring encoding and errors
 	err := ParseTupleAndKeywords(args, kwargs, "|OOO:str", []string{"bytes_or_buffer", "encoding", "errors"}, &sObj, &encoding, &errors)
 	if err != nil {
 		return nil, err
 	}
-	// FIXME ignoring encoding
-	// FIXME ignoring buffer protocol
+	// str(b, encoding, errors) decodes a bytes-like object.
+	if encoding != nil || errors != nil {
+		if tb, err := GetAttrString(sObj, "tobytes"); err == nil { // memoryview
+			if sObj, err = Call(tb, Tuple{}, NewStringDict()); err != nil {
+				return nil, err
+			}
+		}
+		switch sObj.(type) {
+		case Bytes, *ByteArray:
+			decode, err := GetAttrString(sObj, "decode")
+			if err != nil {
+				return nil, err
+			}
+			dargs := Tuple{}
+			if encoding != nil {
+				dargs = append(dargs, encoding)
+			}
+			if errors != nil {
+				dargs = append(dargs, errors)
+			}
+			return Call(decode, dargs, NewStringDict())
+		}
+		return nil, ExceptionNewf(TypeError, "decoding to str: need a bytes-like object, %s found", sObj.Type().Name)
+	}
 	return Str(sObj)
 }
 

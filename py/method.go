@@ -212,6 +212,11 @@ func newBoundMethod(name string, fn interface{}) (Object, error) {
 		m.method = func(_ Object) (Object, error) {
 			return f()
 		}
+	// M__index__() (Int, error)
+	case func() (Int, error):
+		m.method = func(_ Object) (Object, error) {
+			return f()
+		}
 	// M__add__(other Object) (Object, error)
 	case func(Object) (Object, error):
 		m.method = func(_ Object, other Object) (Object, error) {
@@ -344,3 +349,31 @@ var _ I__call__ = (*Method)(nil)
 var _ I__get__ = (*Method)(nil)
 var _ I__eq__ = (*Method)(nil)
 var _ I__ne__ = (*Method)(nil)
+
+// A builtin function names itself and its module, so pickle can save it by
+// reference (os.getpid, math.sqrt, len) and others can print or inspect it.
+func init() {
+	prop := func(name string, get func(m *Method) Object) {
+		MethodType.Dict.Set(name, &Property{Fget: func(self Object) (Object, error) {
+			m, ok := self.(*Method)
+			if !ok {
+				return nil, ExceptionNewf(AttributeError, "%s", name)
+			}
+			return get(m), nil
+		}})
+	}
+	prop("__name__", func(m *Method) Object { return String(m.Name) })
+	prop("__qualname__", func(m *Method) Object { return String(m.Name) })
+	prop("__module__", func(m *Method) Object {
+		if m.Module == nil {
+			return String("builtins")
+		}
+		return String(m.Module.ModuleImpl.Info.Name)
+	})
+	MethodType.Dict.Set("__reduce__", MustNewMethod("__reduce__", func(self Object, args Tuple) (Object, error) {
+		return String(self.(*Method).Name), nil
+	}, 0, "Pickle a builtin function by name."))
+	MethodType.Dict.Set("__reduce_ex__", MustNewMethod("__reduce_ex__", func(self Object, args Tuple) (Object, error) {
+		return String(self.(*Method).Name), nil
+	}, 0, "Pickle a builtin function by name."))
+}

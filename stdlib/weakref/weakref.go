@@ -340,6 +340,102 @@ func (d *WeakKeyDictionary) M__contains__(item py.Object) (py.Object, error) {
 	return py.False, nil
 }
 
+// The read side and deletion of WeakKeyDictionary.  Keys are stored encoded
+// (py.DictKey), so each walk decodes them back; an entry that fails to decode
+// is skipped.
+func (d *WeakKeyDictionary) entries() (keys, vals []py.Object) {
+	for _, enc := range d.items.Keys() {
+		k, err := py.DictKeyDecode(enc)
+		if err != nil {
+			continue
+		}
+		v, _ := d.items.Get(enc)
+		keys, vals = append(keys, k), append(vals, v)
+	}
+	return
+}
+
+func init() {
+	t := WeakKeyDictionaryType
+	set := func(name, doc string, f func(d *WeakKeyDictionary, args py.Tuple) (py.Object, error)) {
+		t.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+			return f(self.(*WeakKeyDictionary), args)
+		}, 0, doc))
+	}
+	set("keys", "Return the keys.", func(d *WeakKeyDictionary, _ py.Tuple) (py.Object, error) {
+		k, _ := d.entries()
+		return py.NewListFromItems(k), nil
+	})
+	set("values", "Return the values.", func(d *WeakKeyDictionary, _ py.Tuple) (py.Object, error) {
+		_, v := d.entries()
+		return py.NewListFromItems(v), nil
+	})
+	set("items", "Return the (key, value) pairs.", func(d *WeakKeyDictionary, _ py.Tuple) (py.Object, error) {
+		k, v := d.entries()
+		out := make([]py.Object, len(k))
+		for i := range k {
+			out[i] = py.Tuple{k[i], v[i]}
+		}
+		return py.NewListFromItems(out), nil
+	})
+	set("__iter__", "Iterate over the keys.", func(d *WeakKeyDictionary, _ py.Tuple) (py.Object, error) {
+		k, _ := d.entries()
+		return py.NewIterator(py.Tuple(k)), nil
+	})
+	set("get", "Return the value for key, or the default.", func(d *WeakKeyDictionary, args py.Tuple) (py.Object, error) {
+		var key py.Object
+		var def py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		if v, err := d.M__getitem__(key); err == nil {
+			return v, nil
+		}
+		return def, nil
+	})
+	del := func(d *WeakKeyDictionary, key py.Object) (py.Object, bool) {
+		enc, err := py.DictKey(key)
+		if err != nil {
+			return nil, false
+		}
+		v, ok := d.items.Get(enc)
+		if ok {
+			d.items.Del(enc)
+		}
+		return v, ok
+	}
+	set("pop", "Remove key and return its value (or the default).", func(d *WeakKeyDictionary, args py.Tuple) (py.Object, error) {
+		var key, def py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		if v, ok := del(d, key); ok {
+			return v, nil
+		}
+		if def != nil {
+			return def, nil
+		}
+		return nil, py.ExceptionNewf(py.KeyError, "%s", mustRepr(key))
+	})
+	set("__delitem__", "Delete key.", func(d *WeakKeyDictionary, args py.Tuple) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "__delitem__ takes one argument")
+		}
+		if _, ok := del(d, args[0]); !ok {
+			return nil, py.ExceptionNewf(py.KeyError, "%s", mustRepr(args[0]))
+		}
+		return py.None, nil
+	})
+	set("copy", "Return a shallow copy.", func(d *WeakKeyDictionary, _ py.Tuple) (py.Object, error) {
+		n := &WeakKeyDictionary{items: py.NewStringDict()}
+		for _, enc := range d.items.Keys() {
+			v, _ := d.items.Get(enc)
+			n.items.Set(enc, v)
+		}
+		return n, nil
+	})
+}
+
 // WeakSet holds weak references to its members.
 type WeakSet struct {
 	items py.StringDict

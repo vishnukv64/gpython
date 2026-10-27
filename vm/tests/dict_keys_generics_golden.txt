@@ -1,0 +1,10 @@
+['T', 'bool'] {('a',): 9, True: 5}
+['T', 'bool']
+['bool', 'tuple']
+T
+(~T, ~U) dict[int, list[str]] ()
+TE
+TE2
+(~T,)
+dict[str, int]
+dict[str, int] list[int] tuple[str, ...]

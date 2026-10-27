@@ -735,3 +735,33 @@ var _ I__index__ = Int(0)
 var _ richComparison = Int(0)
 var _ IGoInt = Int(0)
 var _ IGoInt64 = Int(0)
+
+// Arithmetic dunders are reachable as attributes - int.__add__ is a name
+// programs register or pass around (multiprocessing.reduction registers
+// type(int.__add__)).  Operators themselves dispatch through the Go
+// interfaces, not through these.
+func init() {
+	for _, op := range []struct {
+		name string
+		fn   func(a, b Object) (Object, error)
+		swap bool
+	}{
+		{"__add__", Add, false}, {"__radd__", Add, true},
+		{"__sub__", Sub, false}, {"__rsub__", Sub, true},
+		{"__mul__", Mul, false}, {"__rmul__", Mul, true},
+	} {
+		op := op
+		IntType.Dict.Set(op.name, MustNewMethod(op.name, func(self Object, args Tuple) (Object, error) {
+			if len(args) != 1 {
+				return nil, ExceptionNewf(TypeError, "expected 1 argument, got %d", len(args))
+			}
+			if _, ok := args[0].(Int); !ok {
+				return NotImplemented, nil
+			}
+			if op.swap {
+				return op.fn(args[0], self)
+			}
+			return op.fn(self, args[0])
+		}, 0, "Implement the arithmetic operator."))
+	}
+}

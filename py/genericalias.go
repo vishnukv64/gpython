@@ -128,6 +128,106 @@ func (g *GenericAlias) M__hash__() (Object, error) {
 	return Int(ho ^ ha), nil
 }
 
+// TypeParam marks a type parameter (typing.TypeVar) that a subscript of a
+// generic alias substitutes, as CPython detects by __typing_subst__.
+type TypeParam interface {
+	IsTypeParam()
+}
+
+// parameters is __parameters__: the distinct type parameters in the args, in
+// first-seen order, looking inside nested aliases and Callable's arg lists.
+func (g *GenericAlias) parameters() Tuple {
+	var out Tuple
+	var walk func(o Object)
+	walk = func(o Object) {
+		switch v := o.(type) {
+		case TypeParam:
+			for _, p := range out {
+				if p == o {
+					return
+				}
+			}
+			out = append(out, o)
+		case *GenericAlias:
+			for _, a := range v.Args {
+				walk(a)
+			}
+		case Tuple:
+			for _, a := range v {
+				walk(a)
+			}
+		case *List:
+			for _, a := range v.Items {
+				walk(a)
+			}
+		}
+	}
+	for _, a := range g.Args {
+		walk(a)
+	}
+	if out == nil {
+		return Tuple{}
+	}
+	return out
+}
+
+// M__getitem__ substitutes the alias's type parameters: dict[T, int][str] is
+// dict[str, int].  ponytail: TypeVar only; ParamSpec/TypeVarTuple unpacking is not done.
+func (g *GenericAlias) M__getitem__(key Object) (Object, error) {
+	params := g.parameters()
+	if len(params) == 0 {
+		r, _ := g.M__repr__()
+		return nil, ExceptionNewf(TypeError, "%s is not a generic class", r)
+	}
+	args, ok := key.(Tuple)
+	if !ok {
+		args = Tuple{key}
+	}
+	if len(args) != len(params) {
+		r, _ := g.M__repr__()
+		which := "many"
+		if len(args) < len(params) {
+			which = "few"
+		}
+		return nil, ExceptionNewf(TypeError, "Too %s arguments for %s; actual %d, expected %d", which, r, len(args), len(params))
+	}
+	var subst func(o Object) Object
+	subst = func(o Object) Object {
+		switch v := o.(type) {
+		case TypeParam:
+			for i, p := range params {
+				if p == o {
+					return args[i]
+				}
+			}
+		case *GenericAlias:
+			na := make(Tuple, len(v.Args))
+			for i, a := range v.Args {
+				na[i] = subst(a)
+			}
+			return &GenericAlias{Origin: v.Origin, Args: na}
+		case Tuple:
+			na := make(Tuple, len(v))
+			for i, a := range v {
+				na[i] = subst(a)
+			}
+			return na
+		case *List:
+			na := make([]Object, len(v.Items))
+			for i, a := range v.Items {
+				na[i] = subst(a)
+			}
+			return NewListFromItems(na)
+		}
+		return o
+	}
+	na := make(Tuple, len(g.Args))
+	for i, a := range g.Args {
+		na[i] = subst(a)
+	}
+	return &GenericAlias{Origin: g.Origin, Args: na}, nil
+}
+
 // M__getattr__ forwards every attribute the alias does not define to its
 // origin, as CPython does for non-dunder names: list[int].append is
 // list.append.
@@ -138,7 +238,7 @@ func (g *GenericAlias) M__getattr__(name string) (Object, error) {
 	case "__args__":
 		return g.Args, nil
 	case "__parameters__":
-		return Tuple{}, nil
+		return g.parameters(), nil
 	}
 	if strings.HasPrefix(name, "__") && strings.HasSuffix(name, "__") {
 		return nil, ExceptionNewf(AttributeError, "'types.GenericAlias' object has no attribute '%s'", name)

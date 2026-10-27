@@ -12,6 +12,7 @@ package py
 import (
 	"io"
 	"os"
+	"strconv"
 )
 
 var FileType = NewType("file", `represents an open file`)
@@ -197,6 +198,23 @@ const (
 type File struct {
 	*os.File
 	FileMode
+}
+
+// FileFromFD wraps an open descriptor.  With closefd false the descriptor is
+// duplicated, so closing the File leaves the original open.
+func FileFromFD(fd int, mode string, closefd bool) (Object, error) {
+	perm, _, _, err := FileModeFrom(mode)
+	if err != nil {
+		return nil, err
+	}
+	if closefd {
+		return &File{TakeFD(uintptr(fd), strconv.Itoa(fd)), perm}, nil
+	}
+	nfd, err := dupFD(fd)
+	if err != nil {
+		return nil, OSErrorFrom(err, "")
+	}
+	return &File{os.NewFile(uintptr(nfd), strconv.Itoa(fd)), perm}, nil
 }
 
 // Type of this object

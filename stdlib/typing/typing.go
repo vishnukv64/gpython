@@ -348,6 +348,9 @@ func (t *TypeVarObj) M__repr__() (py.Object, error) {
 
 func (t *TypeVarObj) M__getitem__(key py.Object) (py.Object, error) { return t, nil }
 
+// IsTypeParam lets a generic alias find and substitute this TypeVar.
+func (t *TypeVarObj) IsTypeParam() {}
+
 // newType is what NewType() returns: a callable whose only behaviour is to
 // return what it is given, which is all it does in CPython too.
 type newType struct {
