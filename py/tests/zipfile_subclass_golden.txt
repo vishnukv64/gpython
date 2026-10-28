@@ -1,0 +1,6 @@
+W (5, 6, 'w', 8, True)
+closing W
+None
+['dir/a.txt', 'b.txt']
+(2021, 2, 3, 4, 5, 6) 0o100644 0 b'hi' b'yo'
+ZIP does not support timestamps before 1980

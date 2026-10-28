@@ -71,7 +71,7 @@ func init() {
 		py.DictEntry{Key: "LambdaType", Value: py.FunctionType},
 		py.DictEntry{Key: "BuiltinFunctionType", Value: py.MethodType},
 		py.DictEntry{Key: "BuiltinMethodType", Value: py.MethodType},
-		py.DictEntry{Key: "MethodType", Value: py.MethodType},
+		py.DictEntry{Key: "MethodType", Value: py.BoundMethodType},
 		py.DictEntry{Key: "GeneratorType", Value: py.GeneratorType},
 		py.DictEntry{Key: "CoroutineType", Value: py.CoroutineType},
 		py.DictEntry{Key: "AsyncGeneratorType", Value: py.AsyncGeneratorType},

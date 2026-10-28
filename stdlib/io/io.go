@@ -577,7 +577,7 @@ func writelines(self py.Object, args py.Tuple) (py.Object, error) {
 	var werr error
 	if err := py.Iterate(lines, func(l py.Object) bool {
 		_, werr = py.Call(write, py.Tuple{l}, py.StringDict{})
-		return werr == nil
+		return werr != nil // Iterate stops on true
 	}); err != nil {
 		return nil, err
 	}

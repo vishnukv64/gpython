@@ -16,6 +16,10 @@ type Property struct {
 	// to a getter) marked this property, which is what __isabstractmethod__
 	// reports.
 	Abstract bool
+	// pyFuncs marks accessors written in Python: they take the instance as it
+	// is, a subclass instance of a builtin container included.  Only a native
+	// accessor wants the Go value behind it.
+	pyFuncs bool
 	// name and owner are filled by __set_name__ when the property is defined in
 	// a class body, and exist so that an error can NAME the attribute:
 	// CPython says "property 'radius' of 'Circle' object has no setter", where
@@ -57,7 +61,7 @@ func PropertyNew(metatype *Type, args Tuple, kwargs StringDict) (res Object, err
 		return nil, err
 	}
 
-	p := &Property{}
+	p := &Property{pyFuncs: true}
 
 	if fget != nil && fget != None {
 		fn := fget
@@ -106,6 +110,9 @@ func (p *Property) M__get__(instance, owner Object) (Object, error) {
 	// in Payload.  Passing it through panicked the host process
 	// ("interface conversion: py.Object is *py.Type, not *logging.Logger").
 	// The getter wants the value, so it gets the value.
+	if p.pyFuncs {
+		return p.Fget(instance)
+	}
 	return p.Fget(unwrapPayload(instance))
 }
 
@@ -120,12 +127,18 @@ func (p *Property) M__set__(instance, value Object) (Object, error) {
 		}
 		return nil, ExceptionNewf(AttributeError, "can't set attribute")
 	}
+	if p.pyFuncs {
+		return None, p.Fset(instance, value)
+	}
 	return None, p.Fset(unwrapPayload(instance), value)
 }
 
 func (p *Property) M__delete__(instance Object) (Object, error) {
 	if p.Fdel == nil {
 		return nil, ExceptionNewf(AttributeError, "can't delete attribute")
+	}
+	if p.pyFuncs {
+		return None, p.Fdel(instance)
 	}
 	return None, p.Fdel(unwrapPayload(instance))
 }
@@ -169,7 +182,7 @@ func init() {
 			if !ok {
 				return nil, ExceptionNewf(TypeError, "%s expected a function, got '%s'", name, args[0].Type().Name)
 			}
-			return apply(p, &Property{Fget: p.Fget, Fset: p.Fset, Fdel: p.Fdel, Doc: p.Doc, Abstract: p.Abstract}, fn), nil
+			return apply(p, &Property{Fget: p.Fget, Fset: p.Fset, Fdel: p.Fdel, Doc: p.Doc, Abstract: p.Abstract, pyFuncs: p.pyFuncs}, fn), nil
 		}, 0, doc))
 	}
 	// A getter takes only self; a setter takes self and the value; a deleter

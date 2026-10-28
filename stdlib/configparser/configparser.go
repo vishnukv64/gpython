@@ -374,6 +374,16 @@ func readAll(f py.Object) (string, error) {
 }
 
 func init() {
+	// parser.optionxform = str is how setuptools keeps option case.
+	parserType.Dict.Set("optionxform", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if f := self.(*parser).optionxform; f != nil {
+				return f, nil
+			}
+			return py.StringType.Dict.GetOrNil("lower"), nil
+		},
+		Fset: func(self, v py.Object) error { self.(*parser).optionxform = v; return nil },
+	})
 	parserType.Dict.Set("read", py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p := self.(*parser)
 		if len(args) < 1 {

@@ -272,6 +272,12 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 		if !ok || string(sub) == "*" {
 			continue
 		}
+		// Like _handle_fromlist: an attribute the module already has wins, so
+		// "from setuptools import Command" is not shadowed by setuptools/command/
+		// on a case-insensitive filesystem.
+		if _, has := mod.Globals.Get(string(sub)); has {
+			continue
+		}
 		full := modName + "." + string(sub)
 		if _, err := ctx.GetModule(full); err == nil {
 			continue

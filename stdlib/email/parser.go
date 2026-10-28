@@ -500,6 +500,9 @@ func messageFromString(self py.Object, args py.Tuple, kwargs py.StringDict) (py.
 		[]string{"s", "headersonly"}, &text, &headersonly); err != nil {
 		return nil, err
 	}
+	if text == py.None {
+		text = py.String("") // CPython feeds this to io.StringIO, where None is ""
+	}
 	s, err := strOrBytesArg(text)
 	if err != nil {
 		return nil, err

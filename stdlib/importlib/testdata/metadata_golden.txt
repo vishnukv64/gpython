@@ -1,0 +1,21 @@
+version: 1.2.3
+name: Demo-Pkg Demo-Pkg 1.2.3
+summary: a demo
+classifiers: ['A', 'B']
+requires: ['other (>=1)']
+json keys: ['classifier', 'description', 'metadata_version', 'name']
+files: None
+EntryPoints [('demo', 'demo.cli:main'), ('demo2', 'demo.cli:other')]
+True
+EntryPoint(name='foo', value='demo.plug:Foo [extra]', group='demo.plugins')
+foo demo.plugins demo.plug Foo ['extra']
+{'foo'}
+True
+['Demo-Pkg']
+not found: No package metadata was found for no-such-dist-xyz
+MyDict True
+{'a': [1]} [] {'a': [1]}
+('A', 5) True
+P(a=1, b=9) Q(a=0, b=2)
+Got unexpected field names: ['c']
+suppressed

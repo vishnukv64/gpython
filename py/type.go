@@ -513,6 +513,29 @@ func init() {
 	}, 0, "Return hash(self).")
 	TypeType.Dict.Set("__hash__", typeHash)
 	ObjectType.Dict.Set("__hash__", typeHash)
+
+	// object.__str__ is repr(self); object.__str__(x) works on any x.
+	// It is not in ObjectType.Dict, which every instance's __str__ lookup
+	// would then find (ahead of an exception's own str); getAttrString hands
+	// it out for "object.__str__" only.
+	// Reached as the unbound function, the instance is the first argument.
+	objectStr = MustNewMethod("__str__", func(_ Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "expected 0 arguments, got %d", len(args)-1)
+		}
+		return Repr(args[0])
+	}, 0, "Return str(self).")
+	objectRepr = MustNewMethod("__repr__", func(_ Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "expected 0 arguments, got %d", len(args)-1)
+		}
+		// Only a pointer has an address; a value type such as int shows none.
+		addr := uintptr(0)
+		if v := reflect.ValueOf(args[0]); v.Kind() == reflect.Pointer {
+			addr = v.Pointer()
+		}
+		return String(fmt.Sprintf("<%s object at %#x>", args[0].Type().Name, addr)), nil
+	}, 0, "Return repr(self).")
 }
 
 // typeMetaGetter is the descriptor behind cls.__name__ and friends.
@@ -2587,6 +2610,9 @@ func (ty *Type) M__ne__(other Object) (Object, error) {
 	}
 	return True, nil
 }
+
+// objectStr and objectRepr are object.__str__ and object.__repr__.
+var objectStr, objectRepr *Method
 
 func (ty *Type) M__str__() (Object, error) {
 	// An INSTANCE looks its __str__ up through its class, which is how

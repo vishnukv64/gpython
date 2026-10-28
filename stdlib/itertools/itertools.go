@@ -1123,6 +1123,7 @@ func product(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 type productIter struct {
 	pools [][]py.Object
 	index []int
+	done  bool
 }
 
 var productType = py.NewType("itertools.product", "An iterator of the cartesian product.")
@@ -1132,8 +1133,19 @@ func (p *productIter) Type() *py.Type { return productType }
 func (p *productIter) M__iter__() (py.Object, error) { return p, nil }
 
 func (p *productIter) M__next__() (py.Object, error) {
-	if len(p.pools) == 0 {
+	if p.done {
 		return nil, py.StopIteration
+	}
+	// product() is one empty tuple; a single empty pool leaves no rows at all.
+	if len(p.pools) == 0 {
+		p.done = true
+		return py.Tuple{}, nil
+	}
+	for _, pool := range p.pools {
+		if len(pool) == 0 {
+			p.done = true
+			return nil, py.StopIteration
+		}
 	}
 	if p.index == nil {
 		p.index = make([]int, len(p.pools))

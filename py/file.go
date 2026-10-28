@@ -164,6 +164,35 @@ func init() {
 		Doc: "The name of the file.",
 	})
 
+	FileType.Dict.Set("writelines", MustNewMethod("writelines", func(self Object, lines Object) (Object, error) {
+		f := self.(*File)
+		var werr error
+		if err := Iterate(lines, func(l Object) bool {
+			_, werr = f.Write(l)
+			return werr != nil // Iterate stops on true
+		}); err != nil {
+			return nil, err
+		}
+		if werr != nil {
+			return nil, werr
+		}
+		return None, nil
+	}, 0, "writelines(lines) -> write each item of an iterable."))
+
+	// buffer is the binary layer under a text stream.  A File does no
+	// buffering of its own, so the layer is a binary view of the same
+	// descriptor: bytes written through it land in order with print().
+	FileType.Dict.Set("buffer", &Property{
+		Fget: func(self Object) (Object, error) {
+			f := self.(*File)
+			if f.Can(FileBinary) {
+				return nil, ExceptionNewf(AttributeError, "'file' object has no attribute 'buffer'")
+			}
+			return &File{f.File, f.FileMode&^FileText | FileBinary}, nil
+		},
+		Doc: "The underlying binary buffer of a text stream.",
+	})
+
 	FileType.Dict.Set("readlines", MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		f := self.(*File)
 		lines := &List{}

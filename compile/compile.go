@@ -152,6 +152,45 @@ func moduleStatements(node ast.Ast) []ast.Stmt {
 	return nil
 }
 
+// firstLineno is co_firstlineno: the line a code object starts on.  A
+// decorated function or class starts at its first decorator, as in CPython;
+// a module (and anything with no position) starts at 1.
+func firstLineno(node ast.Ast) int32 {
+	line := node.GetLineno()
+	var decorators []ast.Expr
+	switch n := node.(type) {
+	case *ast.FunctionDef:
+		decorators = n.DecoratorList
+	case *ast.ClassDef:
+		decorators = n.DecoratorList
+	}
+	for _, d := range decorators {
+		// The parser stamps a call or attribute with the line it ends on; the
+		// decorator starts where its leftmost operand does.
+		for {
+			switch e := d.(type) {
+			case *ast.Call:
+				d = e.Func
+				continue
+			case *ast.Attribute:
+				d = e.Value
+				continue
+			case *ast.Subscript:
+				d = e.Value
+				continue
+			}
+			break
+		}
+		if l := d.GetLineno(); l > 0 && l < line {
+			line = l
+		}
+	}
+	if line < 1 {
+		return 1
+	}
+	return int32(line)
+}
+
 // Make a new compiler object with empty code object
 func newCompiler(parent *compiler, scopeType compilerScopeType) *compiler {
 	code := &py.Code{
@@ -265,6 +304,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	code.Flags = c.codeFlags(SymTable) | int32(futureFlags&py.CO_COMPILER_FLAGS_MASK)
 	valueOnStack := false
 	c.SetLineno(Ast)
+	code.Firstlineno = firstLineno(Ast)
 	switch node := Ast.(type) {
 	case *ast.Module:
 		c.Stmts(c.docString(node.Body, false))
@@ -378,7 +418,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	code.Code = c.OpCodes.Assemble()
 	code.Stacksize = int32(c.OpCodes.StackDepth())
 	code.Nlocals = int32(len(code.Varnames))
-	code.Lnotab = string(c.OpCodes.Lnotab())
+	code.Lnotab = string(c.OpCodes.Lnotab(int(code.Firstlineno)))
 	code.InitCell2arg()
 	return nil
 }

@@ -79,6 +79,11 @@ func init() {
 		globals.Set(name, py.Int(int64(value)))
 	}
 
+	// Indexes into the os.stat() tuple.
+	for i, name := range []string{"ST_MODE", "ST_INO", "ST_DEV", "ST_NLINK", "ST_UID", "ST_GID", "ST_SIZE", "ST_ATIME", "ST_MTIME", "ST_CTIME"} {
+		globals.Set(name, py.Int(int64(i)))
+	}
+
 	// The mode predicates.  They take a mode, which is the st_mode field of
 	// an os.stat_result, and answer a bool.
 	// As in CPython, S_IFMT and S_IMODE are functions that pick the file-type

@@ -168,7 +168,8 @@ func unwrapScalarKwargs(kw StringDict) StringDict {
 // A method whose receiver is a builtin scalar (str.index) never keeps: a str
 // stores nothing, and its methods type-assert their arguments.
 var keepArgsNames = map[string]bool{
-	"isinstance": true, "issubclass": true, "type": true, "id": true, "repr": true,
+	"boundmethod": true, // types.MethodType(f, instance) keeps the instance
+	"isinstance":  true, "issubclass": true, "type": true, "id": true, "repr": true,
 	"str": true, "format": true, "print": true, "hash": true, "ascii": true,
 	"getattr": true, "setattr": true, "hasattr": true, "delattr": true,
 	"__getattribute__": true, "__setattr__": true, "__delattr__": true, "__format__": true,

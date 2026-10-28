@@ -19,7 +19,6 @@
 package importlib
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -214,18 +213,21 @@ func findSpec(ctx py.Context, name string) (py.Object, error) {
 	if _, err := dottedPath(name, "package"); err != nil {
 		return nil, err
 	}
+	if py.GetModuleImpl(name) != nil {
+		return &ModuleSpec{Name: name, Loader: BuiltinImporterType, Origin: "built-in"}, nil
+	}
 	if ctx != nil {
-		if _, err := ctx.Store().GetModule(name); err == nil {
-			return &ModuleSpec{Name: name, Loader: py.None, Origin: "built-in"}, nil
-		}
 		if path, isPkg, err := py.ResolveModulePath(ctx, name); err == nil {
 			return &ModuleSpec{
 				Name:     name,
-				Loader:   py.None,
+				Loader:   &SourceLoader{Name: name, Path: path},
 				Origin:   path,
 				IsPkg:    isPkg,
 				Location: filepath.Dir(path),
 			}, nil
+		}
+		if _, err := ctx.Store().GetModule(name); err == nil {
+			return &ModuleSpec{Name: name, Loader: BuiltinImporterType, Origin: "built-in"}, nil
 		}
 	}
 	return py.None, nil
@@ -248,7 +250,25 @@ var ModuleSpecType = py.NewType("importlib.machinery.ModuleSpec", "The specifica
 func (s *ModuleSpec) Type() *py.Type { return ModuleSpecType }
 
 func (s *ModuleSpec) M__repr__() (py.Object, error) {
-	return py.String("<ModuleSpec name=" + s.Name + ">"), nil
+	args := make([]string, 0, 4)
+	for _, kv := range []struct {
+		k string
+		v py.Object
+	}{{"name", py.String(s.Name)}, {"loader", s.Loader}, {"origin", py.String(s.Origin)}} {
+		if kv.k == "origin" && s.Origin == "" {
+			continue
+		}
+		r, err := py.ReprAsString(kv.v)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, kv.k+"="+r)
+	}
+	if s.IsPkg {
+		r, _ := py.ReprAsString(py.String(s.Location))
+		args = append(args, "submodule_search_locations=["+r+"]")
+	}
+	return py.String("ModuleSpec(" + strings.Join(args, ", ") + ")"), nil
 }
 
 var utilDoc = `Utility module for importlib.  Only find_spec and
@@ -603,18 +623,19 @@ func init() {
 			py.MustNewMethod("reload", reload, 0, reload_doc),
 			py.MustNewMethod("invalidate_caches", invalidate_caches, 0, invalidate_caches_doc),
 		},
+		CodeSrc: metaFinderSrc,
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "__doc__", Value: py.String(importlib_doc)},
 			py.DictEntry{Key: "__package__", Value: py.String("importlib")},
+			// importlib.metadata is CPython's own package, embedded in the
+			// binary; the Go module is a package only through this path.
+			py.DictEntry{Key: "__path__", Value: py.NewListFromStrings([]string{py.EmbeddedLibRoot + "/importlib"})},
 		),
 	})
 	// importlib.util is a module of its own so that "from importlib.util import
 	// find_spec" resolves, exactly as it does in CPython.
 	py.RegisterModule(utilModule)
 	py.RegisterModuleAlias("importlib._bootstrap", "importlib")
-	// importlib.metadata is a module of its own; version() reads a package's
-	// installed metadata from disk.
-	py.RegisterModule(metadataModule)
 	// importlib.resources is a module of its own; it reads a package's data
 	// files from the filesystem.
 	py.RegisterModule(resourceModule)
@@ -640,106 +661,6 @@ func init() {
 	// The as_file() context manager.
 	asFileContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", asFileEnter, 0, "Enter the context, yielding the path."))
 	asFileContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", asFileExit, 0, "Exit the context."))
-}
-
-var metadataDoc = `Access to the metadata of an installed distribution.
-
-version(distribution_name) returns the version recorded in the
-.dist-info/METADATA of an installed distribution, searching sys.path.`
-
-// metadataModule is importlib.metadata.
-var metadataModule = &py.ModuleImpl{
-	Info: py.ModuleInfo{
-		Name: "importlib.metadata",
-		Doc:  metadataDoc,
-	},
-	Methods: []*py.Method{
-		py.MustNewMethod("version", metadataVersion, 0, "version(distribution_name) -> version string"),
-		py.MustNewMethod("entry_points", metadataEntryPoints, 0, "entry_points(**params) -> EntryPoints\n\nReturn the entry points declared by the distributions on sys.path."),
-	},
-}
-
-// metadataVersion looks for <name>-<ver>.dist-info/METADATA (or .egg-info) on
-// sys.path and returns its Version field.  A distribution that is not found
-// raises PackageNotFoundError, which is a real exception type so callers can
-// catch it.
-func metadataVersion(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var nameObj py.Object
-	if err := py.ParseTupleAndKeywords(args, kwargs, "s:version", []string{"distribution_name"}, &nameObj); err != nil {
-		return nil, err
-	}
-	name := strings.ToLower(string(nameObj.(py.String)))
-	for _, dir := range metadataSearchDirs(currentContext(self)) {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			base := e.Name()
-			if !strings.HasSuffix(base, ".dist-info") && !strings.HasSuffix(base, ".egg-info") {
-				continue
-			}
-			stem := strings.TrimSuffix(strings.TrimSuffix(base, ".dist-info"), ".egg-info")
-			parts := strings.SplitN(stem, "-", 2)
-			if !strings.EqualFold(parts[0], name) {
-				continue
-			}
-			if v := readMetadataVersion(filepath.Join(dir, base, "METADATA")); v != "" {
-				return py.String(v), nil
-			}
-		}
-	}
-	return nil, py.ExceptionNewf(packageNotFoundType, "No package metadata was found for %s", string(nameObj.(py.String)))
-}
-
-// packageNotFoundType is importlib.metadata.PackageNotFoundError.
-var packageNotFoundType = py.ModuleNotFoundError.NewType("importlib.metadata.PackageNotFoundError",
-	"No package metadata was found for the given name.", nil, nil)
-
-// metadataSearchDirs returns the directories version() searches: the entries
-// of sys.path, which is where site-packages lives.
-func metadataSearchDirs(ctx py.Context) []string {
-	if ctx == nil {
-		return nil
-	}
-	seen := map[string]bool{}
-	var dirs []string
-	add := func(d string) {
-		if d != "" && !seen[d] {
-			seen[d] = true
-			dirs = append(dirs, d)
-		}
-	}
-	mod, err := ctx.GetModule("sys")
-	if err == nil {
-		if p, err := py.GetAttrString(mod, "path"); err == nil {
-			if l, ok := p.(*py.List); ok {
-				for _, it := range l.Items {
-					if s, ok := it.(py.String); ok {
-						add(string(s))
-					}
-				}
-			}
-		}
-	}
-	return dirs
-}
-
-// readMetadataVersion reads the Version: field of a METADATA file.
-func readMetadataVersion(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "Version:"); ok {
-			return strings.TrimSpace(v)
-		}
-		if line == "" {
-			break // end of the header block
-		}
-	}
-	return ""
 }
 
 // checkArgs validates the positional and keyword argument counts of a
@@ -1083,3 +1004,25 @@ func resourcePath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	}
 	return &asFileContext{path: filepath.Join(dir, name), Dict: py.NewStringDict()}, nil
 }
+
+// metaFinderSrc puts a finder on sys.meta_path that serves
+// importlib.metadata.distributions(), which asks every meta path finder for
+// find_distributions.  CPython's PathFinder does this; ours has no import
+// side, so find_spec declines and the finder only locates distributions.
+const metaFinderSrc = `
+import sys as _sys
+
+class _DistributionFinder:
+    @classmethod
+    def find_spec(cls, fullname, path=None, target=None):
+        return None
+
+    @classmethod
+    def find_distributions(cls, context=None):
+        from importlib.metadata import DistributionFinder, MetadataPathFinder
+        context = context or DistributionFinder.Context()
+        return MetadataPathFinder.find_distributions(context)
+
+if not any(f.__name__ == '_DistributionFinder' for f in _sys.meta_path):
+    _sys.meta_path.append(_DistributionFinder)
+`

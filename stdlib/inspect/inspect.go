@@ -52,6 +52,10 @@ func init() {
 		py.DictEntry{Key: "signature", Value: py.MustNewMethod("signature", notImplemented, 0, signature_doc)},
 	)
 
+	for _, e := range sourceMethods() {
+		globals.Set(e.Key, e.Value)
+	}
+
 	// The frame constants are part of the module's interface.
 	globals.Set("CO_GENERATOR", py.Int(py.CO_GENERATOR))
 	globals.Set("CO_VARARGS", py.Int(py.CO_VARARGS))

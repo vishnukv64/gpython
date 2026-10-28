@@ -410,6 +410,14 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 	// M__call__ (the type constructor) where the user's __call__ was meant -
 	// "h.__call__(5)" built a new object instead of calling the method.  The
 	// ordinary lookup below finds the user's method.
+	if self == Object(ObjectType) {
+		switch key {
+		case "__str__":
+			return objectStr, nil
+		case "__repr__":
+			return objectRepr, nil
+		}
+	}
 	if _, isInstance := self.(*Type); !isInstance || self.(*Type).Name != "" {
 		if len(key) >= 5 && strings.HasPrefix(key, "__") && strings.HasSuffix(key, "__") {
 			objectValue := reflect.ValueOf(self)

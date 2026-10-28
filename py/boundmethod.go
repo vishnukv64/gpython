@@ -26,6 +26,16 @@ func NewBoundMethod(self, method Object) *BoundMethod {
 	return &BoundMethod{Self: self, Method: method}
 }
 
+func init() {
+	// types.MethodType(function, instance), which functools-style caches use.
+	BoundMethodType.New = func(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
+		if len(args) != 2 || kwargs.Len() != 0 {
+			return nil, ExceptionNewf(TypeError, "method expected 2 arguments, got %d", len(args))
+		}
+		return NewBoundMethod(args[1], args[0]), nil
+	}
+}
+
 // Call the bound method
 func (bm *BoundMethod) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	// Call built in methods slightly differently

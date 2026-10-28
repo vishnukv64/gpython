@@ -677,6 +677,8 @@ func init() {
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "path", Value: py.NewList()},
 		// maxsize and friends: the values a program reads to size things.
+		// "" is a non-framework build, which this interpreter is.
+		py.DictEntry{Key: "_framework", Value: py.String("")},
 		py.DictEntry{Key: "maxsize", Value: py.Int(math.MaxInt64)},
 		py.DictEntry{Key: "maxunicode", Value: py.Int(0x10FFFF)},
 		py.DictEntry{Key: "float_info", Value: floatInfo()},

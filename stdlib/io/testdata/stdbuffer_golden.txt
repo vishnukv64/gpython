@@ -1,0 +1,12 @@
+text one
+bytes two
+text three
+héllo
+err four
+bytes five
+True True True
+abc
+4
+'a\nb\nc\n'
+False
+b'xy'

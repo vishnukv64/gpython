@@ -490,13 +490,20 @@ func registerConcretePath() {
 		}
 		if p, ok := self.(*path); ok {
 			f, ty, name = p.f, p.t, p.name
+		} else if t, ok := self.(*py.Type); ok {
+			switch {
+			case t.IsSubtype(PosixPathType):
+				f, ty, name = posixFlavour, PosixPathType, "PosixPath"
+			case windowsSupported() && t.IsSubtype(WindowsPathType):
+				f, ty, name = ntFlavour, WindowsPathType, "WindowsPath"
+			}
 		}
 		return cwdPath(f, ty, name)
-	}, 0, "Return a new path pointing to the current working directory."))
+	}, py.METH_CLASS, "Return a new path pointing to the current working directory."))
 
 	d.Set("home", py.MustNewMethod("home", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return homeCurrent()
-	}, 0, "Return a new path pointing to the user's home directory."))
+	}, py.METH_CLASS, "Return a new path pointing to the user's home directory."))
 
 	d.Set("expanduser", py.MustNewMethod("expanduser", func(self py.Object, args py.Tuple) (py.Object, error) {
 		p, err := onePath(self, "expanduser")

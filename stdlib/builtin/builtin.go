@@ -594,6 +594,12 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		ns.Set("__orig_bases__", origBases)
 	}
 	cell, err = fn.Context.RunCode(fn.Code, fn.Globals, ns, fn.Closure)
+	// 3.13+: the line the class statement starts on, which inspect reads.  It
+	// is set here rather than compiled into the body so the body's bytecode
+	// stays that of the class statement.
+	if err == nil && !ns.IsNil() && ns.GetOrNil("__firstlineno__") == nil {
+		ns.Set("__firstlineno__", py.Int(fn.Code.Firstlineno))
+	}
 	if err != nil {
 		return nil, err
 	}

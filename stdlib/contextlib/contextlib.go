@@ -446,10 +446,8 @@ func init() {
 		}
 		for _, wanted := range wantedTypes {
 			if wantedType, ok := wanted.(*py.Type); ok {
-				for t := typ; t != nil; t = t.Base {
-					if t == wantedType {
-						return py.True, nil
-					}
+				if typ.IsSubtype(wantedType) {
+					return py.True, nil
 				}
 			}
 		}

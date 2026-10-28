@@ -1,0 +1,60 @@
+plain src '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+plain lines 7 '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+plain file source.py source.py
+plain find 6 True
+oneline src 'def oneline(): return 1\n'
+oneline lines 19 'def oneline(): return 1\n'
+oneline file source.py source.py
+oneline find 18 True
+Base src 'class Base:\n    """Doc."""\n\n    attr = 1\n\n    def method(self):\n        return {\n            \'a\': 1,\n        }\n\n    @staticmethod\n    def sm():\n        pass\n\n    @property\n    def prop(self):\n        return 2\n'
+Base lines 22 'class Base:\n    """Doc."""\n\n    attr = 1\n\n    def method(self):\n        return {\n            \'a\': 1,\n        }\n\n    @staticmethod\n    def sm():\n        pass\n\n    @property\n    def prop(self):\n        return 2\n'
+Base file source.py source.py
+Base find 21 True
+Base.method src "    def method(self):\n        return {\n            'a': 1,\n        }\n"
+Base.method lines 27 "    def method(self):\n        return {\n            'a': 1,\n        }\n"
+Base.method file source.py source.py
+Base.method find 26 True
+sm src '    @staticmethod\n    def sm():\n        pass\n'
+sm lines 32 '    @staticmethod\n    def sm():\n        pass\n'
+sm file source.py source.py
+sm find 31 True
+Decorated src '@deco\nclass Decorated(Base):\n    def other(self): pass\n'
+Decorated lines 41 '@deco\nclass Decorated(Base):\n    def other(self): pass\n'
+Decorated file source.py source.py
+Decorated find 40 True
+Decorated.other src '    def other(self): pass\n'
+Decorated.other lines 43 '    def other(self): pass\n'
+Decorated.other file source.py source.py
+Decorated.other find 42 True
+lam src 'lam = lambda x: (\n    x + 1)\n'
+lam lines 46 'lam = lambda x: (\n    x + 1)\n'
+lam file source.py source.py
+lam find 45 True
+gen src 'def gen():\n    yield 1\n'
+gen lines 50 'def gen():\n    yield 1\n'
+gen file source.py source.py
+gen find 49 True
+co src 'async def co():\n    pass\n'
+co lines 54 'async def co():\n    pass\n'
+co file source.py source.py
+co find 53 True
+wrapper src '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+wrapper lines 7 '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+wrapper file source.py source.py
+wrapper find 57 True
+bound src "    def method(self):\n        return {\n            'a': 1,\n        }\n"
+bound lines 27 "    def method(self):\n        return {\n            'a': 1,\n        }\n"
+bound file source.py source.py
+bound find 26 True
+code src '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+code lines 7 '@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n'
+code file source.py source.py
+code find 6 True
+module True 0 source.py
+int ERR TypeError
+sys ERR TypeError
+len ERR TypeError
+str ERR TypeError
+type int ERR TypeError
+frame 'import inspect, sys, functools\n\ndef deco(f):\n    return f\n\n\n@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n\n\ndef oneline(): return 1\n\n\nclass Base:\n    """Doc."""\n\n    attr = 1\n\n    def method(self):\n        return {\n            \'a\': 1,\n        }\n\n    @staticmethod\n    def sm():\n        pass\n\n    @property\n    def prop(self):\n        return 2\n\n\n@deco\nclass Decorated(Base):\n    def other(self): pass\n\n\nlam = lambda x: (\n    x + 1)\n\n\ndef gen():\n    yield 1\n\n\nasync def co():\n    pass\n\n\n@functools.wraps(plain)\ndef wrapper(*a):\n    return plain(*a)\n\n\ndef show(label, fn, *args):\n    try:\n        r = fn(*args)\n    except Exception as e:\n        print(label, \'ERR\', type(e).__name__)\n        return\n    if isinstance(r, tuple) and isinstance(r[0], list):\n        print(label, r[1], repr(\'\'.join(r[0])))\n    else:\n        print(label, repr(r) if not isinstance(r, str) or len(r) < 60 else repr(r))\n\n\ndef base(x):\n    return None if x is None else x.replace(chr(92), \'/\').rsplit(\'/\', 1)[-1]\n\nfor name, obj in [(\'plain\', plain), (\'oneline\', oneline), (\'Base\', Base), (\'Base.method\', Base.method),\n                  (\'sm\', Base.sm), (\'Decorated\', Decorated), (\'Decorated.other\', Decorated.other),\n                  (\'lam\', lam), (\'gen\', gen), (\'co\', co), (\'wrapper\', wrapper),\n                  (\'bound\', Base().method), (\'code\', plain.__code__)]:\n    show(name + \' src\', inspect.getsource, obj)\n    show(name + \' lines\', inspect.getsourcelines, obj)\n    print(name, \'file\', base(inspect.getsourcefile(obj)), base(inspect.getfile(obj)))\n    r = inspect.findsource(obj)\n    print(name, \'find\', r[1], len(r[0]) > 10)\n\nme = sys.modules[__name__]\nprint(\'module\', len(inspect.getsource(me).splitlines()) > 50, inspect.getsourcelines(me)[1], base(inspect.getsourcefile(me)))\nfor label, bad in (("int", 3), ("sys", sys), ("len", len), ("str", "str"), ("type int", int)):\n    show(label, lambda o: type(o).__name__ if False else inspect.getsource(o).__class__.__name__, bad)\nshow(\'frame\', inspect.getsource, sys._getframe())\ntry:\n    1/0\nexcept ZeroDivisionError as e:\n    show(\'tb\', inspect.getsourcelines, e.__traceback__)\n'
+tb 0 'import inspect, sys, functools\n\ndef deco(f):\n    return f\n\n\n@deco\ndef plain(a, b=(1,\n                2)):\n    """doc\n\n    more"""\n    x = \'\'\'\n    not code\n\'\'\'\n    return a\n\n\ndef oneline(): return 1\n\n\nclass Base:\n    """Doc."""\n\n    attr = 1\n\n    def method(self):\n        return {\n            \'a\': 1,\n        }\n\n    @staticmethod\n    def sm():\n        pass\n\n    @property\n    def prop(self):\n        return 2\n\n\n@deco\nclass Decorated(Base):\n    def other(self): pass\n\n\nlam = lambda x: (\n    x + 1)\n\n\ndef gen():\n    yield 1\n\n\nasync def co():\n    pass\n\n\n@functools.wraps(plain)\ndef wrapper(*a):\n    return plain(*a)\n\n\ndef show(label, fn, *args):\n    try:\n        r = fn(*args)\n    except Exception as e:\n        print(label, \'ERR\', type(e).__name__)\n        return\n    if isinstance(r, tuple) and isinstance(r[0], list):\n        print(label, r[1], repr(\'\'.join(r[0])))\n    else:\n        print(label, repr(r) if not isinstance(r, str) or len(r) < 60 else repr(r))\n\n\ndef base(x):\n    return None if x is None else x.replace(chr(92), \'/\').rsplit(\'/\', 1)[-1]\n\nfor name, obj in [(\'plain\', plain), (\'oneline\', oneline), (\'Base\', Base), (\'Base.method\', Base.method),\n                  (\'sm\', Base.sm), (\'Decorated\', Decorated), (\'Decorated.other\', Decorated.other),\n                  (\'lam\', lam), (\'gen\', gen), (\'co\', co), (\'wrapper\', wrapper),\n                  (\'bound\', Base().method), (\'code\', plain.__code__)]:\n    show(name + \' src\', inspect.getsource, obj)\n    show(name + \' lines\', inspect.getsourcelines, obj)\n    print(name, \'file\', base(inspect.getsourcefile(obj)), base(inspect.getfile(obj)))\n    r = inspect.findsource(obj)\n    print(name, \'find\', r[1], len(r[0]) > 10)\n\nme = sys.modules[__name__]\nprint(\'module\', len(inspect.getsource(me).splitlines()) > 50, inspect.getsourcelines(me)[1], base(inspect.getsourcefile(me)))\nfor label, bad in (("int", 3), ("sys", sys), ("len", len), ("str", "str"), ("type int", int)):\n    show(label, lambda o: type(o).__name__ if False else inspect.getsource(o).__class__.__name__, bad)\nshow(\'frame\', inspect.getsource, sys._getframe())\ntry:\n    1/0\nexcept ZeroDivisionError as e:\n    show(\'tb\', inspect.getsourcelines, e.__traceback__)\n'

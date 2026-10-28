@@ -52,7 +52,7 @@ func TestLnotab(t *testing.T) {
 				11, 1},
 		},
 	} {
-		got := test.instrs.Lnotab()
+		got := test.instrs.Lnotab(1)
 		if !bytes.Equal(test.want, got) {
 			t.Errorf("%d: want %d got %d", i, test.want, got)
 		}

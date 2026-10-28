@@ -13,6 +13,7 @@
 package collections
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -533,7 +534,7 @@ func (c *Counter) add(key py.Object, delta int64) error {
 
 func counterNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var iterable py.Object = py.None
-	err := py.ParseTupleAndKeywords(args, kwargs, "|O:Counter", []string{"iterable"}, &iterable)
+	err := py.ParseTupleAndKeywords(args, py.StringDict{}, "|O:Counter", []string{"iterable"}, &iterable)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +544,75 @@ func counterNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 			return nil, err
 		}
 	}
+	for _, kv := range kwargs.Items() {
+		n, err := py.IndexInt(kv.Value)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.add(py.String(kv.Key), int64(n)); err != nil {
+			return nil, err
+		}
+	}
 	return c, nil
+}
+
+// counterBinary is the shared body of Counter's +, -, | and &, which keep only
+// the positive counts of the result.  pick returns a count for an element from
+// either side, and whether the other side's elements alone can appear.
+func counterBinary(a py.Object, b py.Object, f func(x, y int64) int64, otherOnly func(y int64) int64) (py.Object, error) {
+	x, ok1 := a.(*Counter)
+	y, ok2 := b.(*Counter)
+	if !ok1 || !ok2 {
+		return py.NotImplemented, nil
+	}
+	out := newCounter()
+	for _, key := range x.order() {
+		xn, _ := x.count(key)
+		yn, _ := y.count(key)
+		if n := f(xn, yn); n > 0 {
+			if err := out.set(key, py.Int(n)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if otherOnly != nil {
+		for _, key := range y.order() {
+			if _, present, _ := x.get(key); present {
+				continue
+			}
+			yn, _ := y.count(key)
+			if n := otherOnly(yn); n > 0 {
+				if err := out.set(key, py.Int(n)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func (c *Counter) M__add__(o py.Object) (py.Object, error) {
+	return counterBinary(c, o, func(x, y int64) int64 { return x + y }, func(y int64) int64 { return y })
+}
+
+func (c *Counter) M__sub__(o py.Object) (py.Object, error) {
+	return counterBinary(c, o, func(x, y int64) int64 { return x - y }, func(y int64) int64 { return -y })
+}
+
+func (c *Counter) M__or__(o py.Object) (py.Object, error) {
+	return counterBinary(c, o, func(x, y int64) int64 { return max(x, y) }, func(y int64) int64 { return y })
+}
+
+func (c *Counter) M__and__(o py.Object) (py.Object, error) {
+	return counterBinary(c, o, func(x, y int64) int64 { return min(x, y) }, nil)
+}
+
+func (c *Counter) M__pos__() (py.Object, error) {
+	return counterBinary(c, newCounter(), func(x, _ int64) int64 { return x }, nil)
+}
+
+func (c *Counter) M__neg__() (py.Object, error) {
+	return counterBinary(c, newCounter(), func(x, _ int64) int64 { return -x }, nil)
 }
 
 // counterUpdate counts the elements of an iterable, or, when given another
@@ -1221,14 +1290,30 @@ type DefaultDict struct {
 	defaultFactory py.Object
 	keys           []string
 	values         py.StringDict
+	// cls and attrs make a Python subclass work: its instances are DefaultDicts
+	// that report the subclass as their type and carry their own attributes
+	// (importlib.metadata's FreezableDefaultDict sets self._frozen).
+	cls   *py.Type
+	attrs py.StringDict
 }
+
+// GetDict is the instance __dict__ of a subclass instance.
+func (d *DefaultDict) GetDict() py.StringDict { return d.attrs }
 
 var DefaultDictType = py.NewTypeX("collections.defaultdict", defaultdict_doc, defaultDictNew, nil)
 
-func (d *DefaultDict) Type() *py.Type { return DefaultDictType }
+func (d *DefaultDict) Type() *py.Type {
+	if d.cls != nil {
+		return d.cls
+	}
+	return DefaultDictType
+}
 
 func defaultDictNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	d := &DefaultDict{values: py.NewStringDict()}
+	if metatype != nil && metatype.Name != "" && metatype.Name != "collections.defaultdict" {
+		d.cls, d.attrs = metatype, py.NewStringDict()
+	}
 	if len(args) > 0 {
 		d.defaultFactory = args[0]
 	} else {
@@ -1311,8 +1396,26 @@ func init() {
 				return v, nil
 			}
 		}
-		return d.missing(key)
+		return d.M__getitem__(key)
 	}, 0, "Return self[key], creating a default when absent."))
+
+	DefaultDictType.Dict.Set("default_factory", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			if f := self.(*DefaultDict).defaultFactory; f != nil {
+				return f, nil
+			}
+			return py.None, nil
+		},
+		Fset: func(self, v py.Object) error { self.(*DefaultDict).defaultFactory = v; return nil },
+		Doc:  "Factory for default value called by __missing__().",
+	})
+	DefaultDictType.Dict.Set("__missing__", py.MustNewMethod("__missing__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var key py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "__missing__", 1, 1, &key); err != nil {
+			return nil, err
+		}
+		return self.(*DefaultDict).missing(key)
+	}, 0, "Create and store the default for a missing key."))
 
 	DefaultDictType.Dict.Set("__setitem__", py.MustNewMethod("__setitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		var key, value py.Object
@@ -1418,141 +1521,6 @@ func init() {
 			return nil, err
 		}
 		return py.String("defaultdict(" + factoryStr + ", {" + strings.Join(parts, ", ") + "})"), nil
-	}, 0, "Return repr(self)."))
-}
-
-// ---------------------------------------------------------------------------
-// ChainMap
-
-const chainmap_doc = `A ChainMap groups multiple dicts (or other mappings) together
-to create a single, updateable view.`
-
-// ChainMap searches a list of mappings in order.
-type ChainMap struct {
-	maps []py.Object
-}
-
-var ChainMapType = py.NewTypeX("collections.ChainMap", chainmap_doc, chainMapNew, nil)
-
-func (c *ChainMap) Type() *py.Type { return ChainMapType }
-
-func chainMapNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	c := &ChainMap{}
-	for _, arg := range args {
-		c.maps = append(c.maps, arg)
-	}
-	if kwargs.Len() > 0 {
-		d := py.NewStringDict()
-		kwargs.Range(func(k string, v py.Object) bool {
-			d.Set(k, v)
-			return false
-		})
-		c.maps = append(c.maps, d)
-	}
-	if len(c.maps) == 0 {
-		c.maps = append(c.maps, py.NewStringDict())
-	}
-	return c, nil
-}
-
-func (c *ChainMap) lookup(key py.Object) (py.Object, bool, error) {
-	for _, m := range c.maps {
-		if _, ok := m.(py.IGetDict); ok {
-			res, err := py.GetAttr(m, key)
-			if err == nil && res != nil {
-				return res, true, nil
-			}
-		}
-		if d, ok := m.(py.StringDict); ok {
-			if encoded, err := py.DictKey(key); err == nil {
-				if v, ok := d.Get(encoded); ok {
-					return v, true, nil
-				}
-			}
-		}
-	}
-	return nil, false, nil
-}
-
-func init() {
-	ChainMapType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		var key py.Object
-		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
-			return nil, err
-		}
-		v, ok, err := c.lookup(key)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
-		}
-		return v, nil
-	}, 0, "Return the value from the first mapping that has it."))
-
-	ChainMapType.Dict.Set("get", py.MustNewMethod("get", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		var key py.Object
-		var def py.Object = py.None
-		if err := py.UnpackTuple(args, py.StringDict{}, "get", 1, 2, &key, &def); err != nil {
-			return nil, err
-		}
-		v, ok, err := c.lookup(key)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return def, nil
-		}
-		return v, nil
-	}, 0, "Return the value for key, or the default."))
-
-	ChainMapType.Dict.Set("__contains__", py.MustNewMethod("__contains__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		var key py.Object
-		if err := py.UnpackTuple(args, py.StringDict{}, "__contains__", 1, 1, &key); err != nil {
-			return nil, err
-		}
-		_, ok, err := c.lookup(key)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			return py.True, nil
-		}
-		return py.False, nil
-	}, 0, "Implement 'in'."))
-
-	ChainMapType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		seen := map[string]bool{}
-		for _, m := range c.maps {
-			d, ok := m.(py.IGetDict)
-			if !ok {
-				continue
-			}
-			for _, k := range d.GetDict().Keys() {
-				seen[k] = true
-			}
-		}
-		return py.Int(len(seen)), nil
-	}, 0, "Number of distinct keys across the mappings."))
-
-	ChainMapType.Dict.Set("maps", py.MustNewMethod("maps", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		items := make([]py.Object, len(c.maps))
-		copy(items, c.maps)
-		return py.NewListFromItems(items), nil
-	}, 0, "Return the list of mappings."))
-
-	ChainMapType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		c := self.(*ChainMap)
-		parts, err := reprItems(c.maps)
-		if err != nil {
-			return nil, err
-		}
-		return py.String("ChainMap(" + strings.Join(parts, ", ") + ")"), nil
 	}, 0, "Return repr(self)."))
 }
 
@@ -1906,6 +1874,22 @@ func init() {
 		}
 		return out, nil
 	}, 0, "Return a dict of the fields."))
+	NamedTupleType.Dict.Set("_replace", py.MustNewMethod("_replace", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		n := self.(*NamedTuple)
+		if len(args) != 0 {
+			return nil, py.ExceptionNewf(py.TypeError, "_replace() takes 1 positional argument but %d were given", len(args)+1)
+		}
+		out := *n
+		out.values = append([]py.Object(nil), n.values...)
+		for _, kw := range kwargs.Items() {
+			i := slices.Index(n.fields, kw.Key)
+			if i < 0 {
+				return nil, py.ExceptionNewf(py.TypeError, "Got unexpected field names: ['%s']", kw.Key)
+			}
+			out.values[i] = kw.Value
+		}
+		return &out, nil
+	}, 0, "Return a new instance replacing the named fields."))
 	NamedTupleType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		n := self.(*NamedTuple)
 		parts := make([]string, len(n.fields))
@@ -2396,6 +2380,12 @@ func (d *DefaultDict) M__getitem__(key py.Object) (py.Object, error) {
 			return v, nil
 		}
 	}
+	// A subclass overriding __missing__ (it may call super() to get here).
+	if d.cls != nil {
+		if fn := d.cls.LookupPython("__missing__"); fn != nil {
+			return py.Call(py.NewBoundMethod(d, fn), py.Tuple{key}, py.StringDict{})
+		}
+	}
 	return d.missing(key)
 }
 
@@ -2427,28 +2417,6 @@ func (d *DefaultDict) M__iter__() (py.Object, error) {
 		items = append(items, key)
 	}
 	return newIteratorFromItems(items), nil
-}
-
-func (c *ChainMap) M__getitem__(key py.Object) (py.Object, error) {
-	v, ok, err := c.lookup(key)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, py.ExceptionNewf(py.KeyError, "%v", key)
-	}
-	return v, nil
-}
-
-func (c *ChainMap) M__contains__(item py.Object) (py.Object, error) {
-	_, ok, err := c.lookup(item)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return py.True, nil
-	}
-	return py.False, nil
 }
 
 func (n *NamedTuple) M__len__() (py.Object, error) { return py.Int(len(n.values)), nil }
@@ -2991,4 +2959,12 @@ func namedTupleOperand(o py.Object) py.Object {
 		return py.Tuple(n.values)
 	}
 	return o
+}
+
+// Every container here is generic in CPython: defaultdict[str, int] is a
+// types.GenericAlias that can still be called to build the container.
+func init() {
+	for _, t := range []*py.Type{DequeType, CounterType, OrderedDictType, DefaultDictType, ChainMapType, UserDictType, UserListType} {
+		t.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
+	}
 }

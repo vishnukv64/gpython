@@ -1,0 +1,149 @@
+== print(exc)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== print(type, value, tb)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== print(exc, limit=1)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+ValueError: boom
+== print(exc, limit=-1)
+Traceback (most recent call last):
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== print(c)
+Traceback (most recent call last):
+  File "F", line 31, in chained
+    outer()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 33, in chained
+    raise RuntimeError("wrapped") from e
+RuntimeError: wrapped
+== print(c, chain=False)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 33, in chained
+    raise RuntimeError("wrapped") from e
+RuntimeError: wrapped
+== print(x)
+Traceback (most recent call last):
+  File "F", line 38, in contexted
+    outer()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 40, in contexted
+    raise KeyError("ctx")
+KeyError: 'ctx'
+== print(x, chain=False)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 40, in contexted
+    raise KeyError("ctx")
+KeyError: 'ctx'
+== print(value=)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== format(exc)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== format(type, value, tb)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom
+== format(exc, limit=2)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+ValueError: boom
+== format(c, chain=False)
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 33, in chained
+    raise RuntimeError("wrapped") from e
+RuntimeError: wrapped
+== format(exc=kw)
+
+list 6
+['ValueError: bare\n']
+['ValueError: v\n']
+== stderr default
+Traceback (most recent call last):
+  File "F", line 45, in get
+    fn()
+  File "F", line 26, in outer
+    middle()
+  File "F", line 22, in middle
+    inner()
+  File "F", line 18, in inner
+    raise ValueError("boom")
+ValueError: boom

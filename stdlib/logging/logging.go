@@ -348,6 +348,7 @@ type Formatter struct {
 	fmt        string
 	dateFmt    string
 	defaultFmt bool
+	style      byte // '%' (default), '{' or '$'
 }
 
 var FormatterType = py.NewTypeX("logging.Formatter",
@@ -1094,7 +1095,14 @@ func (f *Formatter) format(record *LogRecord) (string, error) {
 		}
 		return msg + record.ExcText, nil
 	}
-	text, err := expandFormat(f.fmt, record)
+	expand := expandFormat
+	switch f.style {
+	case '{':
+		expand = expandBraceFormat
+	case '$':
+		expand = expandDollarFormat
+	}
+	text, err := expand(f.fmt, record)
 	if err != nil {
 		return "", err
 	}
@@ -1154,6 +1162,84 @@ func expandFormat(format string, record *LogRecord) (string, error) {
 		// is copied through untouched rather than mis-rendered.
 		b.WriteByte(c)
 		i++
+	}
+	return b.String(), nil
+}
+
+// expandBraceFormat renders a "{field}" style format string: "{name}" or
+// "{name:spec}", with "{{" and "}}" as literal braces.
+func expandBraceFormat(format string, record *LogRecord) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(format); i++ {
+		switch c := format[i]; {
+		case c == '{' && i+1 < len(format) && format[i+1] == '{', c == '}' && i+1 < len(format) && format[i+1] == '}':
+			b.WriteByte(c)
+			i++
+		case c == '{':
+			end := strings.IndexByte(format[i:], '}')
+			if end < 0 {
+				return "", py.ExceptionNewf(py.ValueError, "expected '}' before end of string")
+			}
+			field, spec, _ := strings.Cut(format[i+1:i+end], ":")
+			value, err := recordField(record, field)
+			if err != nil {
+				return "", err
+			}
+			out, err := py.Format(value, spec)
+			if err != nil {
+				return "", err
+			}
+			b.WriteString(string(out.(py.String)))
+			i += end
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String(), nil
+}
+
+// expandDollarFormat renders a string.Template style "$field" / "${field}" format.
+func expandDollarFormat(format string, record *LogRecord) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(format); i++ {
+		c := format[i]
+		if c != '$' || i+1 >= len(format) {
+			b.WriteByte(c)
+			continue
+		}
+		var field string
+		switch n := format[i+1]; {
+		case n == '$':
+			b.WriteByte('$')
+			i++
+			continue
+		case n == '{':
+			end := strings.IndexByte(format[i:], '}')
+			if end < 0 {
+				return "", py.ExceptionNewf(py.ValueError, "Invalid placeholder in string")
+			}
+			field = format[i+2 : i+end]
+			i += end
+		default:
+			j := i + 1
+			for j < len(format) && (format[j] == '_' || format[j] >= '0' && format[j] <= '9' || format[j] >= 'a' && format[j] <= 'z' || format[j] >= 'A' && format[j] <= 'Z') {
+				j++
+			}
+			if j == i+1 {
+				return "", py.ExceptionNewf(py.ValueError, "Invalid placeholder in string")
+			}
+			field = format[i+1 : j]
+			i = j - 1
+		}
+		value, err := recordField(record, field)
+		if err != nil {
+			return "", err
+		}
+		str, err := py.Str(value)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(string(str.(py.String)))
 	}
 	return b.String(), nil
 }
@@ -1487,7 +1573,12 @@ func formatter(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 		&fmtObj, &datefmt, &style); err != nil {
 		return nil, err
 	}
-	f := &Formatter{}
+	f := &Formatter{style: '%'}
+	if st, ok := style.(py.String); ok && (st == "{" || st == "$") {
+		f.style = st[0]
+	} else if !ok || st != "%" {
+		return nil, py.ExceptionNewf(py.ValueError, "Style must be one of: %%,{,$")
+	}
 	if fmtObj != nil && fmtObj != py.None {
 		s, err := py.StrAsString(fmtObj)
 		if err != nil {
@@ -1525,15 +1616,14 @@ func basicConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 		stream   py.Object = py.None
 		force    py.Object = py.False
 		encoding py.Object = py.None
+		handlers py.Object = py.None
 	)
-	kwlist := []string{"filename", "filemode", "format", "datefmt", "style", "level", "stream", "force", "encoding"}
-	if err := py.ParseTupleAndKeywords(nil, kwargs, "|$OOOOOOObOO:basicConfig", kwlist,
-		&filename, &filemode, &format, &datefmt, &style, &level, &stream, &force, &encoding); err != nil {
+	kwlist := []string{"filename", "filemode", "format", "datefmt", "style", "level", "stream", "force", "encoding", "handlers"}
+	if err := py.ParseTupleAndKeywords(nil, kwargs, "|$OOOOOOObOOO:basicConfig", kwlist,
+		&filename, &filemode, &format, &datefmt, &style, &level, &stream, &force, &encoding, &handlers); err != nil {
 		return nil, err
 	}
-	// datefmt/style/encoding are accepted for compatibility; the default
-	// formatter is used and the stream is opened in text mode.
-	_, _, _ = datefmt, style, encoding
+	_ = encoding // accepted; the stream is opened in text mode
 	forced, err := py.ObjectIsTrue(force)
 	if err != nil {
 		return nil, err
@@ -1545,33 +1635,57 @@ func basicConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 		gRoot.handlers = nil
 	}
 
-	var handler *Handler
-	switch {
-	case filename != nil && filename != py.None:
-		open := py.Object(nil)
-		if impl := py.GetModuleImplOrNil("io"); impl != nil {
-			open = impl.Globals.GetOrNil("open")
+	var hs []*Handler
+	if handlers != py.None {
+		if filename != py.None || stream != py.None {
+			return nil, py.ExceptionNewf(py.ValueError, "'stream' or 'filename' should not be specified together with 'handlers'")
 		}
-		if open == nil {
-			return nil, py.ExceptionNewf(py.RuntimeError, "basicConfig(filename=...) needs io.open")
-		}
-		f, err := py.Call(open, py.Tuple{filename, filemode}, py.StringDict{})
+		items, err := py.SequenceList(handlers)
 		if err != nil {
 			return nil, err
 		}
-		handler = newStreamHandler(f)
-	case stream != nil && stream != py.None:
-		handler = newStreamHandler(stream)
-	default:
-		handler = newStreamHandler(stderrStream())
+		for _, it := range items.Items {
+			h, ok := HandlerOf(it)
+			if !ok {
+				return nil, py.ExceptionNewf(py.TypeError, "basicConfig() handlers must be Handlers")
+			}
+			hs = append(hs, h)
+		}
+	} else {
+		var handler *Handler
+		switch {
+		case filename != nil && filename != py.None:
+			open := py.Object(nil)
+			if impl := py.GetModuleImplOrNil("io"); impl != nil {
+				open = impl.Globals.GetOrNil("open")
+			}
+			if open == nil {
+				return nil, py.ExceptionNewf(py.RuntimeError, "basicConfig(filename=...) needs io.open")
+			}
+			f, err := py.Call(open, py.Tuple{filename, filemode}, py.StringDict{})
+			if err != nil {
+				return nil, err
+			}
+			handler = newStreamHandler(f)
+		case stream != nil && stream != py.None:
+			handler = newStreamHandler(stream)
+		default:
+			handler = newStreamHandler(stderrStream())
+		}
+		hs = []*Handler{handler}
 	}
 
-	if format != nil && format != py.None {
-		s, err := py.StrAsString(format)
+	if (format != nil && format != py.None) || style != py.String("%") || (datefmt != nil && datefmt != py.None) {
+		fargs := py.Tuple{format, datefmt, style}
+		fm, err := formatter(nil, fargs, py.StringDict{})
 		if err != nil {
 			return nil, err
 		}
-		handler.formatter = &Formatter{fmt: s}
+		for _, h := range hs {
+			if h.formatter == nil {
+				h.formatter = fm.(*Formatter)
+			}
+		}
 	}
 	if level != nil && level != py.None {
 		n, err := py.IndexInt(level)
@@ -1580,7 +1694,7 @@ func basicConfig(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 		}
 		gRoot.level = n
 	}
-	gRoot.handlers = []*Handler{handler}
+	gRoot.handlers = hs
 	return py.None, nil
 }
 

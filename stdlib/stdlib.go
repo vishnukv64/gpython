@@ -164,6 +164,12 @@ func NewContext(opts py.ContextOpts) py.Context {
 	sys_mod := ctx.Store().MustGetModule("sys")
 	sys_mod.Globals.Set("argv", py.NewListFromStrings(opts.SysArgs))
 	sys_mod.Globals.Set("path", py.NewListFromStrings(opts.SysPaths))
+	// The sys module's globals are built once for the process, so these lists
+	// would otherwise be shared by every context: a finder appended by one
+	// would run in all the others, long after its own context was closed.
+	sys_mod.Globals.Set("meta_path", py.NewListFromItems(nil))
+	sys_mod.Globals.Set("path_hooks", py.NewListFromItems(nil))
+	sys_mod.Globals.Set("path_importer_cache", py.NewStringDict())
 
 	return ctx
 }
@@ -171,10 +177,10 @@ func NewContext(opts py.ContextOpts) py.Context {
 // ModuleInit digests a ModuleImpl, compiling and marshalling as needed, creating a new Module instance in this Context.
 func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 	err := ctx.pushBusy()
-	defer ctx.popBusy()
 	if err != nil {
 		return nil, err
 	}
+	defer ctx.popBusy()
 
 	if impl.Code == nil && len(impl.CodeSrc) > 0 {
 		impl.Code, err = py.Compile(string(impl.CodeSrc), impl.Info.FileDesc, py.ExecMode, 0, true)
@@ -213,10 +219,10 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 // See interface py.Context defined in py/run.go
 func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.CompileOut, error) {
 	err := ctx.pushBusy()
-	defer ctx.popBusy()
 	if err != nil {
 		return py.CompileOut{}, err
 	}
+	defer ctx.popBusy()
 
 	tryPaths := defaultPaths
 	if opts.UseSysPaths {
@@ -394,10 +400,10 @@ func resolveRunPath(runPath string, opts py.CompileOpts, pathObjs []py.Object, t
 // See interface py.Context defined in py/run.go
 func (ctx *context) RunCode(code *py.Code, globals, locals py.StringDict, closure py.Tuple) (py.Object, error) {
 	err := ctx.pushBusy()
-	defer ctx.popBusy()
 	if err != nil {
 		return nil, err
 	}
+	defer ctx.popBusy()
 
 	return vm.EvalCode(ctx, code, globals, locals, nil, py.StringDict{}, nil, py.StringDict{}, closure)
 }

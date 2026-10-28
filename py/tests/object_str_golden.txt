@@ -1,0 +1,12 @@
+int True
+str True
+list True
+dict True
+NoneType True
+float True
+tuple True
+A True
+B True
+A! ValueError('a')
+B-str A! a
+__str__

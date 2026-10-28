@@ -1219,6 +1219,18 @@ func init() {
 		"Turn an RFC 2231 value tuple into a plain string."))
 	globals.Set("localtime", py.MustNewMethod("localtime", localtimeFunc, 0,
 		"Return local time as an aware datetime object."))
+	globals.Set("_has_surrogates", py.MustNewMethod("_has_surrogates", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "_has_surrogates() takes exactly one argument")
+		}
+		str, ok := args[0].(py.String)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "_has_surrogates() argument must be str")
+		}
+		// A lone surrogate (U+D800..U+DFFF) cannot be encoded to UTF-8; here
+		// it is stored as the three bytes ED A0..BF xx.
+		return py.NewBool(hasSurrogateBytes(string(str))), nil
+	}, 0, "Return True if the string holds a lone surrogate."))
 	globals.Set("COMMASPACE", py.String(", "))
 	globals.Set("EMPTYSTRING", py.String(""))
 	globals.Set("CRLF", py.String("\r\n"))
@@ -1232,4 +1244,13 @@ func init() {
 		},
 		Globals: globals,
 	})
+}
+
+func hasSurrogateBytes(s string) bool {
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] == 0xED && s[i+1] >= 0xA0 {
+			return true
+		}
+	}
+	return false
 }

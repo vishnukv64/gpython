@@ -5,8 +5,7 @@
 // Package traceback implements the traceback module: formatting an exception and
 // the frames it passed through.
 //
-// The rendered output is CPython's, line for line, down to the "Traceback (most
-// recent call last):" header and the two-space indent before "File".  Anything
+// The rendered output is CPython's, line for line, down to the "Traceback (most\n// recent call last):" header and the two-space indent before "File".  Anything
 // that renders an exception - pip's own error reporting, rich, a test runner -
 // compares against that text, so matching it is the point of the module.
 
@@ -131,35 +130,85 @@ func formatFrame(tb *py.Traceback) []string {
 	return out
 }
 
-// formatExceptionInto writes the whole rendering of an exception, its
-// traceback and its cause chain, and returns the number of bytes written.
-func formatExceptionInto(w io.Writer, e *py.Exception, tb *py.Traceback, seen map[*py.Exception]bool) {
-	if e == nil {
-		return
+// renderOpts are the limit= and chain= keywords of print_exception and
+// format_exception.
+type renderOpts struct {
+	limit    int  // meaningful only when hasLimit
+	hasLimit bool // limit=None keeps every frame
+	noChain  bool // chain=False leaves the cause/context chain out
+}
+
+// limitTb applies limit= to a traceback: the first limit entries for a positive
+// limit, the last -limit for a negative one, as StackSummary.extract does.
+func (o renderOpts) limitTb(tb *py.Traceback) *py.Traceback {
+	if !o.hasLimit || tb == nil {
+		return tb
 	}
-	if seen == nil {
-		seen = map[*py.Exception]bool{}
+	var entries []*py.Traceback
+	for t := tb; t != nil; t = t.Next {
+		entries = append(entries, t)
+	}
+	if o.limit >= 0 {
+		entries = entries[:min(o.limit, len(entries))]
+	} else {
+		entries = entries[max(len(entries)+o.limit, 0):]
+	}
+	var head *py.Traceback
+	for i := len(entries) - 1; i >= 0; i-- {
+		cp := *entries[i]
+		cp.Next = head
+		head = &cp
+	}
+	return head
+}
+
+// formatExceptionParts renders an exception, its traceback and its cause chain
+// as the list of strings CPython's format_exception returns: the header, one
+// string per frame (File line plus source line), the exception line, and the
+// chain separators.
+func formatExceptionParts(e *py.Exception, tb *py.Traceback, seen map[*py.Exception]bool, opts renderOpts) []string {
+	if e == nil {
+		return nil
 	}
 	if seen[e] {
-		return
+		return nil
 	}
 	seen[e] = true
 
+	var parts []string
 	// A chained exception prints its cause first, then the context, exactly as
 	// CPython orders them; "Traceback (most recent call last):" precedes each.
-	if cause, ok := e.Cause.(*py.Exception); ok && cause != nil {
-		formatExceptionInto(w, cause, py.TracebackOf(cause), seen)
-		io.WriteString(w, "\nThe above exception was the direct cause of the following exception:\n\n")
+	if opts.noChain {
+	} else if cause, ok := e.Cause.(*py.Exception); ok && cause != nil {
+		parts = append(parts, formatExceptionParts(cause, py.TracebackOf(cause), seen, opts)...)
+		parts = append(parts, "\nThe above exception was the direct cause of the following exception:\n\n")
 	} else if ctx, ok := e.Context.(*py.Exception); ok && ctx != nil && !e.SuppressContext {
-		formatExceptionInto(w, ctx, py.TracebackOf(ctx), seen)
-		io.WriteString(w, "\nDuring handling of the above exception, another exception occurred:\n\n")
+		parts = append(parts, formatExceptionParts(ctx, py.TracebackOf(ctx), seen, opts)...)
+		parts = append(parts, "\nDuring handling of the above exception, another exception occurred:\n\n")
 	}
 
-	if tb != nil {
-		io.WriteString(w, "Traceback (most recent call last):\n")
-		tb.TracebackDump(w)
+	if tb = opts.limitTb(tb); tb != nil {
+		parts = append(parts, "Traceback (most recent call last):\n")
+		for _, line := range tb.FormatLines() {
+			// The source line belongs to the File line before it.
+			if strings.HasPrefix(line, "    ") && len(parts) > 0 {
+				parts[len(parts)-1] += line
+			} else {
+				parts = append(parts, line)
+			}
+		}
 	}
-	io.WriteString(w, exceptionText(e)+"\n")
+	return append(parts, exceptionText(e)+"\n")
+}
+
+// formatExceptionInto writes the rendering of formatExceptionParts to w.
+func formatExceptionInto(w io.Writer, e *py.Exception, tb *py.Traceback, seen map[*py.Exception]bool, opts renderOpts) {
+	if seen == nil {
+		seen = map[*py.Exception]bool{}
+	}
+	for _, part := range formatExceptionParts(e, tb, seen, opts) {
+		io.WriteString(w, part)
+	}
 }
 
 // splitLines turns a rendering into the list-of-strings CPython returns.
@@ -225,14 +274,109 @@ func resolveExcArgs(fname string, args py.Tuple) (*py.Exception, *py.Traceback, 
 	}
 }
 
+// excCall is a parsed print_exception / format_exception call.
+type excCall struct {
+	exc   *py.Exception
+	tb    *py.Traceback
+	opts  renderOpts
+	file  py.Object
+	chain py.Object
+}
+
+// parseExcCall reads CPython 3.10+'s signature
+//
+//	f(exc, /, value=<missing>, tb=<missing>, limit=None, [file=None,] chain=True)
+//
+// so f(exc) and f(type, value, tb) both work, with the rest positional or
+// keyword.  A call with a value but no tb (or the reverse) is a ValueError, and
+// an explicit tb=None means "no traceback", not "the exception's own".
+func parseExcCall(fname string, args py.Tuple, kwargs py.StringDict, withFile bool) (*excCall, error) {
+	names := []string{"exc", "value", "tb", "limit", "file", "chain"}
+	if !withFile {
+		names = []string{"exc", "value", "tb", "limit", "chain"}
+	}
+	if len(args) > len(names) {
+		return nil, py.ExceptionNewf(py.TypeError, "%s() takes at most %d arguments (%d given)", fname, len(names), len(args))
+	}
+	got := map[string]py.Object{}
+	for i, a := range args {
+		got[names[i]] = a
+	}
+	for _, kv := range kwargs.Items() {
+		known := false
+		for _, n := range names {
+			known = known || n == kv.Key
+		}
+		if !known || kv.Key == "exc" && len(args) > 0 {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() got an unexpected keyword argument '%s'", fname, kv.Key)
+		}
+		if _, dup := got[kv.Key]; dup {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() got multiple values for argument '%s'", fname, kv.Key)
+		}
+		got[kv.Key] = kv.Value
+	}
+	excArg, ok := got["exc"]
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "%s() missing 1 required positional argument: 'exc'", fname)
+	}
+	value, hasValue := got["value"]
+	tbArg, hasTb := got["tb"]
+	if hasValue != hasTb {
+		return nil, py.ExceptionNewf(py.ValueError, "Both or neither of value and tb must be given")
+	}
+	c := &excCall{file: py.None, chain: py.True}
+	var err error
+	if hasValue {
+		if value != py.None {
+			if exc, ok := value.(*py.Exception); ok {
+				c.exc = exc
+			} else {
+				c.exc = py.MakeException(value)
+			}
+		}
+		if t, ok := tbArg.(*py.Traceback); ok {
+			c.tb = t
+		}
+	} else if excArg != py.None {
+		exc, ok := excArg.(*py.Exception)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "Exception expected for value, %s found", excArg.Type().Name)
+		}
+		c.exc, c.tb = exc, py.TracebackOf(exc)
+	}
+	if l, ok := got["limit"]; ok && l != py.None {
+		n, err := py.IndexInt(l)
+		if err != nil {
+			return nil, err
+		}
+		c.opts.limit, c.opts.hasLimit = int(n), true
+	}
+	if f, ok := got["file"]; ok {
+		c.file = f
+	}
+	if ch, ok := got["chain"]; ok {
+		truth, terr := py.MakeBool(ch)
+		if terr != nil {
+			return nil, terr
+		}
+		c.opts.noChain = truth == py.False
+	}
+	return c, err
+}
+
 func formatException(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	exc, tb, err := resolveExcArgs("format_exception", args)
+	c, err := parseExcCall("format_exception", args, kwargs, false)
 	if err != nil {
 		return nil, err
 	}
-	var sb strings.Builder
-	formatExceptionInto(&sb, exc, tb, nil)
-	return splitLines(sb.String()), nil
+	if c.exc == nil {
+		return splitLines("NoneType: None\n"), nil
+	}
+	out := py.NewList()
+	for _, part := range formatExceptionParts(c.exc, c.tb, map[*py.Exception]bool{}, c.opts) {
+		out.Append(py.String(part))
+	}
+	return out, nil
 }
 
 func formatExceptionOnly(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -276,33 +420,55 @@ func formatExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 	if exc == nil {
 		return py.String("NoneType: None\n"), nil
 	}
-	formatExceptionInto(&sb, exc, tb, nil)
+	formatExceptionInto(&sb, exc, tb, nil, renderOpts{})
 	return py.String(sb.String()), nil
 }
 
-// printException is print_exception(exc) / print_exception(type, value, tb),
-// with the file= keyword; limit and chain are accepted and ignored.
+// printException is print_exception, in all of the forms parseExcCall reads.
 func printException(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	file := py.Object(py.None)
-	if v, ok := kwargs.Get("file"); ok {
-		file = v
-	}
-	exc, tb, err := resolveExcArgs("print_exception", args)
+	c, err := parseExcCall("print_exception", args, kwargs, true)
 	if err != nil {
 		return nil, err
 	}
-	var sb strings.Builder
-	formatExceptionInto(&sb, exc, tb, nil)
+	text := "NoneType: None\n"
+	if c.exc != nil {
+		var sb strings.Builder
+		formatExceptionInto(&sb, c.exc, c.tb, nil, c.opts)
+		text = sb.String()
+	}
+	return py.None, writeTo(self, c.file, text)
+}
+
+// stderrOf is sys.stderr of the running context, so a swapped stream captures.
+func stderrOf(self py.Object) py.Object {
+	if mod, ok := self.(*py.Module); ok && mod.Context != nil {
+		if sys, err := mod.Context.GetModule("sys"); err == nil {
+			if s, ok := sys.Globals.Get("stderr"); ok {
+				return s
+			}
+		}
+	}
+	if sys := py.GetModuleImplOrNil("sys"); sys != nil {
+		return sys.Globals.GetOrNil("stderr")
+	}
+	return py.None
+}
+
+// writeTo writes text to file, which is sys.stderr when it is None.
+func writeTo(self py.Object, file py.Object, text string) error {
 	if file == py.None {
-		_, err = os.Stderr.WriteString(sb.String())
-		return py.None, err
+		file = stderrOf(self)
+		if file == py.None {
+			_, err := os.Stderr.WriteString(text)
+			return err
+		}
 	}
 	w, err := py.GetAttrString(file, "write")
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, err = py.Call(w, py.Tuple{py.String(sb.String())}, py.NewStringDict())
-	return py.None, err
+	_, err = py.Call(w, py.Tuple{py.String(text)}, py.NewStringDict())
+	return err
 }
 
 func printExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -334,7 +500,7 @@ func printExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 		return py.None, nil
 	}
 	var sb strings.Builder
-	formatExceptionInto(&sb, exc, tb, nil)
+	formatExceptionInto(&sb, exc, tb, nil, renderOpts{})
 	if file == py.None {
 		if _, err := os.Stderr.WriteString(sb.String()); err != nil {
 			return nil, err
@@ -452,7 +618,7 @@ func init() {
 			return splitLines("NoneType: None\n"), nil
 		}
 		var sb strings.Builder
-		formatExceptionInto(&sb, te.exc, te.tb, nil)
+		formatExceptionInto(&sb, te.exc, te.tb, nil, renderOpts{})
 		return splitLines(sb.String()), nil
 	}, 0, "Format the exception (and chain) as a list of lines."))
 	tracebackExceptionType.Dict.Set("format_exception_only", py.MustNewMethod("format_exception_only", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {

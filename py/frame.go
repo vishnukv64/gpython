@@ -383,8 +383,9 @@ func init() {
 	})
 	FrameType.Dict.Set("f_lineno", &Property{
 		Fget: func(self Object) (Object, error) {
-			return Int(self.(*Frame).Code.Firstlineno), nil
+			f := self.(*Frame)
+			return Int(f.Code.Addr2Line(f.Lasti)), nil
 		},
-		Doc: "current line number, from the code object's first line",
+		Doc: "current line number, computed from the last instruction",
 	})
 }

@@ -1256,11 +1256,11 @@ func classFields(obj py.Object) ([]*fieldType, error) {
 // fields, or nil when there is none.
 func dataclassFieldOrder(obj py.Object) *py.List {
 	if t, ok := obj.(*py.Type); ok {
-		if l, ok := t.Dict.GetOrNil("__dataclass_field_order__").(*py.List); ok {
+		if l, ok := t.Lookup("__dataclass_field_order__").(*py.List); ok {
 			return l
 		}
 	}
-	if l, ok := obj.Type().Dict.GetOrNil("__dataclass_field_order__").(*py.List); ok {
+	if l, ok := obj.Type().Lookup("__dataclass_field_order__").(*py.List); ok {
 		return l
 	}
 	return nil
@@ -1304,6 +1304,7 @@ func asdictImpl(obj, factory py.Object, depth int) (py.Object, error) {
 		return nil, err
 	}
 	out := py.NewStringDict()
+	pairs := py.NewList()
 	for _, f := range fs {
 		v, err := py.GetAttrString(obj, f.name)
 		if err != nil {
@@ -1314,9 +1315,11 @@ func asdictImpl(obj, factory py.Object, depth int) (py.Object, error) {
 			return nil, err
 		}
 		out.Set(f.name, v)
+		pairs.Append(py.Tuple{py.String(f.name), v})
 	}
 	if factory != nil && factory != py.None {
-		return py.Call(factory, py.Tuple{out}, py.StringDict{})
+		// dict_factory receives the (name, value) pairs, as in CPython.
+		return py.Call(factory, py.Tuple{pairs}, py.StringDict{})
 	}
 	return out, nil
 }
@@ -1361,7 +1364,7 @@ func asdictValue(v, factory py.Object, depth int) (py.Object, error) {
 		}
 		return out, nil
 	}
-	if _, ok := v.Type().Dict.Get("__dataclass_fields__"); ok {
+	if v.Type().Lookup("__dataclass_fields__") != nil {
 		return asdictImpl(v, factory, depth+1)
 	}
 	return v, nil
@@ -1451,7 +1454,7 @@ func astupleValue(v py.Object, depth int) (py.Object, error) {
 		}
 		return out, nil
 	}
-	if _, ok := v.Type().Dict.Get("__dataclass_fields__"); ok {
+	if v.Type().Lookup("__dataclass_fields__") != nil {
 		return astupleImpl(v, depth+1)
 	}
 	return v, nil
@@ -1667,12 +1670,14 @@ func hashTuple(t py.Tuple) (py.Object, error) {
 // dataclassFields finds the __dataclass_fields__ table of a class or
 // instance, or nil when the object is not a dataclass.
 func dataclassFields(obj py.Object) py.Object {
+	// Lookup walks the MRO: a plain subclass of a dataclass (pip's DirectUrl)
+	// is a dataclass too, with its base's fields.
 	if t, ok := obj.(*py.Type); ok {
-		if d, ok := t.Dict.Get("__dataclass_fields__"); ok {
+		if d := t.Lookup("__dataclass_fields__"); d != nil {
 			return d
 		}
 	}
-	if d, ok := obj.Type().Dict.Get("__dataclass_fields__"); ok {
+	if d := obj.Type().Lookup("__dataclass_fields__"); d != nil {
 		return d
 	}
 	return nil

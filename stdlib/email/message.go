@@ -84,6 +84,53 @@ func messageNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 	return m, nil
 }
 
+func (m *Message) headerList() py.Object {
+	items := make([]py.Object, len(m.headers))
+	for i, h := range m.headers {
+		items[i] = py.Tuple{py.String(h), py.String(m.values[i])}
+	}
+	return py.NewListFromItems(items)
+}
+
+func (m *Message) setHeaderList(v py.Object) error {
+	l, err := py.SequenceList(v)
+	if err != nil {
+		return err
+	}
+	headers, values := make([]string, 0, len(l.Items)), make([]string, 0, len(l.Items))
+	for _, it := range l.Items {
+		pair, ok := it.(py.Tuple)
+		if !ok || len(pair) != 2 {
+			return py.ExceptionNewf(py.ValueError, "_headers must be a list of (name, value) pairs")
+		}
+		k, err := py.Str(pair[0])
+		if err != nil {
+			return err
+		}
+		val, err := py.Str(pair[1])
+		if err != nil {
+			return err
+		}
+		headers, values = append(headers, string(k.(py.String))), append(values, string(val.(py.String)))
+	}
+	m.headers, m.values = headers, values
+	return nil
+}
+
+func (m *Message) payloadOrNone() py.Object {
+	if m.payload == nil {
+		return py.None
+	}
+	return m.payload
+}
+
+func (m *Message) setPayload(v py.Object) {
+	if v == py.None {
+		v = nil
+	}
+	m.payload = v
+}
+
 // indexOfHeader returns the position of the first header matching name, or -1.
 func (m *Message) indexOfHeader(name string) int {
 	for i, h := range m.headers {
@@ -770,6 +817,33 @@ func msgRepr(self py.Object, args py.Tuple) (py.Object, error) {
 func init() {
 	MessageType = py.NewTypeX("email.message.Message", message_doc, messageNew, nil)
 
+	// CPython keeps the headers and payload in the instance attributes
+	// _headers and _payload, and importlib.metadata's Message subclass reads
+	// and replaces them (also through vars()).  They live in Go fields here, so
+	// they are properties, and __dict__ is synced both ways around the access.
+	MessageType.Dict.Set("_headers", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return self.(*Message).headerList(), nil },
+		Fset: func(self, v py.Object) error { return self.(*Message).setHeaderList(v) },
+	})
+	MessageType.Dict.Set("_payload", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return self.(*Message).payloadOrNone(), nil },
+		Fset: func(self, v py.Object) error { self.(*Message).setPayload(v); return nil },
+	})
+	MessageType.Dict.Set("__dict__", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		m := self.(*Message)
+		// Take in what vars(m).update(...) stored, then publish the state.
+		if v, ok := m.Dict.Get("_headers"); ok {
+			if err := m.setHeaderList(v); err != nil {
+				return nil, err
+			}
+		}
+		if v, ok := m.Dict.Get("_payload"); ok {
+			m.setPayload(v)
+		}
+		m.Dict.Set("_headers", m.headerList())
+		m.Dict.Set("_payload", m.payloadOrNone())
+		return m.Dict, nil
+	}})
 	globals := py.NewStringDict()
 	globals.Set("Message", MessageType)
 

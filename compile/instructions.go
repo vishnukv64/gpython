@@ -480,10 +480,10 @@ func (o *JumpRel) Resolve() {
 // Creates the lnotab from the instruction stream
 //
 // See Objects/lnotab_notes.txt for the description of the line number table.
-func (is Instructions) Lnotab() []byte {
+func (is Instructions) Lnotab(firstlineno int) []byte {
 	var lnotab []byte
 	old_offset := uint32(0)
-	old_lineno := 1
+	old_lineno := firstlineno
 	for _, instr := range is {
 		if instr.Size() == 0 {
 			continue

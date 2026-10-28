@@ -14,3 +14,8 @@ import (
 func TestTextIOWrapper(t *testing.T) {
 	pytest.RunScript(t, "./testdata/test_textio.py")
 }
+
+// TestStdBuffer checks sys.std*.buffer and file.writelines against CPython.
+func TestStdBuffer(t *testing.T) {
+	pytest.RunScript(t, "./testdata/stdbuffer.py")
+}

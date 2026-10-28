@@ -266,7 +266,7 @@ func (p *path) String() string {
 // is parsed.
 func newPath(t *py.Type, name string, f *flavour, args []py.Object) (*path, error) {
 	if len(args) == 0 {
-		return nil, py.ExceptionNewf(py.TypeError, "missing argument")
+		args = []py.Object{py.String(".")} // Path() is Path(".")
 	}
 	raws := make([]string, 0, len(args))
 	for _, a := range args {

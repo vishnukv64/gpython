@@ -1,0 +1,24 @@
+sorted(c.items()) -> [('a', 1), ('b', 2), ('c', 4)]
+sorted(c.keys()) -> ['a', 'b', 'c']
+sorted(c.values()) -> [1, 2, 4]
+c.get('c') -> 4
+c.get('z', 9) -> 9
+len(c) -> 3
+sorted(c) -> ['a', 'b', 'c']
+dict(c) -> {'b': 2, 'c': 4, 'a': 1}
+'a' in c -> True
+c.maps -> [{'a': 1, 'b': 2}, {'b': 3, 'c': 4}]
+c.new_child({'q':1})['q'] -> 1
+c.parents.maps -> [{'b': 3, 'c': 4}]
+c.pop('a') -> 1
+c.popitem() -> ('b', 2)
+c.setdefault('k', 5) -> 5
+c.update(x=1) or c['x'] -> 1
+repr(c) -> ChainMap({'k': 5, 'x': 1}, {'b': 3, 'c': 4})
+c.copy().maps -> [{'k': 5, 'x': 1}, {'b': 3, 'c': 4}]
+c == ChainMap({'k':5,'x':1,'b':2}) -> False
+c | {'z':1} -> ChainMap({'k': 5, 'x': 1, 'z': 1}, {'b': 3, 'c': 4})
+c.clear() -> None
+c.maps -> [{}, {'b': 3, 'c': 4}]
+Sub 1 missing:zz Sub Sub
+[{'a': 0, 'b': 0}] ChainMap({}) False True

@@ -46,7 +46,46 @@ var ZipFileType = py.NewTypeX("zipfile.ZipFile",
 
 // ZipInfoType is one archive member's metadata.
 var ZipInfoType = py.NewTypeX("zipfile.ZipInfo",
-	"Information about one archive member.", nil, nil)
+	"Information about one archive member.", zipInfoNew, nil)
+
+// zipInfoNew is ZipInfo(filename="NoName", date_time=(1980, 1, 1, 0, 0, 0)).
+func zipInfoNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var name py.Object = py.String("NoName")
+	var dt py.Object = py.Tuple{py.Int(1980), py.Int(1), py.Int(1), py.Int(0), py.Int(0), py.Int(0)}
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OO:ZipInfo", []string{"filename", "date_time"}, &name, &dt); err != nil {
+		return nil, err
+	}
+	filename, err := py.StrAsString(name)
+	if err != nil {
+		return nil, err
+	}
+	// A NUL ends the name, as in CPython.
+	if i := strings.IndexByte(filename, 0); i >= 0 {
+		filename = filename[:i]
+	}
+	parts, err := py.SequenceTuple(dt)
+	if err != nil {
+		return nil, err
+	}
+	if len(parts) != 6 {
+		return nil, py.ExceptionNewf(py.ValueError, "date_time must be a 6-tuple")
+	}
+	var f [6]int
+	for i, p := range parts {
+		if f[i], err = py.IndexInt(p); err != nil {
+			return nil, err
+		}
+	}
+	if f[0] < 1980 {
+		return nil, py.ExceptionNewf(py.ValueError, "ZIP does not support timestamps before 1980")
+	}
+	return &zipInfo{
+		name:     filename,
+		mode:     0o600,
+		modified: time.Date(f[0], time.Month(f[1]), f[2], f[3], f[4], f[5], 0, time.Local),
+		Dict:     py.NewStringDict(),
+	}, nil
+}
 
 // zipFile holds an opened archive.
 type zipFile struct {
@@ -63,9 +102,19 @@ type zipFile struct {
 	sink        py.Object
 	own         *os.File
 	compression uint16
+	closed      bool
+
+	// cls is the Python subclass this archive was created as (wheel's
+	// WheelFile), nil for a plain ZipFile.
+	cls *py.Type
 }
 
-func (z *zipFile) Type() *py.Type         { return ZipFileType }
+func (z *zipFile) Type() *py.Type {
+	if z.cls != nil {
+		return z.cls
+	}
+	return ZipFileType
+}
 func (z *zipFile) GetDict() py.StringDict { return z.Dict }
 
 // zipInfo is one member's metadata.
@@ -128,6 +177,17 @@ func zipFileNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 	if m == "" {
 		m = "r"
 	}
+	obj, err := zipOpen(file, m, compression)
+	if err != nil {
+		return nil, err
+	}
+	if metatype != nil && metatype.Name != "" && metatype.Name != "zipfile.ZipFile" {
+		obj.(*zipFile).cls = metatype
+	}
+	return obj, nil
+}
+
+func zipOpen(file py.Object, m string, compression py.Object) (py.Object, error) {
 	if m == "w" || m == "x" {
 		return zipWriterNew(file, m, uint16(compression.(py.Int)))
 	}
@@ -135,10 +195,35 @@ func zipFileNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 		return nil, py.ExceptionNewf(py.NotImplementedError,
 			"zipfile.ZipFile: append mode is not implemented")
 	}
-	path, err := py.StrAsString(file)
+	if _, isStr := file.(py.String); !isStr && !hasFSPath(file) {
+		// A file-like object: read it whole, as the archive's central
+		// directory is at the end and Go's reader wants a ReaderAt.
+		rd, err := py.GetAttrString(file, "read")
+		if err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "zipfile.ZipFile: expected a path or a file-like object with read()")
+		}
+		if seek, err := py.GetAttrString(file, "seek"); err == nil {
+			if _, err := py.Call(seek, py.Tuple{py.Int(0)}, py.StringDict{}); err != nil {
+				return nil, err
+			}
+		}
+		res, err := py.Call(rd, py.Tuple{}, py.StringDict{})
+		if err != nil {
+			return nil, err
+		}
+		data, ok := res.(py.Bytes)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "zipfile.ZipFile: read() must return bytes")
+		}
+		r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			return nil, py.ExceptionNewf(BadZipFileType, "File is not a zip file")
+		}
+		return &zipFile{r: r, Dict: py.NewStringDict()}, nil
+	}
+	path, err := fsString(file)
 	if err != nil {
-		return nil, py.ExceptionNewf(py.NotImplementedError,
-			"zipfile.ZipFile: only a path argument is implemented, not a file-like object")
+		return nil, err
 	}
 	r, err := zip.OpenReader(path)
 	if err != nil {
@@ -492,10 +577,6 @@ func zipFileWritestr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 		&info, &data, &compress, &level); err != nil {
 		return nil, err
 	}
-	name, ok := info.(py.String)
-	if !ok {
-		return nil, py.ExceptionNewf(py.NotImplementedError, "zipfile: writestr() takes an archive name; ZipInfo is not implemented")
-	}
 	var b []byte
 	switch d := data.(type) {
 	case py.String:
@@ -505,10 +586,42 @@ func zipFileWritestr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	default:
 		return nil, py.ExceptionNewf(py.TypeError, "writestr() data must be str or bytes, not %s", data.Type().Name)
 	}
+	if zi, ok := info.(*zipInfo); ok {
+		// The member's own header decides: its mode (kept in the high half of
+		// external_attr), time and compression, unless compress_type is given.
+		mode := zi.mode
+		if zi.externalAttr>>16 != 0 {
+			mode = unixMode(zi.externalAttr >> 16)
+		}
+		if compress == py.None {
+			compress = py.Int(zi.method)
+		}
+		if err := z.add(zi.name, mode, zi.modified, b, compress); err != nil {
+			return nil, err
+		}
+		return py.None, nil
+	}
+	name, ok := info.(py.String)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "writestr() argument 1 must be str or ZipInfo, not %s", info.Type().Name)
+	}
 	if err := z.add(arcname(string(name), false), 0o600, time.Now(), b, compress); err != nil {
 		return nil, err
 	}
 	return py.None, nil
+}
+
+// unixMode turns the st_mode kept in the high half of external_attr into an
+// os.FileMode that zip.FileHeader.SetMode stores back the same way.
+func unixMode(m uint32) os.FileMode {
+	mode := os.FileMode(m & 0o777)
+	switch m & 0o170000 {
+	case 0o040000:
+		mode |= os.ModeDir
+	case 0o120000:
+		mode |= os.ModeSymlink
+	}
+	return mode
 }
 
 // fsString is os.fspath for a str or os.PathLike.
@@ -525,6 +638,7 @@ func fsString(o py.Object) (string, error) {
 
 func zipFileClose(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	z.closed = true
 	if z.w != nil {
 		w := z.w
 		z.w = nil
@@ -554,7 +668,9 @@ func zipFileEnter(self py.Object, args py.Tuple) (py.Object, error) {
 }
 
 func zipFileExit(self py.Object, args py.Tuple) (py.Object, error) {
-	if _, err := zipFileClose(self, nil); err != nil {
+	// self.close(), so a subclass that overrides it (WheelFile writes RECORD
+	// there) sees the exit.
+	if _, _, err := py.TypeCall0(self, "close"); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -605,12 +721,22 @@ func init() {
 		return py.Int(self.(*zipInfo).compressSize), nil
 	}})
 	ZipInfoType.Dict.Set("orig_filename", ZipInfoType.Dict.GetOrNil("filename"))
-	ZipInfoType.Dict.Set("external_attr", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.Int(self.(*zipInfo).externalAttr), nil
-	}})
-	ZipInfoType.Dict.Set("compress_type", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.Int(self.(*zipInfo).method), nil
-	}})
+	ZipInfoType.Dict.Set("external_attr", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*zipInfo).externalAttr), nil },
+		Fset: func(self, v py.Object) error {
+			n, err := py.IndexInt(v)
+			self.(*zipInfo).externalAttr = uint32(n)
+			return err
+		},
+	})
+	ZipInfoType.Dict.Set("compress_type", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*zipInfo).method), nil },
+		Fset: func(self, v py.Object) error {
+			n, err := py.IndexInt(v)
+			self.(*zipInfo).method = uint16(n)
+			return err
+		},
+	})
 	ZipInfoType.Dict.Set("date_time", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		t := self.(*zipInfo).modified
 		return py.Tuple{py.Int(t.Year()), py.Int(int(t.Month())), py.Int(t.Day()), py.Int(t.Hour()), py.Int(t.Minute()), py.Int(t.Second())}, nil
@@ -621,6 +747,59 @@ func init() {
 	ZipInfoType.Dict.Set("CRC", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*zipInfo).crc), nil
 	}})
+
+	// __init__ runs after __new__ built the archive, so it only takes in the
+	// arguments __new__ could not see when a subclass passes them on
+	// (compression=, as WheelFile does).
+	ZipFileType.Dict.Set("__init__", py.MustNewMethod("__init__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		z, ok := self.(*zipFile)
+		if !ok || z.w == nil {
+			return py.None, nil
+		}
+		var file, mode, compression py.Object
+		var rest [4]py.Object
+		if err := py.ParseTupleAndKeywords(args, kwargs, "O|OiOOOO:__init__",
+			[]string{"file", "mode", "compression", "allowZip64", "compresslevel", "strict_timestamps", "metadata_encoding"},
+			&file, &mode, &compression, &rest[0], &rest[1], &rest[2], &rest[3]); err != nil {
+			return nil, err
+		}
+		if c, ok := compression.(py.Int); ok {
+			if uint16(c) != zip.Store && uint16(c) != zip.Deflate {
+				return nil, py.ExceptionNewf(py.NotImplementedError, "zipfile: only ZIP_STORED and ZIP_DEFLATED are implemented")
+			}
+			z.compression = uint16(c)
+		}
+		return py.None, nil
+	}, 0, "Initialize the archive; __new__ has already opened it."))
+
+	// ZipFile attributes.
+	zipAttr := func(name string, get func(z *zipFile) py.Object) {
+		ZipFileType.Dict.Set(name, &py.Property{Fget: func(self py.Object) (py.Object, error) {
+			return get(self.(*zipFile)), nil
+		}})
+	}
+	zipAttr("filename", func(z *zipFile) py.Object {
+		if z.filename == "" {
+			return py.None
+		}
+		return py.String(z.filename)
+	})
+	// fp is the open file handle in CPython, None once closed; code such as
+	// wheel's WheelFile.close tests it.  There is no Python file object here
+	// (the archive is held in Go), so an open archive reports its file name.
+	zipAttr("fp", func(z *zipFile) py.Object {
+		if z.closed || (z.w == nil && z.r == nil) {
+			return py.None
+		}
+		return py.String(z.filename)
+	})
+	zipAttr("compression", func(z *zipFile) py.Object { return py.Int(z.compression) })
+	zipAttr("mode", func(z *zipFile) py.Object {
+		if z.w != nil {
+			return py.String("w")
+		}
+		return py.String("r")
+	})
 
 	for _, m := range []struct {
 		name string

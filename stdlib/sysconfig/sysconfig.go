@@ -49,6 +49,10 @@ func init() {
 				return py.False, nil
 			}, 0, "Return whether running from a CPython source build; never."),
 			py.MustNewMethod("get_scheme_names", getSchemeNames, 0, "Return a tuple containing the schemes names."),
+			py.MustNewMethod("get_default_scheme", func(self py.Object, args py.Tuple) (py.Object, error) {
+				return py.String("posix_prefix"), nil
+			}, 0, "Return the default scheme name."),
+			py.MustNewMethod("get_preferred_scheme", getPreferredScheme, 0, "Return the scheme name for key 'prefix', 'home' or 'user'."),
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "_INSTALL_SCHEMES", Value: installSchemes()},
@@ -113,6 +117,7 @@ func allConfigVars() []py.DictEntry {
 		{Key: "py_version_nodot", Value: py.String("34")},
 		{Key: "prefix", Value: py.String(prefix())},
 		{Key: "exec_prefix", Value: py.String(prefix())},
+		{Key: "projectbase", Value: py.String(prefix())},
 		{Key: "base", Value: py.String(prefix())},
 		{Key: "platbase", Value: py.String(prefix())},
 		{Key: "installed_base", Value: py.String(prefix())},
@@ -385,6 +390,26 @@ func installSchemes() py.Object {
 		(&out).Set(n, scheme)
 	}
 	return out
+}
+
+// getPreferredScheme is sysconfig.get_preferred_scheme.  There is no user
+// scheme here (it needs a userbase), so 'user' resolves to the prefix layout.
+func getPreferredScheme(self py.Object, args py.Tuple) (py.Object, error) {
+	var keyObj py.Object
+	if err := py.UnpackTuple(args, py.NewStringDict(), "get_preferred_scheme", 1, 1, &keyObj); err != nil {
+		return nil, err
+	}
+	key, err := py.StrAsString(keyObj)
+	if err != nil {
+		return nil, err
+	}
+	switch key {
+	case "prefix", "user":
+		return py.String("posix_prefix"), nil
+	case "home":
+		return py.String("posix_home"), nil
+	}
+	return nil, py.ExceptionNewf(py.ValueError, "'key' must be 'prefix', 'home' or 'user'")
 }
 
 func getSchemeNames(self py.Object, args py.Tuple) (py.Object, error) {
