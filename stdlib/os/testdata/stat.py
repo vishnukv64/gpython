@@ -53,7 +53,8 @@ try:
     pathlib.Path("/nope/x").stat()
 except OSError as e:
     if os.name == "nt":
-        assert str(e) == WIN3 + "'/nope/x'", str(e)
+        # A WindowsPath spells it with backslashes, and stat() names it so.
+        assert str(e) == WIN3 + repr(str(pathlib.Path("/nope/x"))), str(e)
         print("pathlib error: FileNotFoundError 2 [Errno 2] No such file or directory: '/nope/x'")
     else:
         print("pathlib error:", type(e).__name__, e.errno, e)
