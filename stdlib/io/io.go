@@ -495,6 +495,9 @@ type StringIO struct {
 	data   strings.Builder
 	pos    int
 	closed bool
+	// newline is the constructor's newline argument; nlNone marks None.
+	newline string
+	nlNone  bool
 	// cls and Dict make a Python subclass instance work: its class, and the
 	// attributes it assigns.
 	cls  *py.Type
@@ -503,16 +506,31 @@ type StringIO struct {
 
 var StringIOType = py.NewTypeX("io.StringIO", stringio_doc, func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var initial py.Object = py.String("")
-	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:StringIO", []string{"initial_value"}, &initial); err != nil {
+	var newline py.Object = py.String("\n")
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OO:StringIO", []string{"initial_value", "newline"}, &initial, &newline); err != nil {
 		return nil, err
 	}
-	s := &StringIO{Dict: py.NewStringDict(), cls: metatype}
+	s := &StringIO{Dict: py.NewStringDict(), cls: metatype, newline: "\n"}
+	if newline == py.None {
+		s.nlNone, s.newline = true, ""
+	} else {
+		nl, ok := newline.(py.String)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "newline must be str or None, not %s", newline.Type().Name)
+		}
+		switch nl {
+		case "", "\n", "\r", "\r\n":
+			s.newline = string(nl)
+		default:
+			return nil, py.ExceptionNewf(py.ValueError, "illegal newline value: %s", string(nl))
+		}
+	}
 	if initial != py.None {
 		text, err := py.StrAsString(initial)
 		if err != nil {
 			return nil, err
 		}
-		s.data.WriteString(text)
+		s.data.WriteString(s.translateWrite(text))
 	}
 	return s, nil
 }, nil)
@@ -525,6 +543,46 @@ func (s *StringIO) Type() *py.Type {
 }
 
 func (s *StringIO) GetDict() py.StringDict { return s.Dict }
+
+// translateWrite applies the newline argument to text being written: with
+// None, "\r\n" and "\r" become "\n"; with "\r" or "\r\n", "\n" becomes that.
+func (s *StringIO) translateWrite(text string) string {
+	switch {
+	case s.nlNone:
+		text = strings.ReplaceAll(text, "\r\n", "\n")
+		return strings.ReplaceAll(text, "\r", "\n")
+	case s.newline == "\r" || s.newline == "\r\n":
+		return strings.ReplaceAll(text, "\n", s.newline)
+	}
+	return text
+}
+
+// lineEnd is the index just past the first line terminator in text (or
+// len(text) if none), per the newline argument.
+func (s *StringIO) lineEnd(text string) int {
+	switch s.newline {
+	case "\n":
+		if i := strings.IndexByte(text, '\n'); i >= 0 {
+			return i + 1
+		}
+	case "\r":
+		if i := strings.IndexByte(text, '\r'); i >= 0 {
+			return i + 1
+		}
+	case "\r\n":
+		if i := strings.Index(text, "\r\n"); i >= 0 {
+			return i + 2
+		}
+	default: // None (already translated to "\n") or "": any of \n, \r, \r\n
+		if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+			if text[i] == '\r' && i+1 < len(text) && text[i+1] == '\n' {
+				return i + 2
+			}
+			return i + 1
+		}
+	}
+	return len(text)
+}
 
 func (s *StringIO) text() string { return s.data.String() }
 
@@ -604,8 +662,9 @@ func init() {
 		if err != nil {
 			return nil, py.ExceptionNewf(py.TypeError, "string argument expected, got '%s'", value.Type().Name)
 		}
-		s.writeAt(text)
-		return py.Int(len(text)), nil
+		n := len(text)
+		s.writeAt(s.translateWrite(text))
+		return py.Int(n), nil
 	}, 0, "Write a string to the buffer."))
 
 	StringIOType.Dict.Set("read", py.MustNewMethod("read", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -642,14 +701,9 @@ func init() {
 		if s.pos >= len(full) {
 			return py.String(""), nil
 		}
-		idx := strings.IndexByte(full[s.pos:], '\n')
-		if idx < 0 {
-			out := full[s.pos:]
-			s.pos = len(full)
-			return py.String(out), nil
-		}
-		out := full[s.pos : s.pos+idx+1]
-		s.pos += idx + 1
+		end := s.lineEnd(full[s.pos:])
+		out := full[s.pos : s.pos+end]
+		s.pos += end
 		return py.String(out), nil
 	}, 0, "Read one line."))
 

@@ -47,7 +47,7 @@ func start() {
 			for s := range ch {
 				if n, ok := s.(syscall.Signal); ok && int(n) < maxSig {
 					tripped[n].Store(true)
-					py.SignalPending.Store(true)
+					py.SetSignalPending(true)
 					if fd := atomic.LoadInt64(&wakeFd); fd >= 0 {
 						writeWake(int(fd), byte(n))
 					}
@@ -60,7 +60,7 @@ func start() {
 }
 
 func runHandlers() error {
-	py.SignalPending.Store(false)
+	py.SetSignalPending(false)
 	for n := 1; n < maxSig; n++ {
 		if !tripped[n].Swap(false) {
 			continue

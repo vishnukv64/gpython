@@ -1,0 +1,17 @@
+profile events
+('a', 'call', 'None')
+('b', 'call', 'None')
+('c', 'call', 'None')
+('c', 'return', 'None')
+('b', 'return', 'None')
+('a', 'return', 'None')
+('g', 'call', 'None')
+('g', 'return', '1')
+('g', 'call', 'None')
+('g', 'return', '7')
+None
+local [('line', 1), ('line', 2), ('line', 3), ('return', 3)]
+f_trace ['line', 'return']
+raised tracer failed
+None
+frame [('<module>', 0, None)]

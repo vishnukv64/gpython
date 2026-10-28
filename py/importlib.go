@@ -250,6 +250,9 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 	}
 
 	if _, err := ctx.RunCode(out.Code, mod.Globals, mod.Globals, nil); err != nil {
+		// As in CPython, a module whose body raised is not left in sys.modules:
+		// the next import runs it again rather than returning half a module.
+		delete(ctx.Store().Modules(), name)
 		return nil, err
 	}
 

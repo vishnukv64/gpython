@@ -1,0 +1,7 @@
+cProfile [('fib', 45, 3, ['fib', 'work']), ('helper', 3, 3, ['work']), ('work', 1, 1, [])]
+profile [('fib', 45, 3, ['fib', 'work']), ('helper', 3, 3, ['work']), ('work', 1, 1, [])]
+with [('fib', 45, 3, ['fib', 'work']), ('helper', 3, 3, ['work']), ('work', 1, 1, [])]
+pstats rows: ["<'fib'>", 'prof_gold.py:5(fib)']
+sortkey: cumulative time
+mix [] ['boom', 'gen', 'mix']
+enabled? None

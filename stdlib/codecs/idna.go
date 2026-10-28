@@ -13,7 +13,9 @@
 package codecs
 
 import (
+	"bytes"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -303,6 +305,16 @@ func idnaDecode(raw []byte) (string, error) {
 }
 
 func init() {
+	py.ExtraCodecs["utf-8-sig"] = py.ExtraCodec{
+		Encode: func(text string) ([]byte, error) { return append([]byte("\xef\xbb\xbf"), text...), nil },
+		Decode: func(raw []byte) (string, error) {
+			raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
+			if !utf8.Valid(raw) {
+				return "", py.ExceptionNewf(py.UnicodeDecodeError, "'utf-8-sig' codec can't decode bytes")
+			}
+			return string(raw), nil
+		},
+	}
 	py.ExtraCodecs["idna"] = py.ExtraCodec{Encode: idnaEncode, Decode: idnaDecode}
 	globals := py.NewStringDict()
 	globals.Set("ToASCII", py.MustNewMethod("ToASCII", idnaToASCII, 0,

@@ -35,7 +35,8 @@ func TestLnotab(t *testing.T) {
 			want: []byte{1, 1, 1, 1},
 		},
 		{
-			// Example from lnotab.txt
+			// The example from lnotab.txt, in the signed-delta form: a line
+			// delta over 127 is split (CPython 3.6+).
 			instrs: Instructions{
 				&Op{pos: pos{n: 1, p: 0, lineno: 1}},
 				&Op{pos: pos{n: 1, p: 6, lineno: 2}},
@@ -47,9 +48,19 @@ func TestLnotab(t *testing.T) {
 				6, 1,
 				44, 5,
 				255, 0,
-				45, 255,
-				0, 45,
+				45, 127,
+				0, 127,
+				0, 46,
 				11, 1},
+		},
+		{
+			// A line that goes back (a loop exit attributed to its header).
+			instrs: Instructions{
+				&Op{pos: pos{n: 1, p: 0, lineno: 1}},
+				&Op{pos: pos{n: 1, p: 2, lineno: 3}},
+				&Op{pos: pos{n: 1, p: 6, lineno: 2}},
+			},
+			want: []byte{2, 2, 4, 255},
 		},
 	} {
 		got := test.instrs.Lnotab(1)

@@ -1,0 +1,21 @@
+Stack (most recent call first):
+  File "faulthandler_gold.py", line 7 in grab
+  File "faulthandler_gold.py", line 14 in inner
+  File "faulthandler_gold.py", line 16 in outer
+  File "faulthandler_gold.py", line 21 in <module>
+
+Stack (most recent call first):
+  File "faulthandler_gold.py", line 7 in grab
+  File "faulthandler_gold.py", line 19 in m
+  File "faulthandler_gold.py", line 22 in <module>
+
+Stack (most recent call first):
+  File "faulthandler_gold.py", line 7 in grab
+  File "<str>", line 1 in <module>
+  File "faulthandler_gold.py", line 23 in <module>
+
+True
+False
+True
+True False False
+ValueError file is not a valid file descriptor

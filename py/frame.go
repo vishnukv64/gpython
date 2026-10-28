@@ -40,10 +40,17 @@ type Frame struct {
 	// to the current stack top.
 	// Stacktop *Object
 	Yielded bool // set if the function yielded, cleared otherwise
+	// Tracing says f_trace is set (the VM tests it once per instruction).
+	// InTrace marks a frame that is inside a trace function call, or was called
+	// from one: it fires no events.  The rest of the per-frame trace state
+	// lives in a side table (trace.go), so an untraced frame pays only for these
+	// two bytes - kept here so they fit the padding after Yielded and the
+	// struct stays in its allocation size class.
+	Tracing bool
+	InTrace bool
 	// DelegateLen != 0: suspended inside YIELD_FROM / FOR_ITER_AEXPR (sub-iterator is TOS; value is the instruction length), so
 	// throw()/close() must be forwarded to it.
 	DelegateLen int32
-	// Trace   Object // Trace function
 
 	// In a generator, we need to be able to swap between the exception
 	// state inside the generator and the exception state of the calling
@@ -330,6 +337,22 @@ func (f *Frame) LocalsToFast(clear bool) {
 	}
 }
 
+// CurrentLine is the source line of the instruction the frame last executed,
+// or of the one a trace event is announcing.  Lasti already points past the
+// executed instruction, so the line comes from the byte before it: asking for
+// Lasti itself names the NEXT line when the instruction ended its own.
+func (f *Frame) CurrentLine() int32 {
+	if f.InTrace { // EventLine is only ever set during a trace call
+		if ts := f.traceStateOrNil(); ts != nil && ts.EventLine != 0 {
+			return ts.EventLine
+		}
+	}
+	if f.Lasti <= 0 {
+		return f.Code.Addr2Line(0)
+	}
+	return f.Code.Addr2Line(f.Lasti - 1)
+}
+
 // The frame attributes below are the subset of the CPython frame interface
 // that Python code uses to walk out to a caller - which is what
 // inspect.currentframe().f_back.f_globals needs.
@@ -384,8 +407,46 @@ func init() {
 	FrameType.Dict.Set("f_lineno", &Property{
 		Fget: func(self Object) (Object, error) {
 			f := self.(*Frame)
-			return Int(f.Code.Addr2Line(f.Lasti)), nil
+			return Int(f.CurrentLine()), nil
+		},
+		// pdb's "jump" assigns f_lineno and reports a ValueError as "Jump
+		// failed".  Moving a frame's instruction pointer would have to repair
+		// the block stack and the value stack, which gpython does not do.
+		Fset: func(self, value Object) error {
+			return ExceptionNewf(ValueError, "f_lineno assignment is not supported by gpython")
 		},
 		Doc: "current line number, computed from the last instruction",
+	})
+	FrameType.Dict.Set("f_trace", &Property{
+		Fget: func(self Object) (Object, error) {
+			if ts := self.(*Frame).traceStateOrNil(); ts != nil && ts.Trace != nil {
+				return ts.Trace, nil
+			}
+			return None, nil
+		},
+		Fset: func(self, value Object) error {
+			f := self.(*Frame)
+			if value == None {
+				f.DropTraceState()
+			} else {
+				f.TraceState().Trace, f.Tracing = value, true
+			}
+			return nil
+		},
+		Fdel: func(self Object) error {
+			self.(*Frame).DropTraceState()
+			return nil
+		},
+		Doc: "local trace function called for the frame's events, or None",
+	})
+	FrameType.Dict.Set("f_trace_lines", &Property{
+		Fget: func(self Object) (Object, error) { return True, nil },
+		Fset: func(self, value Object) error { return nil },
+		Doc:  "line events are always on; the setting is accepted and ignored",
+	})
+	FrameType.Dict.Set("f_trace_opcodes", &Property{
+		Fget: func(self Object) (Object, error) { return False, nil },
+		Fset: func(self, value Object) error { return nil },
+		Doc:  "opcode events are not generated; the setting is accepted and ignored",
 	})
 }

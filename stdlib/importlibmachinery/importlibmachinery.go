@@ -55,12 +55,25 @@ func init() {
 			py.DictEntry{Key: "FileFinder", Value: FileFinderType},
 			py.DictEntry{Key: "SourceFileLoader", Value: SourceLoaderType},
 			py.DictEntry{Key: "BuiltinImporter", Value: importlib.BuiltinImporterType},
+			// Loader types the interpreter has no instances of: they exist so that
+			// isinstance(spec.loader, ...) in tools such as modulefinder is False.
+			py.DictEntry{Key: "FrozenImporter", Value: FrozenImporterType},
+			py.DictEntry{Key: "ExtensionFileLoader", Value: ExtensionFileLoaderType},
+			py.DictEntry{Key: "AppleFrameworkLoader", Value: AppleFrameworkLoaderType},
+			py.DictEntry{Key: "SourcelessFileLoader", Value: SourcelessFileLoaderType},
 		),
 		Methods: []*py.Method{
 			py.MustNewMethod("all_suffixes", allSuffixesFn, 0, "Return a list of all recognized module suffixes for this process."),
 		},
 	})
 }
+
+var (
+	FrozenImporterType       = py.NewType("_frozen_importlib.FrozenImporter", "Meta path import for frozen modules (none exist in gpython).")
+	ExtensionFileLoaderType  = py.NewType("_frozen_importlib_external.ExtensionFileLoader", "Loader for extension modules (gpython has none).")
+	AppleFrameworkLoaderType = py.NewType("_frozen_importlib_external.AppleFrameworkLoader", "Loader for Apple framework extension modules (gpython has none).")
+	SourcelessFileLoaderType = py.NewType("_frozen_importlib_external.SourcelessFileLoader", "Loader for .pyc files (gpython does not load CPython bytecode).")
+)
 
 // PathFinderType is importlib.machinery.PathFinder, the finder that searches the
 // path entries.
@@ -115,6 +128,12 @@ func init() {
 	}, py.METH_CLASS, "Find a module in the given path list."))
 }
 
+func init() {
+	PathFinderType.Dict.Set("invalidate_caches", py.MustNewMethod("invalidate_caches", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.None, nil // nothing is cached: every lookup reads the directories
+	}, py.METH_CLASS, "Call the invalidate_caches() method on all path entry finders (no caches here)."))
+}
+
 func fileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
@@ -145,4 +164,15 @@ func soabi() string {
 		return "cp34-win_amd64"
 	}
 	return abi + "-" + runtime.GOOS + "-" + runtime.GOARCH
+}
+
+func init() {
+	py.RegisterModule(&py.ModuleImpl{
+		Info: py.ModuleInfo{Name: "importlib._bootstrap_external", Doc: "Core implementation of the path-based import (only _classify_pyc)."},
+		Methods: []*py.Method{
+			py.MustNewMethod("_classify_pyc", func(self py.Object, args py.Tuple) (py.Object, error) {
+				return nil, py.ExceptionNewf(py.ImportError, "gpython cannot load CPython bytecode (.pyc)")
+			}, 0, "_classify_pyc(data, name, exc_details): always raises ImportError; gpython does not read CPython .pyc files"),
+		},
+	})
 }

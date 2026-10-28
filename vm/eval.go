@@ -92,7 +92,7 @@ func (vm *Vm) AddTraceback(exc *py.ExceptionInfo) {
 		Next:   exc.Traceback,
 		Frame:  vm.frame,
 		Lasti:  vm.frame.Lasti,
-		Lineno: vm.frame.Code.Addr2Line(vm.frame.Lasti),
+		Lineno: vm.frame.CurrentLine(),
 	}
 }
 
@@ -1495,8 +1495,13 @@ func do_JUMP_ABSOLUTE(vm *Vm, target int32) error {
 // iterator indicates it is exhausted TOS is popped, and the bytecode
 // counter is incremented by delta.
 func do_FOR_ITER(vm *Vm, delta int32) error {
-	r, finished := py.Next(vm.TOP())
-	if finished != nil {
+	r, err := py.Next(vm.TOP())
+	if err != nil {
+		// Only StopIteration ends the loop; any other exception the iterator
+		// raised belongs to the caller.
+		if !py.IsException(py.StopIteration, err) {
+			return err
+		}
 		vm.DROP()
 		vm.frame.Lasti += delta
 	} else {
@@ -2594,6 +2599,12 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 		return nil, py.ExceptionNewf(py.SystemError, "vm: instruction out of range - code most likely finished already")
 	}
 
+	if py.TracingGlobal.Load() {
+		if err := traceEnter(frame, prevFrame); err != nil {
+			return nil, err
+		}
+	}
+
 	var opcode OpCode
 	var arg int32
 	opcodes := frame.Code.Code
@@ -2611,10 +2622,18 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 			vm.SetException(pending)
 			injected = true
 		}
-		if py.SignalPending.Load() && py.RunSignalHandlers != nil {
-			if err := py.RunSignalHandlers(); err != nil {
-				vm.SetException(py.MakeException(err))
-				injected = true
+		if py.Slow.Load() {
+			if py.SignalPending.Load() && py.RunSignalHandlers != nil {
+				if err := py.RunSignalHandlers(); err != nil {
+					vm.SetException(py.MakeException(err))
+					injected = true
+				}
+			}
+			if frame.Tracing {
+				if terr := traceLine(frame); terr != nil {
+					vm.SetException(py.MakeException(terr))
+					injected = true
+				}
 			}
 		}
 		if debugging {
@@ -2898,6 +2917,11 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 			} else {
 				vm.SetException(py.MakeException(err))
 			}
+			if frame.Tracing {
+				if terr := traceException(frame, vm.curexc); terr != nil {
+					vm.SetException(py.MakeException(terr))
+				}
+			}
 		}
 		if debugging {
 			debugf("* Stack = %#v\n", frame.Stack)
@@ -3021,6 +3045,12 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 	}
 
 fast_yield:
+	if frame.Tracing || py.TracingGlobal.Load() {
+		if terr := traceLeave(frame, vm.retval, vm.curexc.IsSet()); terr != nil {
+			vm.SetException(py.MakeException(terr))
+			vm.retval = nil
+		}
+	}
 	// FIXME
 	// if (co->co_flags & CO_GENERATOR) {
 	//     /* The purpose of this block is to put aside the generator's exception

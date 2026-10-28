@@ -243,9 +243,36 @@ func (co *Code) Addr2Line(addrq int32) int32 {
 		if addr > addrq {
 			break
 		}
-		line += int32(co.Lnotab[i+1])
+		line += int32(int8(co.Lnotab[i+1])) // signed, as CPython 3.6+
 	}
 	return line
+}
+
+// Lines returns the (start, end, line) ranges of co_code, as code.co_lines()
+// yields them: consecutive instructions on one line form one range, and end is
+// exclusive.
+func (co *Code) Lines() Tuple {
+	var out Tuple
+	n := int32(len(co.Code))
+	line, addr, start := co.Firstlineno, int32(0), int32(0)
+	emit := func(end int32) {
+		if end > start {
+			out = append(out, Tuple{Int(start), Int(end), Int(line)})
+		}
+		start = end
+	}
+	for i := 0; i < len(co.Lnotab); i += 2 {
+		addr += int32(co.Lnotab[i])
+		if delta := int32(int8(co.Lnotab[i+1])); delta != 0 {
+			if addr > n {
+				addr = n
+			}
+			emit(addr)
+			line += delta
+		}
+	}
+	emit(n)
+	return out
 }
 
 // FIXME this should be the default?
@@ -307,6 +334,17 @@ func init() {
 	CodeType.Dict.Set("co_names", strTuple(func(c *Code) []string { return c.Names }))
 	CodeType.Dict.Set("co_freevars", strTuple(func(c *Code) []string { return c.Freevars }))
 	CodeType.Dict.Set("co_cellvars", strTuple(func(c *Code) []string { return c.Cellvars }))
+	// co_code is gpython's own bytecode (opcode byte plus a 16-bit argument for
+	// opcodes from HAVE_ARGUMENT up), not CPython's; the dis module reads it.
+	CodeType.Dict.Set("co_code", &Property{Fget: func(self Object) (Object, error) {
+		return Bytes(self.(*Code).Code), nil
+	}})
+	CodeType.Dict.Set("co_lines", MustNewMethod("co_lines", func(self Object, args Tuple) (Object, error) {
+		return NewIterator(self.(*Code).Lines()), nil
+	}, 0, "co_lines() -> iterator of (start, end, line) ranges of co_code"))
+	CodeType.Dict.Set("co_lnotab", &Property{Fget: func(self Object) (Object, error) {
+		return Bytes(self.(*Code).Lnotab), nil
+	}})
 	CodeType.Dict.Set("co_consts", &Property{Fget: func(self Object) (Object, error) {
 		return self.(*Code).Consts, nil
 	}})

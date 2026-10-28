@@ -532,7 +532,7 @@ func formatStack(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 	}
 	var sb strings.Builder
 	for cur := frame; cur != nil; cur = cur.Back {
-		tb := &py.Traceback{Frame: cur, Lineno: cur.Code.Addr2Line(cur.Lasti)}
+		tb := &py.Traceback{Frame: cur, Lineno: cur.CurrentLine()}
 		for _, line := range formatFrame(tb) {
 			sb.WriteString(line)
 		}

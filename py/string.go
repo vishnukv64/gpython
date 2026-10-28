@@ -229,6 +229,10 @@ from the right; at most maxsplit splits are made.`))
 		return self.(String).Justify(args, -1)
 	}, 0, "ljust(width[, fillchar]) -> left-justified in a string of the given width."))
 
+	StringType.Dict.Set("rjust", MustNewMethod("rjust", func(self Object, args Tuple) (Object, error) {
+		return self.(String).Justify(args, 1)
+	}, 0, "rjust(width[, fillchar]) -> right-justified in a string of the given width."))
+
 	StringType.Dict.Set("expandtabs", MustNewMethod("expandtabs", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		return self.(String).ExpandTabs(args, kwargs)
 	}, 0, "expandtabs(tabsize=8) -> expand tabs, honouring column position."))

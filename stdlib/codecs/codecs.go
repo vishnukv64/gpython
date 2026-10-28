@@ -35,7 +35,9 @@ var CodecInfoType = py.NewTypeX("codecs.CodecInfo", "Codec details: the name and
 
 func (c *CodecInfo) Type() *py.Type { return CodecInfoType }
 
-var LookupErrorType = py.ExceptionType.NewType("codecs.LookupError", "Raised when a codec cannot be found.", nil, nil)
+// LookupErrorType is the builtin LookupError: code such as tokenize.detect_encoding
+// catches it by that name.
+var LookupErrorType = py.LookupError
 
 // normalise maps the aliases a caller may use onto a canonical name.
 func normalise(name string) string {

@@ -410,6 +410,13 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 	// M__call__ (the type constructor) where the user's __call__ was meant -
 	// "h.__call__(5)" built a new object instead of calling the method.  The
 	// ordinary lookup below finds the user's method.
+	// A class's own __dict__ is a data descriptor on its metatype, so it wins
+	// over a "__dict__" entry in the class's MRO - which is the descriptor for
+	// the class's INSTANCES (BaseException defines one).  Without this,
+	// "ValueError.__dict__" answered that property, not the namespace.
+	if t, ok := self.(*Type); ok && key == "__dict__" && t.Name != "" {
+		return t.Dict, nil
+	}
 	if self == Object(ObjectType) {
 		switch key {
 		case "__str__":

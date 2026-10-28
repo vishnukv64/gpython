@@ -1,0 +1,3 @@
+['__main__', 'helper_mod', 'json', 'os', 're']
+['nonexistent_zzz']
+['re', 'thing'] ['helper_mod', 'json', 'nonexistent_zzz', 'os', 'thing']

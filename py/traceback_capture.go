@@ -39,7 +39,7 @@ func CaptureTraceback() *Traceback {
 	for _, f := range frames {
 		lineno := int32(0)
 		if f.Code != nil {
-			lineno = f.Code.Addr2Line(f.Lasti)
+			lineno = f.CurrentLine()
 		}
 		tb = &Traceback{Next: tb, Frame: f, Lasti: f.Lasti, Lineno: lineno}
 	}

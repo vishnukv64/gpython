@@ -238,11 +238,44 @@ func (exc *ExceptionInfo) IsSet() bool {
 
 // exceptionNew
 func exceptionNew(metatype *Type, args Tuple) *Exception {
-	return &Exception{
+	e := &Exception{
 		Base: metatype,
 		Args: args.Copy(),
 		Dict: NewStringDict(),
 	}
+	// By name: referring to the SyntaxError variable here is an init cycle.
+	// Base is not reliably the parent for these types, so follow Bases.
+	for t := metatype; t != nil; {
+		if t.Name == "SyntaxError" {
+			e.setSyntaxErrorAttrs(args)
+			break
+		}
+		if len(t.Bases) == 0 {
+			break
+		}
+		t, _ = t.Bases[0].(*Type)
+	}
+	return e
+}
+
+// setSyntaxErrorAttrs gives a SyntaxError built as SyntaxError(msg, (filename,
+// lineno, offset, text[, end_lineno, end_offset])) the attributes CPython sets
+// from it; absent ones are None.
+func (e *Exception) setSyntaxErrorAttrs(args Tuple) {
+	names := [...]string{"msg", "filename", "lineno", "offset", "text", "end_lineno", "end_offset"}
+	vals := [len(names)]Object{None, None, None, None, None, None, None}
+	if len(args) >= 1 {
+		vals[0] = args[0]
+	}
+	if len(args) == 2 {
+		if t, ok := args[1].(Tuple); ok && len(t) >= 4 && len(t) <= 6 {
+			copy(vals[1:], t)
+		}
+	}
+	for i, n := range names {
+		e.Dict.Set(n, vals[i])
+	}
+	e.Dict.Set("print_file_and_line", None)
 }
 
 // ExceptionNew

@@ -16,10 +16,14 @@
 package ast
 
 import (
-	pyast "github.com/vishnukv64/gpython/ast"
+	_ "embed"
+
 	"github.com/vishnukv64/gpython/parser"
 	"github.com/vishnukv64/gpython/py"
 )
+
+//go:embed nodes.py
+var nodesSrc string
 
 const module_doc = `The ast module helps Python applications to process trees of the Python
 abstract syntax grammar.
@@ -38,13 +42,8 @@ func init() {
 			py.MustNewMethod("literal_eval", literal_eval, 0, literal_eval_doc),
 			py.MustNewMethod("parse", parse, 0, parse_doc),
 		},
-		Globals: py.NewStringDictFrom(
-			// AST is the base class of every node type.  The compiler's node
-			// types do not currently register with py as Python types, so the
-			// base is reported as object, which is what "isinstance(node,
-			// ast.AST)" then answers truthily for.
-			py.DictEntry{Key: "AST", Value: py.ObjectType},
-		),
+		Globals: exportedClasses(),
+		CodeSrc: nodesSrc,
 	})
 }
 
@@ -88,7 +87,7 @@ func parse(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		return nil, err
 	}
 	_ = filename
-	return nodeAsObject(node), nil
+	return parsedTree(node, src), nil
 }
 
 // compileModeFrom maps ast.parse's mode string onto the compiler's modes.
@@ -106,12 +105,4 @@ func compileModeFrom(mode py.Object) (py.CompileMode, error) {
 		return py.SingleMode, nil
 	}
 	return "", py.ExceptionNewf(py.ValueError, "unknown parse mode %s", s)
-}
-
-// nodeAsObject converts a compiler AST node into a py.Object.
-func nodeAsObject(node pyast.Ast) py.Object {
-	if node == nil {
-		return py.None
-	}
-	return node
 }

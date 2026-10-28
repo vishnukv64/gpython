@@ -802,7 +802,8 @@ func jarIter(self py.Object, args py.Tuple) (py.Object, error) {
 	for i, c := range cookies {
 		items[i] = c
 	}
-	return py.NewListFromItems(items), nil
+	// __iter__ must return an iterator, not the list itself.
+	return py.NewIterator(py.Tuple(items)), nil
 }
 
 func jarLen(self py.Object, args py.Tuple) (py.Object, error) {

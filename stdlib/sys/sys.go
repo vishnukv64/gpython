@@ -133,6 +133,15 @@ func sys_exc_info(self py.Object) (py.Object, error) {
 	return py.Tuple{exc.Type(), exc, py.None}, nil
 }
 
+const exception_doc = `exception() -> the exception instance currently being handled, or None`
+
+func sys_exception(self py.Object) (py.Object, error) {
+	if exc := py.CurrentException(); exc != nil {
+		return exc, nil
+	}
+	return py.None, nil
+}
+
 const exit_doc = `exit([status])
 
 Exit the interpreter by raising SystemExit(status).
@@ -204,17 +213,11 @@ Set the global debug tracing function.  It will be called on each
 function call.  See the debugger chapter in the library manual.`
 
 func sys_settrace(self py.Object, args py.Tuple) (py.Object, error) {
-	// if (trace_init() == -1) {
-	//     return nil;
-	// }
-	// if (args == Py_None) {
-	//     PyEval_SetTrace(nil, nil);
-	// } else {
-	//     PyEval_SetTrace(trace_trampoline, args);
-	// }
-	// Py_INCREF(Py_None);
-	// return Py_None;
-	return nil, py.NotImplementedError
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "settrace() takes exactly one argument (%d given)", len(args))
+	}
+	py.SetTrace(args[0])
+	return py.None, nil
 }
 
 const gettrace_doc = `gettrace()
@@ -223,15 +226,10 @@ Return the global debug tracing function set with sys.settrace.
 See the debugger chapter in the library manual.`
 
 func sys_gettrace(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.NotImplementedError
-	// PyThreadState *tstate = PyThreadState_GET();
-	// py.Object temp = tstate->c_traceobj;
-
-	// if (temp == nil) {
-	//     temp = Py_None;
-	// }
-	// Py_INCREF(temp);
-	// return temp;
+	if f := py.TraceFunc(); f != nil {
+		return f, nil
+	}
+	return py.None, nil
 }
 
 const setprofile_doc = `setprofile(function)
@@ -240,17 +238,11 @@ Set the profiling function.  It will be called on each function call
 and return.  See the profiler chapter in the library manual.`
 
 func sys_setprofile(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.NotImplementedError
-	// if (trace_init() == -1) {
-	//     return nil;
-	// }
-	// if (args == Py_None) {
-	//     PyEval_SetProfile(nil, nil);
-	// } else {
-	//     PyEval_SetProfile(profile_trampoline, args);
-	// }
-	// Py_INCREF(Py_None);
-	// return Py_None;
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "setprofile() takes exactly one argument (%d given)", len(args))
+	}
+	py.SetProfile(args[0])
+	return py.None, nil
 }
 
 const getprofile_doc = `getprofile()
@@ -259,15 +251,10 @@ Return the profiling function set with sys.setprofile.
 See the profiler chapter in the library manual.`
 
 func sys_getprofile(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.NotImplementedError
-	// PyThreadState *tstate = PyThreadState_GET();
-	// py.Object temp = tstate->c_profileobj;
-
-	// if (temp == nil) {
-	//     temp = Py_None;
-	// }
-	// Py_INCREF(temp);
-	// return temp;
+	if f := py.ProfileFunc(); f != nil {
+		return f, nil
+	}
+	return py.None, nil
 }
 
 // int _check_interval = 100;
@@ -632,6 +619,7 @@ func init() {
 		py.MustNewMethod("_current_frames", sys_current_frames, 0, current_frames_doc),
 		py.MustNewMethod("displayhook", sys_displayhook, 0, displayhook_doc),
 		py.MustNewMethod("exc_info", sys_exc_info, 0, exc_info_doc),
+		py.MustNewMethod("exception", sys_exception, 0, exception_doc),
 		py.MustNewMethod("excepthook", sys_excepthook, 0, excepthook_doc),
 		py.MustNewMethod("exit", sys_exit, 0, exit_doc),
 		py.MustNewMethod("getdefaultencoding", sys_getdefaultencoding, 0, getdefaultencoding_doc),
@@ -841,6 +829,8 @@ func init() {
 	for _, e := range winExtras() {
 		globals.Set(e.Key, e.Value)
 	}
+
+	globals.Set("monitoring", monitoringModule())
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

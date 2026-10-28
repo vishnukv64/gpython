@@ -46,6 +46,10 @@ var EnumType = py.NewTypeX("enum.Enum", "Create a collection of name/value pairs
 // IntEnum members behave as integers, which is what click depends on.
 var IntEnumType = py.NewTypeX("enum.IntEnum", "An enum whose members are also ints.", nil, nil)
 
+// StrEnum members behave as strings: they compare and hash as their value and
+// print as it.
+var StrEnumType = py.NewTypeX("enum.StrEnum", "An enum whose members are also strs.", nil, nil)
+
 // Flag and IntFlag are provided for importability; they behave as Enum here.
 var FlagType = py.NewTypeX("enum.Flag", "An enum of bit flags.", nil, nil)
 
@@ -96,6 +100,8 @@ func init() {
 	IntEnumType.Flags |= enumFlags
 	FlagType.Flags |= enumFlags
 	IntFlagType.Flags |= enumFlags
+	StrEnumType.Flags |= enumFlags
+	StrEnumType.Base = py.StringType
 	// IntEnum and IntFlag are also ints.
 	IntEnumType.Base = py.IntType
 	IntFlagType.Base = py.IntType
@@ -134,7 +140,7 @@ func init() {
 		return self.(*EnumMember).M__ne__(other)
 	}, 0, "Return self!=value."))
 
-	for _, t := range []*py.Type{EnumType, IntEnumType, FlagType, IntFlagType} {
+	for _, t := range []*py.Type{EnumType, IntEnumType, FlagType, IntFlagType, StrEnumType} {
 		// A METH_CLASS method read off the class is handed no self, so each
 		// class gets a method that closes over itself.
 		t := t
@@ -157,6 +163,8 @@ func init() {
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "Enum", Value: EnumType},
 		py.DictEntry{Key: "IntEnum", Value: IntEnumType},
+		py.DictEntry{Key: "StrEnum", Value: StrEnumType},
+		py.DictEntry{Key: "_simple_enum", Value: py.MustNewMethod("_simple_enum", enumSimple, 0, "Class decorator that converts a normal class into an enumeration.")},
 		py.DictEntry{Key: "Flag", Value: FlagType},
 		py.DictEntry{Key: "IntFlag", Value: IntFlagType},
 		py.DictEntry{Key: "EnumMeta", Value: EnumMetaType},
@@ -270,6 +278,8 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		if baseType, ok := base.(*py.Type); ok {
 			if baseType == IntEnumType || baseType == IntFlagType {
 				cls.Base = py.IntType
+			} else if baseType == StrEnumType {
+				cls.Base = py.StringType
 			} else {
 				cls.Base = baseType
 			}
@@ -297,6 +307,10 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		return false
 	}
 
+	// A class body that defines __new__ and gives tuple values (pstats.SortKey)
+	// means "(value, *aliases)": __new__ builds the member in CPython; here the
+	// first item is the value and the others are extra names it answers to.
+	_, hasNew := ns.GetOrNil("__new__").(*py.Function)
 	members := []*EnumMember{}
 	memberNames := []string{}
 	byValue := map[string]*EnumMember{}
@@ -306,8 +320,14 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 	for _, key := range ns.Keys() {
 		value := ns.GetOrNil(key)
 		if isMeta(key) {
-			cls.Dict.Set(key, value)
+			if !(hasNew && key == "__new__") {
+				cls.Dict.Set(key, value)
+			}
 			continue
+		}
+		var aliasValues py.Tuple
+		if t, ok := value.(py.Tuple); ok && hasNew && len(t) > 0 {
+			value, aliasValues = t[0], t[1:]
 		}
 		if isAuto(value) {
 			value = py.Int(autoValue)
@@ -344,6 +364,11 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		}
 		member := &EnumMember{value: value, name: key, enum: cls, index: len(members)}
 		byValue[encoded] = member
+		for _, a := range aliasValues {
+			if k, err := py.DictKey(a); err == nil {
+				byValue[k] = member
+			}
+		}
 		members = append(members, member)
 		memberNames = append(memberNames, key)
 		cls.Dict.Set(key, member)
@@ -481,6 +506,12 @@ func installClassMethods(cls *py.Type) {
 // M__getattr__ reaches what the class body defined (methods, properties,
 // classmethods, staticmethods, plain attributes) through the member.
 func (m *EnumMember) M__getattr__(name string) (py.Object, error) {
+	if m.enum.Base == py.StringType && m.enum.Dict.GetOrNil(name) == nil && StrEnumType.Dict.GetOrNil(name) == nil {
+		// str methods are the value's: Color.RED.upper(), .startswith(...)
+		if v, err := py.GetAttrString(m.value, name); err == nil {
+			return v, nil
+		}
+	}
 	if v := m.enum.Lookup(name); v != nil {
 		if g, ok := v.(py.I__get__); ok {
 			return g.M__get__(m, m.enum)
@@ -520,8 +551,8 @@ func (m *EnumMember) M__str__() (py.Object, error) {
 	if r, ok, err := m.override("__str__"); ok {
 		return r, err
 	}
-	if m.enum.Base == py.IntType {
-		// An IntEnum prints like the int it is, as in Python.
+	if m.proxies() {
+		// An IntEnum or StrEnum prints like the value it is, as in Python.
 		return py.Str(m.value)
 	}
 	return py.String(m.enum.Name + "." + m.name), nil
@@ -530,8 +561,8 @@ func (m *EnumMember) M__str__() (py.Object, error) {
 func (m *EnumMember) M__eq__(other py.Object) (py.Object, error) {
 	o, ok := other.(*EnumMember)
 	if !ok {
-		if m.enum.Base == py.IntType {
-			// An IntEnum compares equal to its integer value.
+		if m.proxies() {
+			// An IntEnum or StrEnum compares equal to its value.
 			return py.Eq(m.value, other)
 		}
 		return py.False, nil
@@ -548,7 +579,7 @@ func (m *EnumMember) M__ne__(other py.Object) (py.Object, error) {
 }
 
 func (m *EnumMember) M__hash__() (py.Object, error) {
-	if m.enum.Base == py.IntType {
+	if m.proxies() {
 		if n, ok := py.HashValue(m.value); ok {
 			return py.Int(n), nil
 		}
@@ -556,9 +587,14 @@ func (m *EnumMember) M__hash__() (py.Object, error) {
 	return py.Int(int64(m.index) + 1), nil
 }
 
+// proxies reports whether the member stands in for its int or str value.
+func (m *EnumMember) proxies() bool {
+	return m.enum.Base == py.IntType || m.enum.Base == py.StringType
+}
+
 // DictKeyObject makes an IntEnum member share its int's dict entry.
 func (m *EnumMember) DictKeyObject() py.Object {
-	if m.enum.Base == py.IntType {
+	if m.proxies() {
 		return m.value
 	}
 	return m
@@ -592,3 +628,34 @@ var (
 	_ py.I__hash__    = (*EnumMember)(nil)
 	_ py.I__index__   = (*EnumMember)(nil)
 )
+
+// enumSimple is enum._simple_enum(etype): a class decorator that turns a plain
+// class into an enum of that type, as pstats.SortKey is written.
+func enumSimple(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var etype py.Object = EnumType
+	if len(args) > 0 {
+		etype = args[0]
+	}
+	return py.MustNewMethod("_simple_enum_decorator", func(_ py.Object, a py.Tuple) (py.Object, error) {
+		if len(a) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "_simple_enum decorator takes one class")
+		}
+		cls, ok := a[0].(*py.Type)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "_simple_enum decorates a class, not %s", a[0].Type().Name)
+		}
+		ns := py.NewStringDict()
+		for _, k := range cls.Dict.Keys() {
+			switch k {
+			case "__dict__", "__weakref__":
+				continue
+			}
+			ns.Set(k, cls.Dict.GetOrNil(k))
+		}
+		built, err := buildEnumClass(cls.Name, []py.Object{etype}, ns)
+		if err != nil {
+			return nil, err
+		}
+		return built, nil
+	}, 0, ""), nil
+}

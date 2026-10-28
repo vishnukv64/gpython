@@ -55,7 +55,7 @@ func parseExpression(text string) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return nodeAsObject(in), nil
+	return in, nil
 }
 
 // stripLeadingSpace removes leading spaces and tabs, which CPython does with
@@ -71,6 +71,9 @@ func stripLeadingSpace(s string) string {
 // astObjectToNode recovers a compiler AST node from the py.Object that ast.parse
 // or a caller handed us.
 func astObjectToNode(o py.Object) (pyast.Ast, bool) {
+	if n, ok := o.(*Node); ok {
+		return n.Orig, n.Orig != nil
+	}
 	if node, ok := o.(pyast.Ast); ok {
 		return node, true
 	}

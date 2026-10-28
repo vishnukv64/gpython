@@ -12,7 +12,7 @@ const sigStop = -1
 // deliver them straight to the notify path.
 func raise(n int) error {
 	tripped[n].Store(true)
-	py.SignalPending.Store(true)
+	py.SetSignalPending(true)
 	return nil
 }
 

@@ -2173,6 +2173,23 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		}
 		return factory.M__call__(args, kwargs)
 	}, 0, "Create a new named tuple instance."))
+	// _make(iterable) is a classmethod: tokenize.TokenInfo._make(info).
+	cls.Dict.Set("_make", &py.ClassMethod{Callable: py.MustNewMethod("_make", func(self py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "_make() takes exactly one argument (%d given)", len(args))
+		}
+		items, err := py.SequenceTuple(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if len(items) != len(fields) {
+			return nil, py.ExceptionNewf(py.TypeError, "Expected %d arguments, got %d", len(fields), len(items))
+		}
+		if calledOn, ok := self.(*py.Type); ok && calledOn != cls && calledOn.IsSubtype(cls) {
+			return factory.callAs(calledOn, items, py.StringDict{})
+		}
+		return factory.M__call__(items, py.StringDict{})
+	}, 0, "Make a new instance from an iterable."), Dict: py.NewStringDict()})
 	// The named tuple behaviours are inherited from the shared NamedTupleType
 	// so every generated class has the field accessors, repr and so on.
 	cls.Base = NamedTupleType

@@ -1156,7 +1156,7 @@ func appendKey(b *[]byte, key Object) error {
 		*b = append(*b, keyTag...)
 		*b = append(*b, 'm')
 		*b = strconv.AppendUint(*b, uint64(k.Globals.Ptr()), 16)
-	case *Function, *Method, *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
+	case *Function, *Method, *Frame, *Code, *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
 		// A function and a method encode as their identity, for the same
 		// reason: two distinct functions are two distinct keys.
 		*b = append(*b, keyTag...)
@@ -1343,7 +1343,7 @@ func HashValue(o Object) (int64, bool) {
 			h = (h ^ ih) * 1000003
 		}
 		return h ^ int64(len(v)), true
-	case *Function, *Method:
+	case *Function, *Method, *Frame, *Code:
 		// A function and a method hash by IDENTITY, which makes them usable as
 		// dict keys and set members.
 		//

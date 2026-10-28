@@ -95,6 +95,24 @@ type compiler struct {
 	// code object, so the first annotated name in a module or class body emits
 	// its creation and later ones index into it (PEP 526).
 	annotationsDone bool
+
+	// loopTail is the start of the enclosing loop while its last statement is
+	// being compiled.  An "if" there jumps straight back to that start from the
+	// end of each branch (as CPython does), instead of falling through to the
+	// loop's own back-jump, which would sit on the line of the last branch and
+	// show up as a stray line in a trace.
+	loopTail *Label
+}
+
+// tailStmts compiles stmts with tail as the loop-back target of the last one.
+func (c *compiler) tailStmts(stmts []ast.Stmt, tail *Label) {
+	if tail == nil || len(stmts) == 0 {
+		c.Stmts(stmts)
+		return
+	}
+	c.Stmts(stmts[:len(stmts)-1])
+	c.loopTail = tail
+	c.Stmt(stmts[len(stmts)-1])
 }
 
 // Set in py to avoid circular import
@@ -1216,6 +1234,9 @@ func (c *compiler) Stmts(stmts []ast.Stmt) {
 
 // Compile statement
 func (c *compiler) Stmt(stmt ast.Stmt) {
+	// loopTail applies to this statement only, and only an "if" uses it.
+	tail := c.loopTail
+	c.loopTail = nil
 	c.SetLineno(stmt)
 	switch node := stmt.(type) {
 	case *ast.FunctionDef:
@@ -1375,9 +1396,12 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 			c.Jump(vm.FOR_ITER, endfor)
 		}
 		c.Expr(node.Target)
-		c.Stmts(node.Body)
+		c.tailStmts(node.Body, forloop)
 		c.Jump(vm.JUMP_ABSOLUTE, forloop)
 		c.Label(endfor)
+		// Leaving the loop belongs to the "for" line, not to the last line of
+		// its body, or a trace shows a stray line event on every exit.
+		c.SetLineno(node)
 		c.Op(vm.POP_BLOCK)
 		c.loops.Pop()
 		c.Stmts(node.Orelse)
@@ -1393,9 +1417,10 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		c.loops.Push(loop{Start: while, End: endpopblock, Type: loopLoop})
 		c.Expr(node.Test)
 		c.Jump(vm.POP_JUMP_IF_FALSE, endwhile)
-		c.Stmts(node.Body)
+		c.tailStmts(node.Body, while)
 		c.Jump(vm.JUMP_ABSOLUTE, while)
 		c.Label(endwhile)
+		c.SetLineno(node) // as for "for": the exit is on the loop's own line
 		c.Op(vm.POP_BLOCK)
 		c.loops.Pop()
 		c.Stmts(node.Orelse)
@@ -1414,14 +1439,24 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		orelse := new(Label)
 		endif := new(Label)
 		c.Expr(node.Test)
+		if tail != nil && len(node.Orelse) == 0 {
+			// Last statement of a loop body: a false test goes straight back.
+			c.Jump(vm.POP_JUMP_IF_FALSE, tail)
+			c.tailStmts(node.Body, tail)
+			return
+		}
 		c.Jump(vm.POP_JUMP_IF_FALSE, orelse)
-		c.Stmts(node.Body)
-		// FIXME this puts a JUMP_FORWARD in when not
-		// necessary (when no Orelse statements) but it
-		// matches python3.4 (this is fixed in py3.5)
-		c.Jump(vm.JUMP_FORWARD, endif)
+		c.tailStmts(node.Body, tail)
+		if tail != nil {
+			c.Jump(vm.JUMP_ABSOLUTE, tail)
+		} else {
+			// FIXME this puts a JUMP_FORWARD in when not
+			// necessary (when no Orelse statements) but it
+			// matches python3.4 (this is fixed in py3.5)
+			c.Jump(vm.JUMP_FORWARD, endif)
+		}
 		c.Label(orelse)
-		c.Stmts(node.Orelse)
+		c.tailStmts(node.Orelse, tail)
 		c.Label(endif)
 	case *ast.With:
 		// Items []*WithItem

@@ -360,7 +360,7 @@ ok = False
 try:
     print("hello", sep=1, end="!")
 except TypeError as e:
-    if e.args[0] != "print() argument 1 must be str, not int":
+    if e.args[0] != "sep must be None or a string, not int":
         raise
     ok = True
 assert ok, "TypeError not raised"
@@ -368,7 +368,7 @@ assert ok, "TypeError not raised"
 try:
     print("hello", sep=",", end=1)
 except TypeError as e:
-    if e.args[0] != "print() argument 2 must be str, not int":
+    if e.args[0] != "end must be None or a string, not int":
       raise
     ok = True
 assert ok, "TypeError not raised"

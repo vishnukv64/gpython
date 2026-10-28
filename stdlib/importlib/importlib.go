@@ -19,6 +19,7 @@
 package importlib
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -284,6 +285,7 @@ var utilModule = &py.ModuleImpl{
 	},
 	Methods: []*py.Method{
 		py.MustNewMethod("find_spec", utilFindSpec, 0, find_spec_doc),
+		py.MustNewMethod("_find_spec_from_path", utilFindSpecFromPath, 0, "_find_spec_from_path(name, path=None) -> ModuleSpec or None, searching only the given directories"),
 		py.MustNewMethod("spec_from_file_location", utilSpecFromFileLocation, 0, spec_from_file_location_doc),
 		py.MustNewMethod("spec_from_loader", utilSpecFromLoader, 0, spec_from_loader_doc),
 		py.MustNewMethod("module_from_spec", utilModuleFromSpec, 0, module_from_spec_doc),
@@ -459,6 +461,42 @@ func utilFindSpec(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return spec, err
 	}
 	return findSpec(ctx, name)
+}
+
+// utilFindSpecFromPath is importlib.util._find_spec_from_path: find_spec
+// restricted to a list of directories, which pyclbr uses to locate the
+// submodules of a package.
+func utilFindSpecFromPath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var nameObj, pathObj py.Object = nil, py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "s|O:_find_spec_from_path", []string{"name", "path"}, &nameObj, &pathObj); err != nil {
+		return nil, err
+	}
+	name := string(nameObj.(py.String))
+	if pathObj == py.None {
+		return findSpec(currentContext(self), name)
+	}
+	dirs, err := py.SequenceTuple(pathObj)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range dirs {
+		dir, ok := d.(py.String)
+		if !ok {
+			continue
+		}
+		pkg := filepath.Join(string(dir), name, "__init__.py")
+		mod := filepath.Join(string(dir), name+".py")
+		for _, c := range []struct {
+			path  string
+			isPkg bool
+		}{{pkg, true}, {mod, false}} {
+			if st, err := os.Stat(c.path); err == nil && !st.IsDir() {
+				return &ModuleSpec{Name: name, Loader: &SourceLoader{Name: name, Path: c.path}, Origin: c.path,
+					IsPkg: c.isPkg, Location: filepath.Dir(c.path)}, nil
+			}
+		}
+	}
+	return py.None, nil
 }
 
 const find_spec_doc = `find_spec(name, package=None) -> ModuleSpec or None

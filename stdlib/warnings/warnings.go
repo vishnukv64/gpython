@@ -12,12 +12,16 @@
 package warnings
 
 import (
+	_ "embed"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 )
+
+//go:embed deprecated.py
+var deprecatedSrc string
 
 const warnings_doc = `Warning control.
 
@@ -212,7 +216,7 @@ func warn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	moduleName := "?"
 	if frame != nil {
 		filename = frame.Code.Filename
-		lineno = int(frame.Code.Addr2Line(frame.Lasti))
+		lineno = int(frame.CurrentLine())
 		if name, ok := frame.Globals.GetOrNil("__name__").(py.String); ok {
 			moduleName = string(name)
 		}
@@ -772,6 +776,7 @@ func init() {
 			Name: "warnings",
 			Doc:  warnings_doc,
 		},
+		CodeSrc: deprecatedSrc,
 		Methods: []*py.Method{
 			py.MustNewMethod("warn", warn, 0, warn_doc),
 			py.MustNewMethod("_deprecated", deprecated, 0, deprecated_doc),

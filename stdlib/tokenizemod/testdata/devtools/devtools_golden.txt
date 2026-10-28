@@ -1,0 +1,25 @@
+tab-good 'D/good.py': Clean bill of health.
+
+tab-bad 'D/bad_tab.py': *** Line 3: trouble in tab city! ***
+offending line: '\tb = 2'
+inconsistent use of tabs and spaces in indentation
+
+tab-nr m
+readmodule [('Base', 'Class', 3), ('Derived', 'Class', 9)]
+readmodule_ex ['Base Class 3 8', '  Inner Class 7 8', '    deep Function 8 8', '  am Function 6 6', '  m Function 5 5', 'Derived Class 9 12', '  n Function 12 12', '  prop Function 11 11', 'afunc Function 16 16', 'func Function 13 15', '  nested Function 14 14']
+supers [('Base', []), ('Derived', ['Base', 'object'])]
+getsource-func def func(a, b=2):
+    def nested(): pass
+    return a
+
+getsource-class class Derived(Base, object):
+    @property
+    def prop(self): return 1
+    def n(self): pass
+
+getsourcelines (['    class Inner:\n', '        def deep(self): pass\n'], 7)
+getblock ['def f():\n', '    return 1\n']
+getcomments None
+cleandoc a
+  b
+c

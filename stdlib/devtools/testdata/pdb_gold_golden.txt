@@ -1,0 +1,174 @@
+== step/next/p 28
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) > pdb_gold.py(7)target()
+-> for i in range(n):
+(Pdb) > pdb_gold.py(8)target()
+-> total += helper(i)
+(Pdb) 3
+(Pdb) 0
+(Pdb) > pdb_gold.py(7)target()
+-> for i in range(n):
+(Pdb) > pdb_gold.py(8)target()
+-> total += helper(i)
+(Pdb) > pdb_gold.py(7)target()
+-> for i in range(n):
+(Pdb) 5
+(Pdb) 
+== break/continue 28
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 1 at pdb_gold.py:13
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 0
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 1
+(Pdb)   BDB()
+  pdb_gold.py(8)target()
+-> total += helper(i)
+> pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== break lineno + cond None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 2 at pdb_gold.py:14
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) *** NameError: name 'y' is not defined
+(Pdb) > pdb_gold.py(8)target()
+-> total += helper(i)
+(Pdb) 0
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== where/up/down None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 3 at pdb_gold.py:13
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb)   BDB()
+  pdb_gold.py(8)target()
+-> total += helper(i)
+> pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(8)target()
+-> total += helper(i)
+(Pdb)   3  	HERE = os.path.dirname(os.path.abspath(__file__))
+  4  	
+  5  	def target(n):
+  6  	    total = 0
+  7  	    for i in range(n):
+  8  ->	        total += helper(i)
+  9  	    result = total * 2
+ 10  	    return result
+ 11  	
+ 12  	def helper(x):
+ 13 B	    y = x + 1
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== return/until None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) > pdb_gold.py(7)target()
+-> for i in range(n):
+(Pdb) > pdb_gold.py(8)target()
+-> total += helper(i)
+(Pdb) --Call--
+> pdb_gold.py(12)helper()
+-> def helper(x):
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(14)helper()
+-> return y * y
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== args/pp None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 4 at pdb_gold.py:13
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) x = 0
+(Pdb) {'a': [1, 2], 'b': 0}
+(Pdb) <class 'int'>
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(14)helper()
+-> return y * y
+(Pdb) 
+== tbreak/disable/enable None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 5 at pdb_gold.py:13
+(Pdb) Breakpoint 6 at pdb_gold.py:10
+(Pdb) Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at pdb_gold.py:13
+	breakpoint already hit 10 times
+2   breakpoint   keep yes   at pdb_gold.py:14
+	stop only if x == 1
+	breakpoint already hit 3 times
+3   breakpoint   keep yes   at pdb_gold.py:13
+4   breakpoint   keep yes   at pdb_gold.py:13
+5   breakpoint   del  yes   at pdb_gold.py:13
+6   breakpoint   keep yes   at pdb_gold.py:10
+(Pdb) Disabled breakpoint 2 at pdb_gold.py:14
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== display/undisplay None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) Breakpoint 7 at pdb_gold.py:13
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) display x: 0
+(Pdb) > pdb_gold.py(14)helper()
+-> return y * y
+(Pdb) (Pdb) --Return--
+> pdb_gold.py(14)helper()->1
+-> return y * y
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) > pdb_gold.py(10)target()
+-> return result
+(Pdb) 
+== quit None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) > pdb_gold.py(7)target()
+-> for i in range(n):
+(Pdb) 
+== error cmds None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb) *** NameError: name 'frobnicate' is not defined
+(Pdb) *** NameError: name 'undefined_name' is not defined
+(Pdb) *** ZeroDivisionError: division by zero
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 
+== list None
+> pdb_gold.py(6)target()
+-> total = 0
+(Pdb)   5  	def target(n):
+  6  ->	    total = 0
+  7  	    for i in range(n):
+  8  	        total += helper(i)
+  9  	    result = total * 2
+(Pdb) *** Invalid argument: helper
+      Usage: ll | longlist
+(Pdb) > pdb_gold.py(13)helper()
+-> y = x + 1
+(Pdb) 

@@ -13,6 +13,7 @@
 package inspect
 
 import (
+	_ "embed"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -23,6 +24,9 @@ const module_doc = `Get useful information from live Python objects.
 This module provides some useful functions to help the user get information
 about live objects such as modules, classes, methods, functions, tracebacks,
 frame objects, and code objects.`
+
+//go:embed blocks.py
+var blocksSrc string
 
 func init() {
 	globals := py.NewStringDictFrom(
@@ -73,6 +77,7 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: blocksSrc,
 	})
 }
 

@@ -491,24 +491,27 @@ func (is Instructions) Lnotab(firstlineno int) []byte {
 		lineno := instr.Lineno()
 		offset := instr.Pos()
 		d_lineno := lineno - old_lineno
-		if d_lineno <= 0 {
+		if lineno <= 0 || d_lineno == 0 {
 			continue
 		}
+		// Like CPython 3.6+, the line delta is a signed byte, so a line can
+		// go back (a loop exit is attributed to its header).
 		d_bytecode := offset - old_offset
 		for d_bytecode > 255 {
 			lnotab = append(lnotab, 255, 0)
 			d_bytecode -= 255
 		}
-		for d_lineno > 255 {
-			lnotab = append(lnotab, byte(d_bytecode), 255)
+		for d_lineno > 127 {
+			lnotab = append(lnotab, byte(d_bytecode), 127)
 			d_bytecode = 0
-			d_lineno -= 255
+			d_lineno -= 127
 		}
-		if d_bytecode > 0 {
-			lnotab = append(lnotab, byte(d_bytecode), byte(d_lineno))
-		} else { /* First line of a block; def stmt, etc. */
-			lnotab = append(lnotab, 0, byte(d_lineno))
+		for d_lineno < -128 {
+			lnotab = append(lnotab, byte(d_bytecode), 0x80)
+			d_bytecode = 0
+			d_lineno += 128
 		}
+		lnotab = append(lnotab, byte(d_bytecode), byte(int8(d_lineno)))
 		old_lineno = lineno
 		old_offset = offset
 	}

@@ -266,9 +266,26 @@ func builtin_print(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	}
 	stdout := sysModule.Globals.GetOrNil("stdout")
 	kwlist := []string{"sep", "end", "file", "flush"}
-	err = py.ParseTupleAndKeywords(nil, kwargs, "|ssOO:print", kwlist, &sepObj, &endObj, &stdout, &flush)
+	// sep and end accept None for their default, and so does file (sys.stdout).
+	var sepArg, endArg py.Object = sepObj, endObj
+	err = py.ParseTupleAndKeywords(nil, kwargs, "|OOOO:print", kwlist, &sepArg, &endArg, &stdout, &flush)
 	if err != nil {
 		return nil, err
+	}
+	if sepArg != py.None {
+		if _, ok := sepArg.(py.String); !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "sep must be None or a string, not %s", sepArg.Type().Name)
+		}
+		sepObj = sepArg
+	}
+	if endArg != py.None {
+		if _, ok := endArg.(py.String); !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "end must be None or a string, not %s", endArg.Type().Name)
+		}
+		endObj = endArg
+	}
+	if stdout == py.None {
+		stdout = sysModule.Globals.GetOrNil("stdout")
 	}
 	sep := sepObj.(py.String)
 	end := endObj.(py.String)

@@ -31,7 +31,11 @@ func (cit *CallIterator) M__next__() (Object, error) {
 		return nil, err
 	}
 
-	if value == cit.sentinel {
+	eq, err := Eq(value, cit.sentinel)
+	if err != nil {
+		return nil, err
+	}
+	if eq == True {
 		return nil, StopIteration
 	}
 

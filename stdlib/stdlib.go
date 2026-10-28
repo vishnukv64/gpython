@@ -36,11 +36,13 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/copy"
 	_ "github.com/vishnukv64/gpython/stdlib/csv"
 	_ "github.com/vishnukv64/gpython/stdlib/ctypes"
+	_ "github.com/vishnukv64/gpython/stdlib/devtools"
 	_ "github.com/vishnukv64/gpython/stdlib/dismod"
 	_ "github.com/vishnukv64/gpython/stdlib/email"
 	_ "github.com/vishnukv64/gpython/stdlib/encodings"
 	_ "github.com/vishnukv64/gpython/stdlib/enum"
 	_ "github.com/vishnukv64/gpython/stdlib/errno"
+	_ "github.com/vishnukv64/gpython/stdlib/faulthandler"
 	_ "github.com/vishnukv64/gpython/stdlib/fractions"
 	_ "github.com/vishnukv64/gpython/stdlib/functools"
 	_ "github.com/vishnukv64/gpython/stdlib/future"
@@ -63,6 +65,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/locale"
 	_ "github.com/vishnukv64/gpython/stdlib/logging/config"
 	_ "github.com/vishnukv64/gpython/stdlib/logging/handlers"
+	_ "github.com/vishnukv64/gpython/stdlib/lsprof"
 	_ "github.com/vishnukv64/gpython/stdlib/lzmamod"
 	_ "github.com/vishnukv64/gpython/stdlib/math"
 	_ "github.com/vishnukv64/gpython/stdlib/mimetypes"
@@ -103,6 +106,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/textwrap"
 	_ "github.com/vishnukv64/gpython/stdlib/thread"
 	_ "github.com/vishnukv64/gpython/stdlib/time"
+	_ "github.com/vishnukv64/gpython/stdlib/tokenizemod"
 	_ "github.com/vishnukv64/gpython/stdlib/traceback"
 	_ "github.com/vishnukv64/gpython/stdlib/types"
 	_ "github.com/vishnukv64/gpython/stdlib/typing"
@@ -209,6 +213,13 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 	if impl.Code != nil {
 		_, err = ctx.RunCode(impl.Code, module.Globals, module.Globals, nil)
 		if err != nil {
+			// A module whose body raised is not imported: CPython drops it from
+			// sys.modules, so the next import runs the body again and raises
+			// again instead of handing back a half-initialised module.  __main__
+			// stays, as it does there.
+			if impl.Info.Name != "__main__" {
+				delete(ctx.Store().Modules(), impl.Info.Name)
+			}
 			return nil, err
 		}
 	}

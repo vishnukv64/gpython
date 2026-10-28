@@ -1,0 +1,2687 @@
+== str0 'x\r\n'
+NAME 'x' (1, 0) (1, 1) 'x\r\n'
+NEWLINE '\r\n' (1, 1) (1, 3) 'x\r\n'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str1 'x = 1\r\n\r\ny\r'
+NAME 'x' (1, 0) (1, 1) 'x = 1\r\n'
+OP '=' (1, 2) (1, 3) 'x = 1\r\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\r\n'
+NEWLINE '\r\n' (1, 5) (1, 7) 'x = 1\r\n'
+NL '\r\n' (2, 0) (2, 2) '\r\n'
+NAME 'y' (3, 0) (3, 1) 'y\r'
+NEWLINE '\r' (3, 1) (3, 3) 'y\r'
+ENDMARKER '' (4, 0) (4, 0) ''
+== str2 '$ ? !'
+OP '$' (1, 0) (1, 1) '$ ? !'
+OP '?' (1, 2) (1, 3) '$ ? !'
+OP '!' (1, 4) (1, 5) '$ ? !'
+NEWLINE '' (1, 5) (1, 6) '$ ? !'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str3 'f"{x:}"'
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"{x:}"'
+OP '{' (1, 2) (1, 3) 'f"{x:}"'
+NAME 'x' (1, 3) (1, 4) 'f"{x:}"'
+OP ':' (1, 4) (1, 5) 'f"{x:}"'
+FSTRING_MIDDLE '' (1, 5) (1, 5) 'f"{x:}"'
+OP '}' (1, 5) (1, 6) 'f"{x:}"'
+FSTRING_END '"' (1, 6) (1, 7) 'f"{x:}"'
+NEWLINE '' (1, 7) (1, 8) 'f"{x:}"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str4 'f"a{{b}}c"'
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'a{' (1, 2) (1, 4) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'b}' (1, 5) (1, 7) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'c' (1, 8) (1, 9) 'f"a{{b}}c"'
+FSTRING_END '"' (1, 9) (1, 10) 'f"a{{b}}c"'
+NEWLINE '' (1, 10) (1, 11) 'f"a{{b}}c"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str5 'f"""a\nb{x}\nc"""\n'
+FSTRING_START 'f"""' (1, 0) (1, 4) 'f"""a\n'
+FSTRING_MIDDLE 'a\nb' (1, 4) (2, 1) 'f"""a\nb{x}\n'
+OP '{' (2, 1) (2, 2) 'b{x}\n'
+NAME 'x' (2, 2) (2, 3) 'b{x}\n'
+OP '}' (2, 3) (2, 4) 'b{x}\n'
+FSTRING_MIDDLE '\nc' (2, 4) (3, 1) 'b{x}\nc"""\n'
+FSTRING_END '"""' (3, 1) (3, 4) 'c"""\n'
+NEWLINE '\n' (3, 4) (3, 5) 'c"""\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== str6 'x = """a\nb""" + 1\n'
+NAME 'x' (1, 0) (1, 1) 'x = """a\n'
+OP '=' (1, 2) (1, 3) 'x = """a\n'
+STRING '"""a\nb"""' (1, 4) (2, 4) 'x = """a\nb""" + 1\n'
+OP '+' (2, 5) (2, 6) 'b""" + 1\n'
+NUMBER '1' (2, 7) (2, 8) 'b""" + 1\n'
+NEWLINE '\n' (2, 8) (2, 9) 'b""" + 1\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== str7 'x = 1 + \\\n  2\n'
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\\n'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\\n'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\\n'
+NUMBER '2' (2, 2) (2, 3) '  2\n'
+NEWLINE '\n' (2, 3) (2, 4) '  2\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== str8 '(\n'
+OP '(' (1, 0) (1, 1) '(\n'
+NL '\n' (1, 1) (1, 2) '(\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== str9 'x = (1,\n'
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== str10 'if x:\n\ty\n  z\n'
+NAME 'if' (1, 0) (1, 2) 'if x:\n'
+NAME 'x' (1, 3) (1, 4) 'if x:\n'
+OP ':' (1, 4) (1, 5) 'if x:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if x:\n'
+INDENT '\t' (2, 0) (2, 1) '\ty\n'
+NAME 'y' (2, 1) (2, 2) '\ty\n'
+NEWLINE '\n' (2, 2) (2, 3) '\ty\n'
+ERR IndentationError ('unindent does not match any outer indentation level', ('<string>', 3, 4, '  z', None, None))
+== str11 'if 1:\n        a\n\tb\n'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '        ' (2, 0) (2, 8) '        a\n'
+NAME 'a' (2, 8) (2, 9) '        a\n'
+NEWLINE '\n' (2, 9) (2, 10) '        a\n'
+ERR TabError ('inconsistent use of tabs and spaces in indentation', ('<string>', 3, 3, '\tb', None, None))
+== str12 "'abc\n"
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 1))
+== str13 '"""abc'
+ERR TokenError ('EOF in multi-line string', (1, 1))
+== str14 'a \\ b'
+NAME 'a' (1, 0) (1, 1) 'a \\ b'
+ERR TokenError ('unexpected character after line continuation character', (1, 6))
+== str15 '1if x else 2'
+NUMBER '1' (1, 0) (1, 1) '1if x else 2'
+NAME 'if' (1, 1) (1, 3) '1if x else 2'
+NAME 'x' (1, 4) (1, 5) '1if x else 2'
+NAME 'else' (1, 6) (1, 10) '1if x else 2'
+NUMBER '2' (1, 11) (1, 12) '1if x else 2'
+NEWLINE '' (1, 12) (1, 13) '1if x else 2'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str16 '0777'
+NUMBER '0777' (1, 0) (1, 4) '0777'
+NEWLINE '' (1, 4) (1, 5) '0777'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str17 'x = 1_'
+NAME 'x' (1, 0) (1, 1) 'x = 1_'
+OP '=' (1, 2) (1, 3) 'x = 1_'
+ERR TokenError ('invalid decimal literal', (1, 6))
+== str18 'def f(): pass'
+NAME 'def' (1, 0) (1, 3) 'def f(): pass'
+NAME 'f' (1, 4) (1, 5) 'def f(): pass'
+OP '(' (1, 5) (1, 6) 'def f(): pass'
+OP ')' (1, 6) (1, 7) 'def f(): pass'
+OP ':' (1, 7) (1, 8) 'def f(): pass'
+NAME 'pass' (1, 9) (1, 13) 'def f(): pass'
+NEWLINE '' (1, 13) (1, 14) 'def f(): pass'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str19 "f'{x!r:>{w}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!r:>{w}}'"
+OP '{' (1, 2) (1, 3) "f'{x!r:>{w}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!r:>{w}}'"
+OP '!' (1, 4) (1, 5) "f'{x!r:>{w}}'"
+NAME 'r' (1, 5) (1, 6) "f'{x!r:>{w}}'"
+OP ':' (1, 6) (1, 7) "f'{x!r:>{w}}'"
+FSTRING_MIDDLE '>' (1, 7) (1, 8) "f'{x!r:>{w}}'"
+OP '{' (1, 8) (1, 9) "f'{x!r:>{w}}'"
+NAME 'w' (1, 9) (1, 10) "f'{x!r:>{w}}'"
+OP '}' (1, 10) (1, 11) "f'{x!r:>{w}}'"
+FSTRING_MIDDLE '' (1, 11) (1, 11) "f'{x!r:>{w}}'"
+OP '}' (1, 11) (1, 12) "f'{x!r:>{w}}'"
+FSTRING_END "'" (1, 12) (1, 13) "f'{x!r:>{w}}'"
+NEWLINE '' (1, 13) (1, 14) "f'{x!r:>{w}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str20 '  # c'
+COMMENT '# c' (1, 2) (1, 5) '  # c'
+NL '' (1, 5) (1, 6) '  # c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str21 'x # c'
+NAME 'x' (1, 0) (1, 1) 'x # c'
+COMMENT '# c' (1, 2) (1, 5) 'x # c'
+NEWLINE '' (1, 5) (1, 6) 'x # c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str22 '\\\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== str23 "'a\\\nb'\n"
+STRING "'a\\\nb'" (1, 0) (2, 2) "'a\\\nb'\n"
+NEWLINE '\n' (2, 2) (2, 3) "b'\n"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str24 'x = (1,\n2,\n3'
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+NUMBER '2' (2, 0) (2, 1) '2,\n'
+OP ',' (2, 1) (2, 2) '2,\n'
+NL '\n' (2, 2) (2, 3) '2,\n'
+NUMBER '3' (3, 0) (3, 1) '3'
+NL '' (3, 1) (3, 2) '3'
+ERR TokenError ('unexpected EOF in multi-line statement', (3, 0))
+== str25 'x = (1,\n2,\n3\n\n'
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+NUMBER '2' (2, 0) (2, 1) '2,\n'
+OP ',' (2, 1) (2, 2) '2,\n'
+NL '\n' (2, 2) (2, 3) '2,\n'
+NUMBER '3' (3, 0) (3, 1) '3\n'
+NL '\n' (3, 1) (3, 2) '3\n'
+NL '\n' (4, 0) (4, 1) '\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (4, 0))
+== str26 'x = 1 + \\\n'
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\\n'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\\n'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 10))
+== str27 'x = 1 + \\'
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 10))
+== str28 'a \\ b\n'
+NAME 'a' (1, 0) (1, 1) 'a \\ b\n'
+ERR TokenError ('unexpected character after line continuation character', (1, 6))
+== str29 'if 1:\n  a\\\n b\n'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '  ' (2, 0) (2, 2) '  a\\\n'
+NAME 'a' (2, 2) (2, 3) '  a\\\n'
+NAME 'b' (3, 1) (3, 2) ' b\n'
+NEWLINE '\n' (3, 2) (3, 3) ' b\n'
+DEDENT '' (4, 0) (4, 0) ''
+ENDMARKER '' (4, 0) (4, 0) ''
+== str30 '(\n)\n]'
+OP '(' (1, 0) (1, 1) '(\n'
+NL '\n' (1, 1) (1, 2) '(\n'
+OP ')' (2, 0) (2, 1) ')\n'
+NEWLINE '\n' (2, 1) (2, 2) ')\n'
+OP ']' (3, 0) (3, 1) ']'
+NEWLINE '' (3, 1) (3, 2) ']'
+ENDMARKER '' (4, 0) (4, 0) ''
+== str31 '(]'
+OP '(' (1, 0) (1, 1) '(]'
+OP ']' (1, 1) (1, 2) '(]'
+NEWLINE '' (1, 2) (1, 3) '(]'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str32 "a = 'abc\n"
+NAME 'a' (1, 0) (1, 1) "a = 'abc\n"
+OP '=' (1, 2) (1, 3) "a = 'abc\n"
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 5))
+== str33 "a = '''abc\ndef"
+NAME 'a' (1, 0) (1, 1) "a = '''abc\n"
+OP '=' (1, 2) (1, 3) "a = '''abc\n"
+ERR TokenError ('EOF in multi-line string', (1, 5))
+== str34 "'\\\n"
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 1))
+== str35 'x = 0x'
+NAME 'x' (1, 0) (1, 1) 'x = 0x'
+OP '=' (1, 2) (1, 3) 'x = 0x'
+ERR TokenError ('invalid hexadecimal literal', (1, 6))
+== str36 'x = 0o9'
+NAME 'x' (1, 0) (1, 1) 'x = 0o9'
+OP '=' (1, 2) (1, 3) 'x = 0o9'
+ERR TokenError ("invalid digit '9' in octal literal", (1, 7))
+== str37 'x = 1e'
+NAME 'x' (1, 0) (1, 1) 'x = 1e'
+OP '=' (1, 2) (1, 3) 'x = 1e'
+NUMBER '1' (1, 4) (1, 5) 'x = 1e'
+NAME 'e' (1, 5) (1, 6) 'x = 1e'
+NEWLINE '' (1, 6) (1, 7) 'x = 1e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str38 'x = 1.e+'
+NAME 'x' (1, 0) (1, 1) 'x = 1.e+'
+OP '=' (1, 2) (1, 3) 'x = 1.e+'
+ERR TokenError ('invalid decimal literal', (1, 8))
+== str39 'x = 00'
+NAME 'x' (1, 0) (1, 1) 'x = 00'
+OP '=' (1, 2) (1, 3) 'x = 00'
+NUMBER '00' (1, 4) (1, 6) 'x = 00'
+NEWLINE '' (1, 6) (1, 7) 'x = 00'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str40 'x = 09'
+NAME 'x' (1, 0) (1, 1) 'x = 09'
+OP '=' (1, 2) (1, 3) 'x = 09'
+NUMBER '09' (1, 4) (1, 6) 'x = 09'
+NEWLINE '' (1, 6) (1, 7) 'x = 09'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str41 'x = 0_0'
+NAME 'x' (1, 0) (1, 1) 'x = 0_0'
+OP '=' (1, 2) (1, 3) 'x = 0_0'
+NUMBER '0_0' (1, 4) (1, 7) 'x = 0_0'
+NEWLINE '' (1, 7) (1, 8) 'x = 0_0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str42 'x = 1__0'
+NAME 'x' (1, 0) (1, 1) 'x = 1__0'
+OP '=' (1, 2) (1, 3) 'x = 1__0'
+ERR TokenError ('invalid decimal literal', (1, 6))
+== str43 '1.5j'
+NUMBER '1.5j' (1, 0) (1, 4) '1.5j'
+NEWLINE '' (1, 4) (1, 5) '1.5j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str44 '0b12'
+ERR TokenError ("invalid digit '2' in binary literal", (1, 4))
+== str45 '0xg'
+ERR TokenError ('invalid hexadecimal literal', (1, 2))
+== str46 '.5e3j'
+NUMBER '.5e3j' (1, 0) (1, 5) '.5e3j'
+NEWLINE '' (1, 5) (1, 6) '.5e3j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str47 '1.'
+NUMBER '1.' (1, 0) (1, 2) '1.'
+NEWLINE '' (1, 2) (1, 3) '1.'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str48 '0e0'
+NUMBER '0e0' (1, 0) (1, 3) '0e0'
+NEWLINE '' (1, 3) (1, 4) '0e0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str49 '0_7'
+NUMBER '0_7' (1, 0) (1, 3) '0_7'
+NEWLINE '' (1, 3) (1, 4) '0_7'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str50 '1_000.000_1e1_0'
+NUMBER '1_000.000_1e1_0' (1, 0) (1, 15) '1_000.000_1e1_0'
+NEWLINE '' (1, 15) (1, 16) '1_000.000_1e1_0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str51 'é = 1'
+NAME 'é' (1, 0) (1, 1) 'é = 1'
+OP '=' (1, 2) (1, 3) 'é = 1'
+NUMBER '1' (1, 4) (1, 5) 'é = 1'
+NEWLINE '' (1, 5) (1, 6) 'é = 1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str52 'a€ = 1'
+NAME 'a€' (1, 0) (1, 2) 'a€ = 1'
+OP '=' (1, 3) (1, 4) 'a€ = 1'
+NUMBER '1' (1, 5) (1, 6) 'a€ = 1'
+NEWLINE '' (1, 6) (1, 7) 'a€ = 1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str53 'a\x01'
+NAME 'a' (1, 0) (1, 1) 'a\x01'
+ERR TokenError ('invalid non-printable character U+0001', (1, 2))
+== str54 '\x00'
+ERR TokenError ('source code cannot contain null bytes', (1, 0))
+== str55 '\x0cx'
+NAME 'x' (1, 1) (1, 2) '\x0cx'
+NEWLINE '' (1, 2) (1, 3) '\x0cx'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str56 'x\ty'
+NAME 'x' (1, 0) (1, 1) 'x\ty'
+NAME 'y' (1, 2) (1, 3) 'x\ty'
+NEWLINE '' (1, 3) (1, 4) 'x\ty'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str57 'if 1:\n x\n\ty\n'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT ' ' (2, 0) (2, 1) ' x\n'
+NAME 'x' (2, 1) (2, 2) ' x\n'
+NEWLINE '\n' (2, 2) (2, 3) ' x\n'
+ERR TabError ('inconsistent use of tabs and spaces in indentation', ('<string>', 3, 3, '\ty', None, None))
+== str58 '\n\n  \n# c\n'
+NL '\n' (1, 0) (1, 1) '\n'
+NL '\n' (2, 0) (2, 1) '\n'
+NL '\n' (3, 2) (3, 3) '  \n'
+COMMENT '# c' (4, 0) (4, 3) '# c\n'
+NL '\n' (4, 3) (4, 4) '# c\n'
+ENDMARKER '' (5, 0) (5, 0) ''
+== str59 'x\n  \n\n  y\n'
+NAME 'x' (1, 0) (1, 1) 'x\n'
+NEWLINE '\n' (1, 1) (1, 2) 'x\n'
+NL '\n' (2, 2) (2, 3) '  \n'
+NL '\n' (3, 0) (3, 1) '\n'
+INDENT '  ' (4, 0) (4, 2) '  y\n'
+NAME 'y' (4, 2) (4, 3) '  y\n'
+NEWLINE '\n' (4, 3) (4, 4) '  y\n'
+DEDENT '' (5, 0) (5, 0) ''
+ENDMARKER '' (5, 0) (5, 0) ''
+== str60 'a ... b .. c'
+NAME 'a' (1, 0) (1, 1) 'a ... b .. c'
+OP '...' (1, 2) (1, 5) 'a ... b .. c'
+NAME 'b' (1, 6) (1, 7) 'a ... b .. c'
+OP '.' (1, 8) (1, 9) 'a ... b .. c'
+OP '.' (1, 9) (1, 10) 'a ... b .. c'
+NAME 'c' (1, 11) (1, 12) 'a ... b .. c'
+NEWLINE '' (1, 12) (1, 13) 'a ... b .. c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str61 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'a' (1, 0) (1, 1) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '<>' (1, 2) (1, 4) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'b' (1, 5) (1, 6) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '!=' (1, 7) (1, 9) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'c' (1, 10) (1, 11) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '->' (1, 12) (1, 14) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'd' (1, 14) (1, 15) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP ':=' (1, 16) (1, 18) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'e' (1, 19) (1, 20) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '**=' (1, 21) (1, 24) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'f' (1, 25) (1, 26) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '//=' (1, 27) (1, 30) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'g' (1, 31) (1, 32) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '>>=' (1, 33) (1, 36) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'h' (1, 37) (1, 38) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '<<=' (1, 39) (1, 42) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'i' (1, 43) (1, 44) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '@=' (1, 45) (1, 47) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'j' (1, 48) (1, 49) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NEWLINE '' (1, 49) (1, 50) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str62 '!='
+OP '!=' (1, 0) (1, 2) '!='
+NEWLINE '' (1, 2) (1, 3) '!='
+ENDMARKER '' (2, 0) (2, 0) ''
+== str63 'a!b'
+NAME 'a' (1, 0) (1, 1) 'a!b'
+OP '!' (1, 1) (1, 2) 'a!b'
+NAME 'b' (1, 2) (1, 3) 'a!b'
+NEWLINE '' (1, 3) (1, 4) 'a!b'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str64 "f'{x=}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x=}'"
+OP '{' (1, 2) (1, 3) "f'{x=}'"
+NAME 'x' (1, 3) (1, 4) "f'{x=}'"
+OP '=' (1, 4) (1, 5) "f'{x=}'"
+OP '}' (1, 5) (1, 6) "f'{x=}'"
+FSTRING_END "'" (1, 6) (1, 7) "f'{x=}'"
+NEWLINE '' (1, 7) (1, 8) "f'{x=}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str65 "f'{x = }'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x = }'"
+OP '{' (1, 2) (1, 3) "f'{x = }'"
+NAME 'x' (1, 3) (1, 4) "f'{x = }'"
+OP '=' (1, 5) (1, 6) "f'{x = }'"
+OP '}' (1, 7) (1, 8) "f'{x = }'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{x = }'"
+NEWLINE '' (1, 9) (1, 10) "f'{x = }'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str66 "f'{x:{y}z}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y}z}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y}z}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y}z}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y}z}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y}z}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y}z}'"
+OP '}' (1, 7) (1, 8) "f'{x:{y}z}'"
+FSTRING_MIDDLE 'z' (1, 8) (1, 9) "f'{x:{y}z}'"
+OP '}' (1, 9) (1, 10) "f'{x:{y}z}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{x:{y}z}'"
+NEWLINE '' (1, 11) (1, 12) "f'{x:{y}z}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str67 "f'{{'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{{'"
+FSTRING_MIDDLE '{' (1, 2) (1, 3) "f'{{'"
+FSTRING_END "'" (1, 4) (1, 5) "f'{{'"
+NEWLINE '' (1, 5) (1, 6) "f'{{'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str68 "f'}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'}'"
+FSTRING_MIDDLE '' (1, 2) (1, 2) "f'}'"
+ERR TokenError ("f-string: single '}' is not allowed", (1, 3))
+== str69 "f'{'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{'"
+OP '{' (1, 2) (1, 3) "f'{'"
+ERR TokenError ("f-string: expecting '}'", (1, 4))
+== str70 "f'{x'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x'"
+OP '{' (1, 2) (1, 3) "f'{x'"
+NAME 'x' (1, 3) (1, 4) "f'{x'"
+ERR TokenError ("f-string: expecting '}'", (1, 5))
+== str71 "f'''{\nx\n}'''"
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''{\n"
+OP '{' (1, 4) (1, 5) "f'''{\n"
+NL '\n' (1, 5) (1, 6) "f'''{\n"
+NAME 'x' (2, 0) (2, 1) 'x\n'
+NL '\n' (2, 1) (2, 2) 'x\n'
+OP '}' (3, 0) (3, 1) "}'''"
+FSTRING_END "'''" (3, 1) (3, 4) "}'''"
+NEWLINE '' (3, 4) (3, 5) "}'''"
+ENDMARKER '' (4, 0) (4, 0) ''
+== str72 "rf'\\{x}'"
+FSTRING_START "rf'" (1, 0) (1, 3) "rf'\\{x}'"
+FSTRING_MIDDLE '\\' (1, 3) (1, 4) "rf'\\{x}'"
+OP '{' (1, 4) (1, 5) "rf'\\{x}'"
+NAME 'x' (1, 5) (1, 6) "rf'\\{x}'"
+OP '}' (1, 6) (1, 7) "rf'\\{x}'"
+FSTRING_END "'" (1, 7) (1, 8) "rf'\\{x}'"
+NEWLINE '' (1, 8) (1, 9) "rf'\\{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str73 "f'\\N{BULLET}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\N{BULLET}'"
+FSTRING_MIDDLE '\\N{BULLET}' (1, 2) (1, 12) "f'\\N{BULLET}'"
+FSTRING_END "'" (1, 12) (1, 13) "f'\\N{BULLET}'"
+NEWLINE '' (1, 13) (1, 14) "f'\\N{BULLET}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str74 "f'\\{x}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\{x}'"
+FSTRING_MIDDLE '\\' (1, 2) (1, 3) "f'\\{x}'"
+OP '{' (1, 3) (1, 4) "f'\\{x}'"
+NAME 'x' (1, 4) (1, 5) "f'\\{x}'"
+OP '}' (1, 5) (1, 6) "f'\\{x}'"
+FSTRING_END "'" (1, 6) (1, 7) "f'\\{x}'"
+NEWLINE '' (1, 7) (1, 8) "f'\\{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str75 "f'{x!r}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!r}'"
+OP '{' (1, 2) (1, 3) "f'{x!r}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!r}'"
+OP '!' (1, 4) (1, 5) "f'{x!r}'"
+NAME 'r' (1, 5) (1, 6) "f'{x!r}'"
+OP '}' (1, 6) (1, 7) "f'{x!r}'"
+FSTRING_END "'" (1, 7) (1, 8) "f'{x!r}'"
+NEWLINE '' (1, 8) (1, 9) "f'{x!r}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str76 "f'{a!=b}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{a!=b}'"
+OP '{' (1, 2) (1, 3) "f'{a!=b}'"
+NAME 'a' (1, 3) (1, 4) "f'{a!=b}'"
+OP '!=' (1, 4) (1, 6) "f'{a!=b}'"
+NAME 'b' (1, 6) (1, 7) "f'{a!=b}'"
+OP '}' (1, 7) (1, 8) "f'{a!=b}'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{a!=b}'"
+NEWLINE '' (1, 9) (1, 10) "f'{a!=b}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str77 "f'{a:=5}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{a:=5}'"
+OP '{' (1, 2) (1, 3) "f'{a:=5}'"
+NAME 'a' (1, 3) (1, 4) "f'{a:=5}'"
+OP ':' (1, 4) (1, 5) "f'{a:=5}'"
+FSTRING_MIDDLE '=5' (1, 5) (1, 7) "f'{a:=5}'"
+OP '}' (1, 7) (1, 8) "f'{a:=5}'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{a:=5}'"
+NEWLINE '' (1, 9) (1, 10) "f'{a:=5}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str78 "f'{(a:=5)}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{(a:=5)}'"
+OP '{' (1, 2) (1, 3) "f'{(a:=5)}'"
+OP '(' (1, 3) (1, 4) "f'{(a:=5)}'"
+NAME 'a' (1, 4) (1, 5) "f'{(a:=5)}'"
+OP ':=' (1, 5) (1, 7) "f'{(a:=5)}'"
+NUMBER '5' (1, 7) (1, 8) "f'{(a:=5)}'"
+OP ')' (1, 8) (1, 9) "f'{(a:=5)}'"
+OP '}' (1, 9) (1, 10) "f'{(a:=5)}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{(a:=5)}'"
+NEWLINE '' (1, 11) (1, 12) "f'{(a:=5)}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str79 "f'{lambda x: 1}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{lambda x: 1}'"
+OP '{' (1, 2) (1, 3) "f'{lambda x: 1}'"
+NAME 'lambda' (1, 3) (1, 9) "f'{lambda x: 1}'"
+NAME 'x' (1, 10) (1, 11) "f'{lambda x: 1}'"
+OP ':' (1, 11) (1, 12) "f'{lambda x: 1}'"
+FSTRING_MIDDLE ' 1' (1, 12) (1, 14) "f'{lambda x: 1}'"
+OP '}' (1, 14) (1, 15) "f'{lambda x: 1}'"
+FSTRING_END "'" (1, 15) (1, 16) "f'{lambda x: 1}'"
+NEWLINE '' (1, 16) (1, 17) "f'{lambda x: 1}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str80 'f\'{f"{x}"}\''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{f"{x}"}\''
+OP '{' (1, 2) (1, 3) 'f\'{f"{x}"}\''
+FSTRING_START 'f"' (1, 3) (1, 5) 'f\'{f"{x}"}\''
+OP '{' (1, 5) (1, 6) 'f\'{f"{x}"}\''
+NAME 'x' (1, 6) (1, 7) 'f\'{f"{x}"}\''
+OP '}' (1, 7) (1, 8) 'f\'{f"{x}"}\''
+FSTRING_END '"' (1, 8) (1, 9) 'f\'{f"{x}"}\''
+OP '}' (1, 9) (1, 10) 'f\'{f"{x}"}\''
+FSTRING_END "'" (1, 10) (1, 11) 'f\'{f"{x}"}\''
+NEWLINE '' (1, 11) (1, 12) 'f\'{f"{x}"}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== str81 'f\'{"a" "b"}\''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{"a" "b"}\''
+OP '{' (1, 2) (1, 3) 'f\'{"a" "b"}\''
+STRING '"a"' (1, 3) (1, 6) 'f\'{"a" "b"}\''
+STRING '"b"' (1, 7) (1, 10) 'f\'{"a" "b"}\''
+OP '}' (1, 10) (1, 11) 'f\'{"a" "b"}\''
+FSTRING_END "'" (1, 11) (1, 12) 'f\'{"a" "b"}\''
+NEWLINE '' (1, 12) (1, 13) 'f\'{"a" "b"}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== str82 "f'a' 'b'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'a' 'b'"
+FSTRING_MIDDLE 'a' (1, 2) (1, 3) "f'a' 'b'"
+FSTRING_END "'" (1, 3) (1, 4) "f'a' 'b'"
+STRING "'b'" (1, 5) (1, 8) "f'a' 'b'"
+NEWLINE '' (1, 8) (1, 9) "f'a' 'b'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str83 "t'{x}'"
+TSTRING_START "t'" (1, 0) (1, 2) "t'{x}'"
+OP '{' (1, 2) (1, 3) "t'{x}'"
+NAME 'x' (1, 3) (1, 4) "t'{x}'"
+OP '}' (1, 4) (1, 5) "t'{x}'"
+TSTRING_END "'" (1, 5) (1, 6) "t'{x}'"
+NEWLINE '' (1, 6) (1, 7) "t'{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str84 "rt'{x}'"
+TSTRING_START "rt'" (1, 0) (1, 3) "rt'{x}'"
+OP '{' (1, 3) (1, 4) "rt'{x}'"
+NAME 'x' (1, 4) (1, 5) "rt'{x}'"
+OP '}' (1, 5) (1, 6) "rt'{x}'"
+TSTRING_END "'" (1, 6) (1, 7) "rt'{x}'"
+NEWLINE '' (1, 7) (1, 8) "rt'{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str85 "Tr'a'"
+TSTRING_START "Tr'" (1, 0) (1, 3) "Tr'a'"
+TSTRING_MIDDLE 'a' (1, 3) (1, 4) "Tr'a'"
+TSTRING_END "'" (1, 4) (1, 5) "Tr'a'"
+NEWLINE '' (1, 5) (1, 6) "Tr'a'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str86 "bf'a'"
+ERR TokenError ("'b' and 'f' prefixes are incompatible", (1, 1))
+== str87 "f'{x:%Y-%m}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:%Y-%m}'"
+OP '{' (1, 2) (1, 3) "f'{x:%Y-%m}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:%Y-%m}'"
+OP ':' (1, 4) (1, 5) "f'{x:%Y-%m}'"
+FSTRING_MIDDLE '%Y-%m' (1, 5) (1, 10) "f'{x:%Y-%m}'"
+OP '}' (1, 10) (1, 11) "f'{x:%Y-%m}'"
+FSTRING_END "'" (1, 11) (1, 12) "f'{x:%Y-%m}'"
+NEWLINE '' (1, 12) (1, 13) "f'{x:%Y-%m}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str88 "f'{x:\n}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:\n"
+OP '{' (1, 2) (1, 3) "f'{x:\n"
+NAME 'x' (1, 3) (1, 4) "f'{x:\n"
+OP ':' (1, 4) (1, 5) "f'{x:\n"
+ERR TokenError ('f-string: newlines are not allowed in format specifiers for single quoted f-strings', (1, 6))
+== str89 "f'''{x:\na}'''"
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''{x:\n"
+OP '{' (1, 4) (1, 5) "f'''{x:\n"
+NAME 'x' (1, 5) (1, 6) "f'''{x:\n"
+OP ':' (1, 6) (1, 7) "f'''{x:\n"
+FSTRING_MIDDLE '\na' (1, 7) (2, 1) "f'''{x:\na}'''"
+OP '}' (2, 1) (2, 2) "a}'''"
+FSTRING_END "'''" (2, 2) (2, 5) "a}'''"
+NEWLINE '' (2, 5) (2, 6) "a}'''"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str90 "f'{#c\n}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{#c\n"
+OP '{' (1, 2) (1, 3) "f'{#c\n"
+COMMENT '#c' (1, 3) (1, 5) "f'{#c\n"
+NL '\n' (1, 5) (1, 6) "f'{#c\n"
+OP '}' (2, 0) (2, 1) "}'"
+FSTRING_END "'" (2, 1) (2, 2) "}'"
+NEWLINE '' (2, 2) (2, 3) "}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str91 "f'{\nx}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{\n"
+OP '{' (1, 2) (1, 3) "f'{\n"
+NL '\n' (1, 3) (1, 4) "f'{\n"
+NAME 'x' (2, 0) (2, 1) "x}'"
+OP '}' (2, 1) (2, 2) "x}'"
+FSTRING_END "'" (2, 2) (2, 3) "x}'"
+NEWLINE '' (2, 3) (2, 4) "x}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str92 "f'a\nb'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'a\n"
+ERR TokenError ('unterminated f-string literal (detected at line 1)', (1, 1))
+== str93 "f'abc"
+FSTRING_START "f'" (1, 0) (1, 2) "f'abc"
+ERR TokenError ('unterminated f-string literal (detected at line 1)', (1, 1))
+== str94 "f'''abc"
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''abc"
+ERR TokenError ('unterminated triple-quoted f-string literal (detected at line 1)', (1, 1))
+== str95 "f'{x}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x}}'"
+OP '{' (1, 2) (1, 3) "f'{x}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x}}'"
+OP '}' (1, 4) (1, 5) "f'{x}}'"
+FSTRING_MIDDLE '' (1, 5) (1, 5) "f'{x}}'"
+ERR TokenError ("f-string: single '}' is not allowed", (1, 6))
+== str96 "f'{x:{{}}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{{}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{{}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{{}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{{}}}'"
+FSTRING_MIDDLE '' (1, 5) (1, 5) "f'{x:{{}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{{}}}'"
+OP '{' (1, 6) (1, 7) "f'{x:{{}}}'"
+OP '}' (1, 7) (1, 8) "f'{x:{{}}}'"
+OP '}' (1, 8) (1, 9) "f'{x:{{}}}'"
+FSTRING_MIDDLE '' (1, 9) (1, 9) "f'{x:{{}}}'"
+OP '}' (1, 9) (1, 10) "f'{x:{{}}}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{x:{{}}}'"
+NEWLINE '' (1, 11) (1, 12) "f'{x:{{}}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str97 "f'{x:{y:{z}}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y:{z}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y:{z}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y:{z}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y:{z}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y:{z}}}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y:{z}}}'"
+OP ':' (1, 7) (1, 8) "f'{x:{y:{z}}}'"
+OP '{' (1, 8) (1, 9) "f'{x:{y:{z}}}'"
+NAME 'z' (1, 9) (1, 10) "f'{x:{y:{z}}}'"
+OP '}' (1, 10) (1, 11) "f'{x:{y:{z}}}'"
+FSTRING_MIDDLE '' (1, 11) (1, 11) "f'{x:{y:{z}}}'"
+OP '}' (1, 11) (1, 12) "f'{x:{y:{z}}}'"
+FSTRING_MIDDLE '' (1, 12) (1, 12) "f'{x:{y:{z}}}'"
+OP '}' (1, 12) (1, 13) "f'{x:{y:{z}}}'"
+FSTRING_END "'" (1, 13) (1, 14) "f'{x:{y:{z}}}'"
+NEWLINE '' (1, 14) (1, 15) "f'{x:{y:{z}}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str98 'f"{x[\'a\']}"'
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"{x[\'a\']}"'
+OP '{' (1, 2) (1, 3) 'f"{x[\'a\']}"'
+NAME 'x' (1, 3) (1, 4) 'f"{x[\'a\']}"'
+OP '[' (1, 4) (1, 5) 'f"{x[\'a\']}"'
+STRING "'a'" (1, 5) (1, 8) 'f"{x[\'a\']}"'
+OP ']' (1, 8) (1, 9) 'f"{x[\'a\']}"'
+OP '}' (1, 9) (1, 10) 'f"{x[\'a\']}"'
+FSTRING_END '"' (1, 10) (1, 11) 'f"{x[\'a\']}"'
+NEWLINE '' (1, 11) (1, 12) 'f"{x[\'a\']}"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str99 "f'{x:{y:{z:{w}}}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y:{z:{w}}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y:{z:{w}}}}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 7) (1, 8) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 8) (1, 9) "f'{x:{y:{z:{w}}}}'"
+NAME 'z' (1, 9) (1, 10) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 10) (1, 11) "f'{x:{y:{z:{w}}}}'"
+ERR TokenError ('f-string: expressions nested too deeply', (1, 11))
+== str100 'async def f(): await x'
+NAME 'async' (1, 0) (1, 5) 'async def f(): await x'
+NAME 'def' (1, 6) (1, 9) 'async def f(): await x'
+NAME 'f' (1, 10) (1, 11) 'async def f(): await x'
+OP '(' (1, 11) (1, 12) 'async def f(): await x'
+OP ')' (1, 12) (1, 13) 'async def f(): await x'
+OP ':' (1, 13) (1, 14) 'async def f(): await x'
+NAME 'await' (1, 15) (1, 20) 'async def f(): await x'
+NAME 'x' (1, 21) (1, 22) 'async def f(): await x'
+NEWLINE '' (1, 22) (1, 23) 'async def f(): await x'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str101 'print(1) # x\n# y\n'
+NAME 'print' (1, 0) (1, 5) 'print(1) # x\n'
+OP '(' (1, 5) (1, 6) 'print(1) # x\n'
+NUMBER '1' (1, 6) (1, 7) 'print(1) # x\n'
+OP ')' (1, 7) (1, 8) 'print(1) # x\n'
+COMMENT '# x' (1, 9) (1, 12) 'print(1) # x\n'
+NEWLINE '\n' (1, 12) (1, 13) 'print(1) # x\n'
+COMMENT '# y' (2, 0) (2, 3) '# y\n'
+NL '\n' (2, 3) (2, 4) '# y\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== str102 'if 1:\n    # c\n    x\n# d\n  # e\ny\n'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+COMMENT '# c' (2, 4) (2, 7) '    # c\n'
+NL '\n' (2, 7) (2, 8) '    # c\n'
+INDENT '    ' (3, 0) (3, 4) '    x\n'
+NAME 'x' (3, 4) (3, 5) '    x\n'
+NEWLINE '\n' (3, 5) (3, 6) '    x\n'
+COMMENT '# d' (4, 0) (4, 3) '# d\n'
+NL '\n' (4, 3) (4, 4) '# d\n'
+COMMENT '# e' (5, 2) (5, 5) '  # e\n'
+NL '\n' (5, 5) (5, 6) '  # e\n'
+DEDENT '' (6, 0) (6, 0) 'y\n'
+NAME 'y' (6, 0) (6, 1) 'y\n'
+NEWLINE '\n' (6, 1) (6, 2) 'y\n'
+ENDMARKER '' (7, 0) (7, 0) ''
+== str103 'def f():\n    pass\n    \n  \nx\n'
+NAME 'def' (1, 0) (1, 3) 'def f():\n'
+NAME 'f' (1, 4) (1, 5) 'def f():\n'
+OP '(' (1, 5) (1, 6) 'def f():\n'
+OP ')' (1, 6) (1, 7) 'def f():\n'
+OP ':' (1, 7) (1, 8) 'def f():\n'
+NEWLINE '\n' (1, 8) (1, 9) 'def f():\n'
+INDENT '    ' (2, 0) (2, 4) '    pass\n'
+NAME 'pass' (2, 4) (2, 8) '    pass\n'
+NEWLINE '\n' (2, 8) (2, 9) '    pass\n'
+NL '\n' (3, 4) (3, 5) '    \n'
+NL '\n' (4, 2) (4, 3) '  \n'
+DEDENT '' (5, 0) (5, 0) 'x\n'
+NAME 'x' (5, 0) (5, 1) 'x\n'
+NEWLINE '\n' (5, 1) (5, 2) 'x\n'
+ENDMARKER '' (6, 0) (6, 0) ''
+== str104 '"abc\\"def"'
+STRING '"abc\\"def"' (1, 0) (1, 10) '"abc\\"def"'
+NEWLINE '' (1, 10) (1, 11) '"abc\\"def"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str105 "'''a'''b"
+STRING "'''a'''" (1, 0) (1, 7) "'''a'''b"
+NAME 'b' (1, 7) (1, 8) "'''a'''b"
+NEWLINE '' (1, 8) (1, 9) "'''a'''b"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str106 '""'
+STRING '""' (1, 0) (1, 2) '""'
+NEWLINE '' (1, 2) (1, 3) '""'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str107 "''''''"
+STRING "''''''" (1, 0) (1, 6) "''''''"
+NEWLINE '' (1, 6) (1, 7) "''''''"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str108 "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "u'x'" (1, 0) (1, 4) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "b'y'" (1, 5) (1, 9) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "Rb'z'" (1, 10) (1, 15) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "bR'q'" (1, 16) (1, 21) "u'x' b'y' Rb'z' bR'q' ur'x'"
+ERR TokenError ("'u' and 'r' prefixes are incompatible", (1, 23))
+== str109 'if 1:\n  if 2:\n    x\n  y\nz'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '  ' (2, 0) (2, 2) '  if 2:\n'
+NAME 'if' (2, 2) (2, 4) '  if 2:\n'
+NUMBER '2' (2, 5) (2, 6) '  if 2:\n'
+OP ':' (2, 6) (2, 7) '  if 2:\n'
+NEWLINE '\n' (2, 7) (2, 8) '  if 2:\n'
+INDENT '    ' (3, 0) (3, 4) '    x\n'
+NAME 'x' (3, 4) (3, 5) '    x\n'
+NEWLINE '\n' (3, 5) (3, 6) '    x\n'
+DEDENT '' (4, 2) (4, 2) '  y\n'
+NAME 'y' (4, 2) (4, 3) '  y\n'
+NEWLINE '\n' (4, 3) (4, 4) '  y\n'
+DEDENT '' (5, 0) (5, 0) 'z'
+NAME 'z' (5, 0) (5, 1) 'z'
+NEWLINE '' (5, 1) (5, 2) 'z'
+ENDMARKER '' (6, 0) (6, 0) ''
+== str110 'class A:\n\tdef f(self):\n\t\treturn 1\n'
+NAME 'class' (1, 0) (1, 5) 'class A:\n'
+NAME 'A' (1, 6) (1, 7) 'class A:\n'
+OP ':' (1, 7) (1, 8) 'class A:\n'
+NEWLINE '\n' (1, 8) (1, 9) 'class A:\n'
+INDENT '\t' (2, 0) (2, 1) '\tdef f(self):\n'
+NAME 'def' (2, 1) (2, 4) '\tdef f(self):\n'
+NAME 'f' (2, 5) (2, 6) '\tdef f(self):\n'
+OP '(' (2, 6) (2, 7) '\tdef f(self):\n'
+NAME 'self' (2, 7) (2, 11) '\tdef f(self):\n'
+OP ')' (2, 11) (2, 12) '\tdef f(self):\n'
+OP ':' (2, 12) (2, 13) '\tdef f(self):\n'
+NEWLINE '\n' (2, 13) (2, 14) '\tdef f(self):\n'
+INDENT '\t\t' (3, 0) (3, 2) '\t\treturn 1\n'
+NAME 'return' (3, 2) (3, 8) '\t\treturn 1\n'
+NUMBER '1' (3, 9) (3, 10) '\t\treturn 1\n'
+NEWLINE '\n' (3, 10) (3, 11) '\t\treturn 1\n'
+DEDENT '' (4, 0) (4, 0) ''
+DEDENT '' (4, 0) (4, 0) ''
+ENDMARKER '' (4, 0) (4, 0) ''
+== str111 'x = [\n  1,\n  2,\n]\n'
+NAME 'x' (1, 0) (1, 1) 'x = [\n'
+OP '=' (1, 2) (1, 3) 'x = [\n'
+OP '[' (1, 4) (1, 5) 'x = [\n'
+NL '\n' (1, 5) (1, 6) 'x = [\n'
+NUMBER '1' (2, 2) (2, 3) '  1,\n'
+OP ',' (2, 3) (2, 4) '  1,\n'
+NL '\n' (2, 4) (2, 5) '  1,\n'
+NUMBER '2' (3, 2) (3, 3) '  2,\n'
+OP ',' (3, 3) (3, 4) '  2,\n'
+NL '\n' (3, 4) (3, 5) '  2,\n'
+OP ']' (4, 0) (4, 1) ']\n'
+NEWLINE '\n' (4, 1) (4, 2) ']\n'
+ENDMARKER '' (5, 0) (5, 0) ''
+== str112 "x = {\n  'a': f'{1}',\n}\n# end"
+NAME 'x' (1, 0) (1, 1) 'x = {\n'
+OP '=' (1, 2) (1, 3) 'x = {\n'
+OP '{' (1, 4) (1, 5) 'x = {\n'
+NL '\n' (1, 5) (1, 6) 'x = {\n'
+STRING "'a'" (2, 2) (2, 5) "  'a': f'{1}',\n"
+OP ':' (2, 5) (2, 6) "  'a': f'{1}',\n"
+FSTRING_START "f'" (2, 7) (2, 9) "  'a': f'{1}',\n"
+OP '{' (2, 9) (2, 10) "  'a': f'{1}',\n"
+NUMBER '1' (2, 10) (2, 11) "  'a': f'{1}',\n"
+OP '}' (2, 11) (2, 12) "  'a': f'{1}',\n"
+FSTRING_END "'" (2, 12) (2, 13) "  'a': f'{1}',\n"
+OP ',' (2, 13) (2, 14) "  'a': f'{1}',\n"
+NL '\n' (2, 14) (2, 15) "  'a': f'{1}',\n"
+OP '}' (3, 0) (3, 1) '}\n'
+NEWLINE '\n' (3, 1) (3, 2) '}\n'
+COMMENT '# end' (4, 0) (4, 5) '# end'
+NL '' (4, 5) (4, 6) '# end'
+ENDMARKER '' (5, 0) (5, 0) ''
+== str113 'def f(a,\n      b):\n    return a  # c\n\n\n'
+NAME 'def' (1, 0) (1, 3) 'def f(a,\n'
+NAME 'f' (1, 4) (1, 5) 'def f(a,\n'
+OP '(' (1, 5) (1, 6) 'def f(a,\n'
+NAME 'a' (1, 6) (1, 7) 'def f(a,\n'
+OP ',' (1, 7) (1, 8) 'def f(a,\n'
+NL '\n' (1, 8) (1, 9) 'def f(a,\n'
+NAME 'b' (2, 6) (2, 7) '      b):\n'
+OP ')' (2, 7) (2, 8) '      b):\n'
+OP ':' (2, 8) (2, 9) '      b):\n'
+NEWLINE '\n' (2, 9) (2, 10) '      b):\n'
+INDENT '    ' (3, 0) (3, 4) '    return a  # c\n'
+NAME 'return' (3, 4) (3, 10) '    return a  # c\n'
+NAME 'a' (3, 11) (3, 12) '    return a  # c\n'
+COMMENT '# c' (3, 14) (3, 17) '    return a  # c\n'
+NEWLINE '\n' (3, 17) (3, 18) '    return a  # c\n'
+NL '\n' (4, 0) (4, 1) '\n'
+NL '\n' (5, 0) (5, 1) '\n'
+DEDENT '' (6, 0) (6, 0) ''
+ENDMARKER '' (6, 0) (6, 0) ''
+== str114 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+NAME 's' (1, 0) (1, 1) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '=' (1, 2) (1, 3) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+STRING "'é'" (1, 4) (1, 7) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '+' (1, 8) (1, 9) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+STRING '"日本"' (1, 10) (1, 14) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '+' (1, 15) (1, 16) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_START "f'" (1, 17) (1, 19) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_MIDDLE 'ü' (1, 19) (1, 20) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '{' (1, 20) (1, 21) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+NAME 'x' (1, 21) (1, 22) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '}' (1, 22) (1, 23) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_MIDDLE 'ñ' (1, 23) (1, 24) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_END "'" (1, 24) (1, 25) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+NEWLINE '\n' (1, 25) (1, 26) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str115 "x = '''é\n日本''' ; y"
+NAME 'x' (1, 0) (1, 1) "x = '''é\n"
+OP '=' (1, 2) (1, 3) "x = '''é\n"
+STRING "'''é\n日本'''" (1, 4) (2, 5) "x = '''é\n日本''' ; y"
+OP ';' (2, 6) (2, 7) "日本''' ; y"
+NAME 'y' (2, 8) (2, 9) "日本''' ; y"
+NEWLINE '' (2, 9) (2, 10) "日本''' ; y"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str116 '\tx\n'
+INDENT '\t' (1, 0) (1, 1) '\tx\n'
+NAME 'x' (1, 1) (1, 2) '\tx\n'
+NEWLINE '\n' (1, 2) (1, 3) '\tx\n'
+DEDENT '' (2, 0) (2, 0) ''
+ENDMARKER '' (2, 0) (2, 0) ''
+== str117 ' x\ny'
+INDENT ' ' (1, 0) (1, 1) ' x\n'
+NAME 'x' (1, 1) (1, 2) ' x\n'
+NEWLINE '\n' (1, 2) (1, 3) ' x\n'
+DEDENT '' (2, 0) (2, 0) 'y'
+NAME 'y' (2, 0) (2, 1) 'y'
+NEWLINE '' (2, 1) (2, 2) 'y'
+ENDMARKER '' (3, 0) (3, 0) ''
+== str118 'x\n y\n'
+NAME 'x' (1, 0) (1, 1) 'x\n'
+NEWLINE '\n' (1, 1) (1, 2) 'x\n'
+INDENT ' ' (2, 0) (2, 1) ' y\n'
+NAME 'y' (2, 1) (2, 2) ' y\n'
+NEWLINE '\n' (2, 2) (2, 3) ' y\n'
+DEDENT '' (3, 0) (3, 0) ''
+ENDMARKER '' (3, 0) (3, 0) ''
+== str119 'a = 1 \\\n  + 2 \\\n  + 3\n'
+NAME 'a' (1, 0) (1, 1) 'a = 1 \\\n'
+OP '=' (1, 2) (1, 3) 'a = 1 \\\n'
+NUMBER '1' (1, 4) (1, 5) 'a = 1 \\\n'
+OP '+' (2, 2) (2, 3) '  + 2 \\\n'
+NUMBER '2' (2, 4) (2, 5) '  + 2 \\\n'
+OP '+' (3, 2) (3, 3) '  + 3\n'
+NUMBER '3' (3, 4) (3, 5) '  + 3\n'
+NEWLINE '\n' (3, 5) (3, 6) '  + 3\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== str120 'if True:\n    x = 1\n\n    # comment\n\ny = 2\n'
+NAME 'if' (1, 0) (1, 2) 'if True:\n'
+NAME 'True' (1, 3) (1, 7) 'if True:\n'
+OP ':' (1, 7) (1, 8) 'if True:\n'
+NEWLINE '\n' (1, 8) (1, 9) 'if True:\n'
+INDENT '    ' (2, 0) (2, 4) '    x = 1\n'
+NAME 'x' (2, 4) (2, 5) '    x = 1\n'
+OP '=' (2, 6) (2, 7) '    x = 1\n'
+NUMBER '1' (2, 8) (2, 9) '    x = 1\n'
+NEWLINE '\n' (2, 9) (2, 10) '    x = 1\n'
+NL '\n' (3, 0) (3, 1) '\n'
+COMMENT '# comment' (4, 4) (4, 13) '    # comment\n'
+NL '\n' (4, 13) (4, 14) '    # comment\n'
+NL '\n' (5, 0) (5, 1) '\n'
+DEDENT '' (6, 0) (6, 0) 'y = 2\n'
+NAME 'y' (6, 0) (6, 1) 'y = 2\n'
+OP '=' (6, 2) (6, 3) 'y = 2\n'
+NUMBER '2' (6, 4) (6, 5) 'y = 2\n'
+NEWLINE '\n' (6, 5) (6, 6) 'y = 2\n'
+ENDMARKER '' (7, 0) (7, 0) ''
+== str121 '\xa0x'
+NAME '\xa0x' (1, 0) (1, 2) '\xa0x'
+NEWLINE '' (1, 2) (1, 3) '\xa0x'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str122 'x = 5 \\\n'
+NAME 'x' (1, 0) (1, 1) 'x = 5 \\\n'
+OP '=' (1, 2) (1, 3) 'x = 5 \\\n'
+NUMBER '5' (1, 4) (1, 5) 'x = 5 \\\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 8))
+== str123 "'\\N{DIGIT ONE}'"
+STRING "'\\N{DIGIT ONE}'" (1, 0) (1, 15) "'\\N{DIGIT ONE}'"
+NEWLINE '' (1, 15) (1, 16) "'\\N{DIGIT ONE}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str124 "f'{x}' f'{y}'\n"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x}' f'{y}'\n"
+OP '{' (1, 2) (1, 3) "f'{x}' f'{y}'\n"
+NAME 'x' (1, 3) (1, 4) "f'{x}' f'{y}'\n"
+OP '}' (1, 4) (1, 5) "f'{x}' f'{y}'\n"
+FSTRING_END "'" (1, 5) (1, 6) "f'{x}' f'{y}'\n"
+FSTRING_START "f'" (1, 7) (1, 9) "f'{x}' f'{y}'\n"
+OP '{' (1, 9) (1, 10) "f'{x}' f'{y}'\n"
+NAME 'y' (1, 10) (1, 11) "f'{x}' f'{y}'\n"
+OP '}' (1, 11) (1, 12) "f'{x}' f'{y}'\n"
+FSTRING_END "'" (1, 12) (1, 13) "f'{x}' f'{y}'\n"
+NEWLINE '\n' (1, 13) (1, 14) "f'{x}' f'{y}'\n"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str125 "f'{x!s:^{w}.{p}}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 2) (1, 3) "f'{x!s:^{w}.{p}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!s:^{w}.{p}}'"
+OP '!' (1, 4) (1, 5) "f'{x!s:^{w}.{p}}'"
+NAME 's' (1, 5) (1, 6) "f'{x!s:^{w}.{p}}'"
+OP ':' (1, 6) (1, 7) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '^' (1, 7) (1, 8) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 8) (1, 9) "f'{x!s:^{w}.{p}}'"
+NAME 'w' (1, 9) (1, 10) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 10) (1, 11) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '.' (1, 11) (1, 12) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 12) (1, 13) "f'{x!s:^{w}.{p}}'"
+NAME 'p' (1, 13) (1, 14) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 14) (1, 15) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '' (1, 15) (1, 15) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 15) (1, 16) "f'{x!s:^{w}.{p}}'"
+FSTRING_END "'" (1, 16) (1, 17) "f'{x!s:^{w}.{p}}'"
+NEWLINE '' (1, 17) (1, 18) "f'{x!s:^{w}.{p}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str126 'f\'{a["b"]}\''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{a["b"]}\''
+OP '{' (1, 2) (1, 3) 'f\'{a["b"]}\''
+NAME 'a' (1, 3) (1, 4) 'f\'{a["b"]}\''
+OP '[' (1, 4) (1, 5) 'f\'{a["b"]}\''
+STRING '"b"' (1, 5) (1, 8) 'f\'{a["b"]}\''
+OP ']' (1, 8) (1, 9) 'f\'{a["b"]}\''
+OP '}' (1, 9) (1, 10) 'f\'{a["b"]}\''
+FSTRING_END "'" (1, 10) (1, 11) 'f\'{a["b"]}\''
+NEWLINE '' (1, 11) (1, 12) 'f\'{a["b"]}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== str127 "f'{ {1:2}[1] }'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{ {1:2}[1] }'"
+OP '{' (1, 2) (1, 3) "f'{ {1:2}[1] }'"
+OP '{' (1, 4) (1, 5) "f'{ {1:2}[1] }'"
+NUMBER '1' (1, 5) (1, 6) "f'{ {1:2}[1] }'"
+OP ':' (1, 6) (1, 7) "f'{ {1:2}[1] }'"
+NUMBER '2' (1, 7) (1, 8) "f'{ {1:2}[1] }'"
+OP '}' (1, 8) (1, 9) "f'{ {1:2}[1] }'"
+OP '[' (1, 9) (1, 10) "f'{ {1:2}[1] }'"
+NUMBER '1' (1, 10) (1, 11) "f'{ {1:2}[1] }'"
+OP ']' (1, 11) (1, 12) "f'{ {1:2}[1] }'"
+OP '}' (1, 13) (1, 14) "f'{ {1:2}[1] }'"
+FSTRING_END "'" (1, 14) (1, 15) "f'{ {1:2}[1] }'"
+NEWLINE '' (1, 15) (1, 16) "f'{ {1:2}[1] }'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== str128 'f\'{x:{"}"}}\''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{x:{"}"}}\''
+OP '{' (1, 2) (1, 3) 'f\'{x:{"}"}}\''
+NAME 'x' (1, 3) (1, 4) 'f\'{x:{"}"}}\''
+OP ':' (1, 4) (1, 5) 'f\'{x:{"}"}}\''
+OP '{' (1, 5) (1, 6) 'f\'{x:{"}"}}\''
+STRING '"}"' (1, 6) (1, 9) 'f\'{x:{"}"}}\''
+OP '}' (1, 9) (1, 10) 'f\'{x:{"}"}}\''
+FSTRING_MIDDLE '' (1, 10) (1, 10) 'f\'{x:{"}"}}\''
+OP '}' (1, 10) (1, 11) 'f\'{x:{"}"}}\''
+FSTRING_END "'" (1, 11) (1, 12) 'f\'{x:{"}"}}\''
+NEWLINE '' (1, 12) (1, 13) 'f\'{x:{"}"}}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== str129 't\'{x!r}\' t"""a{b}\n"""'
+TSTRING_START "t'" (1, 0) (1, 2) 't\'{x!r}\' t"""a{b}\n'
+OP '{' (1, 2) (1, 3) 't\'{x!r}\' t"""a{b}\n'
+NAME 'x' (1, 3) (1, 4) 't\'{x!r}\' t"""a{b}\n'
+OP '!' (1, 4) (1, 5) 't\'{x!r}\' t"""a{b}\n'
+NAME 'r' (1, 5) (1, 6) 't\'{x!r}\' t"""a{b}\n'
+OP '}' (1, 6) (1, 7) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_END "'" (1, 7) (1, 8) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_START 't"""' (1, 9) (1, 13) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_MIDDLE 'a' (1, 13) (1, 14) 't\'{x!r}\' t"""a{b}\n'
+OP '{' (1, 14) (1, 15) 't\'{x!r}\' t"""a{b}\n'
+NAME 'b' (1, 15) (1, 16) 't\'{x!r}\' t"""a{b}\n'
+OP '}' (1, 16) (1, 17) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_MIDDLE '\n' (1, 17) (2, 0) 't\'{x!r}\' t"""a{b}\n"""'
+TSTRING_END '"""' (2, 0) (2, 3) '"""'
+NEWLINE '' (2, 3) (2, 4) '"""'
+ENDMARKER '' (3, 0) (3, 0) ''
+== str130 "f'\\\n{x}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\\n"
+FSTRING_MIDDLE '\\\n' (1, 2) (2, 0) "f'\\\n{x}'"
+OP '{' (2, 0) (2, 1) "{x}'"
+NAME 'x' (2, 1) (2, 2) "{x}'"
+OP '}' (2, 2) (2, 3) "{x}'"
+FSTRING_END "'" (2, 3) (2, 4) "{x}'"
+NEWLINE '' (2, 4) (2, 5) "{x}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str131 "f'''a\\\nb'''"
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''a\\\n"
+FSTRING_MIDDLE 'a\\\nb' (1, 4) (2, 1) "f'''a\\\nb'''"
+FSTRING_END "'''" (2, 1) (2, 4) "b'''"
+NEWLINE '' (2, 4) (2, 5) "b'''"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str132 "f'{x:\\\n}'"
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:\\\n"
+OP '{' (1, 2) (1, 3) "f'{x:\\\n"
+NAME 'x' (1, 3) (1, 4) "f'{x:\\\n"
+OP ':' (1, 4) (1, 5) "f'{x:\\\n"
+FSTRING_MIDDLE '\\\n' (1, 5) (2, 0) "f'{x:\\\n}'"
+OP '}' (2, 0) (2, 1) "}'"
+FSTRING_END "'" (2, 1) (2, 2) "}'"
+NEWLINE '' (2, 2) (2, 3) "}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== str133 'x = 1\n\x0c\ny = 2\n'
+NAME 'x' (1, 0) (1, 1) 'x = 1\n'
+OP '=' (1, 2) (1, 3) 'x = 1\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\n'
+NEWLINE '\n' (1, 5) (1, 6) 'x = 1\n'
+NL '\n' (2, 1) (2, 2) '\x0c\n'
+NAME 'y' (3, 0) (3, 1) 'y = 2\n'
+OP '=' (3, 2) (3, 3) 'y = 2\n'
+NUMBER '2' (3, 4) (3, 5) 'y = 2\n'
+NEWLINE '\n' (3, 5) (3, 6) 'y = 2\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== str134 'if 1:\n\x0c  x\n'
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '\x0c  ' (2, 0) (2, 3) '\x0c  x\n'
+NAME 'x' (2, 3) (2, 4) '\x0c  x\n'
+NEWLINE '\n' (2, 4) (2, 5) '\x0c  x\n'
+DEDENT '' (3, 0) (3, 0) ''
+ENDMARKER '' (3, 0) (3, 0) ''
+== str135 '0 if 1else 2'
+NUMBER '0' (1, 0) (1, 1) '0 if 1else 2'
+NAME 'if' (1, 2) (1, 4) '0 if 1else 2'
+NUMBER '1' (1, 5) (1, 6) '0 if 1else 2'
+NAME 'else' (1, 6) (1, 10) '0 if 1else 2'
+NUMBER '2' (1, 11) (1, 12) '0 if 1else 2'
+NEWLINE '' (1, 12) (1, 13) '0 if 1else 2'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str136 '1 if 1 else 2 or 3and 4'
+NUMBER '1' (1, 0) (1, 1) '1 if 1 else 2 or 3and 4'
+NAME 'if' (1, 2) (1, 4) '1 if 1 else 2 or 3and 4'
+NUMBER '1' (1, 5) (1, 6) '1 if 1 else 2 or 3and 4'
+NAME 'else' (1, 7) (1, 11) '1 if 1 else 2 or 3and 4'
+NUMBER '2' (1, 12) (1, 13) '1 if 1 else 2 or 3and 4'
+NAME 'or' (1, 14) (1, 16) '1 if 1 else 2 or 3and 4'
+NUMBER '3' (1, 17) (1, 18) '1 if 1 else 2 or 3and 4'
+NAME 'and' (1, 18) (1, 21) '1 if 1 else 2 or 3and 4'
+NUMBER '4' (1, 22) (1, 23) '1 if 1 else 2 or 3and 4'
+NEWLINE '' (1, 23) (1, 24) '1 if 1 else 2 or 3and 4'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str137 '1_a'
+ERR TokenError ('invalid decimal literal', (1, 2))
+== str138 '1.2.3'
+NUMBER '1.2' (1, 0) (1, 3) '1.2.3'
+NUMBER '.3' (1, 3) (1, 5) '1.2.3'
+NEWLINE '' (1, 5) (1, 6) '1.2.3'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str139 '1..real'
+NUMBER '1.' (1, 0) (1, 2) '1..real'
+OP '.' (1, 2) (1, 3) '1..real'
+NAME 'real' (1, 3) (1, 7) '1..real'
+NEWLINE '' (1, 7) (1, 8) '1..real'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str140 'x.5'
+NAME 'x' (1, 0) (1, 1) 'x.5'
+NUMBER '.5' (1, 1) (1, 3) 'x.5'
+NEWLINE '' (1, 3) (1, 4) 'x.5'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str141 '1e5j'
+NUMBER '1e5j' (1, 0) (1, 4) '1e5j'
+NEWLINE '' (1, 4) (1, 5) '1e5j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str142 '1jj'
+NUMBER '1j' (1, 0) (1, 2) '1jj'
+NAME 'j' (1, 2) (1, 3) '1jj'
+NEWLINE '' (1, 3) (1, 4) '1jj'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str143 '1__'
+ERR TokenError ('invalid decimal literal', (1, 2))
+== str144 '0b'
+ERR TokenError ('invalid binary literal', (1, 2))
+== str145 '0o'
+ERR TokenError ('invalid octal literal', (1, 2))
+== str146 '0b_1'
+NUMBER '0b_1' (1, 0) (1, 4) '0b_1'
+NEWLINE '' (1, 4) (1, 5) '0b_1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str147 '0x_f'
+NUMBER '0x_f' (1, 0) (1, 4) '0x_f'
+NEWLINE '' (1, 4) (1, 5) '0x_f'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str148 '0xf_'
+ERR TokenError ('invalid hexadecimal literal', (1, 4))
+== str149 '0_'
+ERR TokenError ('invalid decimal literal', (1, 2))
+== str150 '00_'
+ERR TokenError ('invalid decimal literal', (1, 3))
+== str151 '0e'
+NUMBER '0' (1, 0) (1, 1) '0e'
+NAME 'e' (1, 1) (1, 2) '0e'
+NEWLINE '' (1, 2) (1, 3) '0e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str152 '0.e'
+NUMBER '0.' (1, 0) (1, 2) '0.e'
+NAME 'e' (1, 2) (1, 3) '0.e'
+NEWLINE '' (1, 3) (1, 4) '0.e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== str153 '1ee1'
+NUMBER '1' (1, 0) (1, 1) '1ee1'
+NAME 'ee1' (1, 1) (1, 4) '1ee1'
+NEWLINE '' (1, 4) (1, 5) '1ee1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes0 'x\r\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x\r\n'
+NEWLINE '\r\n' (1, 1) (1, 3) 'x\r\n'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes1 'x = 1\r\n\r\ny\r'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1\r\n'
+OP '=' (1, 2) (1, 3) 'x = 1\r\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\r\n'
+NEWLINE '\r\n' (1, 5) (1, 7) 'x = 1\r\n'
+NL '\r\n' (2, 0) (2, 2) '\r\n'
+NAME 'y' (3, 0) (3, 1) 'y\r'
+NEWLINE '\r' (3, 1) (3, 3) 'y\r'
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes2 '$ ? !'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+OP '$' (1, 0) (1, 1) '$ ? !'
+OP '?' (1, 2) (1, 3) '$ ? !'
+OP '!' (1, 4) (1, 5) '$ ? !'
+NEWLINE '' (1, 5) (1, 6) '$ ? !'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes3 'f"{x:}"'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"{x:}"'
+OP '{' (1, 2) (1, 3) 'f"{x:}"'
+NAME 'x' (1, 3) (1, 4) 'f"{x:}"'
+OP ':' (1, 4) (1, 5) 'f"{x:}"'
+FSTRING_MIDDLE '' (1, 5) (1, 5) 'f"{x:}"'
+OP '}' (1, 5) (1, 6) 'f"{x:}"'
+FSTRING_END '"' (1, 6) (1, 7) 'f"{x:}"'
+NEWLINE '' (1, 7) (1, 8) 'f"{x:}"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes4 'f"a{{b}}c"'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'a{' (1, 2) (1, 4) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'b}' (1, 5) (1, 7) 'f"a{{b}}c"'
+FSTRING_MIDDLE 'c' (1, 8) (1, 9) 'f"a{{b}}c"'
+FSTRING_END '"' (1, 9) (1, 10) 'f"a{{b}}c"'
+NEWLINE '' (1, 10) (1, 11) 'f"a{{b}}c"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes5 'f"""a\nb{x}\nc"""\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START 'f"""' (1, 0) (1, 4) 'f"""a\n'
+FSTRING_MIDDLE 'a\nb' (1, 4) (2, 1) 'f"""a\nb{x}\n'
+OP '{' (2, 1) (2, 2) 'b{x}\n'
+NAME 'x' (2, 2) (2, 3) 'b{x}\n'
+OP '}' (2, 3) (2, 4) 'b{x}\n'
+FSTRING_MIDDLE '\nc' (2, 4) (3, 1) 'b{x}\nc"""\n'
+FSTRING_END '"""' (3, 1) (3, 4) 'c"""\n'
+NEWLINE '\n' (3, 4) (3, 5) 'c"""\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes6 'x = """a\nb""" + 1\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = """a\n'
+OP '=' (1, 2) (1, 3) 'x = """a\n'
+STRING '"""a\nb"""' (1, 4) (2, 4) 'x = """a\nb""" + 1\n'
+OP '+' (2, 5) (2, 6) 'b""" + 1\n'
+NUMBER '1' (2, 7) (2, 8) 'b""" + 1\n'
+NEWLINE '\n' (2, 8) (2, 9) 'b""" + 1\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes7 'x = 1 + \\\n  2\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\\n'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\\n'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\\n'
+NUMBER '2' (2, 2) (2, 3) '  2\n'
+NEWLINE '\n' (2, 3) (2, 4) '  2\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes8 '(\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+OP '(' (1, 0) (1, 1) '(\n'
+NL '\n' (1, 1) (1, 2) '(\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== bytes9 'x = (1,\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== bytes10 'if x:\n\ty\n  z\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if x:\n'
+NAME 'x' (1, 3) (1, 4) 'if x:\n'
+OP ':' (1, 4) (1, 5) 'if x:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if x:\n'
+INDENT '\t' (2, 0) (2, 1) '\ty\n'
+NAME 'y' (2, 1) (2, 2) '\ty\n'
+NEWLINE '\n' (2, 2) (2, 3) '\ty\n'
+ERR IndentationError ('unindent does not match any outer indentation level', ('<string>', 3, 4, '  z', None, None))
+== bytes11 'if 1:\n        a\n\tb\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '        ' (2, 0) (2, 8) '        a\n'
+NAME 'a' (2, 8) (2, 9) '        a\n'
+NEWLINE '\n' (2, 9) (2, 10) '        a\n'
+ERR TabError ('inconsistent use of tabs and spaces in indentation', ('<string>', 3, 3, '\tb', None, None))
+== bytes12 "'abc\n"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 1))
+== bytes13 '"""abc'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('EOF in multi-line string', (1, 1))
+== bytes14 'a \\ b'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a \\ b'
+ERR TokenError ('unexpected character after line continuation character', (1, 6))
+== bytes15 '1if x else 2'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1' (1, 0) (1, 1) '1if x else 2'
+NAME 'if' (1, 1) (1, 3) '1if x else 2'
+NAME 'x' (1, 4) (1, 5) '1if x else 2'
+NAME 'else' (1, 6) (1, 10) '1if x else 2'
+NUMBER '2' (1, 11) (1, 12) '1if x else 2'
+NEWLINE '' (1, 12) (1, 13) '1if x else 2'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes16 '0777'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0777' (1, 0) (1, 4) '0777'
+NEWLINE '' (1, 4) (1, 5) '0777'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes17 'x = 1_'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1_'
+OP '=' (1, 2) (1, 3) 'x = 1_'
+ERR TokenError ('invalid decimal literal', (1, 6))
+== bytes18 'def f(): pass'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'def' (1, 0) (1, 3) 'def f(): pass'
+NAME 'f' (1, 4) (1, 5) 'def f(): pass'
+OP '(' (1, 5) (1, 6) 'def f(): pass'
+OP ')' (1, 6) (1, 7) 'def f(): pass'
+OP ':' (1, 7) (1, 8) 'def f(): pass'
+NAME 'pass' (1, 9) (1, 13) 'def f(): pass'
+NEWLINE '' (1, 13) (1, 14) 'def f(): pass'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes19 "f'{x!r:>{w}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!r:>{w}}'"
+OP '{' (1, 2) (1, 3) "f'{x!r:>{w}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!r:>{w}}'"
+OP '!' (1, 4) (1, 5) "f'{x!r:>{w}}'"
+NAME 'r' (1, 5) (1, 6) "f'{x!r:>{w}}'"
+OP ':' (1, 6) (1, 7) "f'{x!r:>{w}}'"
+FSTRING_MIDDLE '>' (1, 7) (1, 8) "f'{x!r:>{w}}'"
+OP '{' (1, 8) (1, 9) "f'{x!r:>{w}}'"
+NAME 'w' (1, 9) (1, 10) "f'{x!r:>{w}}'"
+OP '}' (1, 10) (1, 11) "f'{x!r:>{w}}'"
+FSTRING_MIDDLE '' (1, 11) (1, 11) "f'{x!r:>{w}}'"
+OP '}' (1, 11) (1, 12) "f'{x!r:>{w}}'"
+FSTRING_END "'" (1, 12) (1, 13) "f'{x!r:>{w}}'"
+NEWLINE '' (1, 13) (1, 14) "f'{x!r:>{w}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes20 '  # c'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+COMMENT '# c' (1, 2) (1, 5) '  # c'
+NL '' (1, 5) (1, 6) '  # c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes21 'x # c'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x # c'
+COMMENT '# c' (1, 2) (1, 5) 'x # c'
+NEWLINE '' (1, 5) (1, 6) 'x # c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes22 '\\\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 0))
+== bytes23 "'a\\\nb'\n"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING "'a\\\nb'" (1, 0) (2, 2) "'a\\\nb'\n"
+NEWLINE '\n' (2, 2) (2, 3) "b'\n"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes24 'x = (1,\n2,\n3'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+NUMBER '2' (2, 0) (2, 1) '2,\n'
+OP ',' (2, 1) (2, 2) '2,\n'
+NL '\n' (2, 2) (2, 3) '2,\n'
+NUMBER '3' (3, 0) (3, 1) '3'
+NL '' (3, 1) (3, 2) '3'
+ERR TokenError ('unexpected EOF in multi-line statement', (3, 0))
+== bytes25 'x = (1,\n2,\n3\n\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = (1,\n'
+OP '=' (1, 2) (1, 3) 'x = (1,\n'
+OP '(' (1, 4) (1, 5) 'x = (1,\n'
+NUMBER '1' (1, 5) (1, 6) 'x = (1,\n'
+OP ',' (1, 6) (1, 7) 'x = (1,\n'
+NL '\n' (1, 7) (1, 8) 'x = (1,\n'
+NUMBER '2' (2, 0) (2, 1) '2,\n'
+OP ',' (2, 1) (2, 2) '2,\n'
+NL '\n' (2, 2) (2, 3) '2,\n'
+NUMBER '3' (3, 0) (3, 1) '3\n'
+NL '\n' (3, 1) (3, 2) '3\n'
+NL '\n' (4, 0) (4, 1) '\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (4, 0))
+== bytes26 'x = 1 + \\\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\\n'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\\n'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 10))
+== bytes27 'x = 1 + \\'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1 + \\'
+OP '=' (1, 2) (1, 3) 'x = 1 + \\'
+NUMBER '1' (1, 4) (1, 5) 'x = 1 + \\'
+OP '+' (1, 6) (1, 7) 'x = 1 + \\'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 10))
+== bytes28 'a \\ b\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a \\ b\n'
+ERR TokenError ('unexpected character after line continuation character', (1, 6))
+== bytes29 'if 1:\n  a\\\n b\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '  ' (2, 0) (2, 2) '  a\\\n'
+NAME 'a' (2, 2) (2, 3) '  a\\\n'
+NAME 'b' (3, 1) (3, 2) ' b\n'
+NEWLINE '\n' (3, 2) (3, 3) ' b\n'
+DEDENT '' (4, 0) (4, 0) ''
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes30 '(\n)\n]'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+OP '(' (1, 0) (1, 1) '(\n'
+NL '\n' (1, 1) (1, 2) '(\n'
+OP ')' (2, 0) (2, 1) ')\n'
+NEWLINE '\n' (2, 1) (2, 2) ')\n'
+OP ']' (3, 0) (3, 1) ']'
+NEWLINE '' (3, 1) (3, 2) ']'
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes31 '(]'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+OP '(' (1, 0) (1, 1) '(]'
+OP ']' (1, 1) (1, 2) '(]'
+NEWLINE '' (1, 2) (1, 3) '(]'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes32 "a = 'abc\n"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) "a = 'abc\n"
+OP '=' (1, 2) (1, 3) "a = 'abc\n"
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 5))
+== bytes33 "a = '''abc\ndef"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) "a = '''abc\n"
+OP '=' (1, 2) (1, 3) "a = '''abc\n"
+ERR TokenError ('EOF in multi-line string', (1, 5))
+== bytes34 "'\\\n"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('unterminated string literal (detected at line 1)', (1, 1))
+== bytes35 'x = 0x'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 0x'
+OP '=' (1, 2) (1, 3) 'x = 0x'
+ERR TokenError ('invalid hexadecimal literal', (1, 6))
+== bytes36 'x = 0o9'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 0o9'
+OP '=' (1, 2) (1, 3) 'x = 0o9'
+ERR TokenError ("invalid digit '9' in octal literal", (1, 7))
+== bytes37 'x = 1e'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1e'
+OP '=' (1, 2) (1, 3) 'x = 1e'
+NUMBER '1' (1, 4) (1, 5) 'x = 1e'
+NAME 'e' (1, 5) (1, 6) 'x = 1e'
+NEWLINE '' (1, 6) (1, 7) 'x = 1e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes38 'x = 1.e+'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1.e+'
+OP '=' (1, 2) (1, 3) 'x = 1.e+'
+ERR TokenError ('invalid decimal literal', (1, 8))
+== bytes39 'x = 00'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 00'
+OP '=' (1, 2) (1, 3) 'x = 00'
+NUMBER '00' (1, 4) (1, 6) 'x = 00'
+NEWLINE '' (1, 6) (1, 7) 'x = 00'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes40 'x = 09'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 09'
+OP '=' (1, 2) (1, 3) 'x = 09'
+NUMBER '09' (1, 4) (1, 6) 'x = 09'
+NEWLINE '' (1, 6) (1, 7) 'x = 09'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes41 'x = 0_0'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 0_0'
+OP '=' (1, 2) (1, 3) 'x = 0_0'
+NUMBER '0_0' (1, 4) (1, 7) 'x = 0_0'
+NEWLINE '' (1, 7) (1, 8) 'x = 0_0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes42 'x = 1__0'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1__0'
+OP '=' (1, 2) (1, 3) 'x = 1__0'
+ERR TokenError ('invalid decimal literal', (1, 6))
+== bytes43 '1.5j'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1.5j' (1, 0) (1, 4) '1.5j'
+NEWLINE '' (1, 4) (1, 5) '1.5j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes44 '0b12'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ("invalid digit '2' in binary literal", (1, 4))
+== bytes45 '0xg'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid hexadecimal literal', (1, 2))
+== bytes46 '.5e3j'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '.5e3j' (1, 0) (1, 5) '.5e3j'
+NEWLINE '' (1, 5) (1, 6) '.5e3j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes47 '1.'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1.' (1, 0) (1, 2) '1.'
+NEWLINE '' (1, 2) (1, 3) '1.'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes48 '0e0'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0e0' (1, 0) (1, 3) '0e0'
+NEWLINE '' (1, 3) (1, 4) '0e0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes49 '0_7'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0_7' (1, 0) (1, 3) '0_7'
+NEWLINE '' (1, 3) (1, 4) '0_7'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes50 '1_000.000_1e1_0'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1_000.000_1e1_0' (1, 0) (1, 15) '1_000.000_1e1_0'
+NEWLINE '' (1, 15) (1, 16) '1_000.000_1e1_0'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes51 'é = 1'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'é' (1, 0) (1, 1) 'é = 1'
+OP '=' (1, 2) (1, 3) 'é = 1'
+NUMBER '1' (1, 4) (1, 5) 'é = 1'
+NEWLINE '' (1, 5) (1, 6) 'é = 1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes52 'a€ = 1'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a€' (1, 0) (1, 2) 'a€ = 1'
+OP '=' (1, 3) (1, 4) 'a€ = 1'
+NUMBER '1' (1, 5) (1, 6) 'a€ = 1'
+NEWLINE '' (1, 6) (1, 7) 'a€ = 1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes53 'a\x01'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a\x01'
+ERR TokenError ('invalid non-printable character U+0001', (1, 2))
+== bytes54 '\x00'
+ERR SyntaxError ('source code cannot contain null bytes',)
+== bytes55 '\x0cx'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 1) (1, 2) '\x0cx'
+NEWLINE '' (1, 2) (1, 3) '\x0cx'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes56 'x\ty'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x\ty'
+NAME 'y' (1, 2) (1, 3) 'x\ty'
+NEWLINE '' (1, 3) (1, 4) 'x\ty'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes57 'if 1:\n x\n\ty\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT ' ' (2, 0) (2, 1) ' x\n'
+NAME 'x' (2, 1) (2, 2) ' x\n'
+NEWLINE '\n' (2, 2) (2, 3) ' x\n'
+ERR TabError ('inconsistent use of tabs and spaces in indentation', ('<string>', 3, 3, '\ty', None, None))
+== bytes58 '\n\n  \n# c\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NL '\n' (1, 0) (1, 1) '\n'
+NL '\n' (2, 0) (2, 1) '\n'
+NL '\n' (3, 2) (3, 3) '  \n'
+COMMENT '# c' (4, 0) (4, 3) '# c\n'
+NL '\n' (4, 3) (4, 4) '# c\n'
+ENDMARKER '' (5, 0) (5, 0) ''
+== bytes59 'x\n  \n\n  y\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x\n'
+NEWLINE '\n' (1, 1) (1, 2) 'x\n'
+NL '\n' (2, 2) (2, 3) '  \n'
+NL '\n' (3, 0) (3, 1) '\n'
+INDENT '  ' (4, 0) (4, 2) '  y\n'
+NAME 'y' (4, 2) (4, 3) '  y\n'
+NEWLINE '\n' (4, 3) (4, 4) '  y\n'
+DEDENT '' (5, 0) (5, 0) ''
+ENDMARKER '' (5, 0) (5, 0) ''
+== bytes60 'a ... b .. c'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a ... b .. c'
+OP '...' (1, 2) (1, 5) 'a ... b .. c'
+NAME 'b' (1, 6) (1, 7) 'a ... b .. c'
+OP '.' (1, 8) (1, 9) 'a ... b .. c'
+OP '.' (1, 9) (1, 10) 'a ... b .. c'
+NAME 'c' (1, 11) (1, 12) 'a ... b .. c'
+NEWLINE '' (1, 12) (1, 13) 'a ... b .. c'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes61 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '<>' (1, 2) (1, 4) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'b' (1, 5) (1, 6) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '!=' (1, 7) (1, 9) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'c' (1, 10) (1, 11) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '->' (1, 12) (1, 14) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'd' (1, 14) (1, 15) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP ':=' (1, 16) (1, 18) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'e' (1, 19) (1, 20) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '**=' (1, 21) (1, 24) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'f' (1, 25) (1, 26) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '//=' (1, 27) (1, 30) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'g' (1, 31) (1, 32) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '>>=' (1, 33) (1, 36) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'h' (1, 37) (1, 38) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '<<=' (1, 39) (1, 42) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'i' (1, 43) (1, 44) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+OP '@=' (1, 45) (1, 47) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NAME 'j' (1, 48) (1, 49) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+NEWLINE '' (1, 49) (1, 50) 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes62 '!='
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+OP '!=' (1, 0) (1, 2) '!='
+NEWLINE '' (1, 2) (1, 3) '!='
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes63 'a!b'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a!b'
+OP '!' (1, 1) (1, 2) 'a!b'
+NAME 'b' (1, 2) (1, 3) 'a!b'
+NEWLINE '' (1, 3) (1, 4) 'a!b'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes64 "f'{x=}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x=}'"
+OP '{' (1, 2) (1, 3) "f'{x=}'"
+NAME 'x' (1, 3) (1, 4) "f'{x=}'"
+OP '=' (1, 4) (1, 5) "f'{x=}'"
+OP '}' (1, 5) (1, 6) "f'{x=}'"
+FSTRING_END "'" (1, 6) (1, 7) "f'{x=}'"
+NEWLINE '' (1, 7) (1, 8) "f'{x=}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes65 "f'{x = }'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x = }'"
+OP '{' (1, 2) (1, 3) "f'{x = }'"
+NAME 'x' (1, 3) (1, 4) "f'{x = }'"
+OP '=' (1, 5) (1, 6) "f'{x = }'"
+OP '}' (1, 7) (1, 8) "f'{x = }'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{x = }'"
+NEWLINE '' (1, 9) (1, 10) "f'{x = }'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes66 "f'{x:{y}z}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y}z}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y}z}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y}z}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y}z}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y}z}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y}z}'"
+OP '}' (1, 7) (1, 8) "f'{x:{y}z}'"
+FSTRING_MIDDLE 'z' (1, 8) (1, 9) "f'{x:{y}z}'"
+OP '}' (1, 9) (1, 10) "f'{x:{y}z}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{x:{y}z}'"
+NEWLINE '' (1, 11) (1, 12) "f'{x:{y}z}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes67 "f'{{'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{{'"
+FSTRING_MIDDLE '{' (1, 2) (1, 3) "f'{{'"
+FSTRING_END "'" (1, 4) (1, 5) "f'{{'"
+NEWLINE '' (1, 5) (1, 6) "f'{{'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes68 "f'}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'}'"
+FSTRING_MIDDLE '' (1, 2) (1, 2) "f'}'"
+ERR TokenError ("f-string: single '}' is not allowed", (1, 3))
+== bytes69 "f'{'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{'"
+OP '{' (1, 2) (1, 3) "f'{'"
+ERR TokenError ("f-string: expecting '}'", (1, 4))
+== bytes70 "f'{x'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x'"
+OP '{' (1, 2) (1, 3) "f'{x'"
+NAME 'x' (1, 3) (1, 4) "f'{x'"
+ERR TokenError ("f-string: expecting '}'", (1, 5))
+== bytes71 "f'''{\nx\n}'''"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''{\n"
+OP '{' (1, 4) (1, 5) "f'''{\n"
+NL '\n' (1, 5) (1, 6) "f'''{\n"
+NAME 'x' (2, 0) (2, 1) 'x\n'
+NL '\n' (2, 1) (2, 2) 'x\n'
+OP '}' (3, 0) (3, 1) "}'''"
+FSTRING_END "'''" (3, 1) (3, 4) "}'''"
+NEWLINE '' (3, 4) (3, 5) "}'''"
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes72 "rf'\\{x}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "rf'" (1, 0) (1, 3) "rf'\\{x}'"
+FSTRING_MIDDLE '\\' (1, 3) (1, 4) "rf'\\{x}'"
+OP '{' (1, 4) (1, 5) "rf'\\{x}'"
+NAME 'x' (1, 5) (1, 6) "rf'\\{x}'"
+OP '}' (1, 6) (1, 7) "rf'\\{x}'"
+FSTRING_END "'" (1, 7) (1, 8) "rf'\\{x}'"
+NEWLINE '' (1, 8) (1, 9) "rf'\\{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes73 "f'\\N{BULLET}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\N{BULLET}'"
+FSTRING_MIDDLE '\\N{BULLET}' (1, 2) (1, 12) "f'\\N{BULLET}'"
+FSTRING_END "'" (1, 12) (1, 13) "f'\\N{BULLET}'"
+NEWLINE '' (1, 13) (1, 14) "f'\\N{BULLET}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes74 "f'\\{x}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\{x}'"
+FSTRING_MIDDLE '\\' (1, 2) (1, 3) "f'\\{x}'"
+OP '{' (1, 3) (1, 4) "f'\\{x}'"
+NAME 'x' (1, 4) (1, 5) "f'\\{x}'"
+OP '}' (1, 5) (1, 6) "f'\\{x}'"
+FSTRING_END "'" (1, 6) (1, 7) "f'\\{x}'"
+NEWLINE '' (1, 7) (1, 8) "f'\\{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes75 "f'{x!r}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!r}'"
+OP '{' (1, 2) (1, 3) "f'{x!r}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!r}'"
+OP '!' (1, 4) (1, 5) "f'{x!r}'"
+NAME 'r' (1, 5) (1, 6) "f'{x!r}'"
+OP '}' (1, 6) (1, 7) "f'{x!r}'"
+FSTRING_END "'" (1, 7) (1, 8) "f'{x!r}'"
+NEWLINE '' (1, 8) (1, 9) "f'{x!r}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes76 "f'{a!=b}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{a!=b}'"
+OP '{' (1, 2) (1, 3) "f'{a!=b}'"
+NAME 'a' (1, 3) (1, 4) "f'{a!=b}'"
+OP '!=' (1, 4) (1, 6) "f'{a!=b}'"
+NAME 'b' (1, 6) (1, 7) "f'{a!=b}'"
+OP '}' (1, 7) (1, 8) "f'{a!=b}'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{a!=b}'"
+NEWLINE '' (1, 9) (1, 10) "f'{a!=b}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes77 "f'{a:=5}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{a:=5}'"
+OP '{' (1, 2) (1, 3) "f'{a:=5}'"
+NAME 'a' (1, 3) (1, 4) "f'{a:=5}'"
+OP ':' (1, 4) (1, 5) "f'{a:=5}'"
+FSTRING_MIDDLE '=5' (1, 5) (1, 7) "f'{a:=5}'"
+OP '}' (1, 7) (1, 8) "f'{a:=5}'"
+FSTRING_END "'" (1, 8) (1, 9) "f'{a:=5}'"
+NEWLINE '' (1, 9) (1, 10) "f'{a:=5}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes78 "f'{(a:=5)}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{(a:=5)}'"
+OP '{' (1, 2) (1, 3) "f'{(a:=5)}'"
+OP '(' (1, 3) (1, 4) "f'{(a:=5)}'"
+NAME 'a' (1, 4) (1, 5) "f'{(a:=5)}'"
+OP ':=' (1, 5) (1, 7) "f'{(a:=5)}'"
+NUMBER '5' (1, 7) (1, 8) "f'{(a:=5)}'"
+OP ')' (1, 8) (1, 9) "f'{(a:=5)}'"
+OP '}' (1, 9) (1, 10) "f'{(a:=5)}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{(a:=5)}'"
+NEWLINE '' (1, 11) (1, 12) "f'{(a:=5)}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes79 "f'{lambda x: 1}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{lambda x: 1}'"
+OP '{' (1, 2) (1, 3) "f'{lambda x: 1}'"
+NAME 'lambda' (1, 3) (1, 9) "f'{lambda x: 1}'"
+NAME 'x' (1, 10) (1, 11) "f'{lambda x: 1}'"
+OP ':' (1, 11) (1, 12) "f'{lambda x: 1}'"
+FSTRING_MIDDLE ' 1' (1, 12) (1, 14) "f'{lambda x: 1}'"
+OP '}' (1, 14) (1, 15) "f'{lambda x: 1}'"
+FSTRING_END "'" (1, 15) (1, 16) "f'{lambda x: 1}'"
+NEWLINE '' (1, 16) (1, 17) "f'{lambda x: 1}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes80 'f\'{f"{x}"}\''
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{f"{x}"}\''
+OP '{' (1, 2) (1, 3) 'f\'{f"{x}"}\''
+FSTRING_START 'f"' (1, 3) (1, 5) 'f\'{f"{x}"}\''
+OP '{' (1, 5) (1, 6) 'f\'{f"{x}"}\''
+NAME 'x' (1, 6) (1, 7) 'f\'{f"{x}"}\''
+OP '}' (1, 7) (1, 8) 'f\'{f"{x}"}\''
+FSTRING_END '"' (1, 8) (1, 9) 'f\'{f"{x}"}\''
+OP '}' (1, 9) (1, 10) 'f\'{f"{x}"}\''
+FSTRING_END "'" (1, 10) (1, 11) 'f\'{f"{x}"}\''
+NEWLINE '' (1, 11) (1, 12) 'f\'{f"{x}"}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes81 'f\'{"a" "b"}\''
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{"a" "b"}\''
+OP '{' (1, 2) (1, 3) 'f\'{"a" "b"}\''
+STRING '"a"' (1, 3) (1, 6) 'f\'{"a" "b"}\''
+STRING '"b"' (1, 7) (1, 10) 'f\'{"a" "b"}\''
+OP '}' (1, 10) (1, 11) 'f\'{"a" "b"}\''
+FSTRING_END "'" (1, 11) (1, 12) 'f\'{"a" "b"}\''
+NEWLINE '' (1, 12) (1, 13) 'f\'{"a" "b"}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes82 "f'a' 'b'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'a' 'b'"
+FSTRING_MIDDLE 'a' (1, 2) (1, 3) "f'a' 'b'"
+FSTRING_END "'" (1, 3) (1, 4) "f'a' 'b'"
+STRING "'b'" (1, 5) (1, 8) "f'a' 'b'"
+NEWLINE '' (1, 8) (1, 9) "f'a' 'b'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes83 "t'{x}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+TSTRING_START "t'" (1, 0) (1, 2) "t'{x}'"
+OP '{' (1, 2) (1, 3) "t'{x}'"
+NAME 'x' (1, 3) (1, 4) "t'{x}'"
+OP '}' (1, 4) (1, 5) "t'{x}'"
+TSTRING_END "'" (1, 5) (1, 6) "t'{x}'"
+NEWLINE '' (1, 6) (1, 7) "t'{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes84 "rt'{x}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+TSTRING_START "rt'" (1, 0) (1, 3) "rt'{x}'"
+OP '{' (1, 3) (1, 4) "rt'{x}'"
+NAME 'x' (1, 4) (1, 5) "rt'{x}'"
+OP '}' (1, 5) (1, 6) "rt'{x}'"
+TSTRING_END "'" (1, 6) (1, 7) "rt'{x}'"
+NEWLINE '' (1, 7) (1, 8) "rt'{x}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes85 "Tr'a'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+TSTRING_START "Tr'" (1, 0) (1, 3) "Tr'a'"
+TSTRING_MIDDLE 'a' (1, 3) (1, 4) "Tr'a'"
+TSTRING_END "'" (1, 4) (1, 5) "Tr'a'"
+NEWLINE '' (1, 5) (1, 6) "Tr'a'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes86 "bf'a'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ("'b' and 'f' prefixes are incompatible", (1, 1))
+== bytes87 "f'{x:%Y-%m}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:%Y-%m}'"
+OP '{' (1, 2) (1, 3) "f'{x:%Y-%m}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:%Y-%m}'"
+OP ':' (1, 4) (1, 5) "f'{x:%Y-%m}'"
+FSTRING_MIDDLE '%Y-%m' (1, 5) (1, 10) "f'{x:%Y-%m}'"
+OP '}' (1, 10) (1, 11) "f'{x:%Y-%m}'"
+FSTRING_END "'" (1, 11) (1, 12) "f'{x:%Y-%m}'"
+NEWLINE '' (1, 12) (1, 13) "f'{x:%Y-%m}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes88 "f'{x:\n}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:\n"
+OP '{' (1, 2) (1, 3) "f'{x:\n"
+NAME 'x' (1, 3) (1, 4) "f'{x:\n"
+OP ':' (1, 4) (1, 5) "f'{x:\n"
+ERR TokenError ('f-string: newlines are not allowed in format specifiers for single quoted f-strings', (1, 6))
+== bytes89 "f'''{x:\na}'''"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''{x:\n"
+OP '{' (1, 4) (1, 5) "f'''{x:\n"
+NAME 'x' (1, 5) (1, 6) "f'''{x:\n"
+OP ':' (1, 6) (1, 7) "f'''{x:\n"
+FSTRING_MIDDLE '\na' (1, 7) (2, 1) "f'''{x:\na}'''"
+OP '}' (2, 1) (2, 2) "a}'''"
+FSTRING_END "'''" (2, 2) (2, 5) "a}'''"
+NEWLINE '' (2, 5) (2, 6) "a}'''"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes90 "f'{#c\n}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{#c\n"
+OP '{' (1, 2) (1, 3) "f'{#c\n"
+COMMENT '#c' (1, 3) (1, 5) "f'{#c\n"
+NL '\n' (1, 5) (1, 6) "f'{#c\n"
+OP '}' (2, 0) (2, 1) "}'"
+FSTRING_END "'" (2, 1) (2, 2) "}'"
+NEWLINE '' (2, 2) (2, 3) "}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes91 "f'{\nx}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{\n"
+OP '{' (1, 2) (1, 3) "f'{\n"
+NL '\n' (1, 3) (1, 4) "f'{\n"
+NAME 'x' (2, 0) (2, 1) "x}'"
+OP '}' (2, 1) (2, 2) "x}'"
+FSTRING_END "'" (2, 2) (2, 3) "x}'"
+NEWLINE '' (2, 3) (2, 4) "x}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes92 "f'a\nb'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'a\n"
+ERR TokenError ('unterminated f-string literal (detected at line 1)', (1, 1))
+== bytes93 "f'abc"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'abc"
+ERR TokenError ('unterminated f-string literal (detected at line 1)', (1, 1))
+== bytes94 "f'''abc"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''abc"
+ERR TokenError ('unterminated triple-quoted f-string literal (detected at line 1)', (1, 1))
+== bytes95 "f'{x}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x}}'"
+OP '{' (1, 2) (1, 3) "f'{x}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x}}'"
+OP '}' (1, 4) (1, 5) "f'{x}}'"
+FSTRING_MIDDLE '' (1, 5) (1, 5) "f'{x}}'"
+ERR TokenError ("f-string: single '}' is not allowed", (1, 6))
+== bytes96 "f'{x:{{}}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{{}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{{}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{{}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{{}}}'"
+FSTRING_MIDDLE '' (1, 5) (1, 5) "f'{x:{{}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{{}}}'"
+OP '{' (1, 6) (1, 7) "f'{x:{{}}}'"
+OP '}' (1, 7) (1, 8) "f'{x:{{}}}'"
+OP '}' (1, 8) (1, 9) "f'{x:{{}}}'"
+FSTRING_MIDDLE '' (1, 9) (1, 9) "f'{x:{{}}}'"
+OP '}' (1, 9) (1, 10) "f'{x:{{}}}'"
+FSTRING_END "'" (1, 10) (1, 11) "f'{x:{{}}}'"
+NEWLINE '' (1, 11) (1, 12) "f'{x:{{}}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes97 "f'{x:{y:{z}}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y:{z}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y:{z}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y:{z}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y:{z}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y:{z}}}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y:{z}}}'"
+OP ':' (1, 7) (1, 8) "f'{x:{y:{z}}}'"
+OP '{' (1, 8) (1, 9) "f'{x:{y:{z}}}'"
+NAME 'z' (1, 9) (1, 10) "f'{x:{y:{z}}}'"
+OP '}' (1, 10) (1, 11) "f'{x:{y:{z}}}'"
+FSTRING_MIDDLE '' (1, 11) (1, 11) "f'{x:{y:{z}}}'"
+OP '}' (1, 11) (1, 12) "f'{x:{y:{z}}}'"
+FSTRING_MIDDLE '' (1, 12) (1, 12) "f'{x:{y:{z}}}'"
+OP '}' (1, 12) (1, 13) "f'{x:{y:{z}}}'"
+FSTRING_END "'" (1, 13) (1, 14) "f'{x:{y:{z}}}'"
+NEWLINE '' (1, 14) (1, 15) "f'{x:{y:{z}}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes98 'f"{x[\'a\']}"'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START 'f"' (1, 0) (1, 2) 'f"{x[\'a\']}"'
+OP '{' (1, 2) (1, 3) 'f"{x[\'a\']}"'
+NAME 'x' (1, 3) (1, 4) 'f"{x[\'a\']}"'
+OP '[' (1, 4) (1, 5) 'f"{x[\'a\']}"'
+STRING "'a'" (1, 5) (1, 8) 'f"{x[\'a\']}"'
+OP ']' (1, 8) (1, 9) 'f"{x[\'a\']}"'
+OP '}' (1, 9) (1, 10) 'f"{x[\'a\']}"'
+FSTRING_END '"' (1, 10) (1, 11) 'f"{x[\'a\']}"'
+NEWLINE '' (1, 11) (1, 12) 'f"{x[\'a\']}"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes99 "f'{x:{y:{z:{w}}}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 2) (1, 3) "f'{x:{y:{z:{w}}}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 4) (1, 5) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 5) (1, 6) "f'{x:{y:{z:{w}}}}'"
+NAME 'y' (1, 6) (1, 7) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 7) (1, 8) "f'{x:{y:{z:{w}}}}'"
+OP '{' (1, 8) (1, 9) "f'{x:{y:{z:{w}}}}'"
+NAME 'z' (1, 9) (1, 10) "f'{x:{y:{z:{w}}}}'"
+OP ':' (1, 10) (1, 11) "f'{x:{y:{z:{w}}}}'"
+ERR TokenError ('f-string: expressions nested too deeply', (1, 11))
+== bytes100 'async def f(): await x'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'async' (1, 0) (1, 5) 'async def f(): await x'
+NAME 'def' (1, 6) (1, 9) 'async def f(): await x'
+NAME 'f' (1, 10) (1, 11) 'async def f(): await x'
+OP '(' (1, 11) (1, 12) 'async def f(): await x'
+OP ')' (1, 12) (1, 13) 'async def f(): await x'
+OP ':' (1, 13) (1, 14) 'async def f(): await x'
+NAME 'await' (1, 15) (1, 20) 'async def f(): await x'
+NAME 'x' (1, 21) (1, 22) 'async def f(): await x'
+NEWLINE '' (1, 22) (1, 23) 'async def f(): await x'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes101 'print(1) # x\n# y\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'print' (1, 0) (1, 5) 'print(1) # x\n'
+OP '(' (1, 5) (1, 6) 'print(1) # x\n'
+NUMBER '1' (1, 6) (1, 7) 'print(1) # x\n'
+OP ')' (1, 7) (1, 8) 'print(1) # x\n'
+COMMENT '# x' (1, 9) (1, 12) 'print(1) # x\n'
+NEWLINE '\n' (1, 12) (1, 13) 'print(1) # x\n'
+COMMENT '# y' (2, 0) (2, 3) '# y\n'
+NL '\n' (2, 3) (2, 4) '# y\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes102 'if 1:\n    # c\n    x\n# d\n  # e\ny\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+COMMENT '# c' (2, 4) (2, 7) '    # c\n'
+NL '\n' (2, 7) (2, 8) '    # c\n'
+INDENT '    ' (3, 0) (3, 4) '    x\n'
+NAME 'x' (3, 4) (3, 5) '    x\n'
+NEWLINE '\n' (3, 5) (3, 6) '    x\n'
+COMMENT '# d' (4, 0) (4, 3) '# d\n'
+NL '\n' (4, 3) (4, 4) '# d\n'
+COMMENT '# e' (5, 2) (5, 5) '  # e\n'
+NL '\n' (5, 5) (5, 6) '  # e\n'
+DEDENT '' (6, 0) (6, 0) 'y\n'
+NAME 'y' (6, 0) (6, 1) 'y\n'
+NEWLINE '\n' (6, 1) (6, 2) 'y\n'
+ENDMARKER '' (7, 0) (7, 0) ''
+== bytes103 'def f():\n    pass\n    \n  \nx\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'def' (1, 0) (1, 3) 'def f():\n'
+NAME 'f' (1, 4) (1, 5) 'def f():\n'
+OP '(' (1, 5) (1, 6) 'def f():\n'
+OP ')' (1, 6) (1, 7) 'def f():\n'
+OP ':' (1, 7) (1, 8) 'def f():\n'
+NEWLINE '\n' (1, 8) (1, 9) 'def f():\n'
+INDENT '    ' (2, 0) (2, 4) '    pass\n'
+NAME 'pass' (2, 4) (2, 8) '    pass\n'
+NEWLINE '\n' (2, 8) (2, 9) '    pass\n'
+NL '\n' (3, 4) (3, 5) '    \n'
+NL '\n' (4, 2) (4, 3) '  \n'
+DEDENT '' (5, 0) (5, 0) 'x\n'
+NAME 'x' (5, 0) (5, 1) 'x\n'
+NEWLINE '\n' (5, 1) (5, 2) 'x\n'
+ENDMARKER '' (6, 0) (6, 0) ''
+== bytes104 '"abc\\"def"'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING '"abc\\"def"' (1, 0) (1, 10) '"abc\\"def"'
+NEWLINE '' (1, 10) (1, 11) '"abc\\"def"'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes105 "'''a'''b"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING "'''a'''" (1, 0) (1, 7) "'''a'''b"
+NAME 'b' (1, 7) (1, 8) "'''a'''b"
+NEWLINE '' (1, 8) (1, 9) "'''a'''b"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes106 '""'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING '""' (1, 0) (1, 2) '""'
+NEWLINE '' (1, 2) (1, 3) '""'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes107 "''''''"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING "''''''" (1, 0) (1, 6) "''''''"
+NEWLINE '' (1, 6) (1, 7) "''''''"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes108 "u'x' b'y' Rb'z' bR'q' ur'x'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING "u'x'" (1, 0) (1, 4) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "b'y'" (1, 5) (1, 9) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "Rb'z'" (1, 10) (1, 15) "u'x' b'y' Rb'z' bR'q' ur'x'"
+STRING "bR'q'" (1, 16) (1, 21) "u'x' b'y' Rb'z' bR'q' ur'x'"
+ERR TokenError ("'u' and 'r' prefixes are incompatible", (1, 23))
+== bytes109 'if 1:\n  if 2:\n    x\n  y\nz'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '  ' (2, 0) (2, 2) '  if 2:\n'
+NAME 'if' (2, 2) (2, 4) '  if 2:\n'
+NUMBER '2' (2, 5) (2, 6) '  if 2:\n'
+OP ':' (2, 6) (2, 7) '  if 2:\n'
+NEWLINE '\n' (2, 7) (2, 8) '  if 2:\n'
+INDENT '    ' (3, 0) (3, 4) '    x\n'
+NAME 'x' (3, 4) (3, 5) '    x\n'
+NEWLINE '\n' (3, 5) (3, 6) '    x\n'
+DEDENT '' (4, 2) (4, 2) '  y\n'
+NAME 'y' (4, 2) (4, 3) '  y\n'
+NEWLINE '\n' (4, 3) (4, 4) '  y\n'
+DEDENT '' (5, 0) (5, 0) 'z'
+NAME 'z' (5, 0) (5, 1) 'z'
+NEWLINE '' (5, 1) (5, 2) 'z'
+ENDMARKER '' (6, 0) (6, 0) ''
+== bytes110 'class A:\n\tdef f(self):\n\t\treturn 1\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'class' (1, 0) (1, 5) 'class A:\n'
+NAME 'A' (1, 6) (1, 7) 'class A:\n'
+OP ':' (1, 7) (1, 8) 'class A:\n'
+NEWLINE '\n' (1, 8) (1, 9) 'class A:\n'
+INDENT '\t' (2, 0) (2, 1) '\tdef f(self):\n'
+NAME 'def' (2, 1) (2, 4) '\tdef f(self):\n'
+NAME 'f' (2, 5) (2, 6) '\tdef f(self):\n'
+OP '(' (2, 6) (2, 7) '\tdef f(self):\n'
+NAME 'self' (2, 7) (2, 11) '\tdef f(self):\n'
+OP ')' (2, 11) (2, 12) '\tdef f(self):\n'
+OP ':' (2, 12) (2, 13) '\tdef f(self):\n'
+NEWLINE '\n' (2, 13) (2, 14) '\tdef f(self):\n'
+INDENT '\t\t' (3, 0) (3, 2) '\t\treturn 1\n'
+NAME 'return' (3, 2) (3, 8) '\t\treturn 1\n'
+NUMBER '1' (3, 9) (3, 10) '\t\treturn 1\n'
+NEWLINE '\n' (3, 10) (3, 11) '\t\treturn 1\n'
+DEDENT '' (4, 0) (4, 0) ''
+DEDENT '' (4, 0) (4, 0) ''
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes111 'x = [\n  1,\n  2,\n]\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = [\n'
+OP '=' (1, 2) (1, 3) 'x = [\n'
+OP '[' (1, 4) (1, 5) 'x = [\n'
+NL '\n' (1, 5) (1, 6) 'x = [\n'
+NUMBER '1' (2, 2) (2, 3) '  1,\n'
+OP ',' (2, 3) (2, 4) '  1,\n'
+NL '\n' (2, 4) (2, 5) '  1,\n'
+NUMBER '2' (3, 2) (3, 3) '  2,\n'
+OP ',' (3, 3) (3, 4) '  2,\n'
+NL '\n' (3, 4) (3, 5) '  2,\n'
+OP ']' (4, 0) (4, 1) ']\n'
+NEWLINE '\n' (4, 1) (4, 2) ']\n'
+ENDMARKER '' (5, 0) (5, 0) ''
+== bytes112 "x = {\n  'a': f'{1}',\n}\n# end"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = {\n'
+OP '=' (1, 2) (1, 3) 'x = {\n'
+OP '{' (1, 4) (1, 5) 'x = {\n'
+NL '\n' (1, 5) (1, 6) 'x = {\n'
+STRING "'a'" (2, 2) (2, 5) "  'a': f'{1}',\n"
+OP ':' (2, 5) (2, 6) "  'a': f'{1}',\n"
+FSTRING_START "f'" (2, 7) (2, 9) "  'a': f'{1}',\n"
+OP '{' (2, 9) (2, 10) "  'a': f'{1}',\n"
+NUMBER '1' (2, 10) (2, 11) "  'a': f'{1}',\n"
+OP '}' (2, 11) (2, 12) "  'a': f'{1}',\n"
+FSTRING_END "'" (2, 12) (2, 13) "  'a': f'{1}',\n"
+OP ',' (2, 13) (2, 14) "  'a': f'{1}',\n"
+NL '\n' (2, 14) (2, 15) "  'a': f'{1}',\n"
+OP '}' (3, 0) (3, 1) '}\n'
+NEWLINE '\n' (3, 1) (3, 2) '}\n'
+COMMENT '# end' (4, 0) (4, 5) '# end'
+NL '' (4, 5) (4, 6) '# end'
+ENDMARKER '' (5, 0) (5, 0) ''
+== bytes113 'def f(a,\n      b):\n    return a  # c\n\n\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'def' (1, 0) (1, 3) 'def f(a,\n'
+NAME 'f' (1, 4) (1, 5) 'def f(a,\n'
+OP '(' (1, 5) (1, 6) 'def f(a,\n'
+NAME 'a' (1, 6) (1, 7) 'def f(a,\n'
+OP ',' (1, 7) (1, 8) 'def f(a,\n'
+NL '\n' (1, 8) (1, 9) 'def f(a,\n'
+NAME 'b' (2, 6) (2, 7) '      b):\n'
+OP ')' (2, 7) (2, 8) '      b):\n'
+OP ':' (2, 8) (2, 9) '      b):\n'
+NEWLINE '\n' (2, 9) (2, 10) '      b):\n'
+INDENT '    ' (3, 0) (3, 4) '    return a  # c\n'
+NAME 'return' (3, 4) (3, 10) '    return a  # c\n'
+NAME 'a' (3, 11) (3, 12) '    return a  # c\n'
+COMMENT '# c' (3, 14) (3, 17) '    return a  # c\n'
+NEWLINE '\n' (3, 17) (3, 18) '    return a  # c\n'
+NL '\n' (4, 0) (4, 1) '\n'
+NL '\n' (5, 0) (5, 1) '\n'
+DEDENT '' (6, 0) (6, 0) ''
+ENDMARKER '' (6, 0) (6, 0) ''
+== bytes114 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 's' (1, 0) (1, 1) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '=' (1, 2) (1, 3) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+STRING "'é'" (1, 4) (1, 7) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '+' (1, 8) (1, 9) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+STRING '"日本"' (1, 10) (1, 14) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '+' (1, 15) (1, 16) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_START "f'" (1, 17) (1, 19) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_MIDDLE 'ü' (1, 19) (1, 20) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '{' (1, 20) (1, 21) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+NAME 'x' (1, 21) (1, 22) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+OP '}' (1, 22) (1, 23) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_MIDDLE 'ñ' (1, 23) (1, 24) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+FSTRING_END "'" (1, 24) (1, 25) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+NEWLINE '\n' (1, 25) (1, 26) 's = \'é\' + "日本" + f\'ü{x}ñ\'\n'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes115 "x = '''é\n日本''' ; y"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) "x = '''é\n"
+OP '=' (1, 2) (1, 3) "x = '''é\n"
+STRING "'''é\n日本'''" (1, 4) (2, 5) "x = '''é\n日本''' ; y"
+OP ';' (2, 6) (2, 7) "日本''' ; y"
+NAME 'y' (2, 8) (2, 9) "日本''' ; y"
+NEWLINE '' (2, 9) (2, 10) "日本''' ; y"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes116 '\tx\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+INDENT '\t' (1, 0) (1, 1) '\tx\n'
+NAME 'x' (1, 1) (1, 2) '\tx\n'
+NEWLINE '\n' (1, 2) (1, 3) '\tx\n'
+DEDENT '' (2, 0) (2, 0) ''
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes117 ' x\ny'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+INDENT ' ' (1, 0) (1, 1) ' x\n'
+NAME 'x' (1, 1) (1, 2) ' x\n'
+NEWLINE '\n' (1, 2) (1, 3) ' x\n'
+DEDENT '' (2, 0) (2, 0) 'y'
+NAME 'y' (2, 0) (2, 1) 'y'
+NEWLINE '' (2, 1) (2, 2) 'y'
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes118 'x\n y\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x\n'
+NEWLINE '\n' (1, 1) (1, 2) 'x\n'
+INDENT ' ' (2, 0) (2, 1) ' y\n'
+NAME 'y' (2, 1) (2, 2) ' y\n'
+NEWLINE '\n' (2, 2) (2, 3) ' y\n'
+DEDENT '' (3, 0) (3, 0) ''
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes119 'a = 1 \\\n  + 2 \\\n  + 3\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'a' (1, 0) (1, 1) 'a = 1 \\\n'
+OP '=' (1, 2) (1, 3) 'a = 1 \\\n'
+NUMBER '1' (1, 4) (1, 5) 'a = 1 \\\n'
+OP '+' (2, 2) (2, 3) '  + 2 \\\n'
+NUMBER '2' (2, 4) (2, 5) '  + 2 \\\n'
+OP '+' (3, 2) (3, 3) '  + 3\n'
+NUMBER '3' (3, 4) (3, 5) '  + 3\n'
+NEWLINE '\n' (3, 5) (3, 6) '  + 3\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes120 'if True:\n    x = 1\n\n    # comment\n\ny = 2\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if True:\n'
+NAME 'True' (1, 3) (1, 7) 'if True:\n'
+OP ':' (1, 7) (1, 8) 'if True:\n'
+NEWLINE '\n' (1, 8) (1, 9) 'if True:\n'
+INDENT '    ' (2, 0) (2, 4) '    x = 1\n'
+NAME 'x' (2, 4) (2, 5) '    x = 1\n'
+OP '=' (2, 6) (2, 7) '    x = 1\n'
+NUMBER '1' (2, 8) (2, 9) '    x = 1\n'
+NEWLINE '\n' (2, 9) (2, 10) '    x = 1\n'
+NL '\n' (3, 0) (3, 1) '\n'
+COMMENT '# comment' (4, 4) (4, 13) '    # comment\n'
+NL '\n' (4, 13) (4, 14) '    # comment\n'
+NL '\n' (5, 0) (5, 1) '\n'
+DEDENT '' (6, 0) (6, 0) 'y = 2\n'
+NAME 'y' (6, 0) (6, 1) 'y = 2\n'
+OP '=' (6, 2) (6, 3) 'y = 2\n'
+NUMBER '2' (6, 4) (6, 5) 'y = 2\n'
+NEWLINE '\n' (6, 5) (6, 6) 'y = 2\n'
+ENDMARKER '' (7, 0) (7, 0) ''
+== bytes121 '\xa0x'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME '\xa0x' (1, 0) (1, 2) '\xa0x'
+NEWLINE '' (1, 2) (1, 3) '\xa0x'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes122 'x = 5 \\\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 5 \\\n'
+OP '=' (1, 2) (1, 3) 'x = 5 \\\n'
+NUMBER '5' (1, 4) (1, 5) 'x = 5 \\\n'
+ERR TokenError ('unexpected EOF in multi-line statement', (1, 8))
+== bytes123 "'\\N{DIGIT ONE}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+STRING "'\\N{DIGIT ONE}'" (1, 0) (1, 15) "'\\N{DIGIT ONE}'"
+NEWLINE '' (1, 15) (1, 16) "'\\N{DIGIT ONE}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes124 "f'{x}' f'{y}'\n"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x}' f'{y}'\n"
+OP '{' (1, 2) (1, 3) "f'{x}' f'{y}'\n"
+NAME 'x' (1, 3) (1, 4) "f'{x}' f'{y}'\n"
+OP '}' (1, 4) (1, 5) "f'{x}' f'{y}'\n"
+FSTRING_END "'" (1, 5) (1, 6) "f'{x}' f'{y}'\n"
+FSTRING_START "f'" (1, 7) (1, 9) "f'{x}' f'{y}'\n"
+OP '{' (1, 9) (1, 10) "f'{x}' f'{y}'\n"
+NAME 'y' (1, 10) (1, 11) "f'{x}' f'{y}'\n"
+OP '}' (1, 11) (1, 12) "f'{x}' f'{y}'\n"
+FSTRING_END "'" (1, 12) (1, 13) "f'{x}' f'{y}'\n"
+NEWLINE '\n' (1, 13) (1, 14) "f'{x}' f'{y}'\n"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes125 "f'{x!s:^{w}.{p}}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 2) (1, 3) "f'{x!s:^{w}.{p}}'"
+NAME 'x' (1, 3) (1, 4) "f'{x!s:^{w}.{p}}'"
+OP '!' (1, 4) (1, 5) "f'{x!s:^{w}.{p}}'"
+NAME 's' (1, 5) (1, 6) "f'{x!s:^{w}.{p}}'"
+OP ':' (1, 6) (1, 7) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '^' (1, 7) (1, 8) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 8) (1, 9) "f'{x!s:^{w}.{p}}'"
+NAME 'w' (1, 9) (1, 10) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 10) (1, 11) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '.' (1, 11) (1, 12) "f'{x!s:^{w}.{p}}'"
+OP '{' (1, 12) (1, 13) "f'{x!s:^{w}.{p}}'"
+NAME 'p' (1, 13) (1, 14) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 14) (1, 15) "f'{x!s:^{w}.{p}}'"
+FSTRING_MIDDLE '' (1, 15) (1, 15) "f'{x!s:^{w}.{p}}'"
+OP '}' (1, 15) (1, 16) "f'{x!s:^{w}.{p}}'"
+FSTRING_END "'" (1, 16) (1, 17) "f'{x!s:^{w}.{p}}'"
+NEWLINE '' (1, 17) (1, 18) "f'{x!s:^{w}.{p}}'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes126 'f\'{a["b"]}\''
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{a["b"]}\''
+OP '{' (1, 2) (1, 3) 'f\'{a["b"]}\''
+NAME 'a' (1, 3) (1, 4) 'f\'{a["b"]}\''
+OP '[' (1, 4) (1, 5) 'f\'{a["b"]}\''
+STRING '"b"' (1, 5) (1, 8) 'f\'{a["b"]}\''
+OP ']' (1, 8) (1, 9) 'f\'{a["b"]}\''
+OP '}' (1, 9) (1, 10) 'f\'{a["b"]}\''
+FSTRING_END "'" (1, 10) (1, 11) 'f\'{a["b"]}\''
+NEWLINE '' (1, 11) (1, 12) 'f\'{a["b"]}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes127 "f'{ {1:2}[1] }'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{ {1:2}[1] }'"
+OP '{' (1, 2) (1, 3) "f'{ {1:2}[1] }'"
+OP '{' (1, 4) (1, 5) "f'{ {1:2}[1] }'"
+NUMBER '1' (1, 5) (1, 6) "f'{ {1:2}[1] }'"
+OP ':' (1, 6) (1, 7) "f'{ {1:2}[1] }'"
+NUMBER '2' (1, 7) (1, 8) "f'{ {1:2}[1] }'"
+OP '}' (1, 8) (1, 9) "f'{ {1:2}[1] }'"
+OP '[' (1, 9) (1, 10) "f'{ {1:2}[1] }'"
+NUMBER '1' (1, 10) (1, 11) "f'{ {1:2}[1] }'"
+OP ']' (1, 11) (1, 12) "f'{ {1:2}[1] }'"
+OP '}' (1, 13) (1, 14) "f'{ {1:2}[1] }'"
+FSTRING_END "'" (1, 14) (1, 15) "f'{ {1:2}[1] }'"
+NEWLINE '' (1, 15) (1, 16) "f'{ {1:2}[1] }'"
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes128 'f\'{x:{"}"}}\''
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) 'f\'{x:{"}"}}\''
+OP '{' (1, 2) (1, 3) 'f\'{x:{"}"}}\''
+NAME 'x' (1, 3) (1, 4) 'f\'{x:{"}"}}\''
+OP ':' (1, 4) (1, 5) 'f\'{x:{"}"}}\''
+OP '{' (1, 5) (1, 6) 'f\'{x:{"}"}}\''
+STRING '"}"' (1, 6) (1, 9) 'f\'{x:{"}"}}\''
+OP '}' (1, 9) (1, 10) 'f\'{x:{"}"}}\''
+FSTRING_MIDDLE '' (1, 10) (1, 10) 'f\'{x:{"}"}}\''
+OP '}' (1, 10) (1, 11) 'f\'{x:{"}"}}\''
+FSTRING_END "'" (1, 11) (1, 12) 'f\'{x:{"}"}}\''
+NEWLINE '' (1, 12) (1, 13) 'f\'{x:{"}"}}\''
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes129 't\'{x!r}\' t"""a{b}\n"""'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+TSTRING_START "t'" (1, 0) (1, 2) 't\'{x!r}\' t"""a{b}\n'
+OP '{' (1, 2) (1, 3) 't\'{x!r}\' t"""a{b}\n'
+NAME 'x' (1, 3) (1, 4) 't\'{x!r}\' t"""a{b}\n'
+OP '!' (1, 4) (1, 5) 't\'{x!r}\' t"""a{b}\n'
+NAME 'r' (1, 5) (1, 6) 't\'{x!r}\' t"""a{b}\n'
+OP '}' (1, 6) (1, 7) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_END "'" (1, 7) (1, 8) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_START 't"""' (1, 9) (1, 13) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_MIDDLE 'a' (1, 13) (1, 14) 't\'{x!r}\' t"""a{b}\n'
+OP '{' (1, 14) (1, 15) 't\'{x!r}\' t"""a{b}\n'
+NAME 'b' (1, 15) (1, 16) 't\'{x!r}\' t"""a{b}\n'
+OP '}' (1, 16) (1, 17) 't\'{x!r}\' t"""a{b}\n'
+TSTRING_MIDDLE '\n' (1, 17) (2, 0) 't\'{x!r}\' t"""a{b}\n"""'
+TSTRING_END '"""' (2, 0) (2, 3) '"""'
+NEWLINE '' (2, 3) (2, 4) '"""'
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes130 "f'\\\n{x}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'\\\n"
+FSTRING_MIDDLE '\\\n' (1, 2) (2, 0) "f'\\\n{x}'"
+OP '{' (2, 0) (2, 1) "{x}'"
+NAME 'x' (2, 1) (2, 2) "{x}'"
+OP '}' (2, 2) (2, 3) "{x}'"
+FSTRING_END "'" (2, 3) (2, 4) "{x}'"
+NEWLINE '' (2, 4) (2, 5) "{x}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes131 "f'''a\\\nb'''"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'''" (1, 0) (1, 4) "f'''a\\\n"
+FSTRING_MIDDLE 'a\\\nb' (1, 4) (2, 1) "f'''a\\\nb'''"
+FSTRING_END "'''" (2, 1) (2, 4) "b'''"
+NEWLINE '' (2, 4) (2, 5) "b'''"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes132 "f'{x:\\\n}'"
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+FSTRING_START "f'" (1, 0) (1, 2) "f'{x:\\\n"
+OP '{' (1, 2) (1, 3) "f'{x:\\\n"
+NAME 'x' (1, 3) (1, 4) "f'{x:\\\n"
+OP ':' (1, 4) (1, 5) "f'{x:\\\n"
+FSTRING_MIDDLE '\\\n' (1, 5) (2, 0) "f'{x:\\\n}'"
+OP '}' (2, 0) (2, 1) "}'"
+FSTRING_END "'" (2, 1) (2, 2) "}'"
+NEWLINE '' (2, 2) (2, 3) "}'"
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes133 'x = 1\n\x0c\ny = 2\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1\n'
+OP '=' (1, 2) (1, 3) 'x = 1\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\n'
+NEWLINE '\n' (1, 5) (1, 6) 'x = 1\n'
+NL '\n' (2, 1) (2, 2) '\x0c\n'
+NAME 'y' (3, 0) (3, 1) 'y = 2\n'
+OP '=' (3, 2) (3, 3) 'y = 2\n'
+NUMBER '2' (3, 4) (3, 5) 'y = 2\n'
+NEWLINE '\n' (3, 5) (3, 6) 'y = 2\n'
+ENDMARKER '' (4, 0) (4, 0) ''
+== bytes134 'if 1:\n\x0c  x\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'if' (1, 0) (1, 2) 'if 1:\n'
+NUMBER '1' (1, 3) (1, 4) 'if 1:\n'
+OP ':' (1, 4) (1, 5) 'if 1:\n'
+NEWLINE '\n' (1, 5) (1, 6) 'if 1:\n'
+INDENT '\x0c  ' (2, 0) (2, 3) '\x0c  x\n'
+NAME 'x' (2, 3) (2, 4) '\x0c  x\n'
+NEWLINE '\n' (2, 4) (2, 5) '\x0c  x\n'
+DEDENT '' (3, 0) (3, 0) ''
+ENDMARKER '' (3, 0) (3, 0) ''
+== bytes135 '0 if 1else 2'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0' (1, 0) (1, 1) '0 if 1else 2'
+NAME 'if' (1, 2) (1, 4) '0 if 1else 2'
+NUMBER '1' (1, 5) (1, 6) '0 if 1else 2'
+NAME 'else' (1, 6) (1, 10) '0 if 1else 2'
+NUMBER '2' (1, 11) (1, 12) '0 if 1else 2'
+NEWLINE '' (1, 12) (1, 13) '0 if 1else 2'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes136 '1 if 1 else 2 or 3and 4'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1' (1, 0) (1, 1) '1 if 1 else 2 or 3and 4'
+NAME 'if' (1, 2) (1, 4) '1 if 1 else 2 or 3and 4'
+NUMBER '1' (1, 5) (1, 6) '1 if 1 else 2 or 3and 4'
+NAME 'else' (1, 7) (1, 11) '1 if 1 else 2 or 3and 4'
+NUMBER '2' (1, 12) (1, 13) '1 if 1 else 2 or 3and 4'
+NAME 'or' (1, 14) (1, 16) '1 if 1 else 2 or 3and 4'
+NUMBER '3' (1, 17) (1, 18) '1 if 1 else 2 or 3and 4'
+NAME 'and' (1, 18) (1, 21) '1 if 1 else 2 or 3and 4'
+NUMBER '4' (1, 22) (1, 23) '1 if 1 else 2 or 3and 4'
+NEWLINE '' (1, 23) (1, 24) '1 if 1 else 2 or 3and 4'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes137 '1_a'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid decimal literal', (1, 2))
+== bytes138 '1.2.3'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1.2' (1, 0) (1, 3) '1.2.3'
+NUMBER '.3' (1, 3) (1, 5) '1.2.3'
+NEWLINE '' (1, 5) (1, 6) '1.2.3'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes139 '1..real'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1.' (1, 0) (1, 2) '1..real'
+OP '.' (1, 2) (1, 3) '1..real'
+NAME 'real' (1, 3) (1, 7) '1..real'
+NEWLINE '' (1, 7) (1, 8) '1..real'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes140 'x.5'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x.5'
+NUMBER '.5' (1, 1) (1, 3) 'x.5'
+NEWLINE '' (1, 3) (1, 4) 'x.5'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes141 '1e5j'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1e5j' (1, 0) (1, 4) '1e5j'
+NEWLINE '' (1, 4) (1, 5) '1e5j'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes142 '1jj'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1j' (1, 0) (1, 2) '1jj'
+NAME 'j' (1, 2) (1, 3) '1jj'
+NEWLINE '' (1, 3) (1, 4) '1jj'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes143 '1__'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid decimal literal', (1, 2))
+== bytes144 '0b'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid binary literal', (1, 2))
+== bytes145 '0o'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid octal literal', (1, 2))
+== bytes146 '0b_1'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0b_1' (1, 0) (1, 4) '0b_1'
+NEWLINE '' (1, 4) (1, 5) '0b_1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes147 '0x_f'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0x_f' (1, 0) (1, 4) '0x_f'
+NEWLINE '' (1, 4) (1, 5) '0x_f'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes148 '0xf_'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid hexadecimal literal', (1, 4))
+== bytes149 '0_'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid decimal literal', (1, 2))
+== bytes150 '00_'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+ERR TokenError ('invalid decimal literal', (1, 3))
+== bytes151 '0e'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0' (1, 0) (1, 1) '0e'
+NAME 'e' (1, 1) (1, 2) '0e'
+NEWLINE '' (1, 2) (1, 3) '0e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes152 '0.e'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '0.' (1, 0) (1, 2) '0.e'
+NAME 'e' (1, 2) (1, 3) '0.e'
+NEWLINE '' (1, 3) (1, 4) '0.e'
+ENDMARKER '' (2, 0) (2, 0) ''
+== bytes153 '1ee1'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NUMBER '1' (1, 0) (1, 1) '1ee1'
+NAME 'ee1' (1, 1) (1, 4) '1ee1'
+NEWLINE '' (1, 4) (1, 5) '1ee1'
+ENDMARKER '' (2, 0) (2, 0) ''
+== enc b"# -*- coding: latin-1 -*-\nx = '\xe9'\n"
+ENCODING 'iso-8859-1' (0, 0) (0, 0) ''
+COMMENT '# -*- coding: latin-1 -*-' (1, 0) (1, 25) '# -*- coding: latin-1 -*-\n'
+NL '\n' (1, 25) (1, 26) '# -*- coding: latin-1 -*-\n'
+NAME 'x' (2, 0) (2, 1) "x = 'é'\n"
+OP '=' (2, 2) (2, 3) "x = 'é'\n"
+STRING "'é'" (2, 4) (2, 7) "x = 'é'\n"
+NEWLINE '\n' (2, 7) (2, 8) "x = 'é'\n"
+ENDMARKER '' (3, 0) (3, 0) ''
+== enc b'\xef\xbb\xbfx = 1\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1\n'
+OP '=' (1, 2) (1, 3) 'x = 1\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\n'
+NEWLINE '\n' (1, 5) (1, 6) 'x = 1\n'
+ENDMARKER '' (2, 0) (2, 0) ''
+== enc b"# coding: ascii\nx = 'a'\n"
+ENCODING 'ascii' (0, 0) (0, 0) ''
+COMMENT '# coding: ascii' (1, 0) (1, 15) '# coding: ascii\n'
+NL '\n' (1, 15) (1, 16) '# coding: ascii\n'
+NAME 'x' (2, 0) (2, 1) "x = 'a'\n"
+OP '=' (2, 2) (2, 3) "x = 'a'\n"
+STRING "'a'" (2, 4) (2, 7) "x = 'a'\n"
+NEWLINE '\n' (2, 7) (2, 8) "x = 'a'\n"
+ENDMARKER '' (3, 0) (3, 0) ''
+== enc b'# vim: set fileencoding=utf-8 :\ny=1'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+COMMENT '# vim: set fileencoding=utf-8 :' (1, 0) (1, 31) '# vim: set fileencoding=utf-8 :\n'
+NL '\n' (1, 31) (1, 32) '# vim: set fileencoding=utf-8 :\n'
+NAME 'y' (2, 0) (2, 1) 'y=1'
+OP '=' (2, 1) (2, 2) 'y=1'
+NUMBER '1' (2, 2) (2, 3) 'y=1'
+NEWLINE '' (2, 3) (2, 4) 'y=1'
+ENDMARKER '' (3, 0) (3, 0) ''
+== enc b'x = 1\n# coding: latin-1\n'
+ENCODING 'utf-8' (0, 0) (0, 0) ''
+NAME 'x' (1, 0) (1, 1) 'x = 1\n'
+OP '=' (1, 2) (1, 3) 'x = 1\n'
+NUMBER '1' (1, 4) (1, 5) 'x = 1\n'
+NEWLINE '\n' (1, 5) (1, 6) 'x = 1\n'
+COMMENT '# coding: latin-1' (2, 0) (2, 17) '# coding: latin-1\n'
+NL '\n' (2, 17) (2, 18) '# coding: latin-1\n'
+ENDMARKER '' (3, 0) (3, 0) ''
+== enc b'# coding: bogus\nx=1\n'
+ERR SyntaxError ('unknown encoding: bogus',)
+== enc b'\xff\xfe'
+ERR SyntaxError ('invalid or missing encoding declaration',)
+== enc b"# coding: latin-1\r\nx = '\xe9'\r\n"
+ENCODING 'iso-8859-1' (0, 0) (0, 0) ''
+COMMENT '# coding: latin-1' (1, 0) (1, 17) '# coding: latin-1\r\n'
+NL '\r\n' (1, 17) (1, 19) '# coding: latin-1\r\n'
+NAME 'x' (2, 0) (2, 1) "x = 'é'\r\n"
+OP '=' (2, 2) (2, 3) "x = 'é'\r\n"
+STRING "'é'" (2, 4) (2, 7) "x = 'é'\r\n"
+NEWLINE '\r\n' (2, 7) (2, 9) "x = 'é'\r\n"
+ENDMARKER '' (3, 0) (3, 0) ''
+UNTOK 'x\r\n' 'x\r\n' 'x \r\n'
+UNTOK 'x = 1\r\n\r\ny\r' 'x = 1\r\n\r\ny\r' 'x =1 \r\n\r\ny \r'
+UNTOK '$ ? !' '$ ? !' '$?!'
+UNTOK 'f"{x:}"' 'f"{x:}"' 'f"{x :}"'
+UNTOK 'f"a{{b}}c"' 'f"a{{b}}c"' 'f"a{{b}}c"'
+UNTOK 'f"""a\nb{x}\nc"""\n' 'f"""a\nb{x}\nc"""\n' 'f"""a\nb{x }\nc"""\n'
+UNTOK 'x = """a\nb""" + 1\n' 'x = """a\nb""" + 1\n' 'x ="""a\nb"""+1 \n'
+UNTOK 'x = 1 + \\\n  2\n' 'x = 1 + \\\n  2\n' 'x =1 +2 \n'
+UNTOK '1if x else 2' '1if x else 2' '1 if x else 2 '
+UNTOK '0777' '0777' '0777 '
+UNTOK 'def f(): pass' 'def f(): pass' 'def f ():pass '
+UNTOK "f'{x!r:>{w}}'" "f'{x!r:>{w}}'" "f'{x !r :>{w }}'"
+UNTOK '  # c' '  # c' '# c'
+UNTOK 'x # c' 'x # c' 'x # c'
+UNTOK "'a\\\nb'\n" "'a\\\nb'\n" "'a\\\nb'\n"
+UNTOK 'if 1:\n  a\\\n b\n' 'if 1:\n  a\\\n b\n' 'if 1 :\n  a b \n'
+UNTOK '(\n)\n]' '(\n)\n]' '(\n)\n]'
+UNTOK '(]' '(]' '(]'
+UNTOK 'x = 1e' 'x = 1e' 'x =1 e '
+UNTOK 'x = 00' 'x = 00' 'x =00 '
+UNTOK 'x = 09' 'x = 09' 'x =09 '
+UNTOK 'x = 0_0' 'x = 0_0' 'x =0_0 '
+UNTOK '1.5j' '1.5j' '1.5j '
+UNTOK '.5e3j' '.5e3j' '.5e3j '
+UNTOK '1.' '1.' '1. '
+UNTOK '0e0' '0e0' '0e0 '
+UNTOK '0_7' '0_7' '0_7 '
+UNTOK '1_000.000_1e1_0' '1_000.000_1e1_0' '1_000.000_1e1_0 '
+UNTOK 'é = 1' 'é = 1' 'é =1 '
+UNTOK 'a€ = 1' 'a€ = 1' 'a€ =1 '
+UNTOK '\x0cx' ' x' 'x '
+UNTOK 'x\ty' 'x y' 'x y '
+UNTOK '\n\n  \n# c\n' '\n\n  \n# c\n' '\n\n\n# c\n'
+UNTOK 'x\n  \n\n  y\n' 'x\n  \n\n  y\n' 'x \n\n\n  y \n'
+UNTOK 'a ... b .. c' 'a ... b .. c' 'a ...b ..c '
+UNTOK 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j' 'a <> b != c ->d := e **= f //= g >>= h <<= i @= j' 'a <>b !=c ->d :=e **=f //=g >>=h <<=i @=j '
+UNTOK '!=' '!=' '!='
+UNTOK 'a!b' 'a!b' 'a !b '
+UNTOK "f'{x=}'" "f'{x=}'" "f'{x =}'"
+UNTOK "f'{x = }'" "f'{x = }'" "f'{x =}'"
+UNTOK "f'{x:{y}z}'" "f'{x:{y}z}'" "f'{x :{y }z}'"
+UNTOK "f'{{'" "f'{{'" "f'{{'"
+UNTOK "f'''{\nx\n}'''" "f'''{\nx\n}'''" "f'''{\nx \n}'''"
+UNTOK "rf'\\{x}'" "rf'\\{x}'" "rf'\\{x }'"
+UNTOK "f'\\N{BULLET}'" "f'\\N{BULLET}'" "f'\\N{BULLET}'"
+UNTOK "f'\\{x}'" "f'\\{x}'" "f'\\{x }'"
+UNTOK "f'{x!r}'" "f'{x!r}'" "f'{x !r }'"
+UNTOK "f'{a!=b}'" "f'{a!=b}'" "f'{a !=b }'"
+UNTOK "f'{a:=5}'" "f'{a:=5}'" "f'{a :=5}'"
+UNTOK "f'{(a:=5)}'" "f'{(a:=5)}'" "f'{(a :=5 )}'"
+UNTOK "f'{lambda x: 1}'" "f'{lambda x: 1}'" "f'{lambda x : 1}'"
+UNTOK 'f\'{f"{x}"}\'' 'f\'{f"{x}"}\'' 'f\'{f"{x }"}\''
+UNTOK 'f\'{"a" "b"}\'' 'f\'{"a" "b"}\'' 'f\'{"a"  "b"}\''
+UNTOK "f'a' 'b'" "f'a' 'b'" "f'a' 'b'"
+UNTOK "t'{x}'" "t'{x}'" "t'{x }'"
+UNTOK "rt'{x}'" "rt'{x}'" "rt'{x }'"
+UNTOK "Tr'a'" "Tr'a'" "Tr'a'"
+UNTOK "f'{x:%Y-%m}'" "f'{x:%Y-%m}'" "f'{x :%Y-%m}'"
+UNTOK "f'''{x:\na}'''" "f'''{x:\na}'''" "f'''{x :\na}'''"
+UNTOK "f'{#c\n}'" "f'{#c\n}'" "f'{#c\n}'"
+UNTOK "f'{\nx}'" "f'{\nx}'" "f'{\nx }'"
+UNTOK "f'{x:{{}}}'" "f'{x:{{}}}'" "f'{x :{ {} }}'"
+UNTOK "f'{x:{y:{z}}}'" "f'{x:{y:{z}}}'" "f'{x :{y :{z }}}'"
+UNTOK 'f"{x[\'a\']}"' 'f"{x[\'a\']}"' 'f"{x [\'a\']}"'
+UNTOK 'async def f(): await x' 'async def f(): await x' 'async def f ():await x '
+UNTOK 'print(1) # x\n# y\n' 'print(1) # x\n# y\n' 'print (1 )# x\n# y\n'
+UNTOK 'if 1:\n    # c\n    x\n# d\n  # e\ny\n' 'if 1:\n    # c\n    x\n# d\n  # e\ny\n' 'if 1 :\n# c\n    x \n    # d\n    # e\ny \n'
+UNTOK 'def f():\n    pass\n    \n  \nx\n' 'def f():\n    pass\n    \n  \nx\n' 'def f ():\n    pass \n\n\nx \n'
+UNTOK '"abc\\"def"' '"abc\\"def"' '"abc\\"def"'
+UNTOK "'''a'''b" "'''a'''b" "'''a'''b "
+UNTOK '""' '""' '""'
+UNTOK "''''''" "''''''" "''''''"
+UNTOK 'if 1:\n  if 2:\n    x\n  y\nz' 'if 1:\n  if 2:\n    x\n  y\nz' 'if 1 :\n  if 2 :\n    x \n  y \nz '
+UNTOK 'class A:\n\tdef f(self):\n\t\treturn 1\n' 'class A:\n\tdef f(self):\n\t\treturn 1\n' 'class A :\n\tdef f (self ):\n\t\treturn 1 \n'
+UNTOK 'x = [\n  1,\n  2,\n]\n' 'x = [\n  1,\n  2,\n]\n' 'x =[\n1 ,\n2 ,\n]\n'
+UNTOK "x = {\n  'a': f'{1}',\n}\n# end" "x = {\n  'a': f'{1}',\n}\n# end" "x ={\n'a':f'{1 }',\n}\n# end"
+UNTOK 'def f(a,\n      b):\n    return a  # c\n\n\n' 'def f(a,\n      b):\n    return a  # c\n\n\n' 'def f (a ,\nb ):\n    return a # c\n\n\n'
+UNTOK 's = \'é\' + "日本" + f\'ü{x}ñ\'\n' 's = \'é\' + "日本" + f\'ü{x}ñ\'\n' 's =\'é\'+"日本"+f\'ü{x }ñ\'\n'
+UNTOK "x = '''é\n日本''' ; y" "x = '''é\n日本''' ; y" "x ='''é\n日本''';y "
+UNTOK '\tx\n' ' x\n' 'x \n'
+UNTOK ' x\ny' ' x\ny' 'x \ny '
+UNTOK 'x\n y\n' 'x\n y\n' 'x \n y \n'
+UNTOK 'a = 1 \\\n  + 2 \\\n  + 3\n' 'a = 1 \\\n  + 2 \\\n  + 3\n' 'a =1 +2 +3 \n'
+UNTOK 'if True:\n    x = 1\n\n    # comment\n\ny = 2\n' 'if True:\n    x = 1\n\n    # comment\n\ny = 2\n' 'if True :\n    x =1 \n\n    # comment\n\ny =2 \n'
+UNTOK '\xa0x' '\xa0x' '\xa0x '
+UNTOK "'\\N{DIGIT ONE}'" "'\\N{DIGIT ONE}'" "'\\N{DIGIT ONE}'"
+UNTOK "f'{x}' f'{y}'\n" "f'{x}' f'{y}'\n" "f'{x }' f'{y }'\n"
+UNTOK "f'{x!s:^{w}.{p}}'" "f'{x!s:^{w}.{p}}'" "f'{x !s :^{w }.{p }}'"
+UNTOK 'f\'{a["b"]}\'' 'f\'{a["b"]}\'' 'f\'{a ["b"]}\''
+UNTOK "f'{ {1:2}[1] }'" "f'{ {1:2}[1] }'" "f'{ {1 :2 }[1 ]}'"
+UNTOK 'f\'{x:{"}"}}\'' 'f\'{x:{"}"}}\'' 'f\'{x :{"}"}}\''
+UNTOK 't\'{x!r}\' t"""a{b}\n"""' 't\'{x!r}\' t"""a{b}\n"""' 't\'{x !r }\'t"""a{b }\n"""'
+UNTOK "f'\\\n{x}'" "f'\\\n{x}'" "f'\\\n{x }'"
+UNTOK "f'''a\\\nb'''" "f'''a\\\nb'''" "f'''a\\\nb'''"
+UNTOK "f'{x:\\\n}'" "f'{x:\\\n}'" "f'{x :\\\n}'"
+UNTOK 'x = 1\n\x0c\ny = 2\n' 'x = 1\n \ny = 2\n' 'x =1 \n\ny =2 \n'
+UNTOK 'if 1:\n\x0c  x\n' 'if 1:\n\x0c  x\n' 'if 1 :\n\x0c  x \n'
+UNTOK '0 if 1else 2' '0 if 1else 2' '0 if 1 else 2 '
+UNTOK '1 if 1 else 2 or 3and 4' '1 if 1 else 2 or 3and 4' '1 if 1 else 2 or 3 and 4 '
+UNTOK '1.2.3' '1.2.3' '1.2 .3 '
+UNTOK '1..real' '1..real' '1. .real '
+UNTOK 'x.5' 'x.5' 'x .5 '
+UNTOK '1e5j' '1e5j' '1e5j '
+UNTOK '1jj' '1jj' '1j j '
+UNTOK '0b_1' '0b_1' '0b_1 '
+UNTOK '0x_f' '0x_f' '0x_f '
+UNTOK '0e' '0e' '0 e '
+UNTOK '0.e' '0.e' '0. e '
+UNTOK '1ee1' '1ee1' '1 ee1 '
+DETECT b'# -*- coding: latin-1 -*-\nx = 1\n' ('iso-8859-1', [b'# -*- coding: latin-1 -*-\n'])
+DETECT b'\xef\xbb\xbfx=1' ('utf-8-sig', [b'x=1'])
+DETECT ERR b'# coding: bogus\n' SyntaxError ('unknown encoding: bogus',)
+DETECT b'x\n# coding: utf-8\n' ('utf-8', [b'x\n'])
+DETECT ERR b'\xff\n' SyntaxError ('invalid or missing encoding declaration',)
+FILE fractions.src 5349 396ac3c40a968454e7d8f9bf949c53b3a9adcb745ecc07db0f98618daf46e776
+FILE-UNTOK fractions.src 7a95f1c506c9ac4b2277df5f2bdd9d61cc67b520c45021a5a961939770221ef6
+FILE json_decoder.src 1992 bdfbc312fa3476ba218301660bcf2f443c928939854165911a3fc63010cbffe4
+FILE-UNTOK json_decoder.src dc98d3e677612ea7311303f06a144cec6b91ebadc7ec037d1777501647578a07
+FILE re_parser.src 7948 80db9c2a2ccb9a17cdc696d7d57132ebb23e639565ee0b100c5c3613b542b7a5
+FILE-UNTOK re_parser.src e57bd194a2d42398355ae7c1ccc2ddfb78421dd431eb81e3809dbe8ca9057dc4
+FILE string.src 1790 efe94a4a1542682cdbb0091a11fe6031568520d25967b3d9352cd6765da183bd
+FILE-UNTOK string.src 8c9751e6ae9776b4e94c1c9850b53c0d24e8407196901aeaebffbb1a11a64e05
+FILE textwrap.src 1916 5f14ba3cffe2ead1643100ae52dbd82f501329e408887477c4159607350971d9
+FILE-UNTOK textwrap.src 7f05d89c983f5aa8cefcff707a9cc561ed60c51fc8a68e2e3ab61cc6dfa84544
+FILE tokenize.src 3466 813e668920f7795a51eaf292631c36922c57f216b5fbdd8382e28b8915ac98e8
+FILE-UNTOK tokenize.src 65ba1bacdc42e768382208ff27f3001ee77d9d61aafba686c67652d22b84b330
