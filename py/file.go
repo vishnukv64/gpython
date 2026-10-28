@@ -117,7 +117,7 @@ func init() {
 		if !ok || f.File == nil {
 			return nil, errClosed
 		}
-		return NewBool(isTerminal(f.File.Fd())), nil
+		return NewBool(IsTerminal(f.File.Fd())), nil
 	}, 0, "True if the file is connected to a TTY device."))
 
 	FileType.Dict.Set("readable", MustNewMethod("readable", func(self Object, args Tuple) (Object, error) {

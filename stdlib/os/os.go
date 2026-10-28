@@ -444,9 +444,10 @@ func isatty(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	// ponytail: char-device test also true for /dev/null; term ioctl if that matters.
-	st, err := os.NewFile(uintptr(fd), "").Stat()
-	return py.NewBool(err == nil && st.Mode()&os.ModeCharDevice != 0), nil
+	// Asked directly of the descriptor.  Wrapping it in an *os.File and
+	// dropping that left a finalizer to close Python's descriptor - or
+	// whichever file had since reused the number - at the next GC.
+	return py.NewBool(py.IsTerminal(uintptr(fd))), nil
 }
 
 func getpid(self py.Object, args py.Tuple) (py.Object, error) {

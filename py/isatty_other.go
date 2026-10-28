@@ -6,6 +6,6 @@
 
 package py
 
-// isTerminal answers False where no termios ioctl is wired up, which is the
+// IsTerminal answers False where no termios ioctl is wired up, which is the
 // safe answer: a caller that sees False does not prompt.
-func isTerminal(fd uintptr) bool { return false }
+func IsTerminal(fd uintptr) bool { return false }
