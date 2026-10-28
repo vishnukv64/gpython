@@ -724,9 +724,17 @@ func init() {
 	ZipInfoType.Dict.Set("external_attr", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*zipInfo).externalAttr), nil },
 		Fset: func(self, v py.Object) error {
-			n, err := py.IndexInt(v)
+			// A 32-bit field whose high half is st_mode: a regular file's
+			// 0o100644 << 16 overflows int on 32-bit hosts, so read int64.
+			n, err := py.MakeGoInt64(v)
+			if err != nil {
+				return err
+			}
+			if n < 0 || n > 0xFFFFFFFF {
+				return py.ExceptionNewf(py.OverflowError, "external_attr out of range: %d", n)
+			}
 			self.(*zipInfo).externalAttr = uint32(n)
-			return err
+			return nil
 		},
 	})
 	ZipInfoType.Dict.Set("compress_type", &py.Property{
