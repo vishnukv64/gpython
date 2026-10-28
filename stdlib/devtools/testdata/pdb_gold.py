@@ -21,7 +21,10 @@ def run(label, commands, fn=target, *args):
         r = p.runcall(fn, *args)
     except bdb.BdbQuit:
         r = "<quit>"
-    text = out.getvalue().replace(HERE + os.sep, "").replace(HERE, "")
+    text = out.getvalue()
+    # pdb canonicalises filenames with normcase (lowercase on Windows).
+    for h in (HERE, os.path.normcase(HERE)):
+        text = text.replace(h + os.sep, "").replace(h, "")
     text = re.sub(r"[^\s(]*bdb\.py\(\d+\)runcall\(\)", "BDB()", text)
     text = re.sub(r"[^\s(]*pdbgold\.py", "pdb_gold.py", text)
     # the library file is not on disk in gpython, so its source line is not shown

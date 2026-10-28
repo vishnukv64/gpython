@@ -6,8 +6,13 @@ def show(label, f):
 d = os.path.dirname(os.path.abspath(__file__))
 def cap(fn, *a):
     old = sys.stdout; sys.stdout = io.StringIO()
-    try: fn(*a); return sys.stdout.getvalue().replace(d, "D")
+    try: fn(*a); return norm(sys.stdout.getvalue())
     finally: sys.stdout = old
+def norm(s):
+    # tabnanny prints repr(filename): on Windows its backslashes are doubled.
+    for form in (d, repr(d)[1:-1]):
+        s = s.replace(form, "D")
+    return s.replace("D" + repr(os.sep)[1:-1], "D/").replace("D" + os.sep, "D/")
 tabnanny.verbose = 1
 show("tab-good", lambda: cap(tabnanny.check, os.path.join(d, "good.py")))
 show("tab-bad", lambda: cap(tabnanny.check, os.path.join(d, "bad_tab.py")))
