@@ -42,8 +42,11 @@ assert fnmatch.translate("[z-a]") == "(?s:(?!))\\z", fnmatch.translate("[z-a]")
 assert not fnmatch.fnmatchcase("x", "[z-a]")
 
 # filter and filterfalse keep the original elements.
-assert fnmatch.filter(["a.txt", "b.TXT", "c.py", "A.txt"], "*.TXT") == ["b.TXT"]
-assert fnmatch.filterfalse(["a.txt", "b.TXT", "c.py"], "*.TXT") == ["a.txt", "c.py"]
+# filter normcases too: case-insensitive on Windows.
+assert fnmatch.filter(["a.txt", "b.TXT", "c.py", "A.txt"], "*.TXT") == (
+    ["a.txt", "b.TXT", "A.txt"] if os.path.normcase("A") == "a" else ["b.TXT"])
+assert fnmatch.filterfalse(["a.txt", "b.TXT", "c.py"], "*.TXT") == (
+    ["c.py"] if os.path.normcase("A") == "a" else ["a.txt", "c.py"])
 
 # A "*" matches across a path separator, unlike glob.
 assert fnmatch.fnmatch("a/b/c.txt", "*.txt")
