@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
+	zipio "github.com/vishnukv64/gpython/stdlib/io"
 )
 
 const module_doc = `Read and write ZIP-format archive files.
@@ -74,6 +75,9 @@ type zipInfo struct {
 	compressSize int64
 	crc          uint32
 	mode         os.FileMode
+	externalAttr uint32
+	method       uint16
+	modified     time.Time
 	Dict         py.StringDict
 }
 
@@ -190,6 +194,9 @@ func zipInfoOf(f *zip.File) *zipInfo {
 		compressSize: int64(f.CompressedSize64),
 		crc:          f.CRC32,
 		mode:         f.Mode(),
+		externalAttr: f.ExternalAttrs,
+		method:       f.Method,
+		modified:     f.Modified,
 		Dict:         py.NewStringDict(),
 	}
 }
@@ -226,7 +233,7 @@ func zipFileRead(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "read() takes exactly one argument")
 	}
-	name, err := py.StrAsString(args[0])
+	name, err := memberName(args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +253,34 @@ func zipFileRead(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Bytes(data), nil
 	}
 	return nil, py.ExceptionNewf(py.KeyError, "There is no item named %s in the archive", name)
+}
+
+// memberName is the archive name a member argument stands for: a str, or a
+// ZipInfo as read(), open() and getinfo() callers pass.
+func memberName(o py.Object) (string, error) {
+	if zi, ok := o.(*zipInfo); ok {
+		return zi.name, nil
+	}
+	return py.StrAsString(o)
+}
+
+// zipFileOpen is ZipFile.open for reading: the member's bytes behind a
+// BytesIO, which is a readable binary file with the same read() contract.
+// Archives are read whole by archive/zip anyway.
+func zipFileOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var name, mode, pwd py.Object
+	mode = py.String("r")
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OO:open", []string{"name", "mode", "pwd"}, &name, &mode, &pwd); err != nil {
+		return nil, err
+	}
+	if m, _ := py.StrAsString(mode); m != "r" {
+		return nil, py.ExceptionNewf(py.NotImplementedError, "ZipFile.open supports only mode 'r'")
+	}
+	data, err := zipFileRead(self, py.Tuple{name})
+	if err != nil {
+		return nil, err
+	}
+	return py.Call(zipio.BytesIOType, py.Tuple{data}, py.StringDict{})
 }
 
 func zipFileExtract(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -569,6 +604,20 @@ func init() {
 	ZipInfoType.Dict.Set("compress_size", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*zipInfo).compressSize), nil
 	}})
+	ZipInfoType.Dict.Set("orig_filename", ZipInfoType.Dict.GetOrNil("filename"))
+	ZipInfoType.Dict.Set("external_attr", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		return py.Int(self.(*zipInfo).externalAttr), nil
+	}})
+	ZipInfoType.Dict.Set("compress_type", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		return py.Int(self.(*zipInfo).method), nil
+	}})
+	ZipInfoType.Dict.Set("date_time", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		t := self.(*zipInfo).modified
+		return py.Tuple{py.Int(t.Year()), py.Int(int(t.Month())), py.Int(t.Day()), py.Int(t.Hour()), py.Int(t.Minute()), py.Int(t.Second())}, nil
+	}})
+	ZipInfoType.Dict.Set("is_dir", py.MustNewMethod("is_dir", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.NewBool(strings.HasSuffix(self.(*zipInfo).name, "/")), nil
+	}, 0, "Return True if this archive member is a directory."))
 	ZipInfoType.Dict.Set("CRC", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		return py.Int(self.(*zipInfo).crc), nil
 	}})
@@ -581,7 +630,9 @@ func init() {
 		{"namelist", zipFileNamelist, "Return a list of archive members by name."},
 		{"infolist", zipFileInfolist, "Return a list of ZipInfo objects for all members."},
 		{"read", zipFileRead, "Return the bytes of the file name in the archive."},
-		{"open", nil, "Return a file-like object for a member."},
+		{"open", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
+			return zipFileOpen(self, args, kw)
+		}, "Return a file-like object for a member."},
 		{"extract", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 			return zipFileExtract(self, args, kw)
 		}, "Extract a member from the archive to the current working directory."},

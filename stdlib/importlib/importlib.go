@@ -265,6 +265,7 @@ var utilModule = &py.ModuleImpl{
 	Methods: []*py.Method{
 		py.MustNewMethod("find_spec", utilFindSpec, 0, find_spec_doc),
 		py.MustNewMethod("spec_from_file_location", utilSpecFromFileLocation, 0, spec_from_file_location_doc),
+		py.MustNewMethod("spec_from_loader", utilSpecFromLoader, 0, spec_from_loader_doc),
 		py.MustNewMethod("module_from_spec", utilModuleFromSpec, 0, module_from_spec_doc),
 		py.MustNewMethod("cache_from_source", utilCacheFromSource, 0, "cache_from_source(path, debug_override=None, *, optimization=None) -> the .pyc path for a source path"),
 		py.MustNewMethod("source_from_cache", utilSourceFromCache, 0, "source_from_cache(path) -> the source path for a .pyc path"),
@@ -467,6 +468,47 @@ func utilSpecFromFileLocation(self py.Object, args py.Tuple, kwargs py.StringDic
 	return &ModuleSpec{Name: name, Loader: py.None, Origin: location, Location: filepath.Dir(location)}, nil
 }
 
+// utilSpecFromLoader is spec_from_loader for a loader that is not a file
+// loader: the spec carries the loader and, when the loader answers
+// is_package, whether the module is a package.
+func utilSpecFromLoader(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var nameObj, loader, origin, isPkg py.Object = nil, nil, py.None, py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|$OO:spec_from_loader",
+		[]string{"name", "loader", "origin", "is_package"}, &nameObj, &loader, &origin, &isPkg); err != nil {
+		return nil, err
+	}
+	name, err := py.StrAsString(nameObj)
+	if err != nil {
+		return nil, err
+	}
+	spec := &ModuleSpec{Name: name, Loader: loader}
+	if origin != py.None {
+		if spec.Origin, err = py.StrAsString(origin); err != nil {
+			return nil, err
+		}
+	}
+	if isPkg == py.None {
+		if fn, err := py.GetAttrString(loader, "is_package"); err == nil {
+			r, err := py.Call(fn, py.Tuple{nameObj}, py.StringDict{})
+			if err != nil {
+				return nil, err
+			}
+			isPkg = r
+		}
+	}
+	if isPkg != py.None {
+		spec.IsPkg, err = py.ObjectIsTrue(isPkg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return spec, nil
+}
+
+const spec_from_loader_doc = `spec_from_loader(name, loader, *, origin=None, is_package=None) -> ModuleSpec
+
+Return a module spec based on a loader.`
+
 const spec_from_file_location_doc = `spec_from_file_location(name, location=None, *, file=None,
                         submodule_search_locations=None, loader=None)
 
@@ -560,6 +602,7 @@ func init() {
 		{"read_text", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 			return traversableReadText(self, args, kw)
 		}, "Read the file as text."},
+		{"open", traversableOpen, "Open the file; mode is 'r' (text, the default) or 'rb'."},
 		{"read_bytes", traversableReadBytes, "Read the file as bytes."},
 		{"is_file", traversableIsFile, "True if this is a file."},
 		{"is_dir", traversableIsDir, "True if this is a directory."},
@@ -739,7 +782,13 @@ func packageDir(ctx py.Context, pkg py.Object) (string, error) {
 		}
 		mod, err := ctx.GetModule(string(s))
 		if err != nil {
-			return "", err
+			// Not imported yet: files("pkg.sub") imports it, as in CPython.
+			if ierr := py.Import(ctx, string(s)); ierr != nil {
+				return "", ierr
+			}
+			if mod, err = ctx.GetModule(string(s)); err != nil {
+				return "", err
+			}
 		}
 		pkg = mod
 	}
@@ -762,6 +811,7 @@ func packageDir(ctx py.Context, pkg py.Object) (string, error) {
 // read_bytes, joinpath and iteration operations.
 type traversable struct {
 	path string
+	ctx  py.Context
 	Dict py.StringDict
 }
 
@@ -784,7 +834,7 @@ func resourceFiles(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &traversable{path: dir, Dict: py.NewStringDict()}, nil
+	return &traversable{path: dir, ctx: currentContext(self), Dict: py.NewStringDict()}, nil
 }
 
 func traversableJoinpath(self py.Object, args py.Tuple) (py.Object, error) {
@@ -796,7 +846,7 @@ func traversableJoinpath(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &traversable{path: filepath.Join(t.path, child), Dict: py.NewStringDict()}, nil
+	return &traversable{path: filepath.Join(t.path, child), ctx: t.ctx, Dict: py.NewStringDict()}, nil
 }
 
 func traversableReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -806,7 +856,7 @@ func traversableReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (p
 		[]string{"encoding"}, &encoding); err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(t.path)
+	data, err := py.ReadPath(t.path)
 	if err != nil {
 		return nil, py.ExceptionNewf(py.OSError, "%s", err)
 	}
@@ -815,28 +865,45 @@ func traversableReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (p
 
 func traversableReadBytes(self py.Object, args py.Tuple) (py.Object, error) {
 	t := self.(*traversable)
-	data, err := os.ReadFile(t.path)
+	data, err := py.ReadPath(t.path)
 	if err != nil {
 		return nil, py.ExceptionNewf(py.OSError, "%s", err)
 	}
 	return py.Bytes(data), nil
 }
 
+func traversableOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	t := self.(*traversable)
+	mode := "r"
+	var modeObj, enc, errs py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OOO:open", []string{"mode", "encoding", "errors"}, &modeObj, &enc, &errs); err != nil {
+		return nil, err
+	}
+	if modeObj != nil {
+		m, err := py.StrAsString(modeObj)
+		if err != nil {
+			return nil, err
+		}
+		mode = m
+	}
+	return openResourceFile(t.ctx, filepath.Dir(t.path), filepath.Base(t.path), mode)
+}
+
 func traversableExists(self py.Object, args py.Tuple) (py.Object, error) {
 	t := self.(*traversable)
-	_, err := os.Stat(t.path)
+	_, err := py.StatPath(t.path)
 	return py.Bool(err == nil), nil
 }
 
 func traversableIsFile(self py.Object, args py.Tuple) (py.Object, error) {
 	t := self.(*traversable)
-	fi, err := os.Stat(t.path)
+	fi, err := py.StatPath(t.path)
 	return py.Bool(err == nil && !fi.IsDir()), nil
 }
 
 func traversableIsDir(self py.Object, args py.Tuple) (py.Object, error) {
 	t := self.(*traversable)
-	fi, err := os.Stat(t.path)
+	fi, err := py.StatPath(t.path)
 	return py.Bool(err == nil && fi.IsDir()), nil
 }
 
@@ -878,7 +945,7 @@ func resourceReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, name))
+	data, err := py.ReadPath(filepath.Join(dir, name))
 	if err != nil {
 		return nil, py.ExceptionNewf(py.FileNotFoundError, "%s", err)
 	}
@@ -890,7 +957,7 @@ func resourceReadBinary(self py.Object, args py.Tuple, kwargs py.StringDict) (py
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, name))
+	data, err := py.ReadPath(filepath.Join(dir, name))
 	if err != nil {
 		return nil, py.ExceptionNewf(py.FileNotFoundError, "%s", err)
 	}
@@ -919,7 +986,7 @@ func resourceIsResource(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	fi, err := os.Stat(filepath.Join(dir, name))
+	fi, err := py.StatPath(filepath.Join(dir, name))
 	return py.Bool(err == nil && !fi.IsDir()), nil
 }
 
@@ -930,6 +997,29 @@ func openResourceFile(ctx py.Context, dir, name, mode string) (py.Object, error)
 	var mod py.Object
 	if ctx == nil {
 		return nil, py.ExceptionNewf(py.RuntimeError, "no import context")
+	}
+	if py.IsEmbeddedPath(path) {
+		// A file inside the embedded library is not on disk: serve it from memory.
+		data, err := py.ReadPath(path)
+		if err != nil {
+			return nil, py.ExceptionNewf(py.FileNotFoundError, "[Errno 2] No such file or directory: '%s'", path)
+		}
+		if err := py.Import(ctx, "io"); err != nil {
+			return nil, err
+		}
+		io, err := ctx.GetModule("io")
+		if err != nil {
+			return nil, err
+		}
+		cls, arg := "StringIO", py.Object(py.String(data))
+		if strings.Contains(mode, "b") {
+			cls, arg = "BytesIO", py.Bytes(data)
+		}
+		ctor, err := py.GetAttrString(io, cls)
+		if err != nil {
+			return nil, err
+		}
+		return py.Call(ctor, py.Tuple{arg}, py.NewStringDict())
 	}
 	m, err := ctx.GetModule("builtins")
 	if err != nil {

@@ -322,6 +322,13 @@ func init() {
 		return None, nil
 	}, 0, "update([other]) -> None.  Update D from a dict/iterable of key/value pairs and keywords."))
 
+	// dict.__init__ adds the entries like update(), so a subclass's
+	// super().__init__(mapping) fills the instance (DictNew only does so for
+	// the arguments of the constructor call itself).
+	StringDictType.Dict.Set("__init__", MustNewMethod("__init__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return StringDictType.Dict.GetOrNil("update").(*Method).CallWithKeywords(self, args, kwargs)
+	}, 0, "Initialize self.  See help(type(self)) for accurate signature."))
+
 	StringDictType.Dict.Set("clear", MustNewMethod("clear", func(self Object, args Tuple) (Object, error) {
 		d, _ := dictStorage(self)
 		if err := methodNoArgs("dict.clear", args); err != nil {

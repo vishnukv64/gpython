@@ -61,6 +61,13 @@ type Frame struct {
 	// FIXME Tstate *PyThreadState
 	Lasti int32 // Last instruction if called
 
+	// GID is the id of the goroutine this frame is executing on, recorded by
+	// the VM each time the frame runs.  A call made from this frame to a
+	// Python function is made on the same goroutine, so the callee reads it
+	// from here instead of asking the runtime, which costs time proportional
+	// to the depth of the Go stack.
+	GID uint64
+
 	// PendingException is an exception to raise as soon as this frame
 	// resumes, set by generator.throw().  The VM reads it on entry and
 	// unwinds through the frame's own handlers, so an "except" inside a

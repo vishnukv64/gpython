@@ -318,6 +318,22 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 				}
 				return true
 			})
+		case *ast.FString:
+			// The compiler lowers an f-string to ordinary code, but only
+			// after this pass, so its fields are parsed here too: a name
+			// used only inside an f-string must still count as a use, or a
+			// nested scope (a comprehension, a lambda) never captures it.
+			// An invalid f-string is reported by the compiler, not here.
+			if parts, err := ast.ParseFString(node.Text); err == nil {
+				for _, part := range parts {
+					if !part.Field {
+						continue
+					}
+					if expr, err := ast.ParseExpr(part.Expr); err == nil {
+						st.Parse(expr)
+					}
+				}
+			}
 		case *ast.Name:
 			if node.Ctx == ast.Load {
 				st.AddDef(node, node.Id, DefUse)

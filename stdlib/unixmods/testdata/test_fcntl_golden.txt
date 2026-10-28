@@ -1,0 +1,16 @@
+1 2 1 3 4 0
+1 2 4 8 True
+1
+0
+True
+True
+True
+OSError
+ValueError
+ValueError
+TypeError
+TypeError
+blocking
+0
+True
+0 True

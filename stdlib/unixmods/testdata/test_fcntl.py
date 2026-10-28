@@ -1,0 +1,36 @@
+import fcntl, os, tempfile, struct, termios
+print(fcntl.F_GETFD, fcntl.F_SETFD, fcntl.FD_CLOEXEC, fcntl.F_GETFL, fcntl.F_SETFL, fcntl.F_DUPFD)
+print(fcntl.LOCK_SH, fcntl.LOCK_EX, fcntl.LOCK_NB, fcntl.LOCK_UN, fcntl.F_UNLCK != fcntl.F_WRLCK)
+fd, path = tempfile.mkstemp()
+try:
+    print(fcntl.fcntl(fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC)
+    fcntl.fcntl(fd, fcntl.F_SETFD, 0)
+    print(fcntl.fcntl(fd, fcntl.F_GETFD))
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    print(fl & os.O_ACCMODE == os.O_RDWR)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    print(bool(fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NONBLOCK))
+    d = fcntl.fcntl(fd, fcntl.F_DUPFD, 100)
+    print(d >= 100); os.close(d)
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    fcntl.lockf(fd, fcntl.LOCK_UN)
+    fcntl.lockf(fd, fcntl.LOCK_EX, 10, 0, 0)
+    fcntl.lockf(fd, fcntl.LOCK_UN, 10, 0, 0)
+    for f in (lambda: fcntl.flock(fd, 0), lambda: fcntl.lockf(fd, 0), lambda: fcntl.fcntl(-1, fcntl.F_GETFD), lambda: fcntl.fcntl("x", 1), lambda: fcntl.flock(fd)):
+        try: f()
+        except Exception as e: print(type(e).__name__)
+    fd2 = os.open(path, os.O_RDWR)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    try: fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as e: print("blocking")
+    fcntl.flock(fd, fcntl.LOCK_UN); fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB); os.close(fd2)
+    class F:
+        def fileno(self): return fd
+    print(fcntl.fcntl(F(), fcntl.F_GETFD))
+    r, w = os.pipe(); os.write(w, b"hello")
+    print(fcntl.ioctl(r, termios.FIONREAD, b"\0\0\0\0")[:4] == struct.pack("i", 5))
+    buf = bytearray(4); print(fcntl.ioctl(r, termios.FIONREAD, buf), bytes(buf) == struct.pack("i", 5))
+finally:
+    os.close(fd); os.unlink(path)

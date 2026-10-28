@@ -215,6 +215,28 @@ func init() {
 			return nil
 		},
 	})
+	// __module__ is the __name__ of the globals the function was defined in,
+	// unless it has been assigned (pickle names a function by it).
+	FunctionType.Dict.Set("__module__", &Property{
+		Fget: func(self Object) (Object, error) {
+			f := self.(*Function)
+			if v, ok := f.Dict.Get("__module__"); ok {
+				return v, nil
+			}
+			if v, ok := f.Globals.Get("__name__"); ok {
+				return v, nil
+			}
+			return None, nil
+		},
+		Fset: func(self, value Object) error {
+			f := self.(*Function)
+			if f.Dict.IsNil() {
+				f.Dict = NewStringDict()
+			}
+			f.Dict.Set("__module__", value)
+			return nil
+		},
+	})
 	FunctionType.Dict.Set("__qualname__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Function).Qualname), nil

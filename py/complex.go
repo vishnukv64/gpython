@@ -42,10 +42,14 @@ func ComplexNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		}
 		return Complex(c), nil
 	}
+	// Combine the parts componentwise: real + imag*1j would turn a signed
+	// zero, an infinity or a NaN in a part into the wrong component
+	// (complex(0.0, -0.0), complex(nan, inf)).
 	parts := [2]complex128{}
+	isC := [2]bool{}
 	for i, o := range [2]Object{realObj, imagObj} {
 		if c, ok := o.(Complex); ok {
-			parts[i] = complex128(c)
+			parts[i], isC[i] = complex128(c), true
 			continue
 		}
 		f, err := MakeFloat(o)
@@ -54,7 +58,20 @@ func ComplexNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		}
 		parts[i] = complex(float64(f.(Float)), 0)
 	}
-	return Complex(parts[0] + parts[1]*1i), nil
+	if isC[0] && len(args) < 2 && !kwargs.Has("imag") {
+		return Complex(parts[0]), nil
+	}
+	re, im := real(parts[0]), imag(parts[0])
+	if isC[1] {
+		re -= imag(parts[1])
+		im += real(parts[1])
+	} else {
+		im = real(parts[1])
+		if isC[0] {
+			im += imag(parts[0])
+		}
+	}
+	return Complex(complex(re, im)), nil
 }
 
 // Convert an Object to an Complex

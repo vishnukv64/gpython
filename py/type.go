@@ -2570,6 +2570,17 @@ func (ty *Type) M__ne__(other Object) (Object, error) {
 		} else if found && res != NotImplemented {
 			return res, nil
 		}
+		// object.__ne__ is the inverse of __eq__: a class that defines only
+		// __eq__ must not report "equal" objects as different.
+		if res, found, err := ty.CallMethod("__eq__", Tuple{ty, other}, NewStringDict()); err != nil {
+			return nil, err
+		} else if found && res != NotImplemented {
+			t, err := ObjectIsTrue(res)
+			if err != nil {
+				return nil, err
+			}
+			return NewBool(!t), nil
+		}
 	}
 	if otherTy, ok := other.(*Type); ok && ty == otherTy {
 		return False, nil

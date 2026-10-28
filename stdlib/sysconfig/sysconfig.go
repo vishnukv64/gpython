@@ -119,6 +119,7 @@ func allConfigVars() []py.DictEntry {
 		{Key: "Py_ENABLE_SHARED", Value: py.Int(0)},
 		{Key: "ABIFLAGS", Value: py.String("")},
 		{Key: "Py_DEBUG", Value: py.Int(0)},
+		{Key: "TZPATH", Value: py.String(tzPath())},
 		{Key: "WITH_THREAD", Value: py.Int(1)},
 	}
 }
@@ -216,24 +217,132 @@ func getPythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.String("3.4"), nil
 }
 
+type pathTemplate struct{ key, tmpl string }
+
+// prefixScheme is the layout this interpreter has: a single prefix with the
+// platform's own directories.  homeScheme is CPython's posix_home, the layout
+// for "pip install --target/--home": libraries directly under lib/python.
+var (
+	prefixScheme = []pathTemplate{
+		{"stdlib", "{installed_base}/lib/python{py_version_short}"},
+		{"platstdlib", "{platbase}/lib/python{py_version_short}"},
+		{"purelib", "{base}/lib/python{py_version_short}/site-packages"},
+		{"platlib", "{platbase}/lib/python{py_version_short}/site-packages"},
+		{"include", "{installed_base}/include/python{py_version_short}"},
+		{"platinclude", "{installed_platbase}/include/python{py_version_short}"},
+		{"scripts", "{base}/bin"},
+		{"data", "{base}"},
+	}
+	homeScheme = []pathTemplate{
+		{"stdlib", "{installed_base}/lib/python"},
+		{"platstdlib", "{base}/lib/python"},
+		{"purelib", "{base}/lib/python"},
+		{"platlib", "{base}/lib/python"},
+		{"include", "{installed_base}/include/python"},
+		{"platinclude", "{installed_base}/include/python"},
+		{"scripts", "{base}/bin"},
+		{"data", "{base}"},
+	}
+	// schemes maps each scheme name get_paths accepts to its layout.
+	// posix_prefix is the name pip falls back to when sysconfig has no
+	// get_preferred_scheme.  There is no user scheme: it needs a userbase.
+	schemes = map[string][]pathTemplate{
+		"gpython_posix_prefix": prefixScheme,
+		"posix_prefix":         prefixScheme,
+		"posix_home":           homeScheme,
+	}
+	schemeNames = []string{"gpython_posix_prefix", "posix_prefix", "posix_home"}
+)
+
+// pathVars is the variable table for expanding a scheme: the interpreter's own
+// variables, overridden by the caller's vars mapping (pip passes base, platbase
+// and friends to retarget an install at a temporary prefix).
+func pathVars(varsObj py.Object) (map[string]string, error) {
+	m := map[string]string{}
+	for _, e := range allConfigVars() {
+		if s, ok := e.Value.(py.String); ok {
+			m[e.Key] = string(s)
+		}
+	}
+	if varsObj == nil || varsObj == py.None {
+		return m, nil
+	}
+	it, err := py.Iter(varsObj)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		k, err := py.Next(it)
+		if err != nil {
+			if py.IsException(py.StopIteration, err) {
+				return m, nil
+			}
+			return nil, err
+		}
+		v, err := py.GetItem(varsObj, k)
+		if err != nil {
+			return nil, err
+		}
+		ks, err := py.StrAsString(k)
+		if err != nil {
+			return nil, err
+		}
+		vs, err := py.StrAsString(v)
+		if err != nil {
+			return nil, err
+		}
+		m[ks] = vs
+	}
+}
+
+// schemeFor is the layout named by scheme, or the default when it is unset.
+func schemeFor(scheme py.Object) ([]pathTemplate, error) {
+	if scheme == nil || scheme == py.None {
+		return prefixScheme, nil
+	}
+	name, err := py.StrAsString(scheme)
+	if err != nil {
+		return nil, err
+	}
+	if t, ok := schemes[name]; ok {
+		return t, nil
+	}
+	return nil, py.ExceptionNewf(py.KeyError, "%q", name)
+}
+
+func expandPaths(tmpls []pathTemplate, varsObj, expand py.Object) (py.StringDict, error) {
+	vars, err := pathVars(varsObj)
+	if err != nil {
+		return py.StringDict{}, err
+	}
+	doExpand, _ := py.ObjectIsTrue(expand)
+	d := py.NewStringDict()
+	for _, e := range tmpls {
+		v := e.tmpl
+		if doExpand {
+			for k, val := range vars {
+				v = strings.ReplaceAll(v, "{"+k+"}", val)
+			}
+			v = filepath.FromSlash(v)
+		}
+		(&d).Set(e.key, py.String(v))
+	}
+	return d, nil
+}
+
 func getPaths(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var scheme, varsObj py.Object
 	var expand py.Object = py.True
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|OOO:get_paths", []string{"scheme", "vars", "expand"}, &scheme, &varsObj, &expand); err != nil {
 		return nil, err
 	}
-	d := py.NewStringDict()
-	for _, e := range []py.DictEntry{
-		{Key: "stdlib", Value: py.String(prefix())},
-		{Key: "platstdlib", Value: py.String(prefix())},
-		{Key: "purelib", Value: py.String(filepath.Join(prefix(), "lib", "python3.4", "site-packages"))},
-		{Key: "platlib", Value: py.String(filepath.Join(prefix(), "lib", "python3.4", "site-packages"))},
-		{Key: "include", Value: py.String(filepath.Join(prefix(), "include", "python3.4"))},
-		{Key: "platinclude", Value: py.String(filepath.Join(prefix(), "include", "python3.4"))},
-		{Key: "scripts", Value: py.String(filepath.Join(prefix(), "bin"))},
-		{Key: "data", Value: py.String(prefix())},
-	} {
-		(&d).Set(e.Key, e.Value)
+	tmpls, err := schemeFor(scheme)
+	if err != nil {
+		return nil, err
+	}
+	d, err := expandPaths(tmpls, varsObj, expand)
+	if err != nil {
+		return nil, err
 	}
 	return d, nil
 }
@@ -248,43 +357,42 @@ func getPath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 	if err != nil {
 		return nil, err
 	}
-	d, err := getPaths(self, py.Tuple{}, py.NewStringDict())
+	tmpls, err := schemeFor(scheme)
 	if err != nil {
 		return nil, err
 	}
-	paths := d.(py.StringDict)
+	paths, err := expandPaths(tmpls, varsObj, expand)
+	if err != nil {
+		return nil, err
+	}
 	if v, ok := paths.Get(name); ok {
 		return v, nil
 	}
-	return nil, py.ExceptionNewf(py.KeyError, "unknown installation path %q", name)
+	return nil, py.ExceptionNewf(py.KeyError, "%q", name)
 }
 
-// installSchemes is the one scheme this interpreter has: a single prefix with
-// the platform's own layout.
+// installSchemes exposes the templates as sysconfig._INSTALL_SCHEMES.
 func installSchemes() py.Object {
-	scheme := py.NewStringDict()
-	for _, e := range []py.DictEntry{
-		{Key: "stdlib", Value: py.String("{installed_base}/lib/python{py_version_short}")},
-		{Key: "platstdlib", Value: py.String("{platbase}/lib/python{py_version_short}")},
-		{Key: "purelib", Value: py.String("{base}/lib/python{py_version_short}/site-packages")},
-		{Key: "platlib", Value: py.String("{platbase}/lib/python{py_version_short}/site-packages")},
-		{Key: "include", Value: py.String("{installed_base}/include/python{py_version_short}")},
-		{Key: "platinclude", Value: py.String("{installed_platbase}/include/python{py_version_short}")},
-		{Key: "scripts", Value: py.String("{base}/bin")},
-		{Key: "data", Value: py.String("{base}")},
-	} {
-		(&scheme).Set(e.Key, e.Value)
+	out := py.NewStringDict()
+	for _, n := range schemeNames {
+		scheme := py.NewStringDict()
+		for _, e := range schemes[n] {
+			(&scheme).Set(e.key, py.String(e.tmpl))
+		}
+		(&out).Set(n, scheme)
 	}
-	return py.NewStringDictFrom(
-		py.DictEntry{Key: "gpython_posix_prefix", Value: scheme},
-	)
+	return out
 }
 
 func getSchemeNames(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "get_scheme_names() takes no arguments")
 	}
-	return py.Tuple{py.String("gpython_posix_prefix")}, nil
+	t := py.Tuple{}
+	for _, n := range schemeNames {
+		t = append(t, py.String(n))
+	}
+	return t, nil
 }
 
 // prefix is the installation prefix: the directory holding the running
@@ -306,4 +414,14 @@ func darwinVersion() string {
 		return "0.0"
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// tzPath is where zoneinfo looks for the system's zone files: CPython's
+// configure default on Unix, nothing on Windows (zoneinfo then uses the
+// embedded tzdata package).
+func tzPath() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	return "/usr/share/zoneinfo:/usr/lib/zoneinfo:/usr/share/lib/zoneinfo:/etc/zoneinfo"
 }

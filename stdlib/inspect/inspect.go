@@ -222,7 +222,7 @@ const signature_doc = `signature(callable, *, follow_wrapped=True, globals=None,
 eval_str=False) -> Signature object`
 
 func notImplemented(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.ExceptionNewf(py.NotImplementedError, "inspect.signature is not implemented: this interpreter does not keep the argument binding needed to report it")
+	return nil, py.ExceptionNewf(py.ValueError, "no signature found: this interpreter does not keep the argument binding needed to report it")
 }
 
 // isabstract: a class whose __abstractmethods__ is non-empty (what abc sets,

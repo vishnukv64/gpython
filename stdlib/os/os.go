@@ -6,6 +6,7 @@
 package os
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"os/exec"
@@ -49,6 +50,8 @@ func init() {
 
 	methods := []*py.Method{
 		py.MustNewMethod("_exit", _exit, 0, "Immediate program termination."),
+		py.MustNewMethod("umask", osUmask, 0, "Set the current numeric umask and return the previous umask."),
+		py.MustNewMethod("fsync", fsync, 0, "Force write of fd to disk."),
 		py.MustNewMethod("close", closefd, 0, closefd_doc),
 		py.MustNewMethod("fdopen", fdopen, 0, fdopen_doc),
 		py.MustNewMethod("getcwd", getCwd, 0, "Get the current working directory"),
@@ -89,6 +92,21 @@ func init() {
 		}, 0, "Decode a path-like to str (utf-8)."),
 		py.MustNewMethod("fspath", fspath, 0, "Return the file system path representation of the object."),
 		py.MustNewMethod("isatty", isatty, 0, "Return True if the fd is connected to a terminal."),
+		py.MustNewMethod("strerror", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "strerror() takes exactly 1 argument (%d given)", len(args))
+			}
+			n, err := py.IndexInt(args[0])
+			if err != nil {
+				return nil, err
+			}
+			msg := syscall.Errno(n).Error()
+			if strings.HasPrefix(msg, "errno ") {
+				return py.String(fmt.Sprintf("Unknown error %d", n)), nil
+			}
+			// Go's table is libc's with the first letter lower-cased.
+			return py.String(strings.ToUpper(msg[:1]) + msg[1:]), nil
+		}, 0, "Translate an error code to a message string."),
 		py.MustNewMethod("getpid", getpid, 0, "Return the current process id."),
 		py.MustNewMethod("kill", kill, 0, "Send a signal to a process."),
 		py.MustNewMethod("listdir", listDir, 0, listDir_doc),
@@ -156,6 +174,11 @@ func init() {
 	globals.Set("pathsep", osPathsep)
 	globals.Set("linesep", osLinesep)
 	globals.Set("altsep", osAltsep)
+	// No os function here accepts a file descriptor, dir_fd, effective_ids or
+	// follow_symlinks, so each capability set is honestly empty.
+	for _, n := range []string{"supports_fd", "supports_dir_fd", "supports_effective_ids", "supports_follow_symlinks"} {
+		globals.Set(n, py.NewSet())
+	}
 	// os.PathLike: the protocol a path-like object implements.  It needs to
 	// be a class, since "os.PathLike[str]" appears in annotations and real
 	// code tests for it, and it must accept a subscription.
@@ -173,6 +196,7 @@ func init() {
 		},
 		Methods:    methods,
 		Globals:    globals,
+		CodeSrc:    scandirSrc,
 		Submodules: map[string]*py.Module{"path": PathModule()},
 	})
 }
@@ -215,6 +239,44 @@ func closefd(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		return nil, err
 	}
 
+	return py.None, nil
+}
+
+func osUmask(self py.Object, args py.Tuple) (py.Object, error) {
+	var mask py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "umask", 1, 1, &mask); err != nil {
+		return nil, err
+	}
+	n, err := py.IndexInt(mask)
+	if err != nil {
+		return nil, err
+	}
+	return py.Int(setUmask(n)), nil
+}
+
+func fsync(self py.Object, args py.Tuple) (py.Object, error) {
+	var fd py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "fsync", 1, 1, &fd); err != nil {
+		return nil, err
+	}
+	n, ok := fd.(py.Int)
+	if !ok {
+		// CPython also accepts any object with fileno().
+		fn, err := py.GetAttrString(fd, "fileno")
+		if err != nil {
+			return nil, err
+		}
+		r, err := py.Call(fn, nil, py.StringDict{})
+		if err != nil {
+			return nil, err
+		}
+		if n, ok = r.(py.Int); !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "fileno() returned a non-integer")
+		}
+	}
+	if err := fsyncFD(int(n)); err != nil {
+		return nil, err
+	}
 	return py.None, nil
 }
 

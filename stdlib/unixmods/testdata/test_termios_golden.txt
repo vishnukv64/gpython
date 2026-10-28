@@ -1,0 +1,14 @@
+0 1 2 True True True
+termios True
+error True Inappropriate ioctl for device
+9
+7 True <class 'bytes'> True True
+0 <class 'int'> 1 0
+True
+0 0
+(24, 80)
+True
+TypeError
+TypeError
+TypeError
+6 3 ['cfmakeraw', 'cfmakecbreak', 'setraw', 'setcbreak']

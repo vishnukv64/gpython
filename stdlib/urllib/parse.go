@@ -858,6 +858,14 @@ func resultGetItem(fields []string, args py.Tuple) (py.Object, error) {
 	if len(args) != 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "__getitem__() takes exactly one argument")
 	}
+	// A result is a named tuple: a slice gives a plain tuple of the fields.
+	if _, ok := args[0].(*py.Slice); ok {
+		items := make(py.Tuple, len(fields))
+		for i, f := range fields {
+			items[i] = py.String(f)
+		}
+		return items.M__getitem__(args[0])
+	}
 	i, err := py.IndexInt(args[0])
 	if err != nil {
 		return nil, err
@@ -891,6 +899,118 @@ func resultRepr(name string, names []string, fields []string) string {
 		parts[i] = names[i] + "=" + reprStr(f)
 	}
 	return name + "(" + strings.Join(parts, ", ") + ")"
+}
+
+// legacySplitters are CPython's deprecated splitXXX helpers.  They are public
+// and still imported by third-party code (pip's vendored distlib takes
+// splittype from here at import time), so each follows CPython 3.14 exactly.
+var legacySplitters = map[string]func(self py.Object, args py.Tuple) (py.Object, error){
+	"splittype": splitStr(func(s string) py.Object {
+		i := strings.IndexByte(s, ':')
+		if i <= 0 || strings.ContainsRune(s[:i], '/') {
+			return py.Tuple{py.None, py.String(s)}
+		}
+		return py.Tuple{py.String(strings.ToLower(s[:i])), py.String(s[i+1:])}
+	}),
+	"splithost": splitStr(func(s string) py.Object {
+		if !strings.HasPrefix(s, "//") {
+			return py.Tuple{py.None, py.String(s)}
+		}
+		rest := s[2:]
+		i := strings.IndexAny(rest, "/?")
+		if i < 0 {
+			i = len(rest)
+		}
+		host, path := rest[:i], rest[i:]
+		if path != "" && path[0] != '/' {
+			path = "/" + path
+		}
+		return py.Tuple{py.String(host), py.String(path)}
+	}),
+	"splituser": splitStr(func(s string) py.Object {
+		if i := strings.LastIndexByte(s, '@'); i >= 0 {
+			return py.Tuple{py.String(s[:i]), py.String(s[i+1:])}
+		}
+		return py.Tuple{py.None, py.String(s)}
+	}),
+	"splitpasswd": splitStr(func(s string) py.Object {
+		if i := strings.IndexByte(s, ':'); i >= 0 {
+			return py.Tuple{py.String(s[:i]), py.String(s[i+1:])}
+		}
+		return py.Tuple{py.String(s), py.None}
+	}),
+	"splitport": splitStr(func(s string) py.Object {
+		if i := strings.LastIndexByte(s, ':'); i >= 0 && strings.Trim(s[i+1:], "0123456789") == "" {
+			if i+1 == len(s) {
+				return py.Tuple{py.String(s[:i]), py.None}
+			}
+			return py.Tuple{py.String(s[:i]), py.String(s[i+1:])}
+		}
+		return py.Tuple{py.String(s), py.None}
+	}),
+	"splitquery": splitLast('?'),
+	"splittag":   splitLast('#'),
+	"splitattr": splitStr(func(s string) py.Object {
+		words := strings.Split(s, ";")
+		rest := make([]py.Object, len(words)-1)
+		for i, w := range words[1:] {
+			rest[i] = py.String(w)
+		}
+		return py.Tuple{py.String(words[0]), py.NewListFromItems(rest)}
+	}),
+	"splitvalue": splitStr(func(s string) py.Object {
+		if i := strings.IndexByte(s, '='); i >= 0 {
+			return py.Tuple{py.String(s[:i]), py.String(s[i+1:])}
+		}
+		return py.Tuple{py.String(s), py.None}
+	}),
+	"splitnport": func(self py.Object, args py.Tuple) (py.Object, error) {
+		var a, def py.Object = nil, py.Int(-1)
+		if err := py.UnpackTuple(args, py.StringDict{}, "splitnport", 1, 2, &a, &def); err != nil {
+			return nil, err
+		}
+		s, err := py.StrAsString(a)
+		if err != nil {
+			return nil, err
+		}
+		i := strings.LastIndexByte(s, ':')
+		if i < 0 {
+			return py.Tuple{py.String(s), def}, nil
+		}
+		host, port := s[:i], s[i+1:]
+		if port == "" {
+			return py.Tuple{py.String(host), def}, nil
+		}
+		if n, err := strconv.Atoi(port); err == nil && strings.Trim(port, "0123456789") == "" {
+			return py.Tuple{py.String(host), py.Int(n)}, nil
+		}
+		return py.Tuple{py.String(host), py.None}, nil
+	},
+}
+
+// splitStr adapts a func(string) to a one-argument builtin.
+func splitStr(f func(string) py.Object) func(py.Object, py.Tuple) (py.Object, error) {
+	return func(self py.Object, args py.Tuple) (py.Object, error) {
+		var a py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "split", 1, 1, &a); err != nil {
+			return nil, err
+		}
+		s, err := py.StrAsString(a)
+		if err != nil {
+			return nil, err
+		}
+		return f(s), nil
+	}
+}
+
+// splitLast splits at the last sep: (before, after), or (s, None).
+func splitLast(sep byte) func(py.Object, py.Tuple) (py.Object, error) {
+	return splitStr(func(s string) py.Object {
+		if i := strings.LastIndexByte(s, sep); i >= 0 {
+			return py.Tuple{py.String(s[:i]), py.String(s[i+1:])}
+		}
+		return py.Tuple{py.String(s), py.None}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -950,6 +1070,9 @@ func init() {
 		{"urldefrag", urllibDefragNamed, "urldefrag(url) -> DefragResult(url_without_fragment, fragment)"},
 	} {
 		parseGlobals.Set(m.name, py.MustNewMethod(m.name, m.fn, 0, m.doc))
+	}
+	for name, fn := range legacySplitters {
+		parseGlobals.Set(name, py.MustNewMethod(name, fn, 0, name+"(string) -> a tuple (deprecated in CPython)"))
 	}
 	parseGlobals.Set("MAX_CACHE_SIZE", py.Int(0))
 	parseGlobals.Set("SplitResult", splitResultType)

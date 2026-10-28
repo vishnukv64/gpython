@@ -64,8 +64,56 @@ func init() {
 	}
 }
 
+// __reduce__ pickles a bound method by name, as CPython does:
+// (getattr, (self, "name")).  The builtin getattr is found through the
+// function's context, so the pickle names builtins.getattr itself.
+func init() {
+	BoundMethodType.Dict.Set("__reduce__", MustNewMethod("__reduce__", func(self Object, args Tuple) (Object, error) {
+		bm := self.(*BoundMethod)
+		var getattr Object
+		if f, ok := bm.Method.(*Function); ok && f.Context != nil {
+			getattr, _ = f.Context.Store().Builtins.Globals.Get("getattr")
+		}
+		name, err := GetAttrString(bm.Method, "__name__")
+		if err != nil || getattr == nil {
+			return nil, ExceptionNewf(TypeError, "cannot pickle 'method' object")
+		}
+		return Tuple{getattr, Tuple{bm.Self, name}}, nil
+	}, 0, "Pickle a bound method as getattr(self, name)."))
+}
+
 // M__getattr__ forwards other attribute reads to the function, as CPython's
 // method objects do (unittest.expectedFailure sets a flag on the function).
 func (m *BoundMethod) M__getattr__(name string) (Object, error) {
 	return GetAttrString(m.Method, name)
 }
+
+// Two bound methods are equal when they bind equal objects to the same
+// function, so "a.f == a.f" holds although each lookup builds a new object.
+func (bm *BoundMethod) M__eq__(other Object) (Object, error) {
+	o, ok := other.(*BoundMethod)
+	if !ok {
+		return NotImplemented, nil
+	}
+	same, err := Eq(bm.Self, o.Self)
+	if err != nil {
+		return nil, err
+	}
+	if t, err := ObjectIsTrue(same); err != nil || !t {
+		return False, err
+	}
+	same, err = Eq(bm.Method, o.Method)
+	if err != nil {
+		return nil, err
+	}
+	return same, nil
+}
+
+func (bm *BoundMethod) M__hash__() (Object, error) {
+	h1, _ := HashValue(bm.Self)
+	h2, _ := HashValue(bm.Method)
+	return Int(h1 ^ h2), nil
+}
+
+var _ I__eq__ = (*BoundMethod)(nil)
+var _ I__hash__ = (*BoundMethod)(nil)

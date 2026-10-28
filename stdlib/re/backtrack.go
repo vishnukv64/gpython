@@ -68,5 +68,7 @@ func (b *backtrack) find(text string, anchored, whole bool) []int {
 }
 
 func needsBacktrack(translated string) bool {
-	return strings.Contains(translated, "(?=")
+	// An atomic group "(?>...)" (Python 3.11) is the other construct only a
+	// backtracking engine has; CPython's own fnmatch.translate emits one.
+	return strings.Contains(translated, "(?=") || strings.Contains(translated, "(?>")
 }

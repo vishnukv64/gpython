@@ -374,6 +374,12 @@ func DelItem(self Object, key Object) (Object, error) {
 //
 // If not found err will be an AttributeError
 func GetAttrString(self Object, key string) (res Object, err error) {
+	return getAttrString(self, key, true)
+}
+
+// getAttrString is GetAttrString; hooks=false is object.__getattribute__:
+// the default lookup, without __getattribute__/__getattr__ overrides.
+func getAttrString(self Object, key string, hooks bool) (res Object, err error) {
 	// Call __getattribute__ if it exists.
 	//
 	// For an INSTANCE that means whatever its class defines, which is the
@@ -384,13 +390,15 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	// lookup - so a type that defines __getattribute__, as threading.local
 	// does, otherwise answered EVERY attribute through it and lost its own
 	// metadata: "threading.local.__name__" raised AttributeError.
-	if I, ok := self.(I__getattribute__); ok {
+	if I, ok := self.(I__getattribute__); ok && hooks {
 		if _, isType := self.(*Type); !isType {
 			return I.M__getattribute__(key)
 		}
 	}
-	if _, isType := self.(*Type); !isType {
-		if r, found, err2 := TypeCall1(self, "__getattribute__", Object(String(key))); found {
+	if _, isType := self.(*Type); !isType && hooks {
+		if m := self.Type().Lookup("__getattribute__"); m == Object(objectGetattribute) {
+			// the default: fall through to the ordinary lookup below
+		} else if r, found, err2 := TypeCall1(self, "__getattribute__", Object(String(key))); found {
 			return r, err2
 		}
 	}
@@ -428,6 +436,9 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 				if I, ok := res.(I__get__); ok {
 					return I.M__get__(None, self)
 				}
+				if r, ok, err := userGet(res, None, self); ok {
+					return r, err
+				}
 			}
 			return res, err
 		}
@@ -451,6 +462,9 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 		if own := t.Lookup(key); own != nil {
 			if I, ok := own.(I__get__); ok {
 				return I.M__get__(self, t)
+			}
+			if r, ok, err := userGet(own, self, t); ok {
+				return r, err
 			}
 			return own, nil
 		}
@@ -478,6 +492,9 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 				if I, ok := own.(I__get__); ok {
 					return I.M__get__(None, self)
 				}
+				if r, ok, err := userGet(own, None, self); ok {
+					return r, err
+				}
 				return own, nil
 			}
 		}
@@ -487,8 +504,14 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 		// Call __get__ which creates bound methods, reads properties etc
 		if I, ok := res.(I__get__); ok {
 			res, err = I.M__get__(self, t)
+		} else if r, ok, uerr := userGet(res, self, t); ok {
+			res, err = r, uerr
 		}
 		return res, err
+	}
+
+	if !hooks {
+		return nil, ExceptionNewf(AttributeError, "%s has no attribute '%s'", attributeOwner(self), key)
 	}
 
 	// And now only if not found call __getattr__
@@ -788,7 +811,7 @@ func Iter(self Object) (res Object, err error) {
 // overriding __setattr__ via super() or object.__setattr__(self, ...). They
 // bypass user overrides, so they must not route through SetAttr (recursion);
 // SetAttrString/DeleteAttrString skip dispatching to them for the same reason.
-var objectSetattr, objectDelattr *Method
+var objectSetattr, objectDelattr, objectGetattribute *Method
 
 func init() {
 	objectSetattr = MustNewMethod("__setattr__", func(self Object, args Tuple) (Object, error) {
@@ -819,6 +842,35 @@ func init() {
 		}
 		return None, delAttrDict(self, key)
 	}, 0, "Implement delattr(self, name).")
+	objectGetattribute = MustNewMethod("__getattribute__", func(self Object, args Tuple) (Object, error) {
+		var name Object
+		if err := UnpackTuple(args, StringDict{}, "__getattribute__", 1, 1, &name); err != nil {
+			return nil, err
+		}
+		key, err := AttributeName(name)
+		if err != nil {
+			return nil, err
+		}
+		return getAttrString(self, key, false)
+	}, 0, "Return getattr(self, name).")
+	ObjectType.Dict.Set("__getattribute__", objectGetattribute)
 	ObjectType.Dict.Set("__setattr__", objectSetattr)
 	ObjectType.Dict.Set("__delattr__", objectDelattr)
+}
+
+// userGet runs the __get__ of a descriptor whose class is written in Python:
+// "class D: def __get__(self, obj, owner)", used as a class attribute.  An
+// instance of a Python class is a *Type with an empty Name, so the native
+// I__get__ interface never sees its __get__; ok reports whether res was one.
+func userGet(res, instance, owner Object) (Object, bool, error) {
+	ty, isType := res.(*Type)
+	if !isType || ty.Name != "" || ty.ObjectType == nil {
+		return nil, false, nil
+	}
+	get := ty.ObjectType.LookupPython("__get__")
+	if get == nil {
+		return nil, false, nil
+	}
+	r, err := Call(get, Tuple{res, instance, owner}, NewStringDict())
+	return r, true, err
 }

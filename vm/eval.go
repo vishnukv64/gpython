@@ -2274,6 +2274,20 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 			return nil, py.ExceptionNewf(py.SystemError, "Internal method %v not found", x)
 		}
 	}
+	// A call from Python to a Python function (or a method of one) stays on
+	// this goroutine: hand the callee this frame so it need not look the
+	// goroutine up.  Anything else goes through the general call protocol.
+	switch fn := fn.(type) {
+	case *py.Function:
+		return evalCode(f, fn.Context, fn.Code, fn.Globals, py.NewStringDict(), args, kwargs, fn.Defaults, fn.KwDefaults, fn.Closure)
+	case *py.BoundMethod:
+		if m, ok := fn.Method.(*py.Function); ok {
+			withSelf := make(py.Tuple, len(args)+1)
+			withSelf[0] = fn.Self
+			copy(withSelf[1:], args)
+			return evalCode(f, m.Context, m.Code, m.Globals, py.NewStringDict(), withSelf, kwargs, m.Defaults, m.KwDefaults, m.Closure)
+		}
+	}
 	return py.Call(fn, args, kwargs)
 }
 
@@ -2508,6 +2522,15 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 //
 // This is the equivalent of PyEval_EvalFrame
 func RunFrame(frame *py.Frame) (res py.Object, err error) {
+	return runFrame(frame, nil)
+}
+
+// runFrame runs frame.  caller is the Python frame making the call, when the
+// call is made from the interpreter loop itself: it is already running on this
+// goroutine, so its id and its place in the chain are known without asking the
+// runtime.  nil means the caller is unknown (a builtin calling back into
+// Python, a generator being resumed), and the goroutine is looked up.
+func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 	// Every frame that executes passes through here - a function call, a
 	// class body, a module body, and a generator each time it is resumed -
 	// so this is the one place that needs to keep the chain of executing
@@ -2522,10 +2545,18 @@ func RunFrame(frame *py.Frame) (res py.Object, err error) {
 	// popping assumed frames finish in the order they start, which threads
 	// break.  Back is set on every run, so a resumed generator points at
 	// whoever resumed it.
-	prevFrame := gCurrentFrame.get()
+	var gid uint64
+	var prevFrame *py.Frame
+	if caller != nil {
+		gid, prevFrame = caller.GID, caller
+	} else {
+		gid = goroutineID()
+		prevFrame = gCurrentFrame.getFor(gid)
+	}
 	frame.Back = prevFrame
-	gCurrentFrame.set(frame)
-	defer gCurrentFrame.set(prevFrame)
+	frame.GID = gid
+	gCurrentFrame.setFor(gid, frame)
+	defer gCurrentFrame.setFor(gid, prevFrame)
 
 	var vm = Vm{
 		frame:   frame,
@@ -3116,6 +3147,12 @@ func tooManyPositional(co *py.Code, given, defcount int, fastlocals []py.Object)
 //
 // This is the equivalent of PyEval_EvalCode with closure support
 func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args []py.Object, kws py.StringDict, defs []py.Object, kwdefs py.StringDict, closure py.Tuple) (retval py.Object, err error) {
+	return evalCode(nil, ctx, co, globals, locals, args, kws, defs, kwdefs, closure)
+}
+
+// evalCode is EvalCode for a call made from the frame caller, which is nil
+// when the call comes from Go code with no frame at hand.
+func evalCode(caller *py.Frame, ctx py.Context, co *py.Code, globals, locals py.StringDict, args []py.Object, kws py.StringDict, defs []py.Object, kwdefs py.StringDict, closure py.Tuple) (retval py.Object, err error) {
 	total_args := int(co.Argcount + co.Kwonlyargcount)
 	n := len(args)
 	var kwdict py.StringDict
@@ -3273,7 +3310,7 @@ func EvalCode(ctx py.Context, co *py.Code, globals, locals py.StringDict, args [
 		return py.NewGenerator(f), nil
 	}
 
-	return RunFrame(f)
+	return runFrame(f, caller)
 }
 
 // Write the py global to avoid circular import
@@ -3307,16 +3344,17 @@ type frameSlot struct {
 	frames map[uint64]*py.Frame
 }
 
-func (f *frameSlot) get() *py.Frame {
+func (f *frameSlot) get() *py.Frame { return f.getFor(goroutineID()) }
+
+func (f *frameSlot) getFor(id uint64) *py.Frame {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.frames[goroutineID()]
+	return f.frames[id]
 }
 
-func (f *frameSlot) set(frame *py.Frame) {
+func (f *frameSlot) setFor(id uint64, frame *py.Frame) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	id := goroutineID()
 	if frame == nil {
 		delete(f.frames, id)
 		return

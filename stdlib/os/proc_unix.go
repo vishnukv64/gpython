@@ -18,6 +18,13 @@ import (
 func unixMethods() []*py.Method {
 	fdErr := func(err error) error { return py.OSErrorFrom(err, "") }
 	return []*py.Method{
+		py.MustNewMethod("openpty", func(self py.Object, args py.Tuple) (py.Object, error) {
+			m, s, err := openptyFds()
+			if err != nil {
+				return nil, fdErr(err)
+			}
+			return py.Tuple{py.Int(m), py.Int(s)}, nil
+		}, 0, "Open a pseudo-terminal; return (master_fd, slave_fd)."),
 		py.MustNewMethod("pipe", func(self py.Object, args py.Tuple) (py.Object, error) {
 			var p [2]int
 			if err := syscall.Pipe(p[:]); err != nil {
@@ -157,5 +164,8 @@ func unixMethods() []*py.Method {
 // procConsts are the wait flags.
 func procConsts() map[string]int {
 	return map[string]int{"WNOHANG": syscall.WNOHANG, "O_RDONLY": os.O_RDONLY, "O_WRONLY": os.O_WRONLY, "O_RDWR": os.O_RDWR,
-		"O_CREAT": os.O_CREATE, "O_EXCL": os.O_EXCL, "O_TRUNC": os.O_TRUNC, "O_APPEND": os.O_APPEND}
+		"O_CREAT": os.O_CREATE, "O_EXCL": os.O_EXCL, "O_TRUNC": os.O_TRUNC, "O_APPEND": os.O_APPEND,
+		"O_ACCMODE": syscall.O_ACCMODE, "O_NONBLOCK": syscall.O_NONBLOCK, "O_NOCTTY": syscall.O_NOCTTY,
+		"O_CLOEXEC": syscall.O_CLOEXEC, "O_SYNC": syscall.O_SYNC, "O_NDELAY": syscall.O_NONBLOCK,
+		"O_DIRECTORY": syscall.O_DIRECTORY, "O_NOFOLLOW": syscall.O_NOFOLLOW}
 }

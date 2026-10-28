@@ -8,6 +8,8 @@ package time
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
@@ -603,22 +605,26 @@ the local timezone used by methods such as localtime, but this behaviour
 should not be relied on.`
 
 func time_tzset(self py.Object) (py.Object, error) {
-	// py.Object * m
-
-	// m = PyImport_ImportModuleNoBlock("time")
-	// if m == nil {
-	// 	return nil
-	// }
-
-	// tzset()
-
-	// /* Reset timezone, altzone, daylight and tzname */
-	// PyInit_timezone(m)
-	// Py_DECREF(m)
-
-	// Py_INCREF(Py_None)
-	// return Py_None
-	return nil, py.NotImplementedError
+	// Go reads TZ once at start-up, so re-read it here.  An unknown zone falls
+	// back to UTC, as the tzset man page says; an unset TZ is the system zone.
+	tz, set := os.LookupEnv("TZ")
+	switch {
+	case !set:
+		if data, err := os.ReadFile("/etc/localtime"); err == nil {
+			if loc, err := time.LoadLocationFromTZData("Local", data); err == nil {
+				time.Local = loc
+			}
+		}
+	case tz == "" || tz == ":":
+		time.Local = time.UTC
+	default:
+		loc, err := time.LoadLocation(strings.TrimPrefix(tz, ":"))
+		if err != nil {
+			loc = time.UTC
+		}
+		time.Local = loc
+	}
+	return py.None, nil
 }
 
 const monotonic_doc = `monotonic() -> float

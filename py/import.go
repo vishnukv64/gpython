@@ -242,6 +242,26 @@ func moduleFromSpec(ctx Context, name string, spec Object) (*Module, error) {
 		}
 	}
 
+	// A PEP 451 loader may supply the module object itself: create_module(spec)
+	// answering a module (six hands out its lazy namespaces this way) means that
+	// object is recorded under the name, then exec_module runs on it.  None
+	// means "make the ordinary empty one", which is the path below.
+	if createModule := attrOrNil(loader, "create_module"); createModule != nil {
+		made, err := Call(createModule, Tuple{spec}, NewStringDict())
+		if err != nil {
+			return nil, err
+		}
+		if m, ok := made.(*Module); ok {
+			ctx.Store().SetModuleLike(name, m)
+			if execModule := attrOrNil(loader, "exec_module"); execModule != nil {
+				if _, err := Call(execModule, Tuple{m}, NewStringDict()); err != nil {
+					return nil, err
+				}
+			}
+			return m, nil
+		}
+	}
+
 	// A PEP 451 loader with exec_module fills the module in itself, which is
 	// the modern protocol and the one a finder written today implements.
 	if execModule := attrOrNil(loader, "exec_module"); execModule != nil {

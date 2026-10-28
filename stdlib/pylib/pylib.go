@@ -26,10 +26,31 @@ import (
 //go:embed all:lib
 var files embed.FS
 
+// tzFiles is the "tzdata" package zoneinfo falls back to when the system has
+// no zoneinfo directory (Windows, minimal containers).  It is a separate tree
+// because lib/ is CPython's Lib, copied byte for byte.
+//
+//go:embed all:tzdata
+var tzFiles embed.FS
+
+// union serves lib/ first and then tzdata/, so the one embedded root holds both.
+type union []fs.FS
+
+func (u union) Open(name string) (fs.File, error) {
+	var err error
+	for _, f := range u {
+		var file fs.File
+		if file, err = f.Open(name); err == nil {
+			return file, nil
+		}
+	}
+	return nil, err
+}
+
 func init() {
 	lib, err := fs.Sub(files, "lib")
 	if err != nil {
 		panic(err)
 	}
-	py.RegisterEmbeddedLib(lib)
+	py.RegisterEmbeddedLib(union{lib, tzFiles})
 }

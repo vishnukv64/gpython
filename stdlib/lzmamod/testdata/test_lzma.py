@@ -1,0 +1,73 @@
+import lzma, io
+d = b'hello lzma world\n' * 20 + bytes(range(64))
+X0 = bytes.fromhex('fd377a585a000000ff12d9410200210116000000742fe5a3e0019300565d00341949ee8de9148a6aa5d6b6a5f3275828b8bbc7752a448014ea74d6ed340dedbb5cf954d7db5d41af564ae392b5651deeed545a2054bf289eec99e579ebea82c96fec9280b9141c117f833347a93a325a090c1322be00000000016a9403000000dfd6095ca8000afc020000000000595a')
+X1 = bytes.fromhex('fd377a585a0000016922de360200210116000000742fe5a3e0019300565d00341949ee8de9148a6aa5d6b6a5f3275828b8bbc7752a448014ea74d6ed340dedbb5cf954d7db5d41af564ae392b5651deeed545a2054bf289eec99e579ebea82c96fec9280b9141c117f833347a93a325a090c1322be000000517b925d00016e9403000000c99498c73e300d8b020000000001595a')
+X4 = bytes.fromhex('fd377a585a000004e6d6b4460200210116000000742fe5a3e0019300565d00341949ee8de9148a6aa5d6b6a5f3275828b8bbc7752a448014ea74d6ed340dedbb5cf954d7db5d41af564ae392b5651deeed545a2054bf289eec99e579ebea82c96fec9280b9141c117f833347a93a325a090c1322be0000000fb3373fca8bcbb6000172940300000029568cb3b1c467fb020000000004595a')
+X10 = bytes.fromhex('fd377a585a00000ae1fb0ca10200210116000000742fe5a3e0019300565d00341949ee8de9148a6aa5d6b6a5f3275828b8bbc7752a448014ea74d6ed340dedbb5cf954d7db5d41af564ae392b5651deeed545a2054bf289eec99e579ebea82c96fec9280b9141c117f833347a93a325a090c1322be000000b2149b03ffb5b64fd606eaf184690b3af8f620b288b33980705df0bd7451033c00018a019403000079027a71b6e9df1c02000000000a595a')
+ALONE = bytes.fromhex('5d00008000ffffffffffffffff00341949ee8de9148a6aa5d6b6a5f3275828b8bbc7752a448014ea74d6ed340dedbb5cf954d7db5d41af564ae392b5651deeed545a2054bf289eec99e579ebea82c96fec9280b9141c117f833347a93a325a09339bb4b7fff8c38000')
+print(len(d), lzma.CHECK_CRC64, lzma.FORMAT_AUTO, lzma.PRESET_DEFAULT, lzma.is_check_supported(lzma.CHECK_SHA256), lzma.is_check_supported(lzma.CHECK_NONE))
+for name, c in (("X0", X0), ("X1", X1), ("X4", X4), ("X10", X10), ("ALONE", ALONE)):
+    dec = lzma.LZMADecompressor()
+    out = dec.decompress(c + b"TRAIL")
+    print(name, out == d, dec.eof, dec.unused_data, dec.check, dec.needs_input, lzma.decompress(c) == d)
+print(lzma.decompress(X4 + X1) == d + d)
+print(lzma.decompress(ALONE, format=lzma.FORMAT_ALONE) == d, lzma.decompress(X4, format=lzma.FORMAT_XZ) == d)
+for bad_fmt, data in ((lzma.FORMAT_ALONE, X4), (lzma.FORMAT_XZ, ALONE)):
+    try: lzma.decompress(data, format=bad_fmt)
+    except lzma.LZMAError: print("LZMAError")
+dec = lzma.LZMADecompressor()
+print(dec.decompress(X4[:20]), dec.eof, dec.needs_input, dec.check)
+out = dec.decompress(X4[20:])
+print(out == d, dec.eof)
+try: dec.decompress(b"x")
+except EOFError as e: print("EOFError", e)
+dec = lzma.LZMADecompressor()
+print(len(dec.decompress(X1, 50)), dec.eof, dec.needs_input, len(dec.decompress(b"", 5000)), dec.eof)
+for c in (X4, ALONE):
+    dec = lzma.LZMADecompressor(); res = b""
+    for i in range(0, len(c), 5):
+        res += dec.decompress(c[i:i+5])
+    print(res == d, dec.eof, dec.unused_data)
+for bad in (b"not lzma data at all", X4[:-1] + b"\x00", X10[:30] + bytes(len(X10) - 30)):
+    try: print(lzma.decompress(bad))
+    except (lzma.LZMAError, EOFError) as e: print(type(e).__name__)
+try: lzma.decompress(X4[:25])
+except (lzma.LZMAError, EOFError) as e: print(type(e).__name__)
+try: lzma.decompress(b"")
+except (lzma.LZMAError, EOFError) as e: print(type(e).__name__)
+print(lzma.decompress(b"") if False else "skip")
+# compression round trips (compressed bytes differ between implementations)
+for fmt, chk in ((lzma.FORMAT_XZ, lzma.CHECK_NONE), (lzma.FORMAT_XZ, lzma.CHECK_CRC32), (lzma.FORMAT_XZ, -1), (lzma.FORMAT_XZ, lzma.CHECK_SHA256), (lzma.FORMAT_ALONE, -1)):
+    c = lzma.compress(d * 50, format=fmt, check=chk)
+    dec = lzma.LZMADecompressor(); o = dec.decompress(c)
+    print(fmt, chk, o == d * 50, dec.eof, dec.check, len(c) < len(d) * 50, lzma.decompress(c) == d * 50)
+print(lzma.decompress(lzma.compress(b"")) == b"", lzma.decompress(lzma.compress(b"", format=lzma.FORMAT_ALONE)) == b"")
+comp = lzma.LZMACompressor()
+parts = [comp.compress(d[i:i+30]) for i in range(0, len(d), 30)] + [comp.flush()]
+print(lzma.decompress(b"".join(parts)) == d)
+try: comp.compress(b"x")
+except ValueError as e: print("ValueError", e)
+try: comp.flush()
+except ValueError as e: print("ValueError", e)
+try: lzma.LZMACompressor(format=lzma.FORMAT_ALONE, check=lzma.CHECK_CRC32)
+except ValueError as e: print("ValueError", e)
+except lzma.LZMAError as e: print("LZMAError")
+try: lzma.LZMADecompressor(lzma.FORMAT_XZ, filters=[{"id": lzma.FILTER_LZMA2}])
+except ValueError as e: print("ValueError", e)
+f = lzma.LZMAFile(io.BytesIO(X4))
+print(f.read(10), f.readline(), f.tell(), f.readable(), f.writable(), f.seekable())
+f.seek(0); print(len(f.read())); f.close(); print(f.closed)
+buf = io.BytesIO()
+with lzma.open(buf, "wb") as w:
+    w.write(d); w.write(b"more")
+    print(w.writable(), w.tell())
+print(lzma.decompress(buf.getvalue()) == d + b"more")
+buf = io.BytesIO()
+with lzma.open(buf, "wt", encoding="utf-8") as w:
+    w.write("héllo\nwörld\n")
+with lzma.open(io.BytesIO(buf.getvalue()), "rt", encoding="utf-8") as r:
+    print(r.readlines())
+with lzma.open(io.BytesIO(X10), "rt") as t:
+    print(t.read(15))
+print(lzma._encode_filter_properties({"id": lzma.FILTER_LZMA2, "dict_size": 1 << 20}), lzma._decode_filter_properties(lzma.FILTER_LZMA2, b"\x10"))
+print(lzma._encode_filter_properties({"id": lzma.FILTER_LZMA1, "dict_size": 1 << 16}), lzma._decode_filter_properties(lzma.FILTER_LZMA1, b"\x5d\x00\x00\x01\x00"))

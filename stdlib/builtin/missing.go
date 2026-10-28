@@ -6,6 +6,7 @@ package builtin
 
 import (
 	"reflect"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -41,8 +42,20 @@ This is guaranteed to be unique among simultaneously existing objects.  It is
 derived from the object's address where it has one, and from a counter for the
 value types (int, str, float) that have no address of their own.`
 
-// lastID backs `id` for the object shapes that are not pointers.
-var lastID int64
+// valueIDs backs `id` for the object shapes that are not pointers (None, bool,
+// int, str, float...).  Such a value is boxed afresh each time it is passed, so
+// it has no address of its own; it gets one id per distinct value, handed out
+// from above the address space so it cannot collide with a pointer id.  Code
+// that keys on id() (pip's resolvelib maps id(None) to the root) needs
+// id(x) == id(x).
+//
+// ponytail: the table only grows; a weak table if id() of many one-off values
+// ever matters.
+var (
+	valueIDMu sync.Mutex
+	valueIDs  = map[py.Object]int64{}
+	lastID    = int64(1) << 56
+)
 
 func builtin_id(self, obj py.Object) (py.Object, error) {
 	if obj == nil {
@@ -55,7 +68,17 @@ func builtin_id(self, obj py.Object) (py.Object, error) {
 			return py.Int(int64(v.Pointer())), nil
 		}
 	}
+	valueIDMu.Lock()
+	defer valueIDMu.Unlock()
+	if v.Type().Comparable() {
+		if id, ok := valueIDs[obj]; ok {
+			return py.Int(id), nil
+		}
+	}
 	lastID++
+	if v.Type().Comparable() {
+		valueIDs[obj] = lastID
+	}
 	return py.Int(lastID), nil
 }
 

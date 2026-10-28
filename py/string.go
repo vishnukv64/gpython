@@ -15,6 +15,7 @@ package py
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode"
@@ -1041,6 +1042,18 @@ func (a String) M__mod__(other Object) (Object, error) {
 				prec = specPrecision(spec)
 			}
 			text = strconv.FormatFloat(f, verb, prec, 64)
+			// Go spells the non-finite values "+Inf"/"NaN"; C and CPython "inf"/"nan".
+			if math.IsInf(f, 0) || math.IsNaN(f) {
+				text = "inf"
+				if math.IsNaN(f) {
+					text = "nan"
+				} else if f < 0 {
+					text = "-inf"
+				}
+				if verb == 'E' || verb == 'F' || verb == 'G' {
+					text = strings.ToUpper(text)
+				}
+			}
 		default:
 			return nil, ExceptionNewf(ValueError, "unsupported format character '%c'", verb)
 		}

@@ -124,6 +124,10 @@ type Module struct {
 	ModuleImpl *ModuleImpl // Parent implementation of this Module instance
 	Globals    StringDict  // Initialized from ModuleImpl.Globals
 	Context    Context     // Parent context that "owns" this Module instance
+	// cls is the Python subclass of types.ModuleType this module is an
+	// instance of ("class _LazyModule(types.ModuleType)", as six defines); nil
+	// for a plain module.
+	cls *Type
 }
 
 var ModuleType = NewType("module", "module object")
@@ -156,7 +160,11 @@ func init() {
 		g.Set("__package__", None)
 		g.Set("__loader__", None)
 		g.Set("__spec__", None)
-		return &Module{ModuleImpl: &ModuleImpl{Info: ModuleInfo{Name: string(n)}}, Globals: g}, nil
+		m := &Module{ModuleImpl: &ModuleImpl{Info: ModuleInfo{Name: string(n)}}, Globals: g}
+		if metatype != ModuleType {
+			m.cls = metatype
+		}
+		return m, nil
 	}
 	ModuleType.Dict.Set("__dict__", &Property{
 		Fget: func(self Object) (Object, error) {
@@ -180,6 +188,9 @@ func init() {
 
 // Type of this object
 func (o *Module) Type() *Type {
+	if o.cls != nil {
+		return o.cls
+	}
 	return ModuleType
 }
 

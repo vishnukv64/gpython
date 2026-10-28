@@ -68,6 +68,12 @@ func init() {
 			}
 			return self.(*ModuleSpec).submods, nil
 		},
+		// Writable, as in CPython: six marks its own module a package with
+		// "__spec__.submodule_search_locations = []".
+		Fset: func(self, value Object) error {
+			self.(*ModuleSpec).submods = value
+			return nil
+		},
 	})
 	ModuleSpecType.Dict.Set("__repr__", MustNewMethod("__repr__", func(self Object, args Tuple) (Object, error) {
 		s := self.(*ModuleSpec)

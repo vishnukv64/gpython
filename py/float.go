@@ -7,7 +7,6 @@
 package py
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -80,7 +79,7 @@ func cpythonFloatRepr(f float64) string {
 	}
 	// %e with no precision gives the shortest round-tripping digits, so its
 	// exponent is what decides the form.
-	e := fmt.Sprintf("%e", f)
+	e := strconv.FormatFloat(f, 'e', -1, 64)
 	exp := 0
 	if i := strings.IndexByte(e, 'e'); i >= 0 {
 		exp, _ = strconv.Atoi(e[i+1:])

@@ -12,9 +12,12 @@
 // honestly: getproxies reads the standard proxy environment variables, and
 // parse_http_list is CPython's header-list splitter.
 //
-// urlopen and the opener classes are deliberately absent rather than faked: a
-// silent stub returning an empty response would be far worse than a missing
-// name.
+// urlopen is real (Go, below).  The opener machinery is not: build_opener and
+// urlretrieve raise NotImplementedError rather than return a stub that
+// silently ignores its handlers.  The names exist, with the pure parts real
+// (Request, pathname2url, url2pathname, HTTPPasswordMgr), because libraries
+// import them at module load without ever opening a URL - pip's vendored
+// distlib does, and could not otherwise be imported.
 package urllibparse
 
 import (
@@ -203,5 +206,174 @@ func init() {
 			Doc:  request_doc,
 		},
 		Globals: globals,
+		CodeSrc: requestSrc,
 	})
 }
+
+// requestSrc is the Python half of urllib.request.
+const requestSrc = `
+import os
+from urllib.error import URLError
+from urllib.parse import quote, unquote, urlsplit, urlunsplit, urldefrag
+
+def pathname2url(pathname, *, add_scheme=False):
+    if os.name == 'nt':
+        pathname = pathname.replace('\\', '/')
+    scheme = 'file:' if add_scheme else ''
+    drive, root, tail = os.path.splitroot(pathname)
+    if drive:
+        if drive[:4] == '//?/':
+            drive = drive[4:]
+            if drive[:4].upper() == 'UNC/':
+                drive = '//' + drive[4:]
+        if drive[1:] == ':':
+            drive = '///' + drive
+        drive = quote(drive, safe='/:')
+    elif root:
+        root = '//' + root
+    return scheme + drive + root + quote(tail)
+
+
+# ponytail: only an empty authority or "localhost" counts as local; CPython
+# also resolves the host name (resolve_host=True) - add if file URLs naming
+# this machine's host are needed.
+def url2pathname(url, *, require_scheme=False, resolve_host=False):
+    if not require_scheme:
+        url = 'file:' + url
+    scheme, authority, url = urlsplit(url)[:3]
+    if scheme != 'file':
+        raise URLError("URL is missing a 'file:' scheme")
+    if os.name == 'nt':
+        if authority[1:2] == ':':
+            url = authority + url
+        elif authority not in ('', 'localhost'):
+            url = '//' + authority + url
+        elif url[:3] == '///':
+            url = url[1:]
+        else:
+            if url[:1] == '/' and url[2:3] in (':', '|'):
+                url = url[1:]
+            if url[1:2] == '|':
+                url = url[:1] + ':' + url[2:]
+        url = url.replace('/', '\\')
+    elif authority not in ('', 'localhost'):
+        raise URLError("file:// scheme is supported only on localhost")
+    return unquote(url)
+
+
+class Request:
+    def __init__(self, url, data=None, headers={}, origin_req_host=None,
+                 unverifiable=False, method=None):
+        self.full_url = url
+        self.headers = {}
+        self.unredirected_hdrs = {}
+        self._data = data
+        self.origin_req_host = origin_req_host
+        self.unverifiable = unverifiable
+        if method:
+            self.method = method
+        for key, value in headers.items():
+            self.add_header(key, value)
+
+    @property
+    def full_url(self):
+        if self.fragment:
+            return "{}#{}".format(self._full_url, self.fragment)
+        return self._full_url
+
+    @full_url.setter
+    def full_url(self, url):
+        self._full_url, self.fragment = urldefrag(url)
+        parts = urlsplit(self._full_url)
+        self.type = parts.scheme or None
+        self.host = parts.netloc
+        self.selector = urlunsplit(("", "", parts.path, parts.query, ""))
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        self._data = data
+
+    def get_method(self):
+        default_method = "POST" if self.data is not None else "GET"
+        return getattr(self, "method", default_method)
+
+    def get_full_url(self):
+        return self.full_url
+
+    def add_header(self, key, val):
+        self.headers[key.capitalize()] = val
+
+    def add_unredirected_header(self, key, val):
+        self.unredirected_hdrs[key.capitalize()] = val
+
+    def has_header(self, header_name):
+        return header_name in self.headers or header_name in self.unredirected_hdrs
+
+    def get_header(self, header_name, default=None):
+        return self.headers.get(header_name, self.unredirected_hdrs.get(header_name, default))
+
+    def header_items(self):
+        hdrs = {**self.unredirected_hdrs, **self.headers}
+        return list(hdrs.items())
+
+
+class BaseHandler:
+    handler_order = 500
+
+    def add_parent(self, parent):
+        self.parent = parent
+
+    def close(self):
+        pass
+
+
+class HTTPHandler(BaseHandler):
+    pass
+
+
+class HTTPSHandler(BaseHandler):
+    def __init__(self, debuglevel=None, context=None, check_hostname=None):
+        self._context = context
+
+
+class HTTPRedirectHandler(BaseHandler):
+    max_redirections = 10
+
+
+class HTTPPasswordMgr:
+    def __init__(self):
+        self.passwd = {}
+
+    def add_password(self, realm, uri, user, passwd):
+        if isinstance(uri, str):
+            uri = [uri]
+        self.passwd.setdefault(realm, {})
+        for u in uri:
+            self.passwd[realm][u] = (user, passwd)
+
+    def find_user_password(self, realm, authuri):
+        domains = self.passwd.get(realm, {})
+        for uris, authinfo in domains.items():
+            if authuri == uris or authuri.startswith(uris):
+                return authinfo
+        return None, None
+
+
+class HTTPBasicAuthHandler(BaseHandler):
+    def __init__(self, password_mgr=None):
+        if password_mgr is None:
+            password_mgr = HTTPPasswordMgr()
+        self.passwd = password_mgr
+
+
+def build_opener(*handlers):
+    raise NotImplementedError("urllib.request.build_opener: openers and handlers are not supported; use urlopen")
+
+
+def urlretrieve(url, filename=None, reporthook=None, data=None):
+    raise NotImplementedError("urllib.request.urlretrieve is not supported; use urlopen")
+`

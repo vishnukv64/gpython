@@ -210,6 +210,13 @@ func MakeFloat(a Object) (Object, error) {
 		return res, nil
 	}
 
+	// float() also accepts an object that only defines __index__.
+	if res, ok, err := callPyUnary(a, "__index__"); err != nil {
+		return nil, err
+	} else if ok {
+		return MakeFloat(res)
+	}
+
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for float: '%s'", a.Type().Name)
 }
 
@@ -1366,11 +1373,21 @@ func Ne(a Object, b Object) (Object, error) {
 		return res, nil
 	}
 
-	if a.Type() != b.Type() {
+	// No __ne__ anywhere: object's default is the inverse of __eq__ (which
+	// itself ends in identity), so a class defining only __eq__ gets a
+	// consistent !=.
+	eq, err := Eq(a, b)
+	if err != nil {
+		return nil, err
+	}
+	if eq == NotImplemented {
 		return True, nil
 	}
-
-	return NewBool(!sameObject(a, b)), nil
+	t, err := ObjectIsTrue(eq)
+	if err != nil {
+		return nil, err
+	}
+	return NewBool(!t), nil
 }
 
 // pyBinary tries a binary operator implemented in PYTHON (the class keeps it in

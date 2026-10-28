@@ -1,0 +1,17 @@
+struct_passwd pwd 7 0 0 True
+nofields 7
+pwd.struct_passwd ['pw_dir', 'pw_gecos', 'pw_gid', 'pw_name', 'pw_passwd', 'pw_shell', 'pw_uid']
+struct_group 4 0 0 True True
+True True True
+KeyError "getpwnam(): name not found: 'nonexistent_zz'"
+KeyError 'getpwuid(): uid not found: 99999'
+TypeError getpwnam() argument must be str, not int
+TypeError uid should be integer, not str
+KeyError 'getgrgid(): gid not found: 99999'
+KeyError "getgrnam(): name not found: 'nonex'"
+ValueError embedded null byte
+TypeError getgrnam() argument 'name' must be str, not int
+TypeError gid should be integer, not str
+True
+True
+pwd.struct_passwd() takes a 7-sequence (2-sequence given)

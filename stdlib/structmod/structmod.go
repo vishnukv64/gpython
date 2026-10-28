@@ -504,7 +504,12 @@ func structCalcsize(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 
 func structPackInto(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var fmtObj, buf, offset py.Object
-	if err := py.ParseTupleAndKeywords(args, kwargs, "OOO:pack_into",
+	// pack_into(format, buffer, offset, v1, v2, ...): the values follow the
+	// three named arguments, so only those are parsed.
+	if len(args) < 3 {
+		return nil, py.ExceptionNewf(py.TypeError, "pack_into expected at least 3 arguments, got %d", len(args))
+	}
+	if err := py.ParseTupleAndKeywords(args[:3], kwargs, "OOO:pack_into",
 		[]string{"format", "buffer", "offset"}, &fmtObj, &buf, &offset); err != nil {
 		return nil, err
 	}
@@ -539,7 +544,7 @@ func structPackInto(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	if off < 0 || off+len(packed) > n {
 		return nil, errorf("pack_into requires a buffer of at least %d bytes", off+len(packed))
 	}
-	if _, err := ba.M__setitem__(&py.Slice{Start: py.Int(off), Stop: py.Int(off + len(packed))}, py.Bytes(packed)); err != nil {
+	if _, err := ba.M__setitem__(&py.Slice{Start: py.Int(off), Stop: py.Int(off + len(packed)), Step: py.None}, py.Bytes(packed)); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -574,11 +579,6 @@ func structUnpackFrom(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 	return l.unpackItems(data[off:])
 }
 
-func structIterUnpack(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.ExceptionNewf(py.NotImplementedError,
-		"struct.iter_unpack: this implementation does not provide the streaming unpacker; use unpack_from in a loop")
-}
-
 var _ = strings.TrimSpace
 
 func init() {
@@ -599,8 +599,6 @@ func init() {
 	globals.Set("unpack_from", py.MustNewMethod("unpack_from", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 		return structUnpackFrom(self, args, kw)
 	}, 0, "unpack_from(fmt, buffer, offset=0) -> tuple"))
-	globals.Set("iter_unpack", py.MustNewMethod("iter_unpack", structIterUnpack, 0,
-		"iter_unpack(fmt, buffer) -> iterator of tuples"))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -608,5 +606,45 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: structSrc,
 	})
 }
+
+// structSrc is the Python half of struct: Struct and iter_unpack, written
+// over the module-level functions so a format has one parser.
+const structSrc = `
+def iter_unpack(format, buffer, /):
+    size = calcsize(format)
+    if size == 0:
+        raise error("cannot iteratively unpack with a struct of length 0")
+    buffer = memoryview(buffer)
+    if len(buffer) % size:
+        raise error("iterative unpacking requires a buffer of a multiple of %d bytes" % size)
+    return (unpack(format, bytes(buffer[i:i + size])) for i in range(0, len(buffer), size))
+
+
+class Struct:
+    def __init__(self, format):
+        if isinstance(format, bytes):
+            format = format.decode("ascii")
+        self.size = calcsize(format)
+        self.format = format
+
+    def pack(self, *values):
+        return pack(self.format, *values)
+
+    def unpack(self, buffer, /):
+        return unpack(self.format, buffer)
+
+    def pack_into(self, buffer, offset, *values):
+        return pack_into(self.format, buffer, offset, *values)
+
+    def unpack_from(self, buffer, offset=0):
+        return unpack_from(self.format, buffer, offset)
+
+    def iter_unpack(self, buffer, /):
+        return iter_unpack(self.format, buffer)
+
+    def __repr__(self):
+        return "Struct(%r)" % (self.format,)
+`

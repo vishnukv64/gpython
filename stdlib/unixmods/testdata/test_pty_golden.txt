@@ -1,0 +1,6 @@
+True True
+b'hi\n'
+b'hi\r\nyo\r\n'
+0 1 2 0
+['fork', 'openpty', 'spawn']
+b'abc'

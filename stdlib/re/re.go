@@ -1639,7 +1639,7 @@ func escapeFn(self py.Object, args py.Tuple) (py.Object, error) {
 	var b strings.Builder
 	// The set Python 3.7 and later escapes.
 	for _, r := range text {
-		if r < 128 && strings.ContainsRune(`()[]{}?*+-|^$\.&~# \t\n\r\v\f`, r) {
+		if r < 128 && strings.ContainsRune("()[]{}?*+-|^$\\.&~# \t\n\r\v\f", r) {
 			b.WriteByte('\\')
 		}
 		b.WriteRune(r)

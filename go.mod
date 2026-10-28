@@ -7,6 +7,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/gopherjs/gopherwasm v1.1.0
 	github.com/peterh/liner v1.2.2
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/sys v0.34.0
 	modernc.org/libc v1.66.3
 	modernc.org/sqlite v1.39.0

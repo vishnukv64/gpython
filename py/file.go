@@ -230,7 +230,6 @@ func (o *File) Write(value Object) (Object, error) {
 	var b []byte
 
 	switch v := value.(type) {
-	// FIXME Bytearray
 	case Bytes:
 		b = v
 
@@ -238,7 +237,10 @@ func (o *File) Write(value Object) (Object, error) {
 		b = []byte(v)
 
 	default:
-		return nil, ExceptionNewf(TypeError, "expected a string or other character buffer object")
+		var ok bool
+		if b, ok = bytesLikeData(value); !ok {
+			return nil, ExceptionNewf(TypeError, "expected a string or other character buffer object")
+		}
 	}
 
 	n, err := o.File.Write(b)

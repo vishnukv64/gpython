@@ -581,6 +581,50 @@ func init() {
 		}
 		return def, nil
 	}, 0, "Return the value for key, or the default."))
+	WeakValueDictionaryType.Dict.Set("setdefault", py.MustNewMethod("setdefault", func(self py.Object, args py.Tuple) (py.Object, error) {
+		d := self.(*WeakValueDictionary)
+		var key py.Object
+		var def py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "setdefault", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		encoded, err := py.DictKey(key)
+		if err != nil {
+			return nil, err
+		}
+		if v, ok := d.items.Get(encoded); ok {
+			if r, ok := v.(*Ref); ok {
+				return r.get(), nil
+			}
+			return v, nil
+		}
+		d.items.Set(encoded, def)
+		return def, nil
+	}, 0, "Return the value for key, inserting the default first when it is missing."))
+	WeakValueDictionaryType.Dict.Set("clear", py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
+		self.(*WeakValueDictionary).items.Clear()
+		return py.None, nil
+	}, 0, "Remove all entries."))
+	WeakValueDictionaryType.Dict.Set("pop", py.MustNewMethod("pop", func(self py.Object, args py.Tuple) (py.Object, error) {
+		d := self.(*WeakValueDictionary)
+		var key, def py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		if encoded, err := py.DictKey(key); err == nil {
+			if v, ok := d.items.Get(encoded); ok {
+				d.items.Del(encoded)
+				if r, ok := v.(*Ref); ok {
+					return r.get(), nil
+				}
+				return v, nil
+			}
+		}
+		if def == nil {
+			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
+		}
+		return def, nil
+	}, 0, "Remove key and return its value, or the default."))
 }
 
 // Interfaces the VM reaches directly.

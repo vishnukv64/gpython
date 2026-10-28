@@ -1026,17 +1026,19 @@ func init() {
 		return py.False, nil
 	}, 0, "Implement 'in'."))
 
-	OrderedDictType.Dict.Set("popitem", py.MustNewMethod("popitem", func(self py.Object, args py.Tuple) (py.Object, error) {
+	OrderedDictType.Dict.Set("popitem", py.MustNewMethod("popitem", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		o := self.(*OrderedDict)
 		var last py.Object = py.True
-		if err := py.UnpackTuple(args, py.StringDict{}, "popitem", 0, 1, &last); err != nil {
+		if err := py.ParseTupleAndKeywords(args, kwargs, "|O:popitem", []string{"last"}, &last); err != nil {
 			return nil, err
 		}
 		if len(o.keys) == 0 {
 			return nil, py.ExceptionNewf(py.KeyError, "dictionary is empty")
 		}
 		i := 0
-		if last == py.True {
+		if ok, err := py.ObjectIsTrue(last); err != nil {
+			return nil, err
+		} else if ok {
 			i = len(o.keys) - 1
 		}
 		encoded := o.keys[i]

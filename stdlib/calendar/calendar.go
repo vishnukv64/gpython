@@ -53,7 +53,7 @@ func monthrange(year, month int) (int, int) {
 	if month < 1 || month > 12 {
 		return -1, -1
 	}
-	w := (dayOfWeek(year, month, 1) + 1) % 7 // Monday=0 -> CPython Monday=0
+	w := dayOfWeek(year, month, 1) // Monday=0, as in CPython
 	days := mdays[month]
 	if month == 2 && isleap(year) {
 		days++

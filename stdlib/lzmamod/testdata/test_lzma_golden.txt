@@ -1,0 +1,42 @@
+404 4 0 6 True True
+X0 True True b'TRAIL' 0 False True
+X1 True True b'TRAIL' 1 False True
+X4 True True b'TRAIL' 4 False True
+X10 True True b'TRAIL' 10 False True
+ALONE True True b'TRAIL' 0 False True
+True
+True True
+LZMAError
+LZMAError
+b'' False True 4
+True True
+EOFError Already at end of stream
+50 False False 354 True
+True True b''
+True True b''
+LZMAError
+LZMAError
+LZMAError
+LZMAError
+LZMAError
+skip
+1 0 True True 0 True True
+1 1 True True 1 True True
+1 -1 True True 4 True True
+1 10 True True 10 True True
+2 -1 True True 0 True True
+True True
+True
+ValueError Compressor has been flushed
+ValueError Repeated call to flush()
+ValueError Integrity checks are only supported by FORMAT_XZ
+ValueError Cannot specify filters except with FORMAT_RAW
+b'hello lzma' b' world\n' 17 True False True
+404
+True
+True 408
+True
+['héllo\n', 'wörld\n']
+hello lzma worl
+b'\x10' {'id': 33, 'dict_size': 1048576}
+b']\x00\x00\x01\x00' {'id': 4611686018427387905, 'lc': 3, 'lp': 0, 'pb': 2, 'dict_size': 65536}

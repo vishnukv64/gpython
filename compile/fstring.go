@@ -6,7 +6,6 @@ package compile
 
 import (
 	"bytes"
-	"strings"
 
 	"github.com/vishnukv64/gpython/ast"
 	"github.com/vishnukv64/gpython/parser"
@@ -15,243 +14,6 @@ import (
 	"github.com/vishnukv64/gpython/vm"
 )
 
-// fstringPart is one piece of an f-string: either a literal or a
-// replacement field.
-type fstringPart struct {
-	// literal text (used when field is false)
-	text string
-	// field parts
-	field      bool
-	expr       string
-	conversion byte // 0, 'r' or 'a'
-	formatSpec string
-	// debug is the self-documenting form, f"{x=}": the rendered output is
-	// prefixed with the source text of the expression and an "=".
-	debug     bool
-	debugText string
-}
-
-// parseFString splits the raw text of an f-string literal into literal
-// parts and replacement fields.
-//
-// Limitations: a replacement field may not itself contain an f-string, and
-// a `!` or `:` inside the field is taken as the conversion/format separator
-// unless it appears inside a string, a bracket or a nested call.  Nested
-// f-strings are reported as a SyntaxError rather than silently mis-parsed.
-func parseFString(text string) ([]fstringPart, error) {
-	var parts []fstringPart
-	var lit strings.Builder
-
-	runes := []rune(text)
-	i := 0
-	for i < len(runes) {
-		c := runes[i]
-		switch c {
-		case '{':
-			if i+1 < len(runes) && runes[i+1] == '{' {
-				lit.WriteRune('{')
-				i += 2
-				continue
-			}
-			// replacement field: find its matching close brace
-			depth := 1
-			j := i + 1
-			var inStr rune // quote char when inside a string literal
-			var brackets int
-			for ; j < len(runes); j++ {
-				r := runes[j]
-				if inStr != 0 {
-					if r == '\\' {
-						j++
-						continue
-					}
-					if r == inStr {
-						inStr = 0
-					}
-					continue
-				}
-				switch r {
-				case '\'', '"':
-					inStr = r
-				case '(', '[', '{':
-					brackets++
-				case ')', ']':
-					brackets--
-				case '}':
-					if brackets == 0 {
-						depth--
-					} else {
-						brackets--
-					}
-				}
-				if depth == 0 {
-					break
-				}
-			}
-			if j >= len(runes) {
-				return nil, py.ExceptionNewf(py.SyntaxError, "f-string: expecting '}'")
-			}
-			body := string(runes[i+1 : j])
-
-			if lit.Len() > 0 {
-				parts = append(parts, fstringPart{text: lit.String()})
-				lit.Reset()
-			}
-			field, err := parseField(body)
-			if err != nil {
-				return nil, err
-			}
-			parts = append(parts, field)
-			i = j + 1
-		case '}':
-			if i+1 < len(runes) && runes[i+1] == '}' {
-				lit.WriteRune('}')
-				i += 2
-				continue
-			}
-			return nil, py.ExceptionNewf(py.SyntaxError, "f-string: single '}' is not allowed")
-		default:
-			lit.WriteRune(c)
-			i++
-		}
-	}
-	if lit.Len() > 0 {
-		parts = append(parts, fstringPart{text: lit.String()})
-	}
-	return parts, nil
-}
-
-// parseField splits a replacement field ("expr[!conv][:spec]") into its parts.
-func parseField(body string) (fstringPart, error) {
-	field := fstringPart{field: true}
-
-	// f"{x=}" renders as "x=<repr of x>".  The trailing "=" has to be found
-	// before the conversion and format scan, because it is the last
-	// character of the expression and everything after it is ordinary
-	// conversions and format specs.
-	// The marker is the first "=" at depth 0 outside a string that is not
-	// part of a comparison: it is followed by the conversion, the format
-	// spec or the end of the field, and preceded by the end of the
-	// expression.  Everything after it is parsed as usual, so "f"{x=:>5}""
-	// keeps its format spec.
-	{
-		runes := []rune(body)
-		depth := 0
-		var inStr rune
-		for i := 0; i < len(runes); i++ {
-			r := runes[i]
-			if inStr != 0 {
-				if r == '\\' {
-					i++
-					continue
-				}
-				if r == inStr {
-					inStr = 0
-				}
-				continue
-			}
-			switch r {
-			case '\'', '"':
-				inStr = r
-			case '(', '[', '{':
-				depth++
-			case ')', ']', '}':
-				depth--
-			case '=':
-				if depth != 0 || i == 0 {
-					continue
-				}
-				prev, next := runes[i-1], ' '
-				if i+1 < len(runes) {
-					next = runes[i+1]
-				}
-				// "==", "!=", "<=", ">=" are comparisons, not the marker.
-				if prev == '=' || prev == '!' || prev == '<' || prev == '>' || next == '=' {
-					continue
-				}
-				field.debug = true
-				// The source text is kept EXACTLY as written, padding and
-				// all, because CPython echoes it back: f"{ x = }" renders
-				// " x = 5".  The whitespace that followed the "=" is part of
-				// it too, but only up to the conversion or the format spec.
-				// Only the expression compiled below is trimmed.
-				field.debugText = string(runes[:i]) + "="
-				rest := runes[i+1:]
-				for len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
-					field.debugText += string(rest[0])
-					rest = rest[1:]
-				}
-				body = string(runes[:i]) + string(rest)
-				i = len(runes)
-			}
-		}
-	}
-
-	// Find the conversion and format separators at depth 0, outside strings.
-	runes := []rune(body)
-	depth := 0
-	var inStr rune
-	conv := -1
-	spec := -1
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-		if inStr != 0 {
-			if r == '\\' {
-				i++
-				continue
-			}
-			if r == inStr {
-				inStr = 0
-			}
-			continue
-		}
-		switch r {
-		case '\'', '"':
-			inStr = r
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-		case '!':
-			if depth == 0 && conv < 0 && spec < 0 {
-				conv = i
-			}
-		case ':':
-			if depth == 0 && spec < 0 {
-				spec = i
-			}
-		}
-	}
-
-	end := len(runes)
-	if conv >= 0 {
-		end = conv
-		if conv+1 >= len(runes) {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: missing conversion character")
-		}
-		field.conversion = byte(runes[conv+1])
-		if field.conversion != 'r' && field.conversion != 's' && field.conversion != 'a' {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: invalid conversion character %q", string(field.conversion))
-		}
-	}
-	if spec >= 0 {
-		if conv >= 0 && spec < conv {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: format specifier before conversion")
-		}
-		start := spec
-		if conv < 0 {
-			end = spec
-		}
-		field.formatSpec = string(runes[start+1:])
-	}
-
-	field.expr = strings.TrimSpace(string(runes[:end]))
-	if field.expr == "" {
-		return field, py.ExceptionNewf(py.SyntaxError, "f-string: empty expression not allowed")
-	}
-	return field, nil
-}
-
 // compileFString lowers an f-string node into ordinary bytecode.
 //
 // Each literal becomes a constant; each field evaluates its expression, is
@@ -259,15 +21,15 @@ func parseField(body string) (fstringPart, error) {
 // specifier is present, is passed through the format() builtin.  The parts
 // are then concatenated.
 func (c *compiler) compileFString(node *ast.FString) {
-	parts, err := parseFString(node.Text)
+	parts, err := ast.ParseFString(node.Text)
 	if err != nil {
 		c.panicSyntaxErrorf(node, "f-string: %v", err)
 		return
 	}
 
 	// An f-string with a single literal part is just that constant.
-	if len(parts) == 1 && !parts[0].field {
-		c.LoadConst(py.String(unescapePart(parts[0].text, node.Raw)))
+	if len(parts) == 1 && !parts[0].Field {
+		c.LoadConst(py.String(unescapePart(parts[0].Text, node.Raw)))
 		return
 	}
 	if len(parts) == 0 {
@@ -276,16 +38,16 @@ func (c *compiler) compileFString(node *ast.FString) {
 	}
 
 	for i, part := range parts {
-		if !part.field {
-			c.LoadConst(py.String(unescapePart(part.text, node.Raw)))
+		if !part.Field {
+			c.LoadConst(py.String(unescapePart(part.Text, node.Raw)))
 		} else {
 			// The self-documenting form prints its own source text first, so
 			// the text is pushed and then joined to the value once the value
 			// has been produced.
-			if part.debug {
-				c.LoadConst(py.String(part.debugText))
+			if part.Debug {
+				c.LoadConst(py.String(part.DebugText))
 			}
-			expr, err := ast.ParseExpr(part.expr)
+			expr, err := ast.ParseExpr(part.Expr)
 			if err != nil {
 				c.panicSyntaxErrorf(node, "f-string: %v", err)
 				return
@@ -307,20 +69,20 @@ func (c *compiler) compileFString(node *ast.FString) {
 			// format() gets the original value (or the converted one), and
 			// str() is only used when there is no format specifier at all.
 			switch {
-			case part.conversion == 'r' || (part.debug && part.conversion == 0):
+			case part.Conversion == 'r' || (part.Debug && part.Conversion == 0):
 				// f"{x=}" is f"{x=!r}" unless a conversion says otherwise.
 				c.callBuiltin1("repr")
-			case part.conversion == 0:
+			case part.Conversion == 0:
 				// nothing
-			case part.conversion == 'a':
+			case part.Conversion == 'a':
 				c.callBuiltin1("ascii")
-			case part.conversion == 's':
+			case part.Conversion == 's':
 				c.callBuiltin1("str")
 			}
 
-			if part.formatSpec != "" {
-				c.callFormat(part.formatSpec)
-			} else if part.conversion == 0 && !part.debug {
+			if part.FormatSpec != "" {
+				c.callFormat(part.FormatSpec)
+			} else if part.Conversion == 0 && !part.Debug {
 				// A debug field defaults to repr, not str.  format(x, "") is
 				// what CPython's FORMAT_VALUE does, so a __format__ the
 				// class defines is honoured.
@@ -328,7 +90,7 @@ func (c *compiler) compileFString(node *ast.FString) {
 			}
 
 			// Join the source text pushed above to the rendered value.
-			if part.debug {
+			if part.Debug {
 				c.Op(vm.BINARY_ADD)
 			}
 		}

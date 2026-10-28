@@ -95,10 +95,13 @@ func init() {
 		return self, nil
 	}, 0, "Return the stream itself."))
 	IOBaseType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		if s, ok := self.(interface{ doClose() error }); ok {
-			if err := s.doClose(); err != nil {
-				return nil, err
-			}
+		// Look close up on the object: a Python subclass overrides it.
+		close, err := py.GetAttrString(self, "close")
+		if err != nil {
+			return nil, err
+		}
+		if _, err := py.Call(close, nil, py.StringDict{}); err != nil {
+			return nil, err
 		}
 		return py.False, nil
 	}, 0, "Close the stream."))
@@ -118,9 +121,19 @@ func init() {
 		py.DictEntry{Key: "BufferedReader", Value: BufferedReaderType},
 		py.DictEntry{Key: "BufferedWriter", Value: BufferedWriterType},
 		py.DictEntry{Key: "BufferedRandom", Value: RawIOBaseType},
-		py.DictEntry{Key: "TextIOWrapper", Value: TextIOBaseType},
 		py.DictEntry{Key: "FileIO", Value: RawIOBaseType},
 		py.DictEntry{Key: "open", Value: py.MustNewMethod("open", pyOpen, 0, "Open a file and return a stream.")},
+		// text_encoding(encoding, stacklevel=2): "locale" for None, as CPython
+		// does outside UTF-8 mode (the stacklevel is only for a warning).
+		py.DictEntry{Key: "text_encoding", Value: py.MustNewMethod("text_encoding", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if len(args) == 0 || len(args) > 2 {
+				return nil, py.ExceptionNewf(py.TypeError, "text_encoding() takes 1 or 2 arguments (%d given)", len(args))
+			}
+			if args[0] == py.None {
+				return py.String("locale"), nil
+			}
+			return args[0], nil
+		}, 0, "A helper function to choose the text encoding.")},
 		py.DictEntry{Key: "open_code", Value: py.MustNewMethod("open_code", func(self py.Object, args py.Tuple) (py.Object, error) {
 			if len(args) != 1 {
 				return nil, py.ExceptionNewf(py.TypeError, "open_code() takes exactly one argument (%d given)", len(args))
@@ -135,6 +148,7 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: textIOWrapperSrc,
 	})
 }
 
@@ -170,6 +184,10 @@ type BytesIO struct {
 	data   []byte
 	pos    int
 	closed bool
+	// cls and Dict make a Python subclass instance work: its class, and the
+	// attributes it assigns.
+	cls  *py.Type
+	Dict py.StringDict
 }
 
 var BytesIOType = py.NewTypeX("io.BytesIO", bytesio_doc, func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -177,7 +195,7 @@ var BytesIOType = py.NewTypeX("io.BytesIO", bytesio_doc, func(metatype *py.Type,
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:BytesIO", []string{"initial_bytes"}, &initial); err != nil {
 		return nil, err
 	}
-	b := &BytesIO{}
+	b := &BytesIO{Dict: py.NewStringDict(), cls: metatype}
 	if initial != py.None {
 		switch v := initial.(type) {
 		case py.Bytes:
@@ -191,7 +209,14 @@ var BytesIOType = py.NewTypeX("io.BytesIO", bytesio_doc, func(metatype *py.Type,
 	return b, nil
 }, nil)
 
-func (b *BytesIO) Type() *py.Type { return BytesIOType }
+func (b *BytesIO) Type() *py.Type {
+	if b.cls != nil {
+		return b.cls
+	}
+	return BytesIOType
+}
+
+func (b *BytesIO) GetDict() py.StringDict { return b.Dict }
 
 func (b *BytesIO) isClosed() bool { return b.closed }
 
@@ -470,6 +495,10 @@ type StringIO struct {
 	data   strings.Builder
 	pos    int
 	closed bool
+	// cls and Dict make a Python subclass instance work: its class, and the
+	// attributes it assigns.
+	cls  *py.Type
+	Dict py.StringDict
 }
 
 var StringIOType = py.NewTypeX("io.StringIO", stringio_doc, func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -477,7 +506,7 @@ var StringIOType = py.NewTypeX("io.StringIO", stringio_doc, func(metatype *py.Ty
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:StringIO", []string{"initial_value"}, &initial); err != nil {
 		return nil, err
 	}
-	s := &StringIO{}
+	s := &StringIO{Dict: py.NewStringDict(), cls: metatype}
 	if initial != py.None {
 		text, err := py.StrAsString(initial)
 		if err != nil {
@@ -488,7 +517,14 @@ var StringIOType = py.NewTypeX("io.StringIO", stringio_doc, func(metatype *py.Ty
 	return s, nil
 }, nil)
 
-func (s *StringIO) Type() *py.Type { return StringIOType }
+func (s *StringIO) Type() *py.Type {
+	if s.cls != nil {
+		return s.cls
+	}
+	return StringIOType
+}
+
+func (s *StringIO) GetDict() py.StringDict { return s.Dict }
 
 func (s *StringIO) text() string { return s.data.String() }
 
