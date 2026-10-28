@@ -24,7 +24,10 @@ import sre_parse
 print(smtplib.SMTP_PORT, smtplib.SMTP_SSL_PORT, repr(smtplib.CRLF))
 print(smtplib.quoteaddr("<a@b.c>"), repr(smtplib.quotedata("a\n.b\n")))
 print(smtplib.SMTPResponseException.__mro__[1].__name__)
-print(imaplib.IMAP4_PORT, imaplib.IMAP4_SSL_PORT, imaplib.Internaldate2tuple(b'INTERNALDATE "01-Jan-2020 10:00:00 +0000"')[:6])
+# Internaldate2tuple answers in local time; compare as epoch seconds so the
+# golden does not depend on the machine's timezone.
+import time
+print(imaplib.IMAP4_PORT, imaplib.IMAP4_SSL_PORT, int(time.mktime(imaplib.Internaldate2tuple(b'INTERNALDATE "01-Jan-2020 10:00:00 +0000"'))))
 print(poplib.POP3_PORT, poplib.POP3_SSL_PORT, poplib.error_proto.__name__)
 print(ftplib.FTP_PORT, ftplib.MAXLINE, ftplib.error_perm.__mro__[1].__name__)
 print(ftplib.parse150("150 Opening data connection for x (123 bytes)"))
