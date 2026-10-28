@@ -41,11 +41,18 @@ func shortName(name string) string {
 	return name
 }
 
-// isKindOf walks the base chain.
+// isKindOf reports whether t is want or derives from it.  A Go type has one
+// Base, but pathlib's classes have two parents each (WindowsPath is a Path
+// and a PureWindowsPath), so the declared pathBases count too.
 func isKindOf(t, want *py.Type) bool {
 	for ; t != nil; t = t.Base {
 		if t == want {
 			return true
+		}
+		for _, b := range pathBases[t] {
+			if b == want {
+				return true
+			}
 		}
 	}
 	return false
