@@ -1,0 +1,21 @@
+True False
+['only_a.txt'] ['only_b.txt'] ['diff.txt', 'same.txt'] ['same.txt'] ['diff.txt']
+(['same.txt'], ['diff.txt'], [])
+in1.txt 1 1 True alpha
+in1.txt 2 2 False beta
+in2.txt 3 1 True gamma
+['ALPHA', 'BETA']
+True True True 6
+/usr/l
+[b'k', b'k2'] b'v'
+2 b'v2'
+['dict', 'list'] [1, 2, 3] {'x': (1, 2)} True
+2 0 1
+From: a@b.c
+Subject: one
+
+first body
+
+b'From: d@e.f\nSubject: two\n\nsecond\n>From here\n'
+[1]
+1 'From: d@e.f\nSubject: two\n\nsecond\n>From here\n'

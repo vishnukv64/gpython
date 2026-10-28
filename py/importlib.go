@@ -13,6 +13,7 @@ package py
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -117,7 +118,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		}
 		for _, c := range candidates {
 			stat, err := StatPath(c.file)
-			if err == nil && !stat.IsDir() {
+			if err == nil && !stat.IsDir() && exactCase(c.file) {
 				return c.file, c.isPkg, nil
 			}
 		}
@@ -130,7 +131,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		// "a package with no code to run".
 		// collected below, across EVERY search path entry
 		nsDir := filepath.Join(dir, base)
-		if stat, err := StatPath(nsDir); err == nil && stat.IsDir() {
+		if stat, err := StatPath(nsDir); err == nil && stat.IsDir() && exactCase(nsDir) {
 			nsDirs = append(nsDirs, nsDir)
 		}
 	}
@@ -354,4 +355,27 @@ func resolveRelativeImport(name string, level int, globals StringDict) (string, 
 		return pkg, nil
 	}
 	return pkg + "." + name, nil
+}
+
+// exactCase reports whether the last element of path is spelled exactly as the
+// directory entry is.  On a case-insensitive filesystem (macOS, Windows)
+// stat("util/Timeout.py") succeeds for timeout.py, so "from pkg.util import
+// Timeout" imported the module timeout.py as a submodule named Timeout and
+// shadowed the class of that name - which is how pip's urllib3 broke.  CPython's
+// FileFinder compares against the directory listing for the same reason.
+func exactCase(path string) bool {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		return true
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return true // not a real directory (an embedded lib): nothing to compare
+	}
+	base := filepath.Base(path)
+	for _, e := range entries {
+		if e.Name() == base {
+			return true
+		}
+	}
+	return false
 }

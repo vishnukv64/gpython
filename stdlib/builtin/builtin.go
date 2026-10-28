@@ -166,6 +166,7 @@ func init() {
 		py.DictEntry{Key: "StopIteration", Value: py.StopIteration},
 		py.DictEntry{Key: "StopAsyncIteration", Value: py.StopAsyncIteration},
 		py.DictEntry{Key: "SyntaxError", Value: py.SyntaxError},
+		py.DictEntry{Key: "_IncompleteInputError", Value: py.IncompleteInputError},
 		py.DictEntry{Key: "SyntaxWarning", Value: py.SyntaxWarning},
 		py.DictEntry{Key: "SystemError", Value: py.SystemError},
 		py.DictEntry{Key: "SystemExit", Value: py.SystemExit},
@@ -215,7 +216,7 @@ func builtin_reversed(self py.Object, args py.Tuple) (py.Object, error) {
 	v := args[0]
 
 	// A type may answer for itself.
-	if res, ok, err := py.TypeCall1(v, "__reversed__", nil); ok {
+	if res, ok, err := py.TypeCall0(v, "__reversed__"); ok {
 		return res, err
 	}
 
@@ -500,6 +501,15 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 		return nil, py.ExceptionNewf(py.TypeError, "__build_class__: name is not a string")
 	}
 	bases := args[2:]
+	// PEP 560: resolve __mro_entries__ before the metaclass is chosen, so
+	// ABCMeta and __prepare__ see classes, and remember the originals.
+	var origBases py.Tuple
+	if resolved, changed, err := py.ResolveMroEntries(bases); err != nil {
+		return nil, err
+	} else if changed {
+		origBases = append(py.Tuple(nil), bases...)
+		bases = resolved
+	}
 
 	if !kwargs.IsNil() {
 		mkw = kwargs.Copy() // Don't modify kwds passed in!
@@ -580,6 +590,9 @@ func builtin___build_class__(self py.Object, args py.Tuple, kwargs py.StringDict
 	}
 	// fmt.Printf("Calling %v with %v and %v\n", fn.Name, fn.Globals, ns)
 	// fmt.Printf("Code = %#v\n", fn.Code)
+	if origBases != nil {
+		ns.Set("__orig_bases__", origBases)
+	}
 	cell, err = fn.Context.RunCode(fn.Code, fn.Globals, ns, fn.Closure)
 	if err != nil {
 		return nil, err
@@ -725,11 +738,19 @@ func builtin_open(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, err
 	}
 
-	if encoding != py.None && encoding.(py.String) != py.String("utf-8") {
-		return nil, py.ExceptionNewf(py.NotImplementedError, "encoding not implemented yet")
+	// Text files are UTF-8 here, which is also what "locale" resolves to.
+	// ASCII and Latin-1 are accepted as UTF-8 too: identical for ASCII text
+	// (all dbm.dumb's index files hold), wrong only for Latin-1 bytes above
+	// 0x7f.
+	if encoding != py.None {
+		switch strings.ToLower(strings.ReplaceAll(string(encoding.(py.String)), "_", "-")) {
+		case "utf-8", "utf8", "locale", "ascii", "us-ascii", "latin-1", "latin1", "iso-8859-1":
+		default:
+			return nil, py.ExceptionNewf(py.NotImplementedError, "encoding not implemented yet")
+		}
 	}
 
-	if errors != py.None {
+	if errors != py.None && errors != py.String("strict") {
 		return nil, py.ExceptionNewf(py.NotImplementedError, "errors not implemented yet")
 	}
 
@@ -749,6 +770,15 @@ func builtin_open(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 			return nil, err
 		}
 		return py.FileFromFD(int(fd), string(mode.(py.String)), cf)
+	}
+	// bytes and os.PathLike names, as os.fspath would give them.
+	if res, ok, err := py.TypeCall0(filename, "__fspath__"); err != nil {
+		return nil, err
+	} else if ok {
+		filename = res
+	}
+	if b, ok := filename.(py.Bytes); ok {
+		filename = py.String(b)
 	}
 	if _, ok := filename.(py.String); !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "open() argument 1 must be str, not %s", filename.Type().Name)
@@ -1056,9 +1086,20 @@ func builtin_compile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	if err != nil {
 		return nil, err
 	}
+	// "single" wants its statement newline-terminated; CPython supplies it.
+	if py.CompileMode(startstr.(py.String)) == "single" && !strings.HasSuffix(str, "\n") {
+		str += "\n"
+	}
 	// result = py.CompileStringExFlags(str, filename, start[mode], &cf, optimize)
 	result, err = compile.Compile(str, string(filename.(py.String)), py.CompileMode(startstr.(py.String)), int(supplied_flags.(py.Int)), dont_inherit.(py.Int) != 0)
 	if err != nil {
+		// codeop relies on this to tell "incomplete" from "invalid".
+		const pyCFAllowIncompleteInput = 0x4000
+		if exc, ok := err.(*py.Exception); ok && exc.Base == py.SyntaxError &&
+			int(supplied_flags.(py.Int))&pyCFAllowIncompleteInput != 0 &&
+			strings.Contains(exc.Error(), "unexpected EOF while parsing") {
+			exc.Base = py.IncompleteInputError
+		}
 		return nil, err
 	}
 	// }

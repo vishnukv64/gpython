@@ -151,7 +151,7 @@ func (s *Set) setAddCode(item Object) error {
 		if s.keyObjs != nil {
 			delete(s.keyObjs, k)
 		}
-		if _, isScalar := scalarOf(item); isScalar {
+		if _, isScalar := scalarOf(item); isScalar || keyNeedsObj(item) {
 			if s.keyObjs == nil {
 				s.keyObjs = map[string]Object{}
 			}

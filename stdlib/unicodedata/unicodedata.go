@@ -604,6 +604,7 @@ func init() {
 	// each entry can carry its own comment.
 	globals := py.NewStringDict()
 	globals.Set("unidata_version", py.String(unidataVersion))
+	globals.Set("ucd_3_2_0", &ucd320{})
 	// UCD is the version packed as the C API reports it: 16.0.0.
 	globals.Set("UCD", py.Int(16<<16))
 

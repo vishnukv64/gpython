@@ -7,8 +7,10 @@
 // The reading half is implemented on Go's archive/zip, which reads the same
 // format: is_zipfile, ZipFile with namelist, infolist, read, open, extract and
 // extractall all work, and a member's bytes come out unchanged.  Writing
-// (ZipFile(..., "w")) and the low-level ZipInfo objects are not implemented -
-// those paths raise NotImplementedError rather than produce a bad archive.
+// ("w"/"x") goes through archive/zip's Writer onto a path or onto any object
+// with a write() method: write() and writestr() with a name.  Append mode and
+// the low-level ZipInfo objects are not implemented - those paths raise
+// NotImplementedError rather than produce a bad archive.
 package zipfile
 
 import (
@@ -18,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -26,7 +29,7 @@ const module_doc = `Read and write ZIP-format archive files.
 
 This implementation reads archives with Go's archive/zip; ZipFile, is_zipfile,
 namelist, infolist, read, open, extract and extractall are implemented for
-reading.  Writing is not implemented.`
+reading, and write(), writestr() for writing a new archive.`
 
 var (
 	// BadZipFile is raised for a file that is not a valid zip archive.
@@ -51,6 +54,14 @@ type zipFile struct {
 	path     string
 	filename string
 	Dict     py.StringDict
+
+	// Write mode: w is the archive being built, sink the file-like object it
+	// goes to, and own the os.File to close when the archive was given as a
+	// path.
+	w           *zip.Writer
+	sink        py.Object
+	own         *os.File
+	compression uint16
 }
 
 func (z *zipFile) Type() *py.Type         { return ZipFileType }
@@ -85,20 +96,40 @@ func isZipfile(path string) bool {
 		string(sig) == "PK\x07\x08"
 }
 
+// pyWriter adapts a Python file-like object (anything with write()) to io.Writer.
+type pyWriter struct{ obj py.Object }
+
+func (w pyWriter) Write(p []byte) (int, error) {
+	fn, err := py.GetAttrString(w.obj, "write")
+	if err != nil {
+		return 0, err
+	}
+	if _, err := py.Call(fn, py.Tuple{py.Bytes(append([]byte(nil), p...))}, py.StringDict{}); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func zipFileNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var file py.Object
 	var mode py.Object = py.String("r")
-	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:__init__",
-		[]string{"file", "mode"}, &file, &mode); err != nil {
+	var compression py.Object = py.Int(0)
+	var allowZip64, compresslevel, strictTimestamps, metadataEncoding py.Object = py.True, py.None, py.True, py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OiOOOO:__init__",
+		[]string{"file", "mode", "compression", "allowZip64", "compresslevel", "strict_timestamps", "metadata_encoding"},
+		&file, &mode, &compression, &allowZip64, &compresslevel, &strictTimestamps, &metadataEncoding); err != nil {
 		return nil, err
 	}
 	m, _ := py.StrAsString(mode)
 	if m == "" {
 		m = "r"
 	}
+	if m == "w" || m == "x" {
+		return zipWriterNew(file, m, uint16(compression.(py.Int)))
+	}
 	if !strings.HasPrefix(m, "r") {
 		return nil, py.ExceptionNewf(py.NotImplementedError,
-			"zipfile.ZipFile: only reading is implemented; writing an archive is not supported")
+			"zipfile.ZipFile: append mode is not implemented")
 	}
 	path, err := py.StrAsString(file)
 	if err != nil {
@@ -111,6 +142,45 @@ func zipFileNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 	}
 	z := &zipFile{r: &r.Reader, closer: r, path: path, filename: path, Dict: py.NewStringDict()}
 	return z, nil
+}
+
+func zipWriterNew(file py.Object, mode string, compression uint16) (py.Object, error) {
+	if compression != zip.Store && compression != zip.Deflate {
+		return nil, py.ExceptionNewf(py.NotImplementedError, "zipfile: only ZIP_STORED and ZIP_DEFLATED are implemented")
+	}
+	z := &zipFile{Dict: py.NewStringDict(), compression: compression}
+	var out io.Writer
+	if _, isFile := file.(py.String); isFile || hasFSPath(file) {
+		path, err := py.StrAsString(file)
+		if hasFSPath(file) {
+			res, _, ferr := py.TypeCall0(file, "__fspath__")
+			if ferr != nil {
+				return nil, ferr
+			}
+			path, err = py.StrAsString(res)
+		}
+		if err != nil {
+			return nil, err
+		}
+		flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if mode == "x" {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+		}
+		f, err := os.OpenFile(path, flags, 0o666)
+		if err != nil {
+			return nil, py.OSErrorFrom(err, path)
+		}
+		z.own, z.path, z.filename, out = f, path, path, f
+	} else {
+		z.sink, out = file, pyWriter{file}
+	}
+	z.w = zip.NewWriter(out)
+	return z, nil
+}
+
+func hasFSPath(o py.Object) bool {
+	_, isStr := o.(py.String)
+	return !isStr && o.Type().Lookup("__fspath__") != nil
 }
 
 func zipInfoOf(f *zip.File) *zipInfo {
@@ -126,6 +196,9 @@ func zipInfoOf(f *zip.File) *zipInfo {
 
 func zipFileNamelist(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	items := make([]py.Object, len(z.r.File))
 	for i, f := range z.r.File {
 		items[i] = py.String(f.Name)
@@ -135,6 +208,9 @@ func zipFileNamelist(self py.Object, args py.Tuple) (py.Object, error) {
 
 func zipFileInfolist(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	items := make([]py.Object, len(z.r.File))
 	for i, f := range z.r.File {
 		items[i] = zipInfoOf(f)
@@ -144,6 +220,9 @@ func zipFileInfolist(self py.Object, args py.Tuple) (py.Object, error) {
 
 func zipFileRead(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	if len(args) != 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "read() takes exactly one argument")
 	}
@@ -171,6 +250,9 @@ func zipFileRead(self py.Object, args py.Tuple) (py.Object, error) {
 
 func zipFileExtract(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	var member py.Object
 	path := py.Object(py.None)
 	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:extract",
@@ -218,6 +300,9 @@ func zipFileExtract(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 
 func zipFileExtractall(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	path := py.Object(py.None)
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:extractall",
 		[]string{"path"}, &path); err != nil {
@@ -278,8 +363,146 @@ func safeJoin(dest, name string) (string, error) {
 	return clean, nil
 }
 
+func (z *zipFile) writing() error {
+	if z.w == nil {
+		return py.ExceptionNewf(py.ValueError, "write() requires mode 'w' or 'x'")
+	}
+	return nil
+}
+
+// arcname normalises a member name the way CPython's ZipInfo does: forward
+// slashes, no drive or leading separator.
+func arcname(name string, isDir bool) string {
+	name = filepath.ToSlash(name)
+	if v := filepath.VolumeName(name); v != "" {
+		name = name[len(filepath.ToSlash(v)):]
+	}
+	name = strings.TrimLeft(name, "/")
+	if isDir && !strings.HasSuffix(name, "/") {
+		name += "/"
+	}
+	return name
+}
+
+func (z *zipFile) add(name string, mode os.FileMode, mtime time.Time, data []byte, compress py.Object) error {
+	method := z.compression
+	if c, ok := compress.(py.Int); ok {
+		method = uint16(c)
+	}
+	if method != zip.Store && method != zip.Deflate {
+		return py.ExceptionNewf(py.NotImplementedError, "zipfile: only ZIP_STORED and ZIP_DEFLATED are implemented")
+	}
+	h := &zip.FileHeader{Name: name, Method: method, Modified: mtime}
+	h.SetMode(mode)
+	if strings.HasSuffix(name, "/") {
+		h.Method = zip.Store
+	}
+	w, err := z.w.CreateHeader(h)
+	if err != nil {
+		return py.ExceptionNewf(py.OSError, "%s", err)
+	}
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func zipFileWrite(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	z := self.(*zipFile)
+	if err := z.writing(); err != nil {
+		return nil, err
+	}
+	var filename py.Object
+	var arc, compress py.Object = py.None, py.None
+	var level py.Object = py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OOO:write", []string{"filename", "arcname", "compress_type", "compresslevel"},
+		&filename, &arc, &compress, &level); err != nil {
+		return nil, err
+	}
+	path, err := fsString(filename)
+	if err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, py.OSErrorFrom(err, path)
+	}
+	name := path
+	if arc != py.None {
+		if name, err = py.StrAsString(arc); err != nil {
+			return nil, err
+		}
+	}
+	name = arcname(name, st.IsDir())
+	var data []byte
+	if !st.IsDir() {
+		if data, err = os.ReadFile(path); err != nil {
+			return nil, py.OSErrorFrom(err, path)
+		}
+	}
+	if err := z.add(name, st.Mode(), st.ModTime(), data, compress); err != nil {
+		return nil, err
+	}
+	return py.None, nil
+}
+
+func zipFileWritestr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	z := self.(*zipFile)
+	if err := z.writing(); err != nil {
+		return nil, err
+	}
+	var info, data py.Object
+	var compress, level py.Object = py.None, py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|OO:writestr", []string{"zinfo_or_arcname", "data", "compress_type", "compresslevel"},
+		&info, &data, &compress, &level); err != nil {
+		return nil, err
+	}
+	name, ok := info.(py.String)
+	if !ok {
+		return nil, py.ExceptionNewf(py.NotImplementedError, "zipfile: writestr() takes an archive name; ZipInfo is not implemented")
+	}
+	var b []byte
+	switch d := data.(type) {
+	case py.String:
+		b = []byte(d)
+	case py.Bytes:
+		b = []byte(d)
+	default:
+		return nil, py.ExceptionNewf(py.TypeError, "writestr() data must be str or bytes, not %s", data.Type().Name)
+	}
+	if err := z.add(arcname(string(name), false), 0o600, time.Now(), b, compress); err != nil {
+		return nil, err
+	}
+	return py.None, nil
+}
+
+// fsString is os.fspath for a str or os.PathLike.
+func fsString(o py.Object) (string, error) {
+	if hasFSPath(o) {
+		res, _, err := py.TypeCall0(o, "__fspath__")
+		if err != nil {
+			return "", err
+		}
+		o = res
+	}
+	return py.StrAsString(o)
+}
+
 func zipFileClose(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.w != nil {
+		w := z.w
+		z.w = nil
+		if err := w.Close(); err != nil {
+			return nil, err
+		}
+		if z.own != nil {
+			if err := z.own.Close(); err != nil {
+				return nil, py.OSErrorFrom(err, z.path)
+			}
+			z.own = nil
+		}
+	}
 	if z.closer != nil {
 		z.closer.Close()
 		z.closer = nil
@@ -296,6 +519,9 @@ func zipFileEnter(self py.Object, args py.Tuple) (py.Object, error) {
 }
 
 func zipFileExit(self py.Object, args py.Tuple) (py.Object, error) {
+	if _, err := zipFileClose(self, nil); err != nil {
+		return nil, err
+	}
 	return py.None, nil
 }
 
@@ -314,6 +540,9 @@ func zipIsZipfile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 
 func zipFileGetinfo(self py.Object, args py.Tuple) (py.Object, error) {
 	z := self.(*zipFile)
+	if z.r == nil {
+		return nil, py.ExceptionNewf(py.ValueError, "ZipFile was opened for writing; reading members is not implemented")
+	}
 	if len(args) != 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "getinfo() takes exactly one argument")
 	}
@@ -359,6 +588,8 @@ func init() {
 		{"extractall", func(self py.Object, args py.Tuple, kw py.StringDict) (py.Object, error) {
 			return zipFileExtractall(self, args, kw)
 		}, "Extract all members from the archive to the current working directory."},
+		{"write", zipFileWrite, "Put the bytes from filename into the archive under the name arcname."},
+		{"writestr", zipFileWritestr, "Write a file into the archive; the contents are data."},
 		{"getinfo", zipFileGetinfo, "Return a ZipInfo object with information about the member."},
 		{"close", zipFileClose, "Close the archive file."},
 		{"names", zipFileNames, "Return a list of archive members by name."},

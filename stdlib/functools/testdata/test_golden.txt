@@ -4,7 +4,7 @@ second: 42 calls: 1
 cached in instance dict: 42
 after del: 42 calls: 2
 fresh instance recomputes: 42 calls: 3
-class access is descriptor: functools.cached_property
+class access is descriptor: cached_property
 super in property: ['defaults', 'mixin']
 super with walrus: ['base', 'walrus']
 getuid is int: True

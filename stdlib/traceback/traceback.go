@@ -122,32 +122,13 @@ func formatFrame(tb *py.Traceback) []string {
 		lineno = int(code.Firstlineno)
 	}
 	out := []string{"  File \"" + filename + "\", line " + itoa(lineno) + ", in " + code.Name + "\n"}
-	if line, ok := sourceLine(filename, lineno); ok {
+	if line, ok := py.SourceLine(filename, lineno); ok {
 		text := strings.TrimSpace(line)
 		if text != "" {
 			out = append(out, "    "+text+"\n")
 		}
 	}
 	return out
-}
-
-// sourceLine reads one line from the file a frame came from.
-//
-// CPython omits the source line when it cannot read the file (a module built
-// from a string, or a file since deleted), so a failure here is not an error.
-func sourceLine(filename string, lineno int) (string, bool) {
-	if filename == "" || strings.HasPrefix(filename, "<") || lineno <= 0 {
-		return "", false
-	}
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return "", false
-	}
-	lines := strings.Split(string(data), "\n")
-	if lineno > len(lines) {
-		return "", false
-	}
-	return lines[lineno-1], true
 }
 
 // formatExceptionInto writes the whole rendering of an exception, its
@@ -176,11 +157,7 @@ func formatExceptionInto(w io.Writer, e *py.Exception, tb *py.Traceback, seen ma
 
 	if tb != nil {
 		io.WriteString(w, "Traceback (most recent call last):\n")
-		for t := tb; t != nil; t = t.Next {
-			for _, line := range formatFrame(t) {
-				io.WriteString(w, line)
-			}
-		}
+		tb.TracebackDump(w)
 	}
 	io.WriteString(w, exceptionText(e)+"\n")
 }
@@ -346,6 +323,9 @@ func printExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 	_ = limit
 	_ = chain
+	if v, ok := kwargs.Get("file"); ok {
+		file = v
+	}
 	exc, tb, err := resolveExcArgs("print_exc", py.Tuple{})
 	if err != nil {
 		return nil, err
@@ -361,7 +341,11 @@ func printExc(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 		}
 		return py.None, nil
 	}
-	if _, err := py.Call(file, py.Tuple{py.String(sb.String())}, py.NewStringDict()); err != nil {
+	w, err := py.GetAttrString(file, "write")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := py.Call(w, py.Tuple{py.String(sb.String())}, py.NewStringDict()); err != nil {
 		return nil, err
 	}
 	return py.None, nil
@@ -421,7 +405,7 @@ func extractTb(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 			continue
 		}
 		line := ""
-		if l, ok := sourceLine(t.Frame.Code.Filename, int(t.Lineno)); ok {
+		if l, ok := py.SourceLine(t.Frame.Code.Filename, int(t.Lineno)); ok {
 			line = strings.TrimSpace(l)
 		}
 		frames = append(frames, frameSummary{

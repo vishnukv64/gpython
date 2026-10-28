@@ -640,6 +640,9 @@ func (a Int) M__complex__() (Object, error) {
 }
 
 func (a Int) M__round__(digits Object) (Object, error) {
+	if digits == None {
+		return a, nil
+	}
 	if b, ok := convertToInt(digits); ok {
 		if b >= 0 {
 			return a, nil

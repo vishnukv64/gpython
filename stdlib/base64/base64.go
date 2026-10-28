@@ -882,6 +882,7 @@ func init() {
 			Name: "base64",
 			Doc:  module_doc,
 		},
+		CodeSrc: encodebytesSrc,
 		Methods: []*py.Method{
 			py.MustNewMethod("b64encode", b64encode, 0,
 				"Encode the bytes-like object s using Base64 and return a bytes object.\n\nOptional altchars should be a byte string of length 2 which specifies an\nalternative alphabet for '+' and '/'."),
@@ -908,3 +909,17 @@ func init() {
 		Globals: py.NewStringDict(),
 	})
 }
+
+// encodebytesSrc is base64.encodebytes/decodebytes: the MIME form, 76
+// characters (57 input bytes) per newline-terminated line.
+const encodebytesSrc = `
+def encodebytes(s):
+    """Encode a bytestring into a bytes object containing multiple lines of base-64 data."""
+    s = bytes(s)
+    return b"".join(b64encode(s[i:i + 57]) + b"\n" for i in range(0, len(s), 57))
+
+
+def decodebytes(s):
+    """Decode a bytestring of base-64 data into a bytes object."""
+    return b64decode(bytes(s))
+`

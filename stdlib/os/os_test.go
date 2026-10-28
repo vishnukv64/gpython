@@ -47,3 +47,11 @@ func TestWalk(t *testing.T) {
 func TestStat(t *testing.T) {
 	pytest.RunScript(t, "./testdata/stat.py")
 }
+
+func TestEnvironMapping(t *testing.T) {
+	pytest.RunScript(t, "./testdata/environ_mapping.py")
+}
+
+func TestOsPathModule(t *testing.T) {
+	pytest.RunScript(t, "./testdata/ospath_module.py")
+}

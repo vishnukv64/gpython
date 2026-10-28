@@ -712,6 +712,7 @@ func init() {
 		py.DictEntry{Key: "base_exec_prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "implementation", Value: implementationInfo()},
 		py.DictEntry{Key: "builtin_module_names", Value: py.NewListFromStrings(builtinModuleNames())},
+		py.DictEntry{Key: "stdlib_module_names", Value: stdlibModuleNamesSet()},
 		py.DictEntry{Key: "modules", Value: py.NewStringDict()},
 		py.DictEntry{Key: "dont_write_bytecode", Value: py.False},
 		py.DictEntry{Key: "flags", Value: newFlags()},

@@ -689,8 +689,13 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 
 	// A field with a default may not be followed by one without, which is
 	// the same ordering rule CPython enforces.
+	// CPython checks it only while generating __init__ (init=True), and keyword-only
+	// fields are exempt.
 	seenDefault := false
 	for _, f := range fields {
+		if !initOn || f.kwOnly == py.True {
+			continue
+		}
 		hasDefault := f.defaultVal != missing || f.defaultFactory != missing
 		if hasDefault {
 			seenDefault = true

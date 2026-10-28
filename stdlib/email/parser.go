@@ -286,6 +286,9 @@ func parserNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Objec
 	if v, ok := kwargs.Get("_factory"); ok {
 		factory = v
 	}
+	if v, ok := kwargs.Get("_class"); ok {
+		factory = v
+	}
 	return &Parser{policy: newPolicyArg(kwargs), factory: factory, Dict: py.NewStringDict()}, nil
 }
 
@@ -295,6 +298,9 @@ func bytesParserNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.
 		factory = args[0]
 	}
 	if v, ok := kwargs.Get("_factory"); ok {
+		factory = v
+	}
+	if v, ok := kwargs.Get("_class"); ok {
 		factory = v
 	}
 	return &BytesParser{policy: newPolicyArg(kwargs), factory: factory, Dict: py.NewStringDict()}, nil
@@ -308,6 +314,9 @@ func headerParserNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py
 	if v, ok := kwargs.Get("_factory"); ok {
 		factory = v
 	}
+	if v, ok := kwargs.Get("_class"); ok {
+		factory = v
+	}
 	return &HeaderParser{policy: newPolicyArg(kwargs), factory: factory, Dict: py.NewStringDict()}, nil
 }
 
@@ -319,6 +328,9 @@ func bytesHeaderParserNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict
 	if v, ok := kwargs.Get("_factory"); ok {
 		factory = v
 	}
+	if v, ok := kwargs.Get("_class"); ok {
+		factory = v
+	}
 	return &BytesHeaderParser{policy: newPolicyArg(kwargs), factory: factory, Dict: py.NewStringDict()}, nil
 }
 
@@ -328,6 +340,9 @@ func feedParserNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 		factory = args[0]
 	}
 	if v, ok := kwargs.Get("_factory"); ok {
+		factory = v
+	}
+	if v, ok := kwargs.Get("_class"); ok {
 		factory = v
 	}
 	return &FeedParser{policy: newPolicyArg(kwargs), factory: factory, Dict: py.NewStringDict()}, nil
@@ -346,7 +361,7 @@ func strOrBytesArg(o py.Object) (string, error) {
 }
 
 func parserParse(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return parseFileCommon(args, kwargs)
+	return parseFileCommon(self, args, kwargs)
 }
 
 func parserParseStr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -362,10 +377,54 @@ func parserParseStr(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	if err != nil {
 		return nil, err
 	}
-	return parseMessage(s, isTrueObj(headersonly)), nil
+	return withFactory(self, parseMessage(s, isTrueObj(headersonly)))
 }
 
-func parseFileCommon(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+// parserFactory is the _class (or _factory) a parser was built with.
+func parserFactory(self py.Object) py.Object {
+	switch p := self.(type) {
+	case *Parser:
+		return p.factory
+	case *BytesParser:
+		return p.factory
+	case *HeaderParser:
+		return p.factory
+	case *BytesHeaderParser:
+		return p.factory
+	}
+	return py.None
+}
+
+// withFactory rebuilds a parsed message as an instance of the parser's _class
+// (http.client parses its headers into HTTPMessage, and urllib3 checks for the
+// subclass): headers are copied in order, a string payload is set.
+func withFactory(parser py.Object, msg *Message) (py.Object, error) {
+	factory := parserFactory(parser)
+	if factory == py.None || factory == py.Object(MessageType) {
+		return msg, nil
+	}
+	inst, err := py.Call(factory, py.Tuple{}, py.NewStringDict())
+	if err != nil {
+		return nil, err
+	}
+	for i, name := range msg.headers {
+		if _, err := py.SetItem(inst, py.String(name), py.String(msg.values[i])); err != nil {
+			return nil, err
+		}
+	}
+	if body, ok := msg.payload.(py.String); ok {
+		setPayload, err := py.GetAttrString(inst, "set_payload")
+		if err != nil {
+			return nil, err
+		}
+		if _, err := py.Call(setPayload, py.Tuple{body}, py.NewStringDict()); err != nil {
+			return nil, err
+		}
+	}
+	return inst, nil
+}
+
+func parseFileCommon(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
 		fp          py.Object
 		headersonly py.Object = py.False
@@ -378,7 +437,7 @@ func parseFileCommon(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseMessage(data, isTrueObj(headersonly)), nil
+	return withFactory(self, parseMessage(data, isTrueObj(headersonly)))
 }
 
 // readAllOf drains a file-like object with read().
@@ -465,11 +524,11 @@ func messageFromBytes(self py.Object, args py.Tuple, kwargs py.StringDict) (py.O
 }
 
 func messageFromFile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return parseFileCommon(args, kwargs)
+	return parseFileCommon(py.None, args, kwargs)
 }
 
 func messageFromBinaryFile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return parseFileCommon(args, kwargs)
+	return parseFileCommon(py.None, args, kwargs)
 }
 
 var (

@@ -207,13 +207,9 @@ func init() {
 	// got "'type' object is not subscriptable", which stopped pip at
 	// pip/_internal/commands.
 	//
-	// The class itself is the result, as it is for every other ABC - the
-	// parameter only matters to a type checker.
+	// The result is a GenericAlias, so it can be a base class.
 	for _, t := range []*py.Type{AbstractContextManagerType, ContextDecoratorType} {
-		t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__",
-			func(self py.Object, args py.Tuple) (py.Object, error) {
-				return self, nil
-			}, 0, "Return the class, ignoring the subscription parameters."))
+		t.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 	}
 }
 
@@ -234,6 +230,9 @@ type exitCallback struct {
 	fn   py.Object
 	args py.Tuple
 	kwds py.StringDict
+	// isExit: an __exit__, which is called with (type, value, tb) even when
+	// nothing was raised; a callback() is called with its own arguments only.
+	isExit bool
 }
 
 var ExitStackType = py.NewTypeX("contextlib.ExitStack", exitstack_doc, func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -255,7 +254,8 @@ func (s *ExitStack) push(fn py.Object, args py.Tuple, kwds py.StringDict) py.Obj
 func (s *ExitStack) unwind(excType, excValue, traceback py.Object) (py.Object, error) {
 	for i := len(s.callbacks) - 1; i >= 0; i-- {
 		cb := s.callbacks[i]
-		if excType == py.None || excType == nil {
+		if !cb.isExit {
+			// callback(): its own arguments only, and it never suppresses.
 			if _, err := py.Call(cb.fn, cb.args, cb.kwds); err != nil {
 				return nil, err
 			}
@@ -296,6 +296,7 @@ func init() {
 			return nil, err
 		}
 		s.push(exit, py.Tuple{}, py.StringDict{})
+		s.callbacks[len(s.callbacks)-1].isExit = true
 		return value, nil
 	}, 0, "Enter a context manager and register its exit on the stack."))
 
@@ -306,7 +307,9 @@ func init() {
 		if len(args) < 1 {
 			return nil, py.ExceptionNewf(py.TypeError, "callback() needs at least one argument")
 		}
-		return s.push(args[0], args[1:], py.StringDict{}), nil
+		// args aliases the caller's value stack, which is reused once the
+		// calling frame unwinds; keep a copy.
+		return s.push(args[0], append(py.Tuple(nil), args[1:]...), py.StringDict{}), nil
 	}, 0, "Register a callback to be called on exit."))
 
 	ExitStackType.Dict.Set("push_async_callback", ExitStackType.Dict.GetOrNil("callback"))

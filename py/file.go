@@ -401,15 +401,7 @@ func OpenFile(filename, mode string, buffering int) (Object, error) {
 
 	f, err := os.OpenFile(filename, fmode, 0666)
 	if err != nil {
-		switch {
-		case os.IsExist(err):
-			return nil, ExceptionNewf(FileExistsError, "%s", err.Error())
-
-		case os.IsNotExist(err):
-			return nil, ExceptionNewf(FileNotFoundError, "%s", err.Error())
-		}
-
-		return nil, ExceptionNewf(OSError, "%s", err.Error())
+		return nil, OSErrorFrom(err, filename)
 	}
 
 	if finfo, err := f.Stat(); err == nil {

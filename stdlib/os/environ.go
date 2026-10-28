@@ -6,7 +6,7 @@ package os
 
 import (
 	"os"
-	"sort"
+	"runtime"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -50,6 +50,11 @@ func envKey(key py.Object) (string, error) {
 	s, ok := key.(py.String)
 	if !ok {
 		return "", py.ExceptionNewf(py.TypeError, "str expected, not %s", key.Type().Name)
+	}
+	// Windows variable names are case-insensitive, and os._Environ stores and
+	// reports them upper-cased.
+	if runtime.GOOS == "windows" {
+		return strings.ToUpper(string(s)), nil
 	}
 	return string(s), nil
 }
@@ -139,22 +144,125 @@ func (e *environ) M__str__() (py.Object, error) {
 
 func (e *environ) M__repr__() (py.Object, error) { return e.M__str__() }
 
-// envKeys returns the variable names as a sorted tuple of Strings, so that
-// iteration is stable from one run to the next.
+// envKeys lists the names in process order - startup order, with new names
+// appended - which is the order of os._Environ's dict.
 func envKeys() py.Tuple {
 	vs := os.Environ()
 	keys := make(py.Tuple, 0, len(vs))
+	seen := make(map[string]bool, len(vs))
 	for _, evar := range vs {
-		if i := strings.IndexByte(evar, '='); i >= 0 {
-			keys = append(keys, py.String(evar[:i]))
+		// Windows keeps hidden "=C:=..." entries whose name starts with '='.
+		i := strings.IndexByte(evar[min(1, len(evar)):], '=')
+		if i < 0 {
+			continue
 		}
+		k := evar[:i+1]
+		if runtime.GOOS == "windows" {
+			k = strings.ToUpper(k)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+		}
+		keys = append(keys, py.String(k))
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].(py.String) < keys[j].(py.String) })
 	return keys
 }
 
-// environMethods implements the mapping API on top of the descriptors above,
-// which is what makes environ.get/keys/items/... work.
+// environUpdate is MutableMapping.update(other): a mapping (anything with
+// keys()) is copied key by key, anything else is an iterable of pairs.
+func environUpdate(e *environ, other py.Object) error {
+	return mergeInto(other, func(k, v py.Object) error {
+		_, err := e.M__setitem__(k, v)
+		return err
+	})
+}
+
+// dictUpdate is dict.update(other) for a plain dict d.
+func dictUpdate(d py.StringDict, other py.Object) error {
+	return mergeInto(other, func(k, v py.Object) error {
+		_, err := d.M__setitem__(k, v)
+		return err
+	})
+}
+
+func mergeInto(other py.Object, set func(k, v py.Object) error) error {
+	var ierr error
+	if keysFn, err := py.GetAttrString(other, "keys"); err == nil {
+		keys, err := py.Call(keysFn, py.Tuple{}, py.NewStringDict())
+		if err != nil {
+			return err
+		}
+		err = py.Iterate(keys, func(k py.Object) bool {
+			var v py.Object
+			if v, ierr = py.GetItem(other, k); ierr == nil {
+				ierr = set(k, v)
+			}
+			return ierr != nil
+		})
+		if err != nil {
+			return err
+		}
+		return ierr
+	}
+	err := py.Iterate(other, func(pair py.Object) bool {
+		var kv []py.Object
+		if ierr = py.Iterate(pair, func(x py.Object) bool { kv = append(kv, x); return false }); ierr != nil {
+			return true
+		}
+		if len(kv) < 2 {
+			ierr = py.ExceptionNewf(py.ValueError, "not enough values to unpack (expected 2, got %d)", len(kv))
+			return true
+		} else if len(kv) > 2 {
+			ierr = py.ExceptionNewf(py.ValueError, "too many values to unpack (expected 2, got %d)", len(kv))
+			return true
+		}
+		ierr = set(kv[0], kv[1])
+		return ierr != nil
+	})
+	if err != nil {
+		return err
+	}
+	return ierr
+}
+
+func isMapping(o py.Object) bool {
+	_, err := py.GetAttrString(o, "keys")
+	return err == nil
+}
+
+func (e *environ) M__or__(other py.Object) (py.Object, error) {
+	if !isMapping(other) {
+		return py.NotImplemented, nil
+	}
+	d := getEnvVariables()
+	if err := dictUpdate(d, other); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (e *environ) M__ror__(other py.Object) (py.Object, error) {
+	if !isMapping(other) {
+		return py.NotImplemented, nil
+	}
+	d := py.NewStringDict()
+	if err := dictUpdate(d, other); err != nil {
+		return nil, err
+	}
+	if err := dictUpdate(d, e); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (e *environ) M__ior__(other py.Object) (py.Object, error) {
+	if err := environUpdate(e, other); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
 var environMethods = []*py.Method{
 	py.MustNewMethod("get", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		var key, def py.Object = nil, py.None
@@ -240,13 +348,13 @@ Return the value for key if key is in the environment, else default.`),
 		if len(keys) == 0 {
 			return nil, py.ExceptionNewf(py.KeyError, "popitem(): environment is empty")
 		}
-		k := string(keys[len(keys)-1].(py.String))
+		k := string(keys[0].(py.String))
 		v, _ := lookupEnv(k)
 		if err := unsetEnv(k); err != nil {
 			return nil, err
 		}
 		return py.Tuple{py.String(k), py.String(v)}, nil
-	}, 0, "popitem() -> remove and return the last (name, value) pair."),
+	}, 0, "popitem() -> remove and return the first (name, value) pair."),
 	py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
 		for _, k := range envKeys() {
 			if err := unsetEnv(string(k.(py.String))); err != nil {
@@ -255,6 +363,23 @@ Return the value for key if key is in the environment, else default.`),
 		}
 		return py.None, nil
 	}, 0, "clear() -> remove every variable."),
+	py.MustNewMethod("update", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		e := self.(*environ)
+		if len(args) > 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "MutableMapping.update() takes from 1 to 2 positional arguments but %d were given", len(args)+1)
+		}
+		if len(args) == 1 {
+			if err := environUpdate(e, args[0]); err != nil {
+				return nil, err
+			}
+		}
+		for _, k := range kwargs.Keys() {
+			if _, err := e.M__setitem__(py.String(k), kwargs.GetOrNil(k)); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
+	}, 0, "update([other, ]**kwds) -> set variables from a mapping or pairs, then keywords."),
 	py.MustNewMethod("copy", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return getEnvVariables(), nil
 	}, 0, "copy() -> a plain dict of the environment."),
@@ -267,6 +392,9 @@ func init() {
 }
 
 // Check the interfaces are satisfied.
+var _ py.I__or__ = (*environ)(nil)
+var _ py.I__ror__ = (*environ)(nil)
+var _ py.I__ior__ = (*environ)(nil)
 var _ py.I__len__ = (*environ)(nil)
 var _ py.I__getitem__ = (*environ)(nil)
 var _ py.I__setitem__ = (*environ)(nil)

@@ -50,7 +50,10 @@ type ModuleImpl struct {
 	// Shared, when set, returns the one module object every context uses for
 	// this implementation (stateless modules such as posixpath), so identities
 	// like "os.path is posixpath" hold.
-	Shared          func() *Module
+	Shared func() *Module
+	// Submodules are registered in sys.modules as "<name>.<key>" when this
+	// module is created (os.path under "os.path").
+	Submodules      map[string]*Module
 	OnContextClosed func(*Module) // Callback for when a py.Context is closing to release resources
 }
 
@@ -262,6 +265,9 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 
 	// Register the module
 	store.modules[name] = m
+	for sub, sm := range impl.Submodules {
+		store.modules[name+"."+sub] = sm
+	}
 	if store.moduleLike == nil {
 		store.moduleLike = map[string]Object{}
 	}
@@ -273,6 +279,13 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 	// "sys.modules["__main__"]" raised KeyError.
 	if name == "sys" {
 		m.Globals.Set("modules", NewModulesView(store))
+		// The originals, which code.py compares with "is" to see whether
+		// anyone replaced the hook.
+		for _, hook := range []string{"excepthook", "displayhook"} {
+			if h := m.Globals.GetOrNil(hook); h != nil {
+				m.Globals.Set("__"+hook+"__", h)
+			}
+		}
 	}
 	// Make a note of some modules
 	switch name {

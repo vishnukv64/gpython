@@ -349,6 +349,13 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		cls.Dict.Set(key, member)
 	}
 
+	// __members__: the name-to-member mapping, aliases included.
+	all := py.NewStringDict()
+	for _, n := range memberNames {
+		all.Set(n, cls.Dict.GetOrNil(n))
+	}
+	cls.Dict.Set("__members__", all)
+
 	// The members cannot be stored in the class Dict: that holds py.Object
 	// values, and these are Go values.  They live in a side table instead.
 	enumDataFor[cls] = &enumData{members: members, byValue: byValue, names: memberNames, repr: cls.Dict.GetOrNil("__repr__")}
@@ -541,8 +548,23 @@ func (m *EnumMember) M__ne__(other py.Object) (py.Object, error) {
 }
 
 func (m *EnumMember) M__hash__() (py.Object, error) {
+	if m.enum.Base == py.IntType {
+		if n, ok := py.HashValue(m.value); ok {
+			return py.Int(n), nil
+		}
+	}
 	return py.Int(int64(m.index) + 1), nil
 }
+
+// DictKeyObject makes an IntEnum member share its int's dict entry.
+func (m *EnumMember) DictKeyObject() py.Object {
+	if m.enum.Base == py.IntType {
+		return m.value
+	}
+	return m
+}
+
+var _ py.IDictKeyProxy = (*EnumMember)(nil)
 
 // M__index__ makes an IntEnum usable wherever an integer is expected.
 func (m *EnumMember) M__index__() (py.Int, error) {

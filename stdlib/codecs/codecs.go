@@ -156,7 +156,8 @@ func known(name string) bool {
 	case "utf-8", "ascii", "latin-1", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "rot13":
 		return true
 	}
-	return false
+	_, ok := py.ExtraCodecs[name]
+	return ok
 }
 
 func getEncoder(self py.Object, args py.Tuple) (py.Object, error) {
@@ -327,7 +328,15 @@ func encodeWith(name string, args py.Tuple) (py.Object, error) {
 			out = append(out, byte(r), byte(r>>8), byte(r>>16), byte(r>>24))
 		}
 	default:
-		return nil, py.ExceptionNewf(LookupErrorType, "unknown encoding: %s", name)
+		c, ok := py.ExtraCodecs[name]
+		if !ok {
+			return nil, py.ExceptionNewf(LookupErrorType, "unknown encoding: %s", name)
+		}
+		b, err := c.Encode(text)
+		if err != nil {
+			return nil, err
+		}
+		out = b
 	}
 	return py.Tuple{py.Bytes(out), py.Int(len(text))}, nil
 }
@@ -398,7 +407,15 @@ func decodeWith(name string, args py.Tuple) (py.Object, error) {
 		}
 		text = string(runes)
 	default:
-		return nil, py.ExceptionNewf(LookupErrorType, "unknown encoding: %s", name)
+		c, ok := py.ExtraCodecs[name]
+		if !ok {
+			return nil, py.ExceptionNewf(LookupErrorType, "unknown encoding: %s", name)
+		}
+		t, err := c.Decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		text = t
 	}
 	return py.Tuple{py.String(text), py.Int(len(raw))}, nil
 }

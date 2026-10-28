@@ -1,0 +1,6 @@
+['R', 'MutableMapping', 'Mapping', 'Collection', 'Sized', 'Iterable', 'Container', 'Generic', 'object']
+True {'a': 1, 'b': 2} 1 1
+Generic 2
+['S', 'Sequence', 'Reversible', 'Collection', 'Sized', 'Iterable', 'Container', 'object'] [1, 2]
+3 ['Box', 'Generic', 'object']
+('Q', <class 'int'>)

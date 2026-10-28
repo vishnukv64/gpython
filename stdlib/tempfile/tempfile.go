@@ -52,11 +52,13 @@ func init() {
 			py.MustNewMethod("mkdtemp", mkdtemp, 0, mkdtemp_doc),
 			py.MustNewMethod("mkstemp", mkstemp, 0, mkstemp_doc),
 			py.MustNewMethod("NamedTemporaryFile", namedTemporaryFile, 0, namedTemporaryFile_doc),
+			py.MustNewMethod("TemporaryFile", namedTemporaryFile, 0, namedTemporaryFile_doc),
 			py.MustNewMethod("mktemp", mktemp, 0, mktemp_doc),
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "tempdir", Value: gblTempDir},
 			py.DictEntry{Key: "_RandomNameSequence", Value: RandomNameSequenceType},
+			py.DictEntry{Key: "TemporaryDirectory", Value: temporaryDirectoryType},
 		),
 	})
 }

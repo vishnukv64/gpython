@@ -1,0 +1,19 @@
+True
+['1', '2', '3', '4']
+2
+1 dflt None
+KeyError 'GP_A'
+5 5
+dict 6 False
+dict 7 False
+8 8
+TypeError 'int' object is not iterable
+ValueError not enough values to unpack (expected 2, got 1)
+ValueError too many values to unpack (expected 2, got 3)
+TypeError str expected, not int
+TypeError str expected, not int
+MutableMapping.update() takes from 1 to 2 positional arguments but 3 were given
+dict 2 True
+False
+5
+[]

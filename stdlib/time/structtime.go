@@ -32,7 +32,68 @@ type StructTime struct {
 
 // StructTimeType is time.struct_time.
 var StructTimeType = py.NewTypeX("struct_time",
-	"The time type represents a calendar time broken down into its components.", nil, nil)
+	"The time type represents a calendar time broken down into its components.", newStructTimeObject, nil)
+
+// newStructTimeObject is struct_time(sequence, dict=None), CPython's structseq
+// constructor: 9 to 11 items, the last two being tm_zone and tm_gmtoff, which
+// a dict may supply instead.
+// ponytail: the 9 sequence fields must be integers (CPython stores anything).
+func newStructTimeObject(_ *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var seqObj, dictObj py.Object
+	if len(args)+kwargs.Len() > 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "structseq() takes at most 2 arguments (%d given)", len(args)+kwargs.Len())
+	}
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OO:structseq", []string{"sequence", "dict"}, &seqObj, &dictObj); err != nil {
+		return nil, err
+	}
+	if seqObj == nil {
+		return nil, py.ExceptionNewf(py.TypeError, "structseq() missing required argument 'sequence' (pos 1)")
+	}
+	var dict py.StringDict
+	if dictObj != nil {
+		d, ok := dictObj.(py.StringDict)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "time.struct_time() takes a dict as second arg, if any")
+		}
+		dict = d
+	}
+	seq, err := py.SequenceTuple(seqObj)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.TypeError, "constructor requires a sequence")
+	}
+	switch {
+	case len(seq) < 9:
+		return nil, py.ExceptionNewf(py.TypeError, "time.struct_time() takes an at least 9-sequence (%d-sequence given)", len(seq))
+	case len(seq) > 11:
+		return nil, py.ExceptionNewf(py.TypeError, "time.struct_time() takes an at most 11-sequence (%d-sequence given)", len(seq))
+	}
+	var f [9]int
+	for i := range f {
+		n, err := py.IndexInt(seq[i])
+		if err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "an integer is required (got type %s)", seq[i].Type().Name)
+		}
+		f[i] = n
+	}
+	extra := func(i int, name string) py.Object {
+		if i < len(seq) {
+			return seq[i]
+		}
+		if dictObj != nil {
+			if v, ok := dict.Get(name); ok {
+				return v
+			}
+		}
+		return py.None
+	}
+	zone, off := extra(9, "tm_zone"), extra(10, "tm_gmtoff")
+	st := &StructTime{Year: f[0], Mon: f[1], Mday: f[2], Hour: f[3], Min: f[4], Sec: f[5], Wday: f[6], Yday: f[7], Isdst: f[8], Zone: zone}
+	if n, ok := off.(py.Int); ok {
+		st.Gmtoff = int(n)
+	}
+	st.initDict(off)
+	return st, nil
+}
 
 func (s *StructTime) Type() *py.Type { return StructTimeType }
 
@@ -178,15 +239,16 @@ func newStructTime(t time.Time, zone py.Object, gmtoff int, isdst int) *StructTi
 		Zone:   zone,
 		Gmtoff: gmtoff,
 	}
+	s.initDict(py.Int(gmtoff))
+	return s
+}
+
+func (s *StructTime) initDict(gmtoff py.Object) {
 	for i, name := range structTimeNames {
 		s.Dict.Set(name, py.Int(s.fields()[i]))
 	}
-	s.Dict.Set("tm_zone", zone)
-	s.Dict.Set("tm_gmtoff", py.Int(gmtoff))
-	s.Dict.Set("n_fields", py.Int(9))
-	s.Dict.Set("n_sequence_fields", py.Int(9))
-	s.Dict.Set("n_unnamed_fields", py.Int(0))
-	return s
+	s.Dict.Set("tm_zone", s.Zone)
+	s.Dict.Set("tm_gmtoff", gmtoff)
 }
 
 // gmStructTime builds the UTC breakdown of an epoch second.
@@ -543,4 +605,18 @@ func parseTime(text, format string) (*timeTuple, error) {
 // The module goes in __module__, not in the name: CPython's type(x).__name__ is the bare name and type(x).__module__ is 'time'.
 func init() {
 	StructTimeType.Dict.Set("__module__", py.String("time"))
+	StructTimeType.Dict.Set("n_fields", py.Int(11))
+	StructTimeType.Dict.Set("n_sequence_fields", py.Int(9))
+	StructTimeType.Dict.Set("n_unnamed_fields", py.Int(0))
+	StructTimeType.Dict.Set("__reduce__", py.MustNewMethod("__reduce__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		s := self.(*StructTime)
+		f := make(py.Tuple, 9)
+		for i, v := range s.fields() {
+			f[i] = py.Int(v)
+		}
+		d := py.NewStringDict()
+		d.Set("tm_zone", s.Zone)
+		d.Set("tm_gmtoff", s.Dict.GetOrNil("tm_gmtoff"))
+		return py.Tuple{StructTimeType, py.Tuple{f, d}}, nil
+	}, 0, "Helper for pickle and copy."))
 }

@@ -47,6 +47,10 @@ func init() {
 	RawIOBaseType.Base = IOBaseType
 	BufferedIOBaseType.Base = IOBaseType
 	TextIOBaseType.Base = IOBaseType
+	// BytesIO and StringIO sit under their ABCs, so isinstance(x, io.BufferedIOBase)
+	// - which ElementTree.write and others branch on - is true for them.
+	BytesIOType.Base = BufferedIOBaseType
+	StringIOType.Base = TextIOBaseType
 
 	// close/closed/flush are common to every stream, so they live on the
 	// base class and the concrete types override what they need to.
@@ -524,7 +528,33 @@ func (s *StringIO) writeAt(text string) {
 	s.pos += len(text)
 }
 
+// writelines is IOBase.writelines: write() each item of an iterable.
+func writelines(self py.Object, args py.Tuple) (py.Object, error) {
+	var lines py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "writelines", 1, 1, &lines); err != nil {
+		return nil, err
+	}
+	write, err := py.GetAttrString(self, "write")
+	if err != nil {
+		return nil, err
+	}
+	var werr error
+	if err := py.Iterate(lines, func(l py.Object) bool {
+		_, werr = py.Call(write, py.Tuple{l}, py.StringDict{})
+		return werr == nil
+	}); err != nil {
+		return nil, err
+	}
+	if werr != nil {
+		return nil, werr
+	}
+	return py.None, nil
+}
+
 func init() {
+	for _, t := range []*py.Type{StringIOType, BytesIOType} {
+		t.Dict.Set("writelines", py.MustNewMethod("writelines", writelines, 0, "Write a list of lines to the stream."))
+	}
 	StringIOType.Dict.Set("write", py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
 		s := self.(*StringIO)
 		if err := s.checkOpen(); err != nil {

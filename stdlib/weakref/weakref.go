@@ -179,6 +179,7 @@ func proxyNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 func init() {
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "ref", Value: RefType},
+		py.DictEntry{Key: "finalize", Value: FinalizeType},
 		py.DictEntry{Key: "proxy", Value: ProxyType},
 		py.DictEntry{Key: "ProxyType", Value: ProxyType},
 		py.DictEntry{Key: "CallableProxyType", Value: ProxyType},

@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "FILE", line 32, in <module>
+    raise ValueError("top")
+ValueError: top
+Traceback (most recent call last):
+  File "FILE", line 32, in <module>
+    raise ValueError("top")
+ValueError: top
+<module> 40 'outer()'
+outer 21 'inner()'
+inner 17 'raise ValueError("boom")'
+<module> 46 'rec(3)'
+rec 26 'rec(n - 1)'
+rec 26 'rec(n - 1)'
+rec 26 'rec(n - 1)'
+rec 28 'raise KeyError("deep")'
+<module> 52 'exec(compile("x = 1\\nraise ValueError(\'in string\')", "<string>", "exec"))'
+<module> 2 ''

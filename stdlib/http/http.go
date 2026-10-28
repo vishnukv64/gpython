@@ -28,8 +28,12 @@ This package collects three submodules:
 func init() {
 	globals := py.NewStringDict()
 	globals.Set("__all__", py.NewListFromItems([]py.Object{
-		py.String("client"), py.String("cookiejar"), py.String("cookies"),
+		py.String("client"), py.String("cookiejar"), py.String("cookies"), py.String("server"),
 	}))
+
+	// http.server is CPython's embedded pure-Python module, found through the
+	// package path; the Go-registered submodules are found by name first.
+	globals.Set("__path__", py.NewListFromItems([]py.Object{py.String(py.EmbeddedLibRoot + "/http")}))
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
@@ -37,5 +41,6 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: statusSrc,
 	})
 }

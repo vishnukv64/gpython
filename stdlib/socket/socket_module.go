@@ -402,11 +402,11 @@ func registerSocketMethods() {
 			if err != nil {
 				return nil, err
 			}
-			if err := argc(args, "makefile", 0, 1); err != nil {
+			if err := argc(args, "makefile", 0, 5); err != nil { // mode, buffering, encoding, errors, newline
 				return nil, err
 			}
 			mode := "r"
-			if len(args) == 1 {
+			if len(args) >= 1 {
 				m, ok := args[0].(py.String)
 				if !ok {
 					return nil, py.ExceptionNewf(py.TypeError, "makefile() mode must be str, not %s", args[0].Type().Name)
@@ -430,9 +430,9 @@ func registerSocketMethods() {
 					return nil, py.ExceptionNewf(py.ValueError, "invalid mode: '%s'", mode)
 				}
 			}
-			f := &socketFile{conn: s.conn}
+			f := &socketFile{conn: s.conn, s: s}
 			if containsByte(mode, 'r') || containsByte(mode, '+') {
-				f.rd = &bufReader{r: s.conn}
+				f.rd = &bufReader{f: f}
 			}
 			if containsByte(mode, 'w') || containsByte(mode, 'a') || containsByte(mode, '+') {
 				f.w = s.conn
@@ -527,23 +527,122 @@ func registerSocketFile() {
 		return py.Bytes(b), nil
 	}, 0, "Read up to n bytes from the socket."))
 
-	SocketFileType.Dict.Set("readline", py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
-		f, err := selfFile(self, "readline")
+	// optSize is the optional size argument of readline/read1/peek: absent,
+	// None and negative all mean "no limit".
+	optSize := func(args py.Tuple, name string) (int, error) {
+		if err := argc(args, name, 0, 1); err != nil {
+			return 0, err
+		}
+		if len(args) == 0 || args[0] == py.None {
+			return -1, nil
+		}
+		n, ok := asInt(args[0])
+		if !ok {
+			return 0, py.ExceptionNewf(py.TypeError, "%s() argument must be int or None, not %s", name, args[0].Type().Name)
+		}
+		return int(n), nil
+	}
+	readable := func(self py.Object, name string) (*socketFile, error) {
+		f, err := selfFile(self, name)
 		if err != nil {
 			return nil, err
 		}
 		if f.rd == nil {
 			return nil, py.ExceptionNewf(py.ValueError, "I/O operation on unreadable socket file")
 		}
-		if err := argc(args, "readline", 0, 0); err != nil {
+		return f, nil
+	}
+	SocketFileType.Dict.Set("readline", py.MustNewMethod("readline", func(self py.Object, args py.Tuple) (py.Object, error) {
+		f, err := readable(self, "readline")
+		if err != nil {
 			return nil, err
 		}
-		b, err := f.rd.readline()
+		n, err := optSize(args, "readline")
+		if err != nil {
+			return nil, err
+		}
+		b, err := f.rd.readline(n)
 		if err != nil {
 			return nil, osErr(err)
 		}
 		return py.Bytes(b), nil
 	}, 0, "Read one line from the socket."))
+	SocketFileType.Dict.Set("read1", py.MustNewMethod("read1", func(self py.Object, args py.Tuple) (py.Object, error) {
+		f, err := readable(self, "read1")
+		if err != nil {
+			return nil, err
+		}
+		n, err := optSize(args, "read1")
+		if err != nil {
+			return nil, err
+		}
+		b, err := f.rd.read1(n)
+		if err != nil {
+			return nil, osErr(err)
+		}
+		return py.Bytes(b), nil
+	}, 0, "Read up to n bytes with at most one read from the connection."))
+	SocketFileType.Dict.Set("peek", py.MustNewMethod("peek", func(self py.Object, args py.Tuple) (py.Object, error) {
+		f, err := readable(self, "peek")
+		if err != nil {
+			return nil, err
+		}
+		if len(f.rd.buf) == 0 {
+			if err := f.rd.fill(); err != nil && len(f.rd.buf) == 0 {
+				return nil, osErr(eof(err))
+			}
+		}
+		return py.Bytes(append([]byte(nil), f.rd.buf...)), nil
+	}, 0, "Return buffered bytes without consuming them."))
+	for _, name := range []string{"readinto", "readinto1"} {
+		name := name
+		SocketFileType.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+			f, err := readable(self, name)
+			if err != nil {
+				return nil, err
+			}
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "%s() takes exactly one argument", name)
+			}
+			dst, writable, ok := py.BufferBytes(args[0])
+			if !ok || !writable {
+				return nil, py.ExceptionNewf(py.TypeError, "%s() argument must be read-write bytes-like object, not %s", name, args[0].Type().Name)
+			}
+			var b []byte
+			if name == "readinto1" {
+				b, err = f.rd.read1(len(dst))
+			} else {
+				b, err = f.rd.read(len(dst))
+			}
+			if err != nil {
+				return nil, osErr(err)
+			}
+			return py.Int(copy(dst, b)), nil
+		}, 0, "Read into a writable buffer."))
+	}
+	for name, v := range map[string]bool{"readable": true, "writable": true, "seekable": false} {
+		name, v := name, v
+		SocketFileType.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+			f, err := selfFile(self, name)
+			if err != nil {
+				return nil, err
+			}
+			switch name {
+			case "readable":
+				return py.NewBool(f.rd != nil), nil
+			case "writable":
+				return py.NewBool(f.w != nil), nil
+			}
+			return py.NewBool(v), nil
+		}, 0, "Report a capability of the file."))
+	}
+	SocketFileType.Dict.Set("closed", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		f, err := selfFile(self, "closed")
+		if err != nil {
+			return nil, err
+		}
+		return py.NewBool(f.rd == nil && f.w == nil), nil
+	}})
 
 	SocketFileType.Dict.Set("write", py.MustNewMethod("write", func(self py.Object, args py.Tuple) (py.Object, error) {
 		f, err := selfFile(self, "write")

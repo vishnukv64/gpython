@@ -111,6 +111,13 @@ type Type struct {
 	// check reads this field, which is the one place that decides.
 	NoSubclass bool
 
+	// NoDict marks a class whose instances have no __dict__: it declared
+	// __slots__ without "__dict__" and no base provides one.
+	NoDict bool
+
+	// slotVals holds an instance's __slots__ values; see slots.go.
+	slotVals map[string]Object
+
 	// Payload is where an INSTANCE of a Python subclass of a builtin container
 	// keeps its data.
 	//
@@ -364,8 +371,16 @@ func init() {
 		TypeType.Dict.Set(name, d)
 		ObjectType.Dict.Set(name, d)
 	}
-	typeMeta("__name__", "The name of the type.", func(t *Type) Object { return String(t.Name) })
-	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object { return String(t.Name) })
+	// A natively declared type carries its module in Name ("collections.abc.Mapping");
+	// __name__ is the part after the last dot, as in CPython.
+	shortName := func(t *Type) Object {
+		if i := strings.LastIndexByte(t.Name, '.'); i > 0 && t.Name != "" {
+			return String(t.Name[i+1:])
+		}
+		return String(t.Name)
+	}
+	typeMeta("__name__", "The name of the type.", shortName)
+	typeMeta("__qualname__", "The qualified name of the type.", shortName)
 	// A type declared natively has no __module__ in its dict: the module is the
 	// "pkg." prefix of its name ("itertools.batched"), else "builtins".  A class
 	// statement sets __module__ itself, and its own dict is looked at first.
@@ -397,7 +412,12 @@ func init() {
 		// A type whose MRO was never built still has itself in it.
 		return Tuple{Object(t)}
 	})
-	typeMeta("__dict__", "The namespace of the type.", func(t *Type) Object { return t.Dict })
+	typeMeta("__dict__", "The namespace of the type.", func(t *Type) Object {
+		if t.Name == "" && t.ObjectType != nil && t.ObjectType.NoDict {
+			return nil // an instance of a slotted class: no __dict__
+		}
+		return t.Dict
+	})
 
 	// __class__ is a descriptor registered on both metatypes for the same
 	// reason as the metadata above: an instance of a builtin must be able to
@@ -513,7 +533,11 @@ func (d *typeMetaGetter) Type() *Type { return ObjectType }
 
 func (d *typeMetaGetter) M__get__(instance, owner Object) (Object, error) {
 	if t, ok := instance.(*Type); ok {
-		return d.get(t), nil
+		v := d.get(t)
+		if v == nil {
+			return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s'", t.ObjectType.shortName(), d.name)
+		}
+		return v, nil
 	}
 	if instance == nil || instance == None {
 		if t, ok := owner.(*Type); ok {
@@ -1750,6 +1774,36 @@ func (t *Type) solid_base() *Type {
 	}
 }
 
+// ResolveMroEntries is PEP 560's update_bases: each base that is not a class
+// is replaced by what its __mro_entries__ returns (called with the ORIGINAL
+// bases).  changed reports whether anything was replaced; a base with no hook
+// is kept, so best_base names the problem.
+func ResolveMroEntries(bases Tuple) (expanded Tuple, changed bool, err error) {
+	expanded = make(Tuple, 0, len(bases))
+	for _, b := range bases {
+		if _, isType := b.(*Type); isType {
+			expanded = append(expanded, b)
+			continue
+		}
+		getter, gerr := GetAttrString(b, "__mro_entries__")
+		if gerr != nil {
+			expanded = append(expanded, b)
+			continue
+		}
+		res, cerr := Call(getter, Tuple{bases}, NewStringDict())
+		if cerr != nil {
+			return nil, false, cerr
+		}
+		t, ok := res.(Tuple)
+		if !ok {
+			return nil, false, ExceptionNewf(TypeError, "__mro_entries__ must return a tuple")
+		}
+		expanded = append(expanded, t...)
+		changed = true
+	}
+	return expanded, changed, nil
+}
+
 // Calculate the best base amongst multiple base classes.
 // This is the first one that's on the path to the "solid base".
 func best_base(bases Tuple) (*Type, error) {
@@ -1877,38 +1931,10 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// alias - and without it every such class statement failed with "bases
 	// must be types".  rich declares exactly that shape, and pip renders
 	// through rich.
-	expanded := make(Tuple, 0, len(bases))
-	var mroErr error
-	for _, b := range bases {
-		if _, isType := b.(*Type); isType {
-			expanded = append(expanded, b)
-			continue
-		}
-		getter, err := GetAttrString(b, "__mro_entries__")
-		if err != nil {
-			// No hook: leave it alone so the existing "bases must be types"
-			// error names the real problem.
-			expanded = append(expanded, b)
-			continue
-		}
-		// The hook is called with the ORIGINAL bases tuple, as CPython does.
-		res, err := Call(getter, Tuple{bases}, NewStringDict())
-		if err != nil {
-			mroErr = err
-			break
-		}
-		t, ok := res.(Tuple)
-		if !ok {
-			mroErr = ExceptionNewf(TypeError,
-				"__mro_entries__ must return a tuple")
-			break
-		}
-		expanded = append(expanded, t...)
+	bases, _, err = ResolveMroEntries(bases)
+	if err != nil {
+		return nil, err
 	}
-	if mroErr != nil {
-		return nil, mroErr
-	}
-	bases = expanded
 
 	// Determine the proper metatype to deal with this:
 	winner, err = metatype.CalculateMetaclass(bases)
@@ -1956,6 +1982,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	dict := orig_dict.Copy()
 
 	// Check for a __slots__ sequence variable in dict, and count it
+	var noDict bool
 	slots, haveSlots := dict.Get("__slots__")
 	nslots := 0
 	// add_dict := 0
@@ -1970,21 +1997,9 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		// 	add_weak++
 		// }
 	} else {
-		// __slots__ is IGNORED, deliberately.
-		//
-		// It is an optimisation: it tells CPython to store the named
-		// attributes in preallocated slots instead of a per-instance dict.
-		// The observable difference is that a typo'd attribute raises
-		// AttributeError rather than silently creating one, and that the
-		// instances have no __dict__.  Neither matters to code that uses the
-		// attributes it declared, and every class still WORKS.
-		//
-		// Refusing it - which is what this did, with "Can't do __slots__
-		// yet" - is not an option: __slots__ is common in ordinary library
-		// code, and a class that cannot be defined at all is far worse than
-		// one that is a little more permissive than it asked to be.  The
-		// FIXME below is the note this replaces.
-		_ = slots
+		if noDict, err = setupSlots(string(name), bases, slots, dict); err != nil {
+			return nil, err
+		}
 		/* FIXME ignore slots for the moment
 		// Have slots
 
@@ -2130,7 +2145,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// Keep name and slots alive in the extended type object
 	et := new_type
 	et.Name = string(name)
-	// FIXME et.Slots = slots
+	et.NoDict = noDict
 	slots = nil
 
 	// Initialize tp_flags
@@ -2683,6 +2698,11 @@ const TPFLAGS_NAMEDTUPLE uint = 1 << 21
 // to be used as a base or passed around; it is not a run-time membership
 // test.
 func (t *Type) M__or__(other Object) (Object, error) {
+	// An instance of a Python class is a *Type too; only a class unions.
+	// An instance's own __or__ is found by name, so leave it to the caller.
+	if t.ObjectType == nil || !t.ObjectType.IsSubtype(TypeType) {
+		return NotImplemented, nil
+	}
 	return unionOf(t, other)
 }
 

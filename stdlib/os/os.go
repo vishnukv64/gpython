@@ -60,7 +60,7 @@ func init() {
 			if err := py.UnpackTuple(args, kwargs, "chmod", 2, 2, &path, &mode); err != nil {
 				return nil, err
 			}
-			name, err := py.StrAsString(path)
+			name, _, err := fsRaw(path) // str, bytes or os.PathLike
 			if err != nil {
 				return nil, err
 			}
@@ -171,8 +171,9 @@ func init() {
 			Name: "os",
 			Doc:  "Miscellaneous operating system interfaces",
 		},
-		Methods: methods,
-		Globals: globals,
+		Methods:    methods,
+		Globals:    globals,
+		Submodules: map[string]*py.Module{"path": PathModule()},
 	})
 }
 

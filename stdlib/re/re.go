@@ -127,6 +127,10 @@ func init() {
 		py.DictEntry{Key: "NOFLAG", Value: py.Int(0)},
 	)
 
+	// re is a package so that the embedded re._constants, re._parser and
+	// re._compiler (which sre_parse and friends re-export) are importable.
+	globals.Set("__path__", py.NewListFromItems([]py.Object{py.String(py.EmbeddedLibRoot + "/re")}))
+
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
 			Name: "re",

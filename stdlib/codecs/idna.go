@@ -266,7 +266,44 @@ func idnaToUnicode(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.String(out), nil
 }
 
+// idnaEncode is the "idna" codec: each dot-separated label to its ACE form.
+// ponytail: a non-ASCII label is lower-cased instead of run through full
+// nameprep (NFKC and the RFC 3454 tables); add when a label needs it.
+func idnaEncode(text string) ([]byte, error) {
+	if text == "" {
+		return []byte{}, nil
+	}
+	labels := strings.Split(text, ".")
+	for i, l := range labels {
+		if l == "" && i == len(labels)-1 {
+			continue // a trailing dot is kept
+		}
+		if !isASCII(l) {
+			l = strings.ToLower(l)
+		}
+		a, err := toASCII(l)
+		if err != nil {
+			return nil, err
+		}
+		labels[i] = a
+	}
+	return []byte(strings.Join(labels, ".")), nil
+}
+
+func idnaDecode(raw []byte) (string, error) {
+	labels := strings.Split(string(raw), ".")
+	for i, l := range labels {
+		u, err := toUnicode(l)
+		if err != nil {
+			return "", err
+		}
+		labels[i] = u
+	}
+	return strings.Join(labels, "."), nil
+}
+
 func init() {
+	py.ExtraCodecs["idna"] = py.ExtraCodec{Encode: idnaEncode, Decode: idnaDecode}
 	globals := py.NewStringDict()
 	globals.Set("ToASCII", py.MustNewMethod("ToASCII", idnaToASCII, 0,
 		"ToASCII(label) -- convert a label to its ASCII-compatible encoding."))

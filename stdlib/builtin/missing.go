@@ -18,7 +18,12 @@ False, calling object will never succeed.`
 func builtin_callable(self, obj py.Object) (py.Object, error) {
 	// A type is callable (it constructs instances), as is anything with a
 	// __call__ method or one supplied by its type.
-	if _, ok := obj.(*py.Type); ok {
+	if t, ok := obj.(*py.Type); ok {
+		// An instance of a Python class is a *Type with an empty Name; it is
+		// callable only if its class defines __call__.
+		if t.Name == "" && t.ObjectType != nil {
+			return py.NewBool(t.ObjectType.Lookup("__call__") != nil), nil
+		}
 		return py.True, nil
 	}
 	if _, ok := obj.(py.I__call__); ok {

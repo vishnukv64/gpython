@@ -479,7 +479,6 @@ type dictShared struct {
 	// its payload).  CPython keeps the first-inserted object, so {True: 1}
 	// prints as {True: 1} and iterating yields the subclass instance.  Nil until
 	// such a key is stored.
-	// ponytail: only top-level keys; a subclass nested in a tuple key decodes as its base.
 	keyObjs map[string]Object
 	// mu guards m, order, ht and keyObjs.  There is no GIL, so a dict is read and
 	// written from several goroutines at once - a module's globals by every
@@ -677,14 +676,33 @@ func (d StringDict) setItem(key, value Object) error {
 	return nil
 }
 
+// keyNeedsObj reports whether the encoding of key would decode to something
+// other than key: a bool, a payload-carrying subclass instance, or a tuple
+// holding one anywhere inside (re's parser keys sets by (LITERAL, 98), where
+// LITERAL is an int subclass whose identity and repr matter).
+func keyNeedsObj(key Object) bool {
+	if _, isBool := key.(Bool); isBool {
+		return true
+	}
+	if _, isPayload := payloadOf(key); isPayload {
+		return true
+	}
+	if t, ok := key.(Tuple); ok {
+		for _, item := range t {
+			if keyNeedsObj(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // noteKeyObj records key as the object behind encoded when decoding would not
 // give it back (a bool, or a builtin subclass instance), unless the slot
 // already holds a key - which keeps its original object, as in CPython.
 func (d StringDict) noteKeyObj(encoded string, key Object) {
-	if _, isBool := key.(Bool); !isBool {
-		if _, isPayload := payloadOf(key); !isPayload {
-			return
-		}
+	if !keyNeedsObj(key) {
+		return
 	}
 	if d.shared == nil {
 		return
@@ -1035,6 +1053,13 @@ func (h hashTable) clone() hashTable {
 // objects.  Types with identity hashing are not reversible and raise, which
 // is the honest answer: it is also what Python does for the unhashable
 // containers.
+// IDictKeyProxy is implemented by an object that must find, and be found by,
+// the dict entry of another object it compares equal to (an IntEnum member
+// and its int).
+type IDictKeyProxy interface {
+	DictKeyObject() Object
+}
+
 func dictKey(key Object) (string, error) {
 	var b []byte
 	if err := appendKey(&b, key); err != nil {
@@ -1049,6 +1074,11 @@ func appendKey(b *[]byte, key Object) error {
 	// hash alike, and a key must encode alike to be found.
 	if payload, ok := payloadOf(key); ok {
 		key = payload
+	}
+	// An IntEnum member is an int that is equal to, and hashes like, its value:
+	// "{HTTPStatus.NOT_FOUND: 1}[404]" must find it.
+	if p, ok := key.(IDictKeyProxy); ok {
+		key = p.DictKeyObject()
 	}
 	switch k := key.(type) {
 	case String:

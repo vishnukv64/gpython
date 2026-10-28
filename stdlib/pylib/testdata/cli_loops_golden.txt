@@ -1,0 +1,32 @@
+([('-a', ''), ('-b', 'val'), ('--long', '1'), ('--flag', '')], ['rest', 'more'])
+([('-a', '')], ['x', 'y'])
+GetoptError option -z not recognized z
+[['a'], ['b', 'c'], ['d']]
+[3, 2, 1]
+CycleError [1, 1, 2]
+hello world
+None
+unknown: nope 1 2
+None
+True
+greet NAME
+
+Documented commands (type help <topic>):
+========================================
+greet  help
+
+Undocumented commands:
+======================
+quit
+
+('greet', 'a b', 'greet  a b')
+['greet']
+False
+42
+False
+False
+True
+42
+True True
+3
+['two-high', 'two', 'five'] [2.0, 0, 0, 3.0, 0] 5.0 True

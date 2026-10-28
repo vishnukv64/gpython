@@ -1,0 +1,74 @@
+<?xml version='1.0'?>
+<methodCall>
+<methodName>m.method</methodName>
+<params>
+<param>
+<value><int>1</int></value>
+</param>
+<param>
+<value><string>a&lt;b</string></value>
+</param>
+<param>
+<value><double>2.5</double></value>
+</param>
+<param>
+<value><boolean>1</boolean></value>
+</param>
+<param>
+<value><array><data>
+<value><int>1</int></value>
+<value><int>2</int></value>
+</data></array></value>
+</param>
+<param>
+<value><struct>
+<member>
+<name>k</name>
+<value><string>v</string></value>
+</member>
+</struct></value>
+</param>
+<param>
+<value><base64>
+Ynk=
+</base64></value>
+</param>
+<param>
+<value><nil/></value></param>
+</params>
+</methodCall>
+
+<?xml version='1.0'?>
+<methodResponse>
+<fault>
+<value><struct>
+<member>
+<name>faultCode</name>
+<value><int>4</int></value>
+</member>
+<member>
+<name>faultString</name>
+<value><string>bad</string></value>
+</member>
+</struct></value>
+</fault>
+</methodResponse>
+
+<?xml version='1.0'?>
+<methodResponse>
+<params>
+<param>
+<value><string>r</string></value>
+</param>
+</params>
+</methodResponse>
+
+((1, 'a<b', 2.5, True, [1, 2], {'k': 'v'}, None), 'm.method')
+('ok',) None
+Fault 7 boom
+ExpatError
+a&amp;b&lt;c 2147483647 <Fault 1: 'x'> True b'hi'
+20240102T03:04:05 500
+a [('x', '1'), ('y', '2')] [('b', 't&u'), ('c', None)] tail
+{urn:x}e {'{urn:x}a': '1'}
+ParseError

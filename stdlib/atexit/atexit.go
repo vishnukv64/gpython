@@ -153,6 +153,21 @@ func runHandlers() {
 // RunExitFuncs runs any handlers registered with the atexit module.  It is
 // called by the interpreter once the program has finished, and is safe to
 // call when the module was never imported.
+// Register adds fn, called with no arguments, to the exit handlers.
+func Register(fn py.Object) {
+	gHandlers = append(gHandlers, &exitHandler{fn: fn, args: py.Tuple{}, kwargs: py.NewStringDict()})
+}
+
+// Registered reports whether fn was added with Register and has not run yet.
+func Registered(fn py.Object) bool {
+	for _, h := range gHandlers {
+		if e, ok := h.(*exitHandler); ok && e.fn == fn {
+			return true
+		}
+	}
+	return false
+}
+
 func RunExitFuncs() {
 	runHandlers()
 }

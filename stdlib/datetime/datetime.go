@@ -16,6 +16,7 @@ package datetime
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -64,54 +65,69 @@ func (d *TimeDelta) totalMicros() int64 {
 }
 
 func timeDeltaNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	d := &TimeDelta{}
-	var (
-		days, seconds, microseconds, milliseconds, minutes, hours, weeks int
-	)
-	for _, __e := range kwargs.Items() {
-		k := __e.Key
-		v := __e.Value
-
-		n, err := py.IndexInt(v)
-		if err != nil {
-			return nil, err
-		}
-		switch k {
-		case "days":
-			days = n
-		case "seconds":
-			seconds = n
-		case "microseconds":
-			microseconds = n
-		case "milliseconds":
-			milliseconds = n
-		case "minutes":
-			minutes = n
-		case "hours":
-			hours = n
-		case "weeks":
-			weeks = n
-		default:
-			return nil, py.ExceptionNewf(py.TypeError, "unexpected keyword argument %q", k)
-		}
+	// microseconds in one unit, in CPython's positional order.
+	units := []struct {
+		name  string
+		scale int64
+	}{
+		{"days", 86400e6}, {"seconds", 1e6}, {"microseconds", 1}, {"milliseconds", 1000},
+		{"minutes", 60e6}, {"hours", 3600e6}, {"weeks", 7 * 86400e6},
 	}
-	if len(args) > 7 {
+	if len(args) > len(units) {
 		return nil, py.ExceptionNewf(py.TypeError, "timedelta() takes at most 7 arguments")
 	}
-	pos := []*int{&days, &seconds, &microseconds, &milliseconds, &minutes, &hours, &weeks}
-	for i, a := range args {
-		n, err := py.IndexInt(a)
+	var whole int64  // exact contribution of the int arguments
+	var frac float64 // contribution of the float arguments
+	add := func(v py.Object, scale int64) error {
+		if f, ok := v.(py.Float); ok {
+			frac += float64(f) * float64(scale)
+			return nil
+		}
+		n, err := py.IndexInt(v)
 		if err != nil {
+			return py.ExceptionNewf(py.TypeError, "unsupported type for timedelta component: %s", v.Type().Name)
+		}
+		whole += int64(n) * scale
+		return nil
+	}
+	for i, a := range args {
+		if err := add(a, units[i].scale); err != nil {
 			return nil, err
 		}
-		*pos[i] = n
 	}
-
-	d.Days = days + weeks*7
-	d.Seconds = seconds + minutes*60 + hours*3600
-	d.Microseconds = microseconds + milliseconds*1000
-	d.normalize()
+	for _, e := range kwargs.Items() {
+		found := false
+		for _, u := range units {
+			if u.name == e.Key {
+				found = true
+				if err := add(e.Value, u.scale); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if !found {
+			return nil, py.ExceptionNewf(py.TypeError, "unexpected keyword argument %q", e.Key)
+		}
+	}
+	// Float parts are rounded once, half to even, as CPython does.
+	if math.IsNaN(frac) || math.IsInf(frac, 0) {
+		return nil, py.ExceptionNewf(py.ValueError, "cannot convert float to timedelta")
+	}
+	total := whole + int64(math.RoundToEven(frac))
+	d := &TimeDelta{}
+	d.Days = int(floorDiv(total, 86400e6))
+	total -= int64(d.Days) * 86400e6
+	d.Seconds = int(total / 1e6)
+	d.Microseconds = int(total % 1e6)
 	return d, nil
+}
+
+func floorDiv(a, b int64) int64 {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
 }
 
 // DateTime is a point in time.
@@ -852,7 +868,7 @@ func init() {
 	DateType.Dict.Set("today", py.MustNewMethod("today", func(self py.Object, args py.Tuple) (py.Object, error) {
 		now := time.Now()
 		return &Date{Year: now.Year(), Month: int(now.Month()), Day: now.Day()}, nil
-	}, 0, "The current local date."))
+	}, py.METH_CLASS, "The current local date."))
 	DateType.Dict.Set("weekday", py.MustNewMethod("weekday", func(self py.Object, args py.Tuple) (py.Object, error) {
 		d := self.(*Date)
 		return py.Int(int(time.Date(d.Year, time.Month(d.Month), d.Day, 0, 0, 0, 0, time.UTC).Weekday())), nil
@@ -959,6 +975,9 @@ func (t *TimeDelta) M__repr__() (py.Object, error) {
 	}
 	if t.Microseconds != 0 {
 		parts = append(parts, fmt.Sprintf("microseconds=%d", t.Microseconds))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "0")
 	}
 	return py.String(out + strings.Join(parts, ", ") + ")"), nil
 }
@@ -1189,6 +1208,55 @@ func (d *Date) M__eq__(other py.Object) (py.Object, error) {
 		return py.False, nil
 	}
 	return py.NewBool(*d == *o), nil
+}
+
+func dateOrd(d *Date) int { return d.Year*10000 + d.Month*100 + d.Day }
+
+func dateCompare(d *Date, other py.Object, name string, cmp func(a, b int) bool) (py.Object, error) {
+	o, ok := other.(*Date)
+	if !ok {
+		return py.NotImplemented, nil
+	}
+	return py.NewBool(cmp(dateOrd(d), dateOrd(o))), nil
+}
+
+func (d *Date) M__lt__(o py.Object) (py.Object, error) {
+	return dateCompare(d, o, "<", func(a, b int) bool { return a < b })
+}
+func (d *Date) M__le__(o py.Object) (py.Object, error) {
+	return dateCompare(d, o, "<=", func(a, b int) bool { return a <= b })
+}
+func (d *Date) M__gt__(o py.Object) (py.Object, error) {
+	return dateCompare(d, o, ">", func(a, b int) bool { return a > b })
+}
+func (d *Date) M__ge__(o py.Object) (py.Object, error) {
+	return dateCompare(d, o, ">=", func(a, b int) bool { return a >= b })
+}
+
+func (d *Date) M__hash__() (py.Object, error) { return py.Int(dateOrd(d)), nil }
+
+func (d *DateTime) M__le__(other py.Object) (py.Object, error) {
+	o, ok := other.(*DateTime)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "cannot compare a datetime with %s", other.Type().Name)
+	}
+	return py.NewBool(!d.toTime().After(o.toTime())), nil
+}
+
+func (d *DateTime) M__gt__(other py.Object) (py.Object, error) {
+	o, ok := other.(*DateTime)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "cannot compare a datetime with %s", other.Type().Name)
+	}
+	return py.NewBool(d.toTime().After(o.toTime())), nil
+}
+
+func (d *DateTime) M__ge__(other py.Object) (py.Object, error) {
+	o, ok := other.(*DateTime)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "cannot compare a datetime with %s", other.Type().Name)
+	}
+	return py.NewBool(!d.toTime().Before(o.toTime())), nil
 }
 
 func (t *TimeDelta) M__eq__(other py.Object) (py.Object, error) {

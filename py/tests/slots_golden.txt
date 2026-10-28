@@ -1,0 +1,22 @@
+1
+2
+AttributeError 'C' object has no attribute 'z' and no __dict__ for setting new attributes
+AttributeError 'C' object has no attribute '__dict__'
+TypeError vars() argument must have __dict__ attribute
+AttributeError a
+False False
+member_descriptor <member 'a' of 'C' objects>
+('a', 'b')
+5 ['new']
+1 4 3
+AttributeError 'E' object has no attribute 'd' and no __dict__ for setting new attributes
+1 2 {'y': 2}
+True
+1
+AttributeError 'H' object has no attribute 'other' and no __dict__ for setting new attributes
+7 True
+ValueError 'a' in __slots__ conflicts with class variable
+TypeError __slots__ items must be strings, not 'int'
+TypeError __dict__ slot disallowed: we already got one
+AttributeError 'Empty' object has no attribute 'x' and no __dict__ for setting new attributes
+9

@@ -54,6 +54,7 @@ type specialForm struct {
 var SpecialFormType = py.NewTypeX("typing._SpecialForm", "A typing construct with no run-time behaviour.", nil, nil)
 
 func init() {
+	py.GenericAliasMroHook = genericAliasMro
 	SpecialFormType.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return self.(*specialForm).M__hash__()
 	}, 0, "Return hash(self)."))
@@ -114,7 +115,7 @@ func mroEntries(self py.Object, name string, basesObj py.Object) py.Tuple {
 			continue
 		}
 		switch bt := b.(type) {
-		case *specialForm, *subscribedForm:
+		case *specialForm, *subscribedForm, *py.GenericAlias:
 			return res
 		case *py.Type:
 			if bt.IsSubtype(GenericType) {
@@ -150,6 +151,83 @@ var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted ty
 // and for a typing alias that is the runtime class it stands for: the bases of
 // "class NullFile(IO[str])" are IO and Generic.  Without this, every such class
 // statement failed with "bases must be types".
+// classGetItem is Generic's and Protocol's __class_getitem__: a classmethod
+// returning cls[params] as an alias, whose __mro_entries__ gives back cls.
+// Returning the class (or, as an unbound method did, the bare key) broke
+// "class R(Generic[K, V], MutableMapping[K, V])": Generic[K, V] was a tuple.
+var classGetItem = py.ClassGetItemAlias
+
+// genericAliasMro is typing._GenericAlias.__mro_entries__ for the collections.abc
+// classes that typing re-exports under the same name.
+// ponytail: collections.abc.X[...] gets the same treatment (CPython adds no
+// Generic there); indistinguishable until typing has its own alias objects.
+func genericAliasMro(g *py.GenericAlias, basesObj py.Object) (py.Tuple, bool) {
+	bases, _ := basesObj.(py.Tuple)
+	origin, ok := g.Origin.(*py.Type)
+	if !ok {
+		return nil, false
+	}
+	switch origin {
+	case GenericType, ProtocolType:
+		// Generic[T] / Protocol[T]: nothing when a later alias already
+		// provides Generic, or (Generic only) when Protocol is a base.
+		if origin == ProtocolType {
+			return py.Tuple{origin}, true
+		}
+		for _, b := range bases {
+			if b == py.Object(ProtocolType) {
+				return py.Tuple{}, true
+			}
+		}
+		after := false
+		for _, b := range bases {
+			if b == py.Object(g) {
+				after = true
+			} else if _, isAlias := b.(*py.GenericAlias); after && isAlias {
+				return py.Tuple{}, true
+			}
+		}
+		return py.Tuple{origin}, true
+	}
+	found := false
+	for _, o := range abcOrigins {
+		found = found || o == origin
+	}
+	if !found {
+		return nil, false
+	}
+	res := py.Tuple{}
+	if !containsObj(bases, origin) {
+		res = append(res, origin)
+	}
+	after := false
+	for _, b := range bases {
+		if b == py.Object(g) {
+			after = true
+			continue
+		}
+		if !after {
+			continue
+		}
+		if _, isAlias := b.(*py.GenericAlias); isAlias {
+			return res, true
+		}
+		if t, isT := b.(*py.Type); isT && t.IsSubtype(GenericType) {
+			return res, true
+		}
+	}
+	return append(res, GenericType), true
+}
+
+func containsObj(ts py.Tuple, o py.Object) bool {
+	for _, t := range ts {
+		if t == o {
+			return true
+		}
+	}
+	return false
+}
+
 // ProtocolType is typing.Protocol, at package level because importlib.abc
 // re-exports the SAME class.  CPython's
 // "importlib.abc.Protocol is typing.Protocol" is True, and a second class with
@@ -157,9 +235,7 @@ var subscribedFormType = py.NewTypeX("typing._SubscribedForm", "A subscripted ty
 var ProtocolType = func() *py.Type {
 	t := py.NewType("typing.Protocol", "Base class for protocol classes.")
 	t.Flags |= py.TPFLAGS_BASETYPE
-	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters."))
+	t.Dict.Set("__class_getitem__", classGetItem)
 	return t
 }()
 
@@ -168,9 +244,7 @@ var ProtocolType = func() *py.Type {
 var GenericType = func() *py.Type {
 	t := py.NewType("typing.Generic", "Abstract base class for generic types.")
 	t.Flags |= py.TPFLAGS_BASETYPE
-	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, 0, "Return the class, ignoring the subscription parameters."))
+	t.Dict.Set("__class_getitem__", classGetItem)
 	return t
 }()
 
@@ -501,7 +575,7 @@ func init() {
 	globals.Set("overload", py.MustNewMethod("overload", passthrough, 0, "Decorator for overloaded functions: returns the function itself."))
 	globals.Set("final", py.MustNewMethod("final", passthrough, 0, "Decorator to indicate a final method: returns the function itself."))
 	globals.Set("no_type_check", py.MustNewMethod("no_type_check", passthrough, 0, "Decorator to indicate no type checking: returns the object."))
-	globals.Set("runtime_checkable", py.MustNewMethod("runtime_checkable", passthrough, 0, "Mark a protocol as runtime checkable: returns the class."))
+	globals.Set("runtime_checkable", py.MustNewMethod("runtime_checkable", runtimeCheckable, 0, "Mark a protocol as runtime checkable: returns the class."))
 
 	globals.Set("TypeVar", py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)"))
 	globals.Set("NewType", py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument."))
@@ -692,6 +766,21 @@ func namedTupleNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obje
 	fn, err := py.GetAttrString(mod, "namedtuple")
 	if err != nil {
 		return nil, err
+	}
+	// The typed form takes (name, type) pairs - NamedTuple("U", [("a", int)]) -
+	// where namedtuple wants the bare names.
+	if len(args) == 2 {
+		if items, err := py.SequenceList(args[1]); err == nil {
+			names := make([]py.Object, len(items.Items))
+			for i, it := range items.Items {
+				if pair, ok := it.(py.Tuple); ok && len(pair) == 2 {
+					names[i] = pair[0]
+				} else {
+					names[i] = it
+				}
+			}
+			args = py.Tuple{args[0], py.NewListFromItems(names)}
+		}
 	}
 	return py.Call(fn, args, kwargs)
 }

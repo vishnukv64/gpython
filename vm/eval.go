@@ -2257,6 +2257,9 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 			case 1:
 				attr, err := py.GetAttrString(args[0], "__dict__")
 				if err != nil {
+					if py.IsException(py.AttributeError, err) {
+						return nil, py.ExceptionNewf(py.TypeError, "vars() argument must have __dict__ attribute")
+					}
 					return nil, err
 				}
 				return attr, nil
@@ -2336,6 +2339,17 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 				continue
 			}
 			seen[name] = true
+		}
+	}
+	// A class also has everything its bases define: dir(Sub) lists the names
+	// Sub inherits, not just its own.
+	if isClass {
+		for _, b := range t0.Mro {
+			if bt, ok := b.(*py.Type); ok {
+				for _, name := range bt.Dict.Keys() {
+					seen[name] = true
+				}
+			}
 		}
 	}
 	// Attributes carried by the object itself.

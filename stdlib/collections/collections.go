@@ -846,6 +846,58 @@ func (o *OrderedDict) set(key, value py.Object) error {
 	return nil
 }
 
+func (o *OrderedDict) remove(encoded string) {
+	o.values.Del(encoded)
+	for i, k := range o.keys {
+		if k == encoded {
+			o.keys = append(o.keys[:i], o.keys[i+1:]...)
+			return
+		}
+	}
+}
+
+// updateFrom is dict.update's positional argument: a mapping (anything with
+// keys()) or an iterable of pairs.
+func (o *OrderedDict) updateFrom(src py.Object) error {
+	if _, err := py.GetAttrString(src, "keys"); err == nil {
+		keys, err := py.Call(mustAttr(src, "keys"), py.Tuple{}, py.StringDict{})
+		if err != nil {
+			return err
+		}
+		var inner error
+		if ierr := py.Iterate(keys, func(k py.Object) bool {
+			var v py.Object
+			if v, inner = py.GetItem(src, k); inner != nil {
+				return true
+			}
+			inner = o.set(k, v)
+			return inner != nil
+		}); ierr != nil {
+			return ierr
+		}
+		return inner
+	}
+	pairs, err := py.SequenceList(src)
+	if err != nil {
+		return err
+	}
+	for _, item := range pairs.Items {
+		pair, ok := item.(py.Tuple)
+		if !ok || len(pair) != 2 {
+			return py.ExceptionNewf(py.ValueError, "dictionary update sequence element is not a pair")
+		}
+		if err := o.set(pair[0], pair[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mustAttr(o py.Object, name string) py.Object {
+	v, _ := py.GetAttrString(o, name)
+	return v
+}
+
 func (o *OrderedDict) order() []py.Object {
 	out := make([]py.Object, 0, len(o.keys))
 	for _, encoded := range o.keys {
@@ -997,6 +1049,140 @@ func init() {
 		o.keys = append(o.keys[:i], o.keys[i+1:]...)
 		return py.Tuple{key, value}, nil
 	}, 0, "Remove and return a (key, value) pair."))
+
+	od := OrderedDictType.Dict
+	od.Set("pop", py.MustNewMethod("pop", func(self py.Object, args py.Tuple) (py.Object, error) {
+		o := self.(*OrderedDict)
+		var key, def py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		encoded, err := py.DictKey(key)
+		if err != nil {
+			return nil, err
+		}
+		v, ok := o.values.Get(encoded)
+		if !ok {
+			if def != nil {
+				return def, nil
+			}
+			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
+		}
+		o.remove(encoded)
+		return v, nil
+	}, 0, "Remove key and return its value; default if missing, else KeyError."))
+	od.Set("setdefault", py.MustNewMethod("setdefault", func(self py.Object, args py.Tuple) (py.Object, error) {
+		o := self.(*OrderedDict)
+		var key py.Object
+		var def py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "setdefault", 1, 2, &key, &def); err != nil {
+			return nil, err
+		}
+		encoded, err := py.DictKey(key)
+		if err != nil {
+			return nil, err
+		}
+		if v, ok := o.values.Get(encoded); ok {
+			return v, nil
+		}
+		return def, o.set(key, def)
+	}, 0, "Return self[key], inserting the default first if missing."))
+	od.Set("update", py.MustNewMethod("update", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		o := self.(*OrderedDict)
+		if len(args) > 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "update expected at most 1 argument, got %d", len(args))
+		}
+		if len(args) == 1 {
+			if err := o.updateFrom(args[0]); err != nil {
+				return nil, err
+			}
+		}
+		for _, e := range kwargs.Items() {
+			if err := o.set(py.String(e.Key), e.Value); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
+	}, 0, "Update from a mapping or an iterable of pairs, then from keyword arguments."))
+	od.Set("clear", py.MustNewMethod("clear", func(self py.Object, args py.Tuple) (py.Object, error) {
+		o := self.(*OrderedDict)
+		o.keys, o.values = nil, py.NewStringDict()
+		return py.None, nil
+	}, 0, "Remove all items."))
+	od.Set("copy", py.MustNewMethod("copy", func(self py.Object, args py.Tuple) (py.Object, error) {
+		o := self.(*OrderedDict)
+		c := &OrderedDict{values: py.NewStringDict()}
+		for _, k := range o.keys {
+			c.keys = append(c.keys, k)
+			c.values.Set(k, o.values.GetOrNil(k))
+		}
+		return c, nil
+	}, 0, "Return a shallow copy."))
+	od.Set("move_to_end", py.MustNewMethod("move_to_end", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		o := self.(*OrderedDict)
+		var key py.Object
+		var last py.Object = py.True
+		if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:move_to_end", []string{"key", "last"}, &key, &last); err != nil {
+			return nil, err
+		}
+		encoded, err := py.DictKey(key)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := o.values.Get(encoded); !ok {
+			return nil, py.ExceptionNewf(py.KeyError, "%v", key)
+		}
+		for i, k := range o.keys {
+			if k == encoded {
+				o.keys = append(o.keys[:i:i], o.keys[i+1:]...)
+				break
+			}
+		}
+		if t, _ := py.ObjectIsTrue(last); t {
+			o.keys = append(o.keys, encoded)
+		} else {
+			o.keys = append([]string{encoded}, o.keys...)
+		}
+		return py.None, nil
+	}, 0, "Move key to the end (or the front when last is false)."))
+	od.Set("__reversed__", py.MustNewMethod("__reversed__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		ks := self.(*OrderedDict).order()
+		for i, j := 0, len(ks)-1; i < j; i, j = i+1, j-1 {
+			ks[i], ks[j] = ks[j], ks[i]
+		}
+		return newIteratorFromItems(ks), nil
+	}, 0, "Iterate keys in reverse order."))
+	od.Set("__eq__", py.MustNewMethod("__eq__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		o := self.(*OrderedDict)
+		other, ok := args[0].(*OrderedDict)
+		if !ok {
+			// Against an ordinary mapping the comparison ignores order.
+			if _, isDict := args[0].(py.StringDict); !isDict {
+				return py.NotImplemented, nil
+			}
+			d := py.NewStringDict()
+			for _, k := range o.keys {
+				d.Set(k, o.values.GetOrNil(k))
+			}
+			return py.Eq(d, args[0])
+		}
+		if len(o.keys) != len(other.keys) {
+			return py.False, nil
+		}
+		for i, k := range o.keys {
+			if other.keys[i] != k {
+				return py.False, nil
+			}
+			eq, err := py.Eq(o.values.GetOrNil(k), other.values.GetOrNil(k))
+			if err != nil {
+				return nil, err
+			}
+			if t, _ := py.ObjectIsTrue(eq); !t {
+				return py.False, nil
+			}
+		}
+		return py.True, nil
+	}, 0, "Order-sensitive against another OrderedDict, else as a dict."))
 
 	OrderedDictType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		o := self.(*OrderedDict)
@@ -2781,4 +2967,26 @@ func init() {
 		d.remove(enc)
 		return py.Tuple{k, v}, nil
 	})
+}
+
+// A namedtuple orders exactly as the tuple of its values does;
+// sched's heap of Events depends on it.
+func (n *NamedTuple) M__lt__(other py.Object) (py.Object, error) {
+	return py.Tuple(n.values).M__lt__(namedTupleOperand(other))
+}
+func (n *NamedTuple) M__le__(other py.Object) (py.Object, error) {
+	return py.Tuple(n.values).M__le__(namedTupleOperand(other))
+}
+func (n *NamedTuple) M__gt__(other py.Object) (py.Object, error) {
+	return py.Tuple(n.values).M__gt__(namedTupleOperand(other))
+}
+func (n *NamedTuple) M__ge__(other py.Object) (py.Object, error) {
+	return py.Tuple(n.values).M__ge__(namedTupleOperand(other))
+}
+
+func namedTupleOperand(o py.Object) py.Object {
+	if n, ok := o.(*NamedTuple); ok {
+		return py.Tuple(n.values)
+	}
+	return o
 }

@@ -16,12 +16,50 @@
 package abc
 
 import (
+	_ "embed"
 	"strings"
 	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/collections"
 )
+
+//go:embed mixins.py
+var mixinsSrc string
+
+var installOnce sync.Once
+
+// install copies the Python-defined concrete methods onto the Go ABC types,
+// once per process: the types are shared by every context, and their dicts
+// are plain maps.
+func install(self py.Object, args py.Tuple) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "_install takes one argument")
+	}
+	pairs, ok := args[0].(*py.List)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "_install takes a list")
+	}
+	var err error
+	installOnce.Do(func() {
+		for _, pr := range pairs.Items {
+			kv := pr.(py.Tuple)
+			t, ok := kv[0].(*py.Type)
+			methods, ok2 := kv[1].(py.Tuple)
+			if !ok || !ok2 {
+				err = py.ExceptionNewf(py.TypeError, "_install: bad entry")
+				return
+			}
+			for _, m := range methods {
+				name := string(m.(py.Tuple)[0].(py.String))
+				if _, has := t.Dict.Get(name); !has {
+					t.Dict.Set(name, m.(py.Tuple)[1])
+				}
+			}
+		}
+	})
+	return py.None, err
+}
 
 const module_doc = `Abstract Base Classes for Containers.  (PEP 3119)`
 
@@ -32,10 +70,15 @@ const module_doc = `Abstract Base Classes for Containers.  (PEP 3119)`
 
 // abcType makes one abstract base class, deriving it from base so that the
 // isinstance base-chain walk recognises the hierarchy.
-func abcType(name string, base *py.Type) *py.Type {
+func abcType(name string, bases ...*py.Type) *py.Type {
 	t := py.NewType("collections.abc."+name, name+" abstract base class")
-	if base != nil {
-		t.Base = base
+	for _, b := range bases {
+		if b != nil {
+			t.Bases = append(t.Bases, b)
+		}
+	}
+	if len(t.Bases) > 0 {
+		t.Base = t.Bases[0].(*py.Type)
 	}
 	return t
 }
@@ -44,13 +87,7 @@ func abcType(name string, base *py.Type) *py.Type {
 // The parameters carry no runtime meaning here, so the class itself is
 // returned, which is all that evaluating an annotation needs.
 func subscriptable(t *py.Type) {
-	// Reached through the class the method is unbound: the subscript key
-	// arrives as `key` (the "self" slot). A real alias lets Mapping[str, str]
-	// serve as a base class.
-	getitem := func(key py.Object, args py.Tuple) (py.Object, error) {
-		return py.NewGenericAlias(t, key), nil
-	}
-	t.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", getitem, 0, "Return the class, ignoring the subscription parameters."))
+	t.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 }
 
 // has reports whether the object satisfies the named protocol.
@@ -126,17 +163,17 @@ var (
 	IteratorType        = abcType("Iterator", IterableType)
 	ReversibleType      = abcType("Reversible", IterableType)
 	GeneratorType       = abcType("Generator", IteratorType)
-	CollectionType      = abcType("Collection", nil)
-	SequenceType        = abcType("Sequence", nil)
+	CollectionType      = abcType("Collection", SizedType, IterableType, ContainerType)
+	SequenceType        = abcType("Sequence", ReversibleType, CollectionType)
 	MutableSequenceType = abcType("MutableSequence", SequenceType)
-	SetType             = abcType("Set", nil)
+	SetType             = abcType("Set", CollectionType)
 	MutableSetType      = abcType("MutableSet", SetType)
-	MappingType         = abcType("Mapping", nil)
+	MappingType         = abcType("Mapping", CollectionType)
 	MutableMappingType  = abcType("MutableMapping", MappingType)
-	MappingViewType     = abcType("MappingView", nil)
-	KeysViewType        = abcType("KeysView", MappingViewType)
-	ItemsViewType       = abcType("ItemsView", MappingViewType)
-	ValuesViewType      = abcType("ValuesView", MappingViewType)
+	MappingViewType     = abcType("MappingView", SizedType)
+	KeysViewType        = abcType("KeysView", MappingViewType, SetType)
+	ItemsViewType       = abcType("ItemsView", MappingViewType, SetType)
+	ValuesViewType      = abcType("ValuesView", MappingViewType, CollectionType)
 	AwaitableType       = abcType("Awaitable", nil)
 	CoroutineType       = abcType("Coroutine", AwaitableType)
 	AsyncIterableType   = abcType("AsyncIterable", nil)
@@ -291,12 +328,16 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		Methods: []*py.Method{py.MustNewMethod("_install", install, 0, "Install the concrete mixin methods.")},
+		CodeSrc: mixinsSrc,
 	})
 	// _collections_abc is the same module: CPython's collections.abc is
 	// "from _collections_abc import *", and contextvars imports it by name.
 	py.RegisterModule(&py.ModuleImpl{
 		Info:    py.ModuleInfo{Name: "_collections_abc", Doc: module_doc},
 		Globals: globals,
+		Methods: []*py.Method{py.MustNewMethod("_install", install, 0, "Install the concrete mixin methods.")},
+		CodeSrc: mixinsSrc,
 	})
 }
 

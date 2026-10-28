@@ -112,6 +112,7 @@ func BytesNew(metatype *Type, args Tuple, kwargs StringDict) (res Object, err er
 	if _, ok = New.(Bytes); !ok {
 		return nil, ExceptionNewf(TypeError, "__bytes__ returned non-bytes (type %s)", New.Type().Name)
 	}
+	return New, nil
 no_bytes_method:
 
 	// Is it an integer?
@@ -1418,8 +1419,21 @@ func encodeStringWith(name, text, handler string) ([]byte, error) {
 		}
 		return out, nil
 	}
+	if c, ok := ExtraCodecs[canonical]; ok {
+		return c.Encode(text)
+	}
 	return nil, ExceptionNewf(LookupError, "unknown encoding: %s", name)
 }
+
+// ExtraCodec is a codec implemented outside this package (idna, which needs
+// punycode); canonicalEncoding recognises its name once it is registered.
+type ExtraCodec struct {
+	Encode func(text string) ([]byte, error)
+	Decode func(raw []byte) (string, error)
+}
+
+// ExtraCodecs maps a canonical codec name to its implementation.
+var ExtraCodecs = map[string]ExtraCodec{}
 
 // encodeError reports a character the target codec cannot represent, honouring
 // the error handler the way CPython does.
@@ -1520,6 +1534,13 @@ func decodeBytesWith(name string, raw []byte, handler string) (Object, error) {
 			return nil, err
 		}
 		return String(string(runes)), nil
+	}
+	if c, ok := ExtraCodecs[canonical]; ok {
+		text, err := c.Decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		return String(text), nil
 	}
 	return nil, ExceptionNewf(LookupError, "unknown encoding: %s", name)
 }
@@ -1704,6 +1725,9 @@ func canonicalEncoding(name string) (string, error) {
 		return "unicode-escape", nil
 	case "raw-unicode-escape":
 		return "raw-unicode-escape", nil
+	}
+	if _, ok := ExtraCodecs[n]; ok {
+		return n, nil
 	}
 	return "", ExceptionNewf(LookupError, "unknown encoding: %s", name)
 }

@@ -185,6 +185,9 @@ func fsPath(o py.Object) (string, error) {
 	if s, ok := o.(py.String); ok {
 		return string(s), nil
 	}
+	if b, ok := o.(py.Bytes); ok {
+		return string(b), nil
+	}
 	if fn, err := py.GetAttrString(o, "__fspath__"); err == nil {
 		r, err := py.Call(fn, nil, py.NewStringDict())
 		if err != nil {

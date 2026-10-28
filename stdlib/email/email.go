@@ -18,11 +18,12 @@ func init() {
 	globals := py.NewStringDict()
 	// __path__ marks this as a package, which is what lets a "from email
 	// import errors" reach the natively registered submodule.
-	path := py.NewListFromItems(nil)
+	path := py.NewListFromItems([]py.Object{py.String(py.EmbeddedLibRoot + "/email")})
 	globals.Set("__path__", path)
 	globals.Set("__all__", py.NewListFromItems([]py.Object{
 		py.String("errors"), py.String("utils"), py.String("parser"),
-		py.String("message"), py.String("header"),
+		py.String("message"), py.String("header"), py.String("generator"),
+		py.String("base64mime"), py.String("quoprimime"),
 	}))
 	// CPython defines message_from_* in email/__init__.py rather than in
 	// email.parser, and callers use both spellings; they are registered here

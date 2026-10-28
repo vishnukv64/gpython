@@ -235,6 +235,12 @@ func (m *MemoryView) DelayedClose() error {
 }
 
 func init() {
+	MemoryViewType.Dict.Set("__enter__", MustNewMethod("__enter__", func(self Object, args Tuple) (Object, error) {
+		return self, nil
+	}, 0, ""))
+	MemoryViewType.Dict.Set("__exit__", MustNewMethod("__exit__", func(self Object, args Tuple) (Object, error) {
+		return False, nil
+	}, 0, ""))
 	// close() on the SOURCE unmaps immediately; close() on the VIEW closes the
 	// source but defers the actual unmap until this view is garbage collected,
 	// so reads through the view after mmap.close() still see valid pages.

@@ -82,6 +82,7 @@ func (r *release) M__repr__() (py.Object, error) {
 type feature struct {
 	optional  *release
 	mandatory *release
+	flag      int // compiler_flag: the CO_FUTURE_* bit, as in CPython
 }
 
 var featureType = py.NewTypeX("_Feature", "A future feature flag", featureNew, nil)
@@ -118,6 +119,9 @@ func init() {
 			return f.optional, nil
 		},
 	})
+	featureType.Dict.Set("compiler_flag", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return py.Int(self.(*feature).flag), nil },
+	})
 	featureType.Dict.Set("mandatory", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {
 			f := self.(*feature)
@@ -147,7 +151,7 @@ func init() {
 	names := make([]py.Object, 0, len(releases))
 	for _, name := range featureNames {
 		r := releases[name]
-		globals.Set(name, &feature{optional: r, mandatory: r})
+		globals.Set(name, &feature{optional: r, mandatory: r, flag: compilerFlags[name]})
 		names = append(names, py.String(name))
 	}
 	globals.Set("all_feature_names", py.NewListFromItems(names))
@@ -159,6 +163,20 @@ func init() {
 		},
 		Globals: globals,
 	})
+}
+
+// compilerFlags are CPython's CO_FUTURE_* values; features that are always on
+// have 0.
+var compilerFlags = map[string]int{
+	"nested_scopes":    0x10,
+	"division":         0x20000,
+	"absolute_import":  0x40000,
+	"with_statement":   0x80000,
+	"print_function":   0x100000,
+	"unicode_literals": 0x200000,
+	"barry_as_FLUFL":   0x400000,
+	"generator_stop":   0x800000,
+	"annotations":      0x1000000,
 }
 
 // featureNames is the ordered list of feature names, as in CPython.

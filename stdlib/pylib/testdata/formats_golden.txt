@@ -1,0 +1,31 @@
+b'caf=C3=A9 =3D ok =09\nline two with trailing space=20\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\nxxxxx\n'
+True
+b'a=20b=09c'
+b'h=E9llo\n'
+True False
+True ss a
+True True True
+True True True
+True True
+    0: \x80 PROTO      2
+    2: }    EMPTY_DICT
+    3: q    BINPUT     0
+    5: X    BINUNICODE 'a'
+   11: q    BINPUT     1
+   13: ]    EMPTY_LIST
+   14: q    BINPUT     2
+   16: (    MARK
+   17: K        BININT1    1
+   19: K        BININT1    2
+   21: e        APPENDS    (MARK at 16)
+   22: s    SETITEM
+   23: .    STOP
+highest protocol among opcodes = 2
+
+['PROTO', 'EMPTY_DICT', 'BINPUT', 'BINUNICODE', 'BINPUT', 'EMPTY_LIST', 'BINPUT', 'MARK', 'BININT1', 'BININT1', 'APPENDS', 'SETITEM', 'STOP']
+False
+_wave_params(nchannels=1, sampwidth=2, framerate=8000, nframes=8, comptype='NONE', compname='not compressed')
+True 8
+b'#!/usr/bin/env python3\n'
+/usr/bin/env python3
+['__main__.py']

@@ -14,6 +14,7 @@ package warnings
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -217,6 +218,54 @@ func warn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 		}
 	}
 	return warnExplicit(mod, text, category, filename, lineno, moduleName, nil)
+}
+
+const deprecated_doc = `_deprecated(name, message=..., *, remove, _version=None)
+
+Warn that a module or function is slated for removal in the Python version
+remove, or raise RuntimeError once that version has been reached.`
+
+const deprecatedMsg = "{name!r} is deprecated and slated for removal in Python {remove}"
+
+// gpythonMinor is the CPython version gpython tracks.
+const gpythonMinor = 14
+
+func deprecated(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var (
+		name    py.Object
+		message py.Object = py.String(deprecatedMsg)
+		remove  py.Object
+		version py.Object
+	)
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|O$OO:_deprecated",
+		[]string{"name", "message", "remove", "_version"}, &name, &message, &remove, &version); err != nil {
+		return nil, err
+	}
+	rem, ok := remove.(py.Tuple)
+	if !ok || len(rem) < 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "_deprecated() missing required keyword-only argument: 'remove'")
+	}
+	major, err := py.IndexInt(rem[0])
+	if err != nil {
+		return nil, err
+	}
+	minor, err := py.IndexInt(rem[1])
+	if err != nil {
+		return nil, err
+	}
+	nameStr, err := py.ReprAsString(name)
+	if err != nil {
+		return nil, err
+	}
+	text, err := py.StrAsString(message)
+	if err != nil {
+		return nil, err
+	}
+	text = strings.NewReplacer("{name!r}", nameStr, "{remove}", fmt.Sprintf("%d.%d", major, minor)).Replace(text)
+	if major < 3 || (major == 3 && minor <= int(gpythonMinor)) {
+		return nil, py.ExceptionNewf(py.RuntimeError, "%s", text)
+	}
+	return warn(self, py.Tuple{py.String(text), py.DeprecationWarning, py.Int(2)}, py.StringDict{})
 }
 
 const warn_explicit_doc = `warn_explicit(message, category, filename, lineno, module=None,
@@ -501,7 +550,7 @@ Insert a simple entry into the list of warnings filters (at the front).`
 func simplefilter(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
 		action    py.Object
-		category  py.Object = py.UserWarning
+		category  py.Object = py.Warning
 		lineno    py.Object = py.Int(0)
 		appendObj py.Object = py.False
 	)
@@ -509,6 +558,16 @@ func simplefilter(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	if err := py.ParseTupleAndKeywords(args, kwargs, "s|Oi$p:simplefilter", kwlist,
 		&action, &category, &lineno, &appendObj); err != nil {
 		return nil, err
+	}
+	// CPython matches a filter with issubclass(), so a tuple of categories is
+	// accepted here (codeop passes one); each becomes its own filter.
+	if cats, ok := category.(py.Tuple); ok {
+		for _, c := range cats {
+			if _, err := addFilter(action, py.String(""), c, py.String(""), lineno, appendObj); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
 	}
 	return addFilter(action, py.String(""), category, py.String(""), lineno, appendObj)
 }
@@ -715,6 +774,7 @@ func init() {
 		},
 		Methods: []*py.Method{
 			py.MustNewMethod("warn", warn, 0, warn_doc),
+			py.MustNewMethod("_deprecated", deprecated, 0, deprecated_doc),
 			py.MustNewMethod("warn_explicit", warn_explicit, 0, warn_explicit_doc),
 			py.MustNewMethod("showwarning", showwarning, 0, showwarning_doc),
 			py.MustNewMethod("formatwarning", formatwarning, 0, formatwarning_doc),
@@ -725,6 +785,7 @@ func init() {
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "filters", Value: gFiltersList},
+			py.DictEntry{Key: "_DEPRECATED_MSG", Value: py.String(deprecatedMsg)},
 			py.DictEntry{Key: "defaultaction", Value: py.String("default")},
 			py.DictEntry{Key: "onceregistry", Value: gOnceregistry},
 			py.DictEntry{Key: "WarningMessage", Value: WarningMessageType},

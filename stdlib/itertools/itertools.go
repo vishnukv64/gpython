@@ -247,7 +247,9 @@ type chainIter struct {
 
 var chainType = py.NewTypeX("itertools.chain", "chain(*iterables) --> chain object: chain from the first until the last is exhausted.",
 	func(_ *py.Type, args py.Tuple, _ py.StringDict) (py.Object, error) {
-		return &chainIter{sources: args}, nil
+		// args aliases the caller's value stack, which is reused once the
+		// call returns; keep a copy.
+		return &chainIter{sources: append(py.Tuple(nil), args...)}, nil
 	}, nil)
 
 func init() {
@@ -809,14 +811,8 @@ var (
 func zipLongest(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	fill := py.Object(py.None)
 	var seqs []py.Object
-	// The last positional argument may be the fillvalue.
-	if len(args) > 0 {
-		if kw, ok := kwargs.Get("fillvalue"); ok {
-			fill = kw
-		} else {
-			fill = args[len(args)-1]
-			args = args[:len(args)-1]
-		}
+	if kw, ok := kwargs.Get("fillvalue"); ok {
+		fill = kw
 	}
 	for _, a := range args {
 		seqs = append(seqs, a)

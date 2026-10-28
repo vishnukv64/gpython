@@ -95,8 +95,18 @@ func (g *GenericAlias) M__call__(args Tuple, kwargs StringDict) (Object, error) 
 	return Call(g.Origin, args, kwargs)
 }
 
+// GenericAliasMroHook lets typing override __mro_entries__ for the aliases it
+// stands in for (typing.MutableMapping[K, V] is a GenericAlias here, and
+// CPython's typing alias adds Generic to the bases).  ok=false: use the default.
+var GenericAliasMroHook func(g *GenericAlias, bases Object) (Tuple, bool)
+
 // M__mro_entries__ makes "class C(list[int])" subclass list.
 func (g *GenericAlias) M__mro_entries__(bases Object) (Object, error) {
+	if GenericAliasMroHook != nil {
+		if res, ok := GenericAliasMroHook(g, bases); ok {
+			return res, nil
+		}
+	}
 	return Tuple{g.Origin}, nil
 }
 
@@ -244,4 +254,17 @@ func (g *GenericAlias) M__getattr__(name string) (Object, error) {
 		return nil, ExceptionNewf(AttributeError, "'types.GenericAlias' object has no attribute '%s'", name)
 	}
 	return GetAttrString(g.Origin, name)
+}
+
+// ClassGetItemAlias is a __class_getitem__ that returns cls[params] as a
+// GenericAlias: a classmethod, so cls is the class and not the bare key an
+// unbound Method would receive.
+var ClassGetItemAlias = &ClassMethod{
+	Dict: NewStringDict(),
+	Callable: MustNewMethod("__class_getitem__", func(cls Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "__class_getitem__() takes exactly one argument")
+		}
+		return NewGenericAlias(cls, args[0]), nil
+	}, 0, "Represent a PEP 585 generic type."),
 }

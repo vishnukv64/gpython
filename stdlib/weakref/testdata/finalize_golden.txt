@@ -1,0 +1,15 @@
+True True True ((1, 2), {'x': 3})
+cb (1, 2) [('x', 3)]
+False None None
+True False
+cb ('collected',) []
+after collect False
+False True
+cannot create weak reference to 'int' object
+cannot create weak reference to 'str' object
+cannot create weak reference to 'NoneType' object
+finalize.__init__() missing 2 required positional arguments: 'obj' and 'func'
+cb ('exit1',) []
+cb ('exit2',) []
+False True
+end

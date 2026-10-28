@@ -41,9 +41,17 @@ type Message struct {
 	// reads back.  "defects" lives here too: in CPython it is a plain list
 	// attribute, not a method.
 	Dict py.StringDict
+	// cls is the Python subclass (http.client.HTTPMessage) this is an instance
+	// of; nil for a plain Message.
+	cls *py.Type
 }
 
-func (m *Message) Type() *py.Type { return MessageType }
+func (m *Message) Type() *py.Type {
+	if m.cls != nil {
+		return m.cls
+	}
+	return MessageType
+}
 
 // GetDict exposes the instance dict, which is what makes attribute assignment
 // and lookup behave as they do for a python object.
@@ -68,6 +76,9 @@ func messageNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Obje
 		return nil, py.ExceptionNewf(py.TypeError, "Message() takes no positional arguments")
 	}
 	m := &Message{Dict: py.NewStringDict()}
+	if metatype != MessageType {
+		m.cls = metatype
+	}
 	// CPython's Message.__init__ sets self.defects = [].
 	m.Dict.Set("defects", py.NewListFromItems(nil))
 	return m, nil
@@ -211,18 +222,24 @@ func (m *Message) headerString() string {
 		b.WriteString(m.values[i])
 		b.WriteString("\n")
 	}
+	// The blank line ends the header block, as in CPython's Generator.
+	b.WriteString("\n")
 	if subs, ok := m.payload.(*py.List); ok && len(subs.Items) > 0 {
 		boundary, _ := m.getParam("boundary")
-		b.WriteString("This is a multi-part message in MIME format.\n\n")
+		b.WriteString("--" + boundary + "\n")
+		first := true
 		for _, item := range subs.Items {
 			sub, ok := item.(*Message)
 			if !ok {
 				continue
 			}
-			b.WriteString("--" + boundary + "\n")
+			if !first {
+				b.WriteString("\n--" + boundary + "\n")
+			}
+			first = false
 			b.WriteString(sub.headerString())
 		}
-		b.WriteString("--" + boundary + "--\n")
+		b.WriteString("\n--" + boundary + "--\n")
 	} else if m.payload != nil {
 		switch p := m.payload.(type) {
 		case py.String:
@@ -570,19 +587,54 @@ func msgGetContentCharset(self py.Object, args py.Tuple, kwargs py.StringDict) (
 }
 
 func msgAsString(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var unixfrom py.Object = py.None
-	if err := py.ParseTupleAndKeywords(args, kwargs, "|z:as_string", []string{"unixfrom"}, &unixfrom); err != nil {
+	text, err := flatten(self, args, kwargs, "as_string")
+	if err != nil {
 		return nil, err
 	}
-	return py.String(self.(*Message).headerString()), nil
+	return py.String(text), nil
 }
 
 func msgAsBytes(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var unixfrom py.Object = py.None
-	if err := py.ParseTupleAndKeywords(args, kwargs, "|z:as_bytes", []string{"unixfrom"}, &unixfrom); err != nil {
+	text, err := flatten(self, args, kwargs, "as_bytes")
+	if err != nil {
 		return nil, err
 	}
-	return py.Bytes([]byte(self.(*Message).headerString())), nil
+	return py.Bytes([]byte(text)), nil
+}
+
+// flatten is as_string/as_bytes: "unixfrom" prepends the envelope line set by
+// set_unixfrom.  maxheaderlen and policy are accepted and ignored.
+func flatten(self py.Object, args py.Tuple, kwargs py.StringDict, name string) (string, error) {
+	var unixfrom, maxheaderlen, policy py.Object = py.False, py.None, py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|OOO:"+name, []string{"unixfrom", "maxheaderlen", "policy"}, &unixfrom, &maxheaderlen, &policy); err != nil {
+		return "", err
+	}
+	m := self.(*Message)
+	text := m.headerString()
+	if want, err := py.ObjectIsTrue(unixfrom); err != nil {
+		return "", err
+	} else if want {
+		if from, ok := m.Dict.GetOrNil("_unixfrom").(py.String); ok {
+			text = string(from) + "\n" + text
+		}
+	}
+	return text, nil
+}
+
+func msgSetUnixfrom(self py.Object, args py.Tuple) (py.Object, error) {
+	var v py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "set_unixfrom", 1, 1, &v); err != nil {
+		return nil, err
+	}
+	self.(*Message).Dict.Set("_unixfrom", v)
+	return py.None, nil
+}
+
+func msgGetUnixfrom(self py.Object, args py.Tuple) (py.Object, error) {
+	if v := self.(*Message).Dict.GetOrNil("_unixfrom"); v != nil {
+		return v, nil
+	}
+	return py.None, nil
 }
 
 func msgSetType(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -762,6 +814,8 @@ func init() {
 	register("get_filename", msgGetFilename, "Return the filename parameter.")
 	register("get_content_charset", msgGetContentCharset, "Return the charset parameter.")
 	register("as_string", msgAsString, "Return the entire message flattened as a string.")
+	register("set_unixfrom", msgSetUnixfrom, "Set the envelope header ("+"From "+"line).")
+	register("get_unixfrom", msgGetUnixfrom, "Return the envelope header set by set_unixfrom, or None.")
 	register("as_bytes", msgAsBytes, "Return the entire message flattened as bytes.")
 	register("set_type", msgSetType, "Set the Content-Type after removing its parameters.")
 	register("add_header", msgAddHeader, "Append a header.")

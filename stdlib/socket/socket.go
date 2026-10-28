@@ -19,6 +19,7 @@
 package socket
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -164,6 +165,7 @@ type sock struct {
 	listener net.Listener   // listening stream socket
 	packet   net.PacketConn // bound or connected datagram socket
 	closed   bool
+	pytype   *py.Type // a subtype (ssl.SSLSocket) when set
 	// placeholder stands in for a descriptor until connect or bind; 0 means none.
 	placeholder int
 }
@@ -173,7 +175,12 @@ var SocketType = py.NewTypeX("socket.socket",
 		"A network socket, backed by Go's net package.",
 	socketNew, nil)
 
-func (s *sock) Type() *py.Type { return SocketType }
+func (s *sock) Type() *py.Type {
+	if s.pytype != nil {
+		return s.pytype
+	}
+	return SocketType
+}
 
 func socketNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) > 3 {
@@ -692,7 +699,11 @@ func (s *sock) shutdown(how int) (py.Object, error) {
 	if err := s.checkOpen("shutdown"); err != nil {
 		return nil, err
 	}
-	if tc, ok := s.conn.(*net.TCPConn); ok {
+	inner := s.conn
+	if u, ok := inner.(interface{ NetConn() net.Conn }); ok {
+		inner = u.NetConn() // tls.Conn: shut the transport down
+	}
+	if tc, ok := inner.(*net.TCPConn); ok {
 		var err error
 		switch how {
 		case SHUT_RD:
@@ -790,6 +801,7 @@ type socketFile struct {
 	conn net.Conn
 	w    io.Writer
 	rd   *bufReader
+	s    *sock // for the timeout; nil when the socket is unknown
 }
 
 var SocketFileType = py.NewTypeX("socket.SocketIO",
@@ -797,72 +809,105 @@ var SocketFileType = py.NewTypeX("socket.SocketIO",
 
 func (f *socketFile) Type() *py.Type { return SocketFileType }
 
-// bufReader is a one-byte lookahead buffer over the connection, enough for
-// readline.
+// bufReader buffers reads from the connection, as io.BufferedReader does: one
+// Read per refill (which returns whatever has arrived), so read1() never waits
+// for more than the first chunk and read(n) waits for n bytes or EOF.
 type bufReader struct {
-	r   io.Reader
+	f   *socketFile
 	buf []byte
+	err error // sticky: a failed or finished connection stays so
 }
 
-func (r *bufReader) readByte() (byte, error) {
-	if len(r.buf) > 0 {
-		b := r.buf[0]
-		r.buf = r.buf[1:]
-		return b, nil
+func (r *bufReader) fill() error {
+	if r.err != nil {
+		return r.err
 	}
-	one := make([]byte, 1)
-	n, err := r.r.Read(one)
-	if n == 0 {
-		if err == nil {
-			err = io.EOF
+	if r.f.s != nil {
+		_ = r.f.conn.SetReadDeadline(r.f.s.deadline())
+	}
+	tmp := make([]byte, 16384)
+	n, err := r.f.conn.Read(tmp)
+	r.buf = append(r.buf, tmp[:n]...)
+	if err != nil {
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			return err // a timeout is not the end of the stream
 		}
-		return 0, err
+		r.err = err
 	}
-	return one[0], nil
+	if n == 0 && err == nil {
+		return nil
+	}
+	return err
+}
+
+func (r *bufReader) take(n int) []byte {
+	out := append([]byte(nil), r.buf[:n]...)
+	r.buf = r.buf[n:]
+	return out
+}
+
+// eof turns the end of the stream into a short read; other errors surface.
+func eof(err error) error {
+	if err == io.EOF {
+		return nil
+	}
+	return err
 }
 
 func (r *bufReader) read(n int) ([]byte, error) {
-	out := make([]byte, 0, n)
-	for len(out) < n {
-		b, err := r.readByte()
-		if err != nil {
-			if len(out) > 0 {
-				return out, nil
+	for len(r.buf) < n {
+		if err := r.fill(); err != nil {
+			if len(r.buf) > 0 && err == io.EOF {
+				break
 			}
-			return nil, err
+			return r.take(len(r.buf)), eof(err)
 		}
-		out = append(out, b)
 	}
-	return out, nil
+	if n > len(r.buf) {
+		n = len(r.buf)
+	}
+	return r.take(n), nil
 }
 
 func (r *bufReader) readAll() ([]byte, error) {
-	var out []byte
 	for {
-		b, err := r.readByte()
-		if err != nil {
-			if len(out) > 0 {
-				return out, nil
-			}
-			return nil, err
+		if err := r.fill(); err != nil {
+			return r.take(len(r.buf)), eof(err)
 		}
-		out = append(out, b)
 	}
 }
 
-func (r *bufReader) readline() ([]byte, error) {
-	var out []byte
-	for {
-		b, err := r.readByte()
-		if err != nil {
-			if len(out) > 0 {
-				return out, nil
-			}
-			return nil, err
+// read1 returns at most n bytes, reading the connection at most once.
+func (r *bufReader) read1(n int) ([]byte, error) {
+	if len(r.buf) == 0 {
+		if err := r.fill(); err != nil && len(r.buf) == 0 {
+			return nil, eof(err)
 		}
-		out = append(out, b)
-		if b == '\n' {
-			return out, nil
+	}
+	if n < 0 || n > len(r.buf) {
+		n = len(r.buf)
+	}
+	return r.take(n), nil
+}
+
+// readline reads through the next newline, or at most limit bytes (limit < 0:
+// no limit).
+func (r *bufReader) readline(limit int) ([]byte, error) {
+	scanned := 0
+	for {
+		if i := bytes.IndexByte(r.buf[scanned:], '\n'); i >= 0 {
+			end := scanned + i + 1
+			if limit >= 0 && end > limit {
+				end = limit
+			}
+			return r.take(end), nil
+		}
+		scanned = len(r.buf)
+		if limit >= 0 && scanned >= limit {
+			return r.take(limit), nil
+		}
+		if err := r.fill(); err != nil {
+			return r.take(len(r.buf)), eof(err)
 		}
 	}
 }
@@ -1272,7 +1317,7 @@ func init() {
 			Doc:  module_doc,
 		},
 		Methods:          methods,
-		Globals:          py.NewStringDictFrom(append(platformGlobals, py.DictEntry{Key: "socket", Value: SocketType}, py.DictEntry{Key: "AF_UNSPEC", Value: py.Int(AF_UNSPEC)}, py.DictEntry{Key: "AF_UNIX", Value: py.Int(AF_UNIX)}, py.DictEntry{Key: "AF_INET", Value: py.Int(AF_INET)}, py.DictEntry{Key: "AF_INET6", Value: py.Int(AF_INET6)}, py.DictEntry{Key: "SOCK_STREAM", Value: py.Int(SOCK_STREAM)}, py.DictEntry{Key: "SOCK_DGRAM", Value: py.Int(SOCK_DGRAM)}, py.DictEntry{Key: "SOCK_RAW", Value: py.Int(SOCK_RAW)}, py.DictEntry{Key: "SOL_SOCKET", Value: py.Int(SOL_SOCKET)}, py.DictEntry{Key: "SO_REUSEADDR", Value: py.Int(SO_REUSEADDR)}, py.DictEntry{Key: "SO_KEEPALIVE", Value: py.Int(SO_KEEPALIVE)}, py.DictEntry{Key: "SO_BROADCAST", Value: py.Int(SO_BROADCAST)}, py.DictEntry{Key: "SO_SNDBUF", Value: py.Int(SO_SNDBUF)}, py.DictEntry{Key: "SO_RCVBUF", Value: py.Int(SO_RCVBUF)}, py.DictEntry{Key: "SHUT_RD", Value: py.Int(SHUT_RD)}, py.DictEntry{Key: "SHUT_WR", Value: py.Int(SHUT_WR)}, py.DictEntry{Key: "SHUT_RDWR", Value: py.Int(SHUT_RDWR)}, py.DictEntry{Key: "IPPROTO_TCP", Value: py.Int(IPPROTO_TCP)}, py.DictEntry{Key: "IPPROTO_UDP", Value: py.Int(IPPROTO_UDP)}, py.DictEntry{Key: "IPPROTO_IPV6", Value: py.Int(IPPROTO_IPV6)}, py.DictEntry{Key: "IPPROTO_IP", Value: py.Int(0)}, py.DictEntry{Key: "TCP_NODELAY", Value: py.Int(TCP_NODELAY)}, py.DictEntry{Key: "IPV6_V6ONLY", Value: py.Int(IPV6_V6ONLY)}, py.DictEntry{Key: "TCP_MAXSEG", Value: py.Int(0x2)}, py.DictEntry{Key: "AI_PASSIVE", Value: py.Int(AI_PASSIVE)}, py.DictEntry{Key: "AI_CANONNAME", Value: py.Int(AI_CANONNAME)}, py.DictEntry{Key: "AI_NUMERICHOST", Value: py.Int(AI_NUMERICHOST)}, py.DictEntry{Key: "AI_NUMERICSERV", Value: py.Int(AI_NUMERICSERV)}, py.DictEntry{Key: "NI_NUMERICHOST", Value: py.Int(NI_NUMERICHOST)}, py.DictEntry{Key: "NI_NUMERICSERV", Value: py.Int(NI_NUMERICSERV)}, py.DictEntry{Key: "NI_NOFQDN", Value: py.Int(NI_NOFQDN)}, py.DictEntry{Key: "NI_NAMEREQD", Value: py.Int(NI_NAMEREQD)}, py.DictEntry{Key: "NI_DGRAM", Value: py.Int(NI_DGRAM)}, py.DictEntry{Key: "MSG_PEEK", Value: py.Int(MSG_PEEK)}, py.DictEntry{Key: "MSG_DONTWAIT", Value: py.Int(MSG_DONTWAIT)}, py.DictEntry{Key: "INADDR_ANY", Value: py.Int(INADDR_ANY)}, py.DictEntry{Key: "INADDR_BROADCAST", Value: py.Int(INADDR_BROADCAST)}, py.DictEntry{Key: "error", Value: SocketErrorType}, py.DictEntry{Key: "gaierror", Value: GaierrorType}, py.DictEntry{Key: "herror", Value: HerrorType}, py.DictEntry{Key: // socket.timeout is TimeoutError as of CPython 3.10.
+		Globals:          py.NewStringDictFrom(append(platformGlobals, py.DictEntry{Key: "socket", Value: SocketType}, py.DictEntry{Key: "_GLOBAL_DEFAULT_TIMEOUT", Value: globalDefaultTimeout}, py.DictEntry{Key: "AF_UNSPEC", Value: py.Int(AF_UNSPEC)}, py.DictEntry{Key: "AF_UNIX", Value: py.Int(AF_UNIX)}, py.DictEntry{Key: "AF_INET", Value: py.Int(AF_INET)}, py.DictEntry{Key: "AF_INET6", Value: py.Int(AF_INET6)}, py.DictEntry{Key: "SOCK_STREAM", Value: py.Int(SOCK_STREAM)}, py.DictEntry{Key: "SOCK_DGRAM", Value: py.Int(SOCK_DGRAM)}, py.DictEntry{Key: "SOCK_RAW", Value: py.Int(SOCK_RAW)}, py.DictEntry{Key: "SOL_SOCKET", Value: py.Int(SOL_SOCKET)}, py.DictEntry{Key: "SO_REUSEADDR", Value: py.Int(SO_REUSEADDR)}, py.DictEntry{Key: "SO_KEEPALIVE", Value: py.Int(SO_KEEPALIVE)}, py.DictEntry{Key: "SO_BROADCAST", Value: py.Int(SO_BROADCAST)}, py.DictEntry{Key: "SO_SNDBUF", Value: py.Int(SO_SNDBUF)}, py.DictEntry{Key: "SO_RCVBUF", Value: py.Int(SO_RCVBUF)}, py.DictEntry{Key: "SHUT_RD", Value: py.Int(SHUT_RD)}, py.DictEntry{Key: "SHUT_WR", Value: py.Int(SHUT_WR)}, py.DictEntry{Key: "SHUT_RDWR", Value: py.Int(SHUT_RDWR)}, py.DictEntry{Key: "IPPROTO_TCP", Value: py.Int(IPPROTO_TCP)}, py.DictEntry{Key: "IPPROTO_UDP", Value: py.Int(IPPROTO_UDP)}, py.DictEntry{Key: "IPPROTO_IPV6", Value: py.Int(IPPROTO_IPV6)}, py.DictEntry{Key: "IPPROTO_IP", Value: py.Int(0)}, py.DictEntry{Key: "TCP_NODELAY", Value: py.Int(TCP_NODELAY)}, py.DictEntry{Key: "IPV6_V6ONLY", Value: py.Int(IPV6_V6ONLY)}, py.DictEntry{Key: "TCP_MAXSEG", Value: py.Int(0x2)}, py.DictEntry{Key: "AI_PASSIVE", Value: py.Int(AI_PASSIVE)}, py.DictEntry{Key: "AI_CANONNAME", Value: py.Int(AI_CANONNAME)}, py.DictEntry{Key: "AI_NUMERICHOST", Value: py.Int(AI_NUMERICHOST)}, py.DictEntry{Key: "AI_NUMERICSERV", Value: py.Int(AI_NUMERICSERV)}, py.DictEntry{Key: "NI_NUMERICHOST", Value: py.Int(NI_NUMERICHOST)}, py.DictEntry{Key: "NI_NUMERICSERV", Value: py.Int(NI_NUMERICSERV)}, py.DictEntry{Key: "NI_NOFQDN", Value: py.Int(NI_NOFQDN)}, py.DictEntry{Key: "NI_NAMEREQD", Value: py.Int(NI_NAMEREQD)}, py.DictEntry{Key: "NI_DGRAM", Value: py.Int(NI_DGRAM)}, py.DictEntry{Key: "MSG_PEEK", Value: py.Int(MSG_PEEK)}, py.DictEntry{Key: "MSG_DONTWAIT", Value: py.Int(MSG_DONTWAIT)}, py.DictEntry{Key: "INADDR_ANY", Value: py.Int(INADDR_ANY)}, py.DictEntry{Key: "INADDR_BROADCAST", Value: py.Int(INADDR_BROADCAST)}, py.DictEntry{Key: "error", Value: SocketErrorType}, py.DictEntry{Key: "gaierror", Value: GaierrorType}, py.DictEntry{Key: "herror", Value: HerrorType}, py.DictEntry{Key: // socket.timeout is TimeoutError as of CPython 3.10.
 		"timeout", Value: py.TimeoutError}, py.DictEntry{Key: "has_ipv6", Value: py.True})...),
 	})
 }
@@ -1327,3 +1372,7 @@ func toFloat(v py.Object) (float64, error) {
 func (s *sock) M__hash__() (py.Object, error) {
 	return py.Int(int64(uintptr(unsafe.Pointer(s)) >> 4)), nil
 }
+
+// globalDefaultTimeout is the sentinel CPython's socket module exports for
+// "no timeout argument given"; callers compare it with "is".
+var globalDefaultTimeout = func() py.Object { o, _ := py.Call(py.ObjectType, nil, py.StringDict{}); return o }()

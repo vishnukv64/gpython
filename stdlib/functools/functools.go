@@ -32,7 +32,7 @@ func init() {
 		py.DictEntry{Key: "total_ordering", Value: py.MustNewMethod("total_ordering", identity, 0, "Class decorator that fills in missing ordering methods.")},
 		py.DictEntry{Key: "cmp_to_key", Value: py.MustNewMethod("cmp_to_key", cmpToKey, 0, "Convert a comparison function into a key function.")},
 		py.DictEntry{Key: "singledispatch", Value: py.MustNewMethod("singledispatch", singledispatch, 0, "Single-dispatch generic function decorator.")},
-		py.DictEntry{Key: "singledispatchmethod", Value: py.MustNewMethod("singledispatchmethod", singledispatch, 0, "Single-dispatch generic method decorator.")},
+		py.DictEntry{Key: "singledispatchmethod", Value: singleDispatchMethodType},
 		py.DictEntry{Key: "WRAPPER_ASSIGNMENTS", Value: py.Tuple{
 			py.String("__module__"), py.String("__name__"), py.String("__qualname__"),
 			py.String("__annotations__"), py.String("__doc__"),
@@ -574,8 +574,7 @@ func singledispatch(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "singledispatch() needs a function")
 	}
-	fn := args[0]
-	d := &Dispatcher{defaultFn: fn, registry: map[*py.Type]py.Object{}}
+	d := &Dispatcher{defaultFn: args[0], registry: map[*py.Type]py.Object{py.ObjectType: args[0]}, order: []*py.Type{py.ObjectType}}
 	return d, nil
 }
 
@@ -583,63 +582,175 @@ func singledispatch(self py.Object, args py.Tuple) (py.Object, error) {
 type Dispatcher struct {
 	defaultFn py.Object
 	registry  map[*py.Type]py.Object
+	order     []*py.Type // registration order, for the registry mapping
 }
 
 var DispatcherType = py.NewType("functools.singledispatch", "A generic function.")
 
 func (d *Dispatcher) Type() *py.Type { return DispatcherType }
 
+func (d *Dispatcher) set(t *py.Type, fn py.Object) {
+	if _, ok := d.registry[t]; !ok {
+		d.order = append(d.order, t)
+	}
+	d.registry[t] = fn
+}
+
+// find is the implementation for cls: the first class in its MRO that is
+// registered, else the most specific registered class cls is a (virtual)
+// subclass of, which is how register(Mapping) catches a dict.
+// ponytail: CPython composes the MRO with C3 and reports ambiguity among
+// unrelated ABCs; here the earliest registration of the most specific wins.
+func (d *Dispatcher) find(cls *py.Type, obj py.Object) (py.Object, error) {
+	for _, m := range cls.Mro {
+		if t, ok := m.(*py.Type); ok && t != py.ObjectType {
+			if f, ok := d.registry[t]; ok {
+				return f, nil
+			}
+		}
+	}
+	var best *py.Type
+	for _, t := range d.order {
+		if t == py.ObjectType {
+			continue
+		}
+		ok, err := isSubclass(cls, t, obj)
+		if err != nil {
+			return nil, err
+		}
+		if ok && (best == nil || t.IsSubtype(best)) {
+			best = t
+		}
+	}
+	if best != nil {
+		return d.registry[best], nil
+	}
+	return d.registry[py.ObjectType], nil
+}
+
+// isSubclass is issubclass(cls, parent), or isinstance(obj, parent) when an
+// object is at hand: the structural ABC checks (dict is a Mapping) are only
+// known for instances.
+func isSubclass(cls, parent *py.Type, obj py.Object) (bool, error) {
+	if cls.IsSubtype(parent) {
+		return true, nil
+	}
+	b := py.GetModuleImplOrNil("builtins")
+	if b == nil {
+		return false, nil
+	}
+	name, arg := "issubclass", py.Object(cls)
+	if obj != nil {
+		name, arg = "isinstance", obj
+	}
+	fn, err := py.GetAttrString(b, name)
+	if err != nil {
+		return false, err
+	}
+	res, err := py.Call(fn, py.Tuple{arg, parent}, py.NewStringDict())
+	if err != nil {
+		return false, err
+	}
+	return py.ObjectIsTrue(res)
+}
+
 func (d *Dispatcher) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) == 0 {
-		return py.Call(d.defaultFn, args, kwargs)
+		return nil, py.ExceptionNewf(py.TypeError, "%s requires at least 1 positional argument", "singledispatch function")
 	}
-	// Find the most derived registered type that the first argument is.
-	fn := d.defaultFn
-	for t := args[0].Type(); t != nil; t = t.Base {
-		if f, ok := d.registry[t]; ok {
-			fn = f
-			break
-		}
+	fn, err := d.find(args[0].Type(), args[0])
+	if err != nil {
+		return nil, err
 	}
 	return py.Call(fn, args, kwargs)
 }
 
 var _ py.I__call__ = (*Dispatcher)(nil)
 
+// annotationType is the type the first parameter of fn is annotated with, for
+// the bare "@g.register" form.  A string annotation (from __future__
+// annotations) is evaluated in the function's globals.
+func annotationType(fn py.Object) (*py.Type, error) {
+	anns, err := py.GetAttrString(fn, "__annotations__")
+	if err != nil {
+		anns = py.None
+	}
+	var first py.Object
+	if sd, ok := anns.(py.StringDict); ok {
+		for _, e := range sd.Items() {
+			if e.Key != "return" {
+				first = e.Value
+				break
+			}
+		}
+	}
+	if first == nil {
+		return nil, py.ExceptionNewf(py.TypeError,
+			"Invalid first argument to `register()`: %v. Use either `@register(some_class)` or plain `@register` on an annotated function.", fn)
+	}
+	if str, ok := first.(py.String); ok {
+		globals, err := py.GetAttrString(fn, "__globals__")
+		if err != nil {
+			return nil, err
+		}
+		ev, err := py.GetAttrString(py.GetModuleImplOrNil("builtins"), "eval")
+		if err != nil {
+			return nil, err
+		}
+		if first, err = py.Call(ev, py.Tuple{str, globals}, py.NewStringDict()); err != nil {
+			return nil, err
+		}
+	}
+	t, ok := first.(*py.Type)
+	if !ok {
+		return nil, py.ExceptionNewf(py.TypeError, "Invalid annotation for the first parameter: %v is not a class.", first)
+	}
+	return t, nil
+}
+
+// register is the shared body of register(cls), register(cls, fn) and the
+// bare register(fn).
+func (d *Dispatcher) register(args py.Tuple) (py.Object, error) {
+	if len(args) == 0 || len(args) > 2 {
+		return nil, py.ExceptionNewf(py.TypeError, "register() takes 1 or 2 arguments")
+	}
+	t, isType := args[0].(*py.Type)
+	// A *Type with an empty Name is an instance of a Python class, not a class.
+	isType = isType && t.Name != ""
+	if len(args) == 2 {
+		if !isType {
+			return nil, py.ExceptionNewf(py.TypeError, "Invalid first argument to `register()`: %v. Use either `@register(some_class)` or plain `@register` on an annotated function.", args[0])
+		}
+		d.set(t, args[1])
+		return args[1], nil
+	}
+	if isType {
+		return &registerDecorator{dispatcher: d, typ: t}, nil
+	}
+	t, err := annotationType(args[0])
+	if err != nil {
+		return nil, err
+	}
+	d.set(t, args[0])
+	return args[0], nil
+}
+
 func init() {
 	DispatcherType.Dict.Set("register", py.MustNewMethod("register", func(self py.Object, args py.Tuple) (py.Object, error) {
-		d := self.(*Dispatcher)
-		// Used as @register, or @register(Type), or register(Type, fn).
-		switch len(args) {
-		case 1:
-			if t, ok := args[0].(*py.Type); ok {
-				// @register(Type) - return a decorator.
-				return &registerDecorator{dispatcher: d, typ: t}, nil
-			}
-			// @register - the default implementation, keyed by object.
-			d.registry[py.ObjectType] = args[0]
-			return args[0], nil
-		case 2:
-			t, ok := args[0].(*py.Type)
-			if !ok {
-				return nil, py.ExceptionNewf(py.TypeError, "register() first argument must be a class")
-			}
-			d.registry[t] = args[1]
-			return args[1], nil
-		}
-		return nil, py.ExceptionNewf(py.TypeError, "invalid register() arguments")
+		return self.(*Dispatcher).register(args)
 	}, 0, "Register an implementation for a type."))
 
 	DispatcherType.Dict.Set("registry", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		// The registry is exposed as a mapping keyed by the registered type.
-		d := py.NewStringDict()
-		for t, fn := range self.(*Dispatcher).registry {
-			d.Set(t.Name, fn)
+		d := self.(*Dispatcher)
+		reg := py.NewStringDict()
+		for _, t := range d.order {
+			if _, err := py.SetItem(reg, t, d.registry[t]); err != nil {
+				return nil, err
+			}
 		}
-		return d, nil
+		return reg, nil
 	}})
 	DispatcherType.Dict.Set("dispatch", py.MustNewMethod("dispatch", func(self py.Object, args py.Tuple) (py.Object, error) {
-		d := self.(*Dispatcher)
 		var t py.Object
 		if err := py.UnpackTuple(args, py.StringDict{}, "dispatch", 1, 1, &t); err != nil {
 			return nil, err
@@ -648,13 +759,21 @@ func init() {
 		if !ok {
 			return nil, py.ExceptionNewf(py.TypeError, "dispatch() argument must be a class")
 		}
-		for at := typ; at != nil; at = at.Base {
-			if f, ok := d.registry[at]; ok {
-				return f, nil
-			}
-		}
-		return d.defaultFn, nil
+		return self.(*Dispatcher).find(typ, nil)
 	}, 0, "Return the implementation for a type."))
+	DispatcherType.Dict.Set("_clear_cache", py.MustNewMethod("_clear_cache", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.None, nil
+	}, 0, "Dispatch is not cached."))
+	// functools.update_wrapper(wrapper, func): the metadata of the default.
+	for _, name := range []string{"__name__", "__qualname__", "__doc__", "__module__"} {
+		name := name
+		DispatcherType.Dict.Set(name, &py.Property{Fget: func(self py.Object) (py.Object, error) {
+			return py.GetAttrString(self.(*Dispatcher).defaultFn, name)
+		}})
+	}
+	DispatcherType.Dict.Set("__wrapped__", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		return self.(*Dispatcher).defaultFn, nil
+	}})
 }
 
 // registerDecorator is what @register(Type) returns.
@@ -671,11 +790,82 @@ func (r *registerDecorator) M__call__(args py.Tuple, kwargs py.StringDict) (py.O
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "register() decorator needs a function")
 	}
-	r.dispatcher.registry[r.typ] = args[0]
+	r.dispatcher.set(r.typ, args[0])
 	return args[0], nil
 }
 
 var _ py.I__call__ = (*registerDecorator)(nil)
+
+// singledispatchmethod dispatches on the first argument after self.
+type singleDispatchMethod struct {
+	d *Dispatcher
+}
+
+var singleDispatchMethodType = py.NewTypeX("functools.singledispatchmethod",
+	"Single-dispatch generic method descriptor.",
+	func(_ *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "singledispatchmethod() takes exactly 1 argument")
+		}
+		d, err := singledispatch(nil, args)
+		if err != nil {
+			return nil, err
+		}
+		return &singleDispatchMethod{d: d.(*Dispatcher)}, nil
+	}, nil)
+
+func (m *singleDispatchMethod) Type() *py.Type { return singleDispatchMethodType }
+
+// M__get__ binds the dispatcher: the result dispatches on its first argument
+// and calls the chosen method's own __get__(instance, owner), as CPython does.
+func (m *singleDispatchMethod) M__get__(instance, owner py.Object) (py.Object, error) {
+	if instance == nil {
+		instance = py.None
+	}
+	if owner == nil || owner == py.None {
+		owner = instance.Type()
+	}
+	return &boundDispatch{d: m.d, instance: instance, owner: owner}, nil
+}
+
+type boundDispatch struct {
+	d               *Dispatcher
+	instance, owner py.Object
+}
+
+var boundDispatchType = py.NewType("functools._singledispatchmethod_bound", "A bound single-dispatch method.")
+
+func (b *boundDispatch) Type() *py.Type { return boundDispatchType }
+
+func (b *boundDispatch) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) == 0 {
+		return nil, py.ExceptionNewf(py.TypeError, "singledispatchmethod requires at least 1 positional argument")
+	}
+	fn, err := b.d.find(args[0].Type(), args[0])
+	if err != nil {
+		return nil, err
+	}
+	if g, ok := fn.(py.I__get__); ok {
+		if fn, err = g.M__get__(b.instance, b.owner); err != nil {
+			return nil, err
+		}
+	}
+	return py.Call(fn, args, kwargs)
+}
+
+var (
+	_ py.I__call__ = (*boundDispatch)(nil)
+	_ py.I__get__  = (*singleDispatchMethod)(nil)
+)
+
+func init() {
+	for _, name := range []string{"register", "dispatch", "registry"} {
+		name := name
+		singleDispatchMethodType.Dict.Set(name, &py.Property{Fget: func(self py.Object) (py.Object, error) {
+			return py.GetAttrString(self.(*singleDispatchMethod).d, name)
+		}})
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Go interface bridges

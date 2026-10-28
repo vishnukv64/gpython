@@ -795,6 +795,50 @@ func truthy(v py.Object) bool {
 
 var _ = sort.Strings
 
+func isDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isDigit(s[i]) {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// netlocUserinfo splits "user:password@host" the way CPython's
+// _userinfo does: on the LAST '@', then the first ':'.  ok is false without
+// an '@'; a user with no ':' has the password marker "\x00" (reported as None).
+func netlocUserinfo(netloc string) (user, password string, ok bool) {
+	i := strings.LastIndexByte(netloc, '@')
+	if i < 0 {
+		return "", "", false
+	}
+	info := netloc[:i]
+	if j := strings.IndexByte(info, ':'); j >= 0 {
+		return info[:j], info[j+1:], true
+	}
+	return info, "\x00", true
+}
+
+// netlocHostPort is CPython's _hostinfo: the host (brackets removed for an
+// IPv6 literal, case kept) and the port text after the colon.
+func netlocHostPort(netloc string) (host, port string) {
+	if i := strings.LastIndexByte(netloc, '@'); i >= 0 {
+		netloc = netloc[i+1:]
+	}
+	if strings.HasPrefix(netloc, "[") {
+		end := strings.IndexByte(netloc, ']')
+		if end < 0 {
+			return netloc[1:], ""
+		}
+		host, rest := netloc[1:end], netloc[end+1:]
+		return host, strings.TrimPrefix(rest, ":")
+	}
+	if i := strings.IndexByte(netloc, ':'); i >= 0 {
+		return netloc[:i], netloc[i+1:]
+	}
+	return netloc, ""
+}
+
 // ---------------------------------------------------------------------------
 // Sequence protocol
 // ---------------------------------------------------------------------------
@@ -965,6 +1009,52 @@ func registerResultFields(t *py.Type, names []string,
 			return py.String(fields(self)[idx]), nil
 		}})
 	}
+	netloc := func(self py.Object) string { return fields(self)[1] }
+	optStr := func(s string, ok bool) py.Object {
+		if !ok {
+			return py.None
+		}
+		return py.String(s)
+	}
+	t.Dict.Set("username", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		u, _, ok := netlocUserinfo(netloc(self))
+		return optStr(u, ok), nil
+	}})
+	t.Dict.Set("password", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		_, pw, ok := netlocUserinfo(netloc(self))
+		return optStr(pw, ok && pw != "\x00"), nil
+	}})
+	t.Dict.Set("hostname", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		h, _ := netlocHostPort(netloc(self))
+		return optStr(strings.ToLower(h), h != ""), nil
+	}})
+	t.Dict.Set("port", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		_, port := netlocHostPort(netloc(self))
+		if port == "" {
+			return py.None, nil
+		}
+		n, err := strconv.Atoi(port)
+		if err != nil || !isDigits(port) {
+			return nil, py.ExceptionNewf(py.ValueError, "Port could not be cast to integer value as %s", reprStr(port))
+		}
+		if n < 0 || n > 65535 {
+			return nil, py.ExceptionNewf(py.ValueError, "Port out of range 0-65535")
+		}
+		return py.Int(n), nil
+	}})
+	t.Dict.Set("_replace", py.MustNewMethod("_replace", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		kw := py.NewStringDict()
+		for i, nm := range names {
+			kw.Set(nm, py.String(fields(self)[i]))
+		}
+		for _, e := range kwargs.Items() {
+			if _, ok := kw.Get(e.Key); !ok {
+				return nil, py.ExceptionNewf(py.ValueError, "Got unexpected field names: [%s]", reprStr(e.Key))
+			}
+			kw.Set(e.Key, e.Value)
+		}
+		return py.Call(self.Type(), py.Tuple{}, kw)
+	}, 0, "Return a new result with the given fields replaced."))
 	t.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return resultGetItem(fields(self), args)
 	}, 0, "x[i]"))

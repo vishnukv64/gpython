@@ -206,30 +206,74 @@ func b2a_qp(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if err != nil {
 		return nil, err
 	}
+	return py.Bytes(encodeQP([]byte(pydata.(py.Bytes)), bool(pyqtabs.(py.Bool)), bool(pyistxt.(py.Bool)), bool(pyhdr.(py.Bool)))), nil
+}
 
-	if pyqtabs.(py.Bool) {
-		return nil, py.NotImplementedError
+// encodeQP is a port of CPython's binascii.b2a_qp: lines break at 76 columns
+// and use CRLF only if the first line of the input does.
+func encodeQP(data []byte, quotetabs, istext, header bool) []byte {
+	const maxLine = 76
+	const hex = "0123456789ABCDEF"
+	crlf := false
+	if i := bytes.IndexByte(data, '\n'); i > 0 && data[i-1] == '\r' {
+		crlf = true
 	}
-
-	if !pyistxt.(py.Bool) {
-		return nil, py.NotImplementedError
+	var out []byte
+	softBreak := func() {
+		out = append(out, '=')
+		if crlf {
+			out = append(out, '\r')
+		}
+		out = append(out, '\n')
 	}
-
-	if pyhdr.(py.Bool) {
-		return nil, py.NotImplementedError
+	n := len(data)
+	linelen := 0
+	for in := 0; in < n; {
+		c := data[in]
+		quote := c > 126 || c == '=' || (header && c == '_') ||
+			(c == '.' && linelen == 0 && (in+1 == n || data[in+1] == '\n' || data[in+1] == '\r' || data[in+1] == 0)) ||
+			(!istext && (c == '\r' || c == '\n')) ||
+			((c == '\t' || c == ' ') && in+1 == n) ||
+			(c <= 32 && c != '\r' && c != '\n' && (quotetabs || (c != '\t' && c != ' ')))
+		switch {
+		case quote:
+			if linelen+3 >= maxLine {
+				softBreak()
+				linelen = 0
+			}
+			out = append(out, '=', hex[c>>4], hex[c&15])
+			in++
+			linelen += 3
+		case istext && (c == '\n' || (in+1 < n && c == '\r' && data[in+1] == '\n')):
+			linelen = 0
+			// Protect whitespace at the end of a line.
+			if l := len(out); l > 0 && (out[l-1] == ' ' || out[l-1] == '\t') {
+				ch := out[l-1]
+				out[l-1] = '='
+				out = append(out, hex[ch>>4], hex[ch&15])
+			}
+			if crlf {
+				out = append(out, '\r')
+			}
+			out = append(out, '\n')
+			if c == '\r' {
+				in += 2
+			} else {
+				in++
+			}
+		default:
+			if in+1 != n && data[in+1] != '\n' && linelen+1 >= maxLine {
+				softBreak()
+				linelen = 0
+			}
+			linelen++
+			if header && c == ' ' {
+				out = append(out, '_')
+			} else {
+				out = append(out, c)
+			}
+			in++
+		}
 	}
-
-	o := new(bytes.Buffer)
-	w := quotedprintable.NewWriter(o)
-	_, err = w.Write([]byte(pydata.(py.Bytes)))
-	if err != nil {
-		// FIXME(sbinet): decorate the error somehow?
-		return nil, err
-	}
-	err = w.Close()
-	if err != nil {
-		// FIXME(sbinet): decorate the error somehow?
-		return nil, err
-	}
-	return py.Bytes(o.Bytes()), nil
+	return out
 }

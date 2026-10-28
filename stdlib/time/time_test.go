@@ -25,3 +25,7 @@ func TestStrftime(t *testing.T) {
 func TestStructSeq(t *testing.T) {
 	pytest.RunScript(t, "./testdata/structseq.py")
 }
+
+func TestStructTimeCtor(t *testing.T) {
+	pytest.RunScript(t, "./testdata/struct_time_ctor.py")
+}

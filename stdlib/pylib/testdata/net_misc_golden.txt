@@ -1,0 +1,23 @@
+25 465 '\r\n'
+<a@b.c> 'a\r\n..b\r\n'
+SMTPException
+143 993 (2020, 1, 1, 15, 30, 0)
+110 995 error_proto
+21 8192 Error
+123
+True
+b'echo:ping\n'
+http://example.com:8080/app/a%20b?x=1 http://example.com:8080/app
+one
+https True
+'Content-Type: text/plain\r\nX-Test: v; a="b"\r\n\r\n' text/plain ['v; a="b"']
+[b'HTTP/1.0 200 OK', b'Content-Type: text/plain', b'', b'hello wsgi']
+AssertionError The application must return an iterator, if only an empty list
+fake True True [('http://x.test', 2), ('http://y.test', 2)]
+Error could not locate runnable browser
+C:\foo\bar ///C:/foo/bar
+[(LITERAL, 97), (MAX_REPEAT, (1, MAXREPEAT, [(SUBPATTERN, (1, 0, 0, [(IN, [(LITERAL, 98), (LITERAL, 99)])]))])), (IN, [(CATEGORY, CATEGORY_DIGIT)])]
+(3, 18446744073709551616) 2
+MAXREPEAT 20230612 ANY_ALL
+Exception
+True [INFO, 8, 1]

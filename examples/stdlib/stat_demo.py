@@ -30,7 +30,7 @@ print()
 print("--- the file-type bits ---")
 for name in ["S_IFREG", "S_IFDIR", "S_IFLNK", "S_IFIFO", "S_IFSOCK", "S_IFBLK", "S_IFCHR"]:
     print("  %-9s = %o" % (name, getattr(stat, name)))
-print("  S_IFMT (the mask)  = %o" % (stat.S_IFMT,))
+print("  S_IFMT (the mask)  = %o" % (stat.S_IFMT(0o177777),))
 
 print()
 print("--- filemode() renders a mode like `ls -l` ---")

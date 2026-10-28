@@ -50,7 +50,6 @@ func init() {
 
 	// File mode bits, from the host.
 	for name, value := range map[string]uint32{
-		"S_IFMT":   S_IFMT,
 		"S_IFDIR":  S_IFDIR,
 		"S_IFCHR":  S_IFCHR,
 		"S_IFBLK":  S_IFBLK,
@@ -65,6 +64,9 @@ func init() {
 		"S_IRUSR":  S_IRUSR,
 		"S_IWUSR":  S_IWUSR,
 		"S_IXUSR":  S_IXUSR,
+		"S_IEXEC":  S_IXUSR, // old names for the owner bits
+		"S_IREAD":  S_IRUSR,
+		"S_IWRITE": S_IWUSR,
 		"S_IRWXG":  S_IRWXG,
 		"S_IRGRP":  S_IRGRP,
 		"S_IWGRP":  S_IWGRP,
@@ -79,6 +81,10 @@ func init() {
 
 	// The mode predicates.  They take a mode, which is the st_mode field of
 	// an os.stat_result, and answer a bool.
+	// As in CPython, S_IFMT and S_IMODE are functions that pick the file-type
+	// bits and the permission bits out of a mode.
+	globals.Set("S_IFMT", predicateInt("S_IFMT", func(mode uint32) uint32 { return mode & S_IFMT }))
+	globals.Set("S_IMODE", predicateInt("S_IMODE", func(mode uint32) uint32 { return mode & 0o7777 }))
 	globals.Set("S_ISDIR", predicate("S_ISDIR", func(mode uint32) bool { return mode&S_IFMT == S_IFDIR }))
 	globals.Set("S_ISREG", predicate("S_ISREG", func(mode uint32) bool { return mode&S_IFMT == S_IFREG }))
 	globals.Set("S_ISCHR", predicate("S_ISCHR", func(mode uint32) bool { return mode&S_IFMT == S_IFCHR }))
@@ -111,6 +117,21 @@ func predicate(name string, test func(uint32) bool) *py.Method {
 		}
 		return py.NewBool(test(uint32(n))), nil
 	}, 0, "Test a file mode.")
+}
+
+// predicateInt is predicate for functions that return an int.
+func predicateInt(name string, f func(uint32) uint32) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		var mode py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, name, 1, 1, &mode); err != nil {
+			return nil, err
+		}
+		n, err := py.IndexInt(mode)
+		if err != nil {
+			return nil, err
+		}
+		return py.Int(f(uint32(n))), nil
+	}, 0, "Return part of a file mode.")
 }
 
 // filemode renders a mode the way "ls -l" does.

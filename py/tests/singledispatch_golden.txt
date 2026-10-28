@@ -1,0 +1,8 @@
+i s f o o map A i
+['object', 'int', 'str', 'float', 'Mapping', 'A']
+True True
+g doc of g
+i s o
+Fooci co
+TypeError
+TypeError no args

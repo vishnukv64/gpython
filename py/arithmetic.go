@@ -302,6 +302,13 @@ func IAdd(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__iadd__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return Add(a, b)
 }
 
@@ -353,6 +360,13 @@ func ISub(a, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__isub__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return Sub(a, b)
 }
@@ -406,6 +420,13 @@ func IMul(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__imul__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return Mul(a, b)
 }
 
@@ -458,6 +479,13 @@ func ITrueDiv(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__itruediv__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return TrueDiv(a, b)
 }
 
@@ -509,6 +537,13 @@ func IFloorDiv(a, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__ifloordiv__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return FloorDiv(a, b)
 }
@@ -574,6 +609,13 @@ func IMod(a, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__imod__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return Mod(a, b)
 }
@@ -668,6 +710,13 @@ func ILshift(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__ilshift__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return Lshift(a, b)
 }
 
@@ -719,6 +768,13 @@ func IRshift(a, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__irshift__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return Rshift(a, b)
 }
@@ -802,6 +858,13 @@ func IAnd(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__iand__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return And(a, b)
 }
 
@@ -854,6 +917,13 @@ func IXor(a, b Object) (Object, error) {
 			return res, nil
 		}
 	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__ixor__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
 	return Xor(a, b)
 }
 
@@ -905,6 +975,13 @@ func IOr(a, b Object) (Object, error) {
 		if res != NotImplemented {
 			return res, nil
 		}
+	}
+	// An in-place method written in Python lives in the class's Dict and
+	// matches no Go interface.
+	if res, ok, err := callPyReflected(a, "__ior__", b); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
 	}
 	return Or(a, b)
 }

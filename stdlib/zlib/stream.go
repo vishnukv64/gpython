@@ -63,7 +63,13 @@ type decompressor struct {
 	eof      bool
 	unused   []byte
 	raw      bool // _ZlibDecompressor: max_length defaults to -1, EOFError after eof
-	Dict     py.StringDict
+	// tail is unconsumed_tail: output held back by max_length is already
+	// inflated here, but a caller loops "while unconsumed_tail", so a one-byte
+	// token stands for the input zlib would not have consumed yet.  The token
+	// is dropped from the front of the next decompress() data, so feeding the
+	// tail back, as the zlib docs ask, continues the stream.
+	tail []byte
+	Dict py.StringDict
 }
 
 var (
@@ -155,10 +161,18 @@ func init() {
 			if d.raw && d.eof && len(d.pending) == 0 {
 				return nil, py.ExceptionNewf(py.EOFError, "End of stream already reached")
 			}
+			if len(d.tail) > 0 && bytes.HasPrefix(b, d.tail) {
+				b = b[len(d.tail):]
+			}
+			d.tail = nil
 			if err := d.feed(b); err != nil {
 				return nil, err
 			}
-			return d.take(max), nil
+			out := d.take(max)
+			if !d.raw && len(d.pending) > 0 {
+				d.tail = []byte{0}
+			}
+			return out, nil
 		}, 0, "Return a bytes object containing the decompressed data."))
 		t.Dict.Set("unused_data", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 			return py.Bytes(self.(*decompressor).unused), nil
@@ -172,5 +186,7 @@ func init() {
 		d := self.(*decompressor)
 		return py.NewBool(!d.eof && len(d.pending) == 0), nil
 	}})
-	decompressObjType.Dict.Set("unconsumed_tail", &py.Property{Fget: func(self py.Object) (py.Object, error) { return py.Bytes(nil), nil }})
+	decompressObjType.Dict.Set("unconsumed_tail", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		return py.Bytes(self.(*decompressor).tail), nil
+	}})
 }

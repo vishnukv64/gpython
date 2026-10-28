@@ -466,7 +466,11 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	// exactly the inherited case.  Instances are untouched: their
 	// t.Type().Lookup(key) already found the attribute, so res is not nil
 	// and this is skipped.
-	if res == nil {
+	//
+	// A metatype attribute that is not a data descriptor yields to the
+	// class's own MRO the same way: "Sub.__init__" must be the __init__ Sub
+	// inherits, not type.__init__ (which silently did nothing).
+	if _, isProp := res.(*Property); res == nil || !isProp {
 		if ty, isType := self.(*Type); isType {
 			if own := ty.Lookup(key); own != nil {
 				// Bind as a CLASS access: a staticmethod yields the plain
@@ -562,6 +566,9 @@ func setAttrDict(self Object, key string, value Object) (Object, error) {
 	// Otherwise set the attribute in the instance dictionary if
 	// possible
 	if I, ok := self.(IGetDict); ok {
+		if t := self.Type(); t.NoDict {
+			return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s' and no __dict__ for setting new attributes", t.shortName(), key)
+		}
 		dict := I.GetDict()
 		if dict.IsNil() {
 			return nil, ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
@@ -668,6 +675,13 @@ func Repr(self Object) (Object, error) {
 	// decorator fills it in.
 	if self == nil {
 		return nil, ExceptionNewf(RuntimeError, "Repr called with a nil object")
+	}
+	if _, isExc := self.(*Exception); isExc {
+		// a subclass may override __repr__ (xmlrpc's Fault does); the Go
+		// method below is only the default
+		if res, ok, err := TypeCall0(self, "__repr__"); ok {
+			return res, err
+		}
 	}
 	if I, ok := self.(I__repr__); ok {
 		return I.M__repr__()

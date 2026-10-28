@@ -5,8 +5,10 @@ package gc
 import (
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/weakref"
 )
 
 var enabled atomic.Bool
@@ -19,6 +21,9 @@ func init() {
 		Methods: []*py.Method{
 			py.MustNewMethod("collect", func(self py.Object, args py.Tuple) (py.Object, error) {
 				runtime.GC()
+				// Finalizers run on their own goroutine; give them a moment to queue.
+				time.Sleep(5 * time.Millisecond)
+				weakref.RunPending()
 				// ponytail: Go has no cycle-unreachable count; always 0.
 				return py.Int(0), nil
 			}, 0, "collect(generation=2) -> number of unreachable objects found (always 0)."),

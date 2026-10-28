@@ -1779,7 +1779,12 @@ func formatPythonMapping(format string, mapping Object) (Object, error) {
 func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manual *bool) (string, error) {
 	name, conv, spec := splitField(body)
 
-	// The name may be a chain: "0.attr" or "0[key]" or "name.attr".
+	// The name may be a chain: "0.attr", "0[key]" or "name.attr[0]".  The
+	// first part picks the argument; the rest is applied to it below.
+	rest := ""
+	if i := strings.IndexAny(name, ".["); i >= 0 {
+		name, rest = name[:i], name[i:]
+	}
 	var value Object
 	if name == "" {
 		if *manual {
@@ -1807,6 +1812,46 @@ func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manua
 			return "", ExceptionNewf(KeyError, "'%s'", name)
 		}
 		value = v
+	}
+
+	for rest != "" {
+		var err error
+		if rest[0] == '.' {
+			end := strings.IndexAny(rest[1:], ".[")
+			attr := rest[1:]
+			if end >= 0 {
+				attr, rest = rest[1:1+end], rest[1+end:]
+			} else {
+				rest = ""
+			}
+			if attr == "" {
+				return "", ExceptionNewf(ValueError, "Empty attribute in format string")
+			}
+			if value, err = GetAttrString(value, attr); err != nil {
+				return "", err
+			}
+			continue
+		}
+		end := strings.IndexByte(rest, ']')
+		if end < 0 {
+			return "", ExceptionNewf(ValueError, "Missing ']' in format string")
+		}
+		key := rest[1:end]
+		rest = rest[end+1:]
+		if rest != "" && rest[0] != '.' && rest[0] != '[' {
+			return "", ExceptionNewf(ValueError, "Only '.' or '[' may follow ']' in format field specifier")
+		}
+		var k Object = String(key)
+		if isDigits(key) {
+			n, err := strconv.Atoi(key)
+			if err != nil {
+				return "", err
+			}
+			k = Int(n)
+		}
+		if value, err = GetItem(value, k); err != nil {
+			return "", err
+		}
 	}
 
 	// Apply the conversion, then the spec.
@@ -2194,11 +2239,8 @@ func setTransEntry(table StringDict, key Int, value Object) error {
 	// The MAPPING form keeps whatever it was given - a string stays a string,
 	// an int stays an int - so only the validity is checked here.  The
 	// two-string form builds its own ordinals, above.
-	if v, ok := value.(String); ok {
-		if utf8.RuneCountInString(string(v)) != 1 {
-			return ExceptionNewf(ValueError, "string keys in translate table must be of length 1")
-		}
-	}
+	// A replacement string may be any length: "abc".translate({97: "xy"}) is
+	// "xybc", and http.server builds its control-character table that way.
 	var buf []byte
 	if err := appendKey(&buf, Int(key)); err != nil {
 		return err
