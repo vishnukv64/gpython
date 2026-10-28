@@ -1,3 +1,4 @@
+import os
 # glob is CPython's own glob.py, embedded; this builds a tree and checks it.
 import glob, os, tempfile
 
@@ -9,7 +10,8 @@ old = os.getcwd()
 os.chdir(root)
 
 def show(label, got):
-    print(label, sorted(got))
+    # glob returns host separators; compare in POSIX form.
+    print(label, sorted(g.replace(os.fsencode(os.sep), b"/") if isinstance(g, bytes) else g.replace(os.sep, "/") for g in got))
 
 for pat in ["*", "*test*", "*/test*", "*/test*_*", "*/t??t*_*", "*/t[e]?t*_*", "*/t[oe]?t*_*", "*/t[o]?t*_*", "*/t[!o]?t*_*", "*/*", "nope*"]:
     show(pat, glob.glob(pat))

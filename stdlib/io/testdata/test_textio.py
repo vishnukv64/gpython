@@ -5,7 +5,8 @@ print(t.read(3), repr(t.readline()), repr(t.readline()), repr(t.read()), repr(t.
 print(list(mk(b"a\nb\r\nc\rd")), list(mk(b"a\nb\r\nc\rd", newline="")), list(mk(b"a\nb\r\nc\rd", newline="\n")), list(mk(b"a\nb\r\nc\rd", newline="\r\n")))
 print(mk("héllo wörld\n日本語".encode()).read(), mk("日本語".encode()).read(1), mk("日本語\nx".encode()).readlines())
 print(mk(b"abc\ndef").readline(2), mk(b"abc\ndef").readlines(2))
-b = io.BytesIO(); w = io.TextIOWrapper(b, "utf-8"); print(w.write("hi\n"), w.write("é")); w.flush(); print(b.getvalue())
+# newline="\n": the default newline=None writes os.linesep, "\r\n" on Windows.
+b = io.BytesIO(); w = io.TextIOWrapper(b, "utf-8", newline="\n"); print(w.write("hi\n"), w.write("é")); w.flush(); print(b.getvalue())
 b = io.BytesIO(); w = io.TextIOWrapper(b, "utf-8", newline="\r\n"); w.write("a\nb"); w.flush(); print(b.getvalue())
 b = io.BytesIO(); w = io.TextIOWrapper(b, "latin-1"); w.write("é"); w.flush(); print(b.getvalue())
 t = mk(b"x\ny")

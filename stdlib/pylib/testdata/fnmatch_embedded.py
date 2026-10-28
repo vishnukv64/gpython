@@ -6,7 +6,9 @@ import fnmatch
 assert fnmatch.fnmatch("a/b", "a*")
 assert fnmatch.fnmatch("A.TXT", "*.TXT")
 assert fnmatch.fnmatchcase("A.TXT", "*.TXT")
-assert not fnmatch.fnmatch("a.txt", "*.TXT")
+# fnmatch normcases, so this is case-sensitive on POSIX only.
+import os
+assert fnmatch.fnmatch("a.txt", "*.TXT") == (os.path.normcase("a") == os.path.normcase("A"))
 assert fnmatch.fnmatch("a.TXT", "*.TXT")
 
 # ? and character classes.
