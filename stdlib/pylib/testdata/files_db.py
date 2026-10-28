@@ -23,6 +23,10 @@ try:
     b1 = w("b", "same.txt", text="hello\n")
     a2 = w("a", "diff.txt", text="one\n")
     b2 = w("b", "diff.txt", text="two\n")
+    # Shallow dircmp compares (type, size, mtime); the two diff.txt are the
+    # same size and can share an mtime tick, so set them apart explicitly.
+    t = os.stat(a2).st_mtime
+    os.utime(b2, (t + 10, t + 10))
     w("a", "only_a.txt", text="x\n")
     w("b", "only_b.txt", text="y\n")
     print(filecmp.cmp(a1, b1, shallow=False), filecmp.cmp(a2, b2, shallow=False))
