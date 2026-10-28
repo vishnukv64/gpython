@@ -290,3 +290,16 @@ func (a *Range) M__ne__(other Object) (Object, error) {
 
 	return False, nil
 }
+
+func init() {
+	for name, get := range map[string]func(*Range) Int{
+		"start": func(r *Range) Int { return r.Start },
+		"stop":  func(r *Range) Int { return r.Stop },
+		"step":  func(r *Range) Int { return r.Step },
+	} {
+		get := get
+		RangeType.Dict.Set(name, &Property{Fget: func(self Object) (Object, error) {
+			return get(self.(*Range)), nil
+		}})
+	}
+}

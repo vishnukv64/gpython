@@ -691,13 +691,11 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	// "def g(*a, name, k=1)" reported {name: 1} and "g(name='z')" raised
 	// "missing 1 required keyword-only argument: 'k'".  pip's
 	// ConfigOptionParser is written exactly that way.
-	if len(Args.KwDefaults) > len(Args.Kwonlyargs) {
-		panic("compile: more KwDefaults than Kwonlyargs")
-	}
-	firstDefaulted := len(Args.Kwonlyargs) - len(Args.KwDefaults)
-	for i := range Args.KwDefaults {
-		c.LoadConst(py.String(Args.Kwonlyargs[firstDefaulted+i].Arg))
-		c.Expr(Args.KwDefaults[i])
+	for _, a := range Args.Kwonlyargs {
+		if a.Default != nil {
+			c.LoadConst(py.String(a.Arg))
+			c.Expr(a.Default)
+		}
 	}
 
 	// Annotations

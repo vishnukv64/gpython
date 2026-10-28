@@ -23,11 +23,9 @@
 // PYTHONPATH put it there counts, and a conventional location that is not
 // searched does not.
 //
-// What is NOT done, rather than done badly: the sitecustomize / usercustomize
-// hooks and the .pth file processing that CPython's site performs at startup.
-// This module runs long after startup and cannot retroactively add paths from
-// .pth files, so import_sitecustomize() and addsitedir() report what they do
-// and do not silently pretend to have executed something.
+// addsitedir() adds a directory and the paths its .pth files name to sys.path.
+// sitecustomize is imported at startup by the command line, not by this module;
+// usercustomize and .pth "import" lines are not run.
 
 package site
 
@@ -35,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -47,8 +46,7 @@ program installs into and imports from are here: getusersitepackages() and
 USER_SITE for the per-user location, getsitepackages() for the directories
 this interpreter searches.
 
-The startup hooks - sitecustomize, usercustomize and .pth file processing -
-are NOT run, and this module says so rather than appearing to have run them.
+usercustomize and executable .pth lines are NOT run.
 `
 
 // versionShort is the "<major>.<minor>" this interpreter reports.
@@ -251,18 +249,74 @@ func init() {
 				return py.String(userBase(currentContext(self))), nil
 			}, 0, "Return the base directory of the user site-packages."),
 			py.MustNewMethod("addsitedir", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-				// A .pth file would have to be executed to add what it names.
-				// Adding the directory itself is half the job, and doing half
-				// silently is what this project keeps refusing to do.
-				return nil, py.ExceptionNewf(py.NotImplementedError,
-					"site.addsitedir() is not implemented: it processes .pth files, which this interpreter does not run")
-			}, 0, "Add a site directory; not implemented, see the module documentation."),
+				var dir py.Object
+				var known py.Object = py.None
+				if err := py.ParseTupleAndKeywords(args, kwargs, "O|O:addsitedir", []string{"sitedir", "known_paths"}, &dir, &known); err != nil {
+					return nil, err
+				}
+				d, err := py.StrAsString(dir)
+				if err != nil {
+					return nil, err
+				}
+				return py.None, addSiteDir(currentContext(self), d)
+			}, 0, "Add a directory to sys.path and process its .pth files."),
 			py.MustNewMethod("main", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 				return py.None, nil
 			}, 0, "Set up the paths; this interpreter already has its paths."),
 		},
 		Globals: globals,
 	})
+}
+
+// addSiteDir puts dir on sys.path and then each path a *.pth file in it names
+// that exists.  ponytail: "import ..." lines in .pth files are skipped, not
+// executed; run them if a real package needs one.
+func addSiteDir(ctx py.Context, dir string) error {
+	sysMod, err := ctx.GetModule("sys")
+	if err != nil || sysMod == nil {
+		return nil
+	}
+	obj, _ := sysMod.Globals.Get("path")
+	sysPath, ok := obj.(*py.List)
+	if !ok {
+		return nil
+	}
+	have := map[string]bool{}
+	for _, it := range sysPath.Items {
+		if s, ok := it.(py.String); ok {
+			have[string(s)] = true
+		}
+	}
+	add := func(p string) {
+		if !have[p] {
+			have[p] = true
+			sysPath.Append(py.String(p))
+		}
+	}
+	add(dir)
+	names, _ := filepath.Glob(filepath.Join(dir, "*.pth"))
+	sort.Strings(names)
+	for _, n := range names {
+		data, err := os.ReadFile(n)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || line[0] == '#' || strings.HasPrefix(line, "import ") || strings.HasPrefix(line, "import\t") {
+				continue
+			}
+			if p := filepath.Join(dir, line); fileOrDirExists(p) {
+				add(p)
+			}
+		}
+	}
+	return nil
+}
+
+func fileOrDirExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // currentContext returns the Context a module method was called on.

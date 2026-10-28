@@ -114,6 +114,7 @@ func RunMultiPi(numWorkers, numTimes int) time.Duration {
 	for i := range workers {
 		w := workers[i]
 		go func() {
+			defer py.EnterGoroutine()()
 
 			// Compiling can be concurrent since there is no associated py.Context
 			w.compileTemplate(jobSrcTemplate)

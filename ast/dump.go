@@ -71,7 +71,7 @@ func dump(ast interface{}, name string) string {
 		fieldValue := astValue.Field(i)
 		fname := strings.ToLower(fieldType.Name)
 		switch fname {
-		case "stmtbase", "exprbase", "modbase", "slicebase", "pos":
+		case "stmtbase", "exprbase", "modbase", "slicebase", "pos", "default":
 			continue
 		case "isasync":
 			// Not part of the AST shape CPython's ast.dump prints (it uses a

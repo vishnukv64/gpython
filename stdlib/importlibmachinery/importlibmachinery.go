@@ -17,7 +17,10 @@
 package importlibmachinery
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/importlib"
@@ -63,6 +66,87 @@ var PathFinderType = py.NewType("importlib.machinery.PathFinder", "PathFinder se
 
 // FileFinderType is importlib.machinery.FileFinder, the finder for a directory.
 var FileFinderType = py.NewType("importlib.machinery.FileFinder", "FileFinder locates a module inside one directory.")
+
+// SourceLoader loads one .py file.  PathFinder.find_spec hands it out, which is
+// what lets a finder on sys.meta_path (pip's __pip-runner__.py) delegate to it.
+type SourceLoader struct{ Path string }
+
+var SourceLoaderType = py.NewType("importlib.machinery.SourceFileLoader", "Loader for a .py source file.")
+
+func (l *SourceLoader) Type() *py.Type { return SourceLoaderType }
+
+func (l *SourceLoader) code() (*py.Code, error) {
+	src, err := os.ReadFile(l.Path)
+	if err != nil {
+		return nil, py.ExceptionNewf(py.ImportError, "%v", err)
+	}
+	return py.Compile(string(src), l.Path, py.ExecMode, 0, true)
+}
+
+func init() {
+	SourceLoaderType.Dict.Set("get_code", py.MustNewMethod("get_code", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return self.(*SourceLoader).code()
+	}, 0, "Return the compiled code of the file."))
+	SourceLoaderType.Dict.Set("exec_module", py.MustNewMethod("exec_module", func(self py.Object, args py.Tuple) (py.Object, error) {
+		mod, ok := args[0].(*py.Module)
+		if len(args) != 1 || !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "exec_module() needs a module")
+		}
+		code, err := self.(*SourceLoader).code()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := mod.Context.RunCode(code, mod.Globals, mod.Globals, nil); err != nil {
+			return nil, err
+		}
+		return py.None, nil
+	}, 0, "Execute the file in the module."))
+
+	PathFinderType.Dict.Set("find_spec", py.MustNewMethod("find_spec", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		var name, path, target py.Object = nil, py.None, py.None
+		if err := py.ParseTupleAndKeywords(args, kwargs, "O|OO:find_spec", []string{"fullname", "path", "target"}, &name, &path, &target); err != nil {
+			return nil, err
+		}
+		full, err := py.StrAsString(name)
+		if err != nil {
+			return nil, err
+		}
+		if path == py.None {
+			return py.None, nil
+		}
+		last := full[strings.LastIndex(full, ".")+1:]
+		it, err := py.Iter(path)
+		if err != nil {
+			return nil, err
+		}
+		for {
+			d, err := py.Next(it)
+			if err != nil {
+				if py.IsException(py.StopIteration, err) {
+					return py.None, nil
+				}
+				return nil, err
+			}
+			dir, ok := d.(py.String)
+			if !ok {
+				continue
+			}
+			pkg := filepath.Join(string(dir), last)
+			if _, err := os.Stat(filepath.Join(pkg, "__init__.py")); err == nil {
+				o := filepath.Join(pkg, "__init__.py")
+				return &importlib.ModuleSpec{Name: full, Loader: &SourceLoader{o}, Origin: o, IsPkg: true, Location: pkg}, nil
+			}
+			if f := pkg + ".py"; fileExists(f) {
+				return &importlib.ModuleSpec{Name: full, Loader: &SourceLoader{f}, Origin: f}, nil
+			}
+		}
+	}, py.METH_CLASS, "Find a module in the given path list."))
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
 
 // allSuffixesFn returns the recognised module suffixes, source first, as
 // CPython's all_suffixes does.

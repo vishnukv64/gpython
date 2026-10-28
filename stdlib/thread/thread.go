@@ -12,36 +12,19 @@
 package thread
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/vishnukv64/gpython/py"
 )
 
-// goid returns the calling goroutine's id, which is the thread ident.  The
-// main goroutine is id 1.  The header format is a long-standing convention;
-// if it ever changes this returns 0 for every thread rather than crashing.
 // Ident is the calling thread's identifier, as threading.get_ident() reports.
 func Ident() uint64 { return goid() }
 
-func goid() uint64 {
-	var buf [32]byte
-	s := buf[:runtime.Stack(buf[:], false)]
-	s = bytes.TrimPrefix(s, []byte("goroutine "))
-	var id uint64
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			break
-		}
-		id = id*10 + uint64(c-'0')
-	}
-	return id
-}
+func goid() uint64 { return py.GoroutineID() }
 
 // timeoutDur converts (blocking, timeout) into a wait: block forever (-1),
 // do not wait (0), or wait up to d.
@@ -248,6 +231,7 @@ func startThread(fn py.Object, args py.Tuple, kwargs py.StringDict, h *Handle, d
 	}
 	started := make(chan struct{})
 	go func() {
+		defer py.EnterGoroutine()()
 		h.mu.Lock()
 		h.ident = goid()
 		h.mu.Unlock()

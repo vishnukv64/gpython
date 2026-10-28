@@ -70,6 +70,9 @@ func shallowCopy(x py.Object, memo py.Object) (py.Object, error) {
 				dst.Set(k, src.GetOrNil(k))
 			}
 		}
+		if err := py.CopySlots(x, obj, nil); err != nil {
+			return nil, err
+		}
 		return obj, nil
 	}
 	// An object the interpreter cannot duplicate: the result is itself, which
@@ -163,6 +166,9 @@ func deepCopy(x py.Object, memo py.Object) (py.Object, error) {
 				}
 				dst.Set(k, c)
 			}
+		}
+		if err := py.CopySlots(x, obj, func(v py.Object) (py.Object, error) { return deepCopy(v, memo) }); err != nil {
+			return nil, err
 		}
 		return obj, nil
 	}

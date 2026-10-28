@@ -89,11 +89,11 @@ func (l *importLock) held() bool {
 func init() {
 	methods := []*py.Method{
 		py.MustNewMethod("acquire_lock", func(self py.Object, args py.Tuple) (py.Object, error) {
-			gLock.acquire(py.CurrentGoroutineID())
+			gLock.acquire(py.GoroutineID())
 			return py.None, nil
 		}, 0, "Acquire the interpreter's import lock for the current thread."),
 		py.MustNewMethod("release_lock", func(self py.Object, args py.Tuple) (py.Object, error) {
-			if err := gLock.release(py.CurrentGoroutineID()); err != nil {
+			if err := gLock.release(py.GoroutineID()); err != nil {
 				return nil, err
 			}
 			return py.None, nil

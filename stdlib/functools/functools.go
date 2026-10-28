@@ -689,17 +689,20 @@ func annotationType(fn py.Object) (*py.Type, error) {
 			"Invalid first argument to `register()`: %v. Use either `@register(some_class)` or plain `@register` on an annotated function.", fn)
 	}
 	if str, ok := first.(py.String); ok {
-		globals, err := py.GetAttrString(fn, "__globals__")
+		f, ok := fn.(*py.Function)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "Invalid annotation for the first parameter: %v", first)
+		}
+		code, err := py.Compile(string(str), "<annotation>", py.EvalMode, 0, true)
 		if err != nil {
 			return nil, err
 		}
-		ev, err := py.GetAttrString(py.GetModuleImplOrNil("builtins"), "eval")
-		if err != nil {
+		if first, err = py.VmEvalCode(f.Context, code, f.Globals, py.NewStringDict(), nil, py.NewStringDict(), nil, py.NewStringDict(), nil); err != nil {
 			return nil, err
 		}
-		if first, err = py.Call(ev, py.Tuple{str, globals}, py.NewStringDict()); err != nil {
-			return nil, err
-		}
+	}
+	if first == py.None {
+		first = py.None.Type() // an annotation of None means NoneType
 	}
 	t, ok := first.(*py.Type)
 	if !ok {

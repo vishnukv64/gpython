@@ -1655,6 +1655,8 @@ func init() {
 			py.DictEntry{Key: "pi", Value: py.Float(math.Pi)},
 			py.DictEntry{Key: "tau", Value: py.Float(2 * math.Pi)},
 			py.DictEntry{Key: "e", Value: py.Float(math.E)},
+			py.DictEntry{Key: "inf", Value: py.Float(math.Inf(1))},
+			py.DictEntry{Key: "nan", Value: py.Float(math.NaN())},
 		),
 	})
 }

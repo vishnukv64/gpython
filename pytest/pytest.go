@@ -295,6 +295,7 @@ func RunTestTasks(t *testing.T, tasks []*Task) {
 	for ti := 0; ti < numTasks; ti++ {
 		task := tasks[ti]
 		go func() {
+			defer py.EnterGoroutine()()
 			err := task.run()
 			task.Err = err
 			onCompleted <- task

@@ -144,6 +144,7 @@ func runScript(args []string) error {
 	opts.SysArgs = args
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
+	importSiteCustomize(ctx)
 
 	if err := startCPUProfile(); err != nil {
 		return err
@@ -165,6 +166,7 @@ func runCode(src string, args []string) error {
 	opts.SysArgs = append([]string{"-c"}, args...)
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
+	importSiteCustomize(ctx)
 
 	_, err := py.RunSrc(ctx, src, "<string>", "__main__")
 	return err
@@ -184,6 +186,7 @@ func runModule(args []string) error {
 	opts.SysArgs = args
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
+	importSiteCustomize(ctx)
 
 	path, isPkg, err := py.ResolveModulePath(ctx, name)
 	if err != nil {
@@ -268,5 +271,14 @@ func handleSystemExit(exc *py.Exception) {
 			fmt.Fprintln(os.Stderr, msg)
 		}
 		os.Exit(1)
+	}
+}
+
+// importSiteCustomize runs a sitecustomize module if one is on sys.path, as
+// CPython's startup does; pip's build isolation relies on it to set up
+// sys.path in the child.  A missing module is normal and ignored.
+func importSiteCustomize(ctx py.Context) {
+	if err := py.Import(ctx, "sitecustomize"); err != nil && !py.IsException(py.ImportError, err) {
+		py.TracebackDump(err)
 	}
 }

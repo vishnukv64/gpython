@@ -45,6 +45,9 @@ func init() {
 			py.MustNewMethod("get_path", getPath, 0, "Return a path corresponding to the scheme."),
 			py.MustNewMethod("get_paths", getPaths, 0, "Return a dictionary containing the installation paths."),
 			py.MustNewMethod("get_python_version", getPythonVersion, 0, "Return the MAJOR.MINOR Python version number as a string."),
+			py.MustNewMethod("is_python_build", func(self py.Object, args py.Tuple) (py.Object, error) {
+				return py.False, nil
+			}, 0, "Return whether running from a CPython source build; never."),
 			py.MustNewMethod("get_scheme_names", getSchemeNames, 0, "Return a tuple containing the schemes names."),
 		},
 		Globals: py.NewStringDictFrom(

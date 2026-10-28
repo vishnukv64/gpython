@@ -593,6 +593,7 @@ tfpdeftest:
 |	tfpdef '=' test
 	{
 		$$ = $1
+		$$.Default = $3
 		$<expr>$ = $3
 	}
 
@@ -775,6 +776,7 @@ vfpdeftest:
 |	vfpdef '=' test
 	{
 		$$ = $1
+		$$.Default = $3
 		$<expr>$ = $3
 	}
 

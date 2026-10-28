@@ -251,9 +251,12 @@ type Popen struct {
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
 	stderr io.ReadCloser
-	text   bool
-	done   bool
-	code   int
+	// The .stdin/.stdout/.stderr file objects: None when not piped.  They
+	// share the descriptors above, so communicate still drains what is left.
+	stdinObj, stdoutObj, stderrObj py.Object
+	text                           bool
+	done                           bool
+	code                           int
 }
 
 var PopenType = py.NewTypeX("subprocess.Popen", "A running child process.", popenNew, nil)
@@ -272,7 +275,12 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 	if err != nil {
 		return nil, err
 	}
-	p := &Popen{text: o.text}
+	p := &Popen{text: o.text, stdinObj: py.None, stdoutObj: py.None, stderrObj: py.None}
+	mode := py.FileBinary
+	if o.text {
+		mode = py.FileText
+	}
+	var closeAfterStart []*os.File
 	cmd := exec.Command(argv[0], argv[1:]...)
 	if o.cwd != "" {
 		cmd.Dir = o.cwd
@@ -289,6 +297,9 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 			return nil, py.ExceptionNewf(SubprocessErrorType, "%s", err)
 		}
 		p.stdin = pipe
+		if f, ok := pipe.(*os.File); ok {
+			p.stdinObj = &py.File{File: f, FileMode: py.FileWrite | mode}
+		}
 	case py.NoneType:
 		// inherit
 	default:
@@ -300,16 +311,17 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 	}
 
 	// stdout and stderr, with STDOUT meaning "the same as stdout".
-	stdoutPiped := false
 	switch o.stdout.(type) {
 	case sentinel:
 		if o.stdout.(sentinel) == pipeSentinel {
-			pipe, err := cmd.StdoutPipe()
+			r, w, err := os.Pipe()
 			if err != nil {
 				return nil, py.ExceptionNewf(SubprocessErrorType, "%s", err)
 			}
-			p.stdout = pipe
-			stdoutPiped = true
+			cmd.Stdout = w
+			closeAfterStart = append(closeAfterStart, w)
+			p.stdout = r
+			p.stdoutObj = &py.File{File: r, FileMode: py.FileRead | mode}
 		} else {
 			cmd.Stdout = nil
 		}
@@ -325,14 +337,22 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 
 	switch v := o.stderr.(type) {
 	case sentinel:
-		if v == STDOUTSentinel && stdoutPiped {
-			cmd.Stderr = nil // exec.Cmd supports this through the writer
+		if v == STDOUTSentinel {
+			// stderr goes wherever stdout goes.
+			if cmd.Stdout != nil {
+				cmd.Stderr = cmd.Stdout
+			} else {
+				cmd.Stderr = os.Stdout
+			}
 		} else if v == pipeSentinel {
-			pipe, err := cmd.StderrPipe()
+			r, w, err := os.Pipe()
 			if err != nil {
 				return nil, py.ExceptionNewf(SubprocessErrorType, "%s", err)
 			}
-			p.stderr = pipe
+			cmd.Stderr = w
+			closeAfterStart = append(closeAfterStart, w)
+			p.stderr = r
+			p.stderrObj = &py.File{File: r, FileMode: py.FileRead | mode}
 		}
 	case py.NoneType:
 	default:
@@ -343,7 +363,11 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 		cmd.Stderr = file
 	}
 
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	for _, f := range closeAfterStart {
+		f.Close()
+	}
+	if err != nil {
 		return nil, childError(err)
 	}
 	p.cmd = cmd
@@ -422,11 +446,12 @@ func (p *Popen) communicate(input py.Object) (string, string, error) {
 
 	if p.stdin != nil {
 		if input != py.None && input != nil {
-			data, err := py.StrAsString(input)
-			if err != nil {
-				if b, ok := input.(py.Bytes); ok {
-					data = string(b)
-				} else {
+			var data string
+			if b, ok := input.(py.Bytes); ok {
+				data = string(b)
+			} else {
+				var err error
+				if data, err = py.StrAsString(input); err != nil {
 					return "", "", err
 				}
 			}
@@ -529,11 +554,19 @@ func init() {
 			return nil, err
 		}
 		p := self.(*Popen)
+		hadOut, hadErr := p.stdout != nil, p.stderr != nil
 		out, errText, err := p.communicate(input)
 		if err != nil {
 			return nil, err
 		}
-		return py.Tuple{streamValue(out, p.text), streamValue(errText, p.text)}, nil
+		res := py.Tuple{py.None, py.None}
+		if hadOut {
+			res[0] = streamValue(out, p.text)
+		}
+		if hadErr {
+			res[1] = streamValue(errText, p.text)
+		}
+		return res, nil
 	}, 0, "Interact with the child: send input, then read output."))
 
 	PopenType.Dict.Set("poll", py.MustNewMethod("poll", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -565,7 +598,13 @@ func init() {
 		},
 	})
 	PopenType.Dict.Set("stdin", &py.Property{
-		Fget: func(self py.Object) (py.Object, error) { return py.None, nil },
+		Fget: func(self py.Object) (py.Object, error) { return self.(*Popen).stdinObj, nil },
+	})
+	PopenType.Dict.Set("stdout", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return self.(*Popen).stdoutObj, nil },
+	})
+	PopenType.Dict.Set("stderr", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return self.(*Popen).stderrObj, nil },
 	})
 
 	PopenType.Dict.Set("kill", py.MustNewMethod("kill", func(self py.Object, args py.Tuple) (py.Object, error) {

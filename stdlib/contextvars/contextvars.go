@@ -4,9 +4,7 @@
 package contextvars
 
 import (
-	"bytes"
 	"fmt"
-	"runtime"
 	"sync"
 	"unsafe"
 
@@ -60,20 +58,7 @@ var (
 	cur = map[uint64]*Context{}
 )
 
-// goroutineID: same stack-header parse as vm.goroutineID (unexported there).
-func goroutineID() uint64 {
-	var buf [32]byte
-	s := buf[:runtime.Stack(buf[:], false)]
-	s = bytes.TrimPrefix(s, []byte("goroutine "))
-	var id uint64
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			break
-		}
-		id = id*10 + uint64(c-'0')
-	}
-	return id
-}
+func goroutineID() uint64 { return py.GoroutineID() }
 
 func current() *Context {
 	g := goroutineID()

@@ -820,6 +820,10 @@ type Arg struct {
 	Pos
 	Arg        Identifier
 	Annotation Expr
+	// Default is the "=expr" of a keyword-only parameter, nil when it has
+	// none.  Kwonlyargs need not be defaulted from the end ("*, a=1, b"), so
+	// KwDefaults alone cannot say which parameter each default belongs to.
+	Default Expr
 }
 
 type Keyword struct {

@@ -1705,6 +1705,12 @@ var (
 func formatPython(format string, args Tuple, kwargs StringDict) (Object, error) {
 	autoNum := -1
 	manual := false
+	return formatPythonN(format, args, kwargs, &autoNum, &manual)
+}
+
+// formatPythonN is formatPython with the field-numbering state supplied, so a
+// nested spec like "{:{}d}" continues the outer's automatic numbering.
+func formatPythonN(format string, args Tuple, kwargs StringDict, autoNum *int, manual *bool) (Object, error) {
 	var out strings.Builder
 	runes := []rune(format)
 	for i := 0; i < len(runes); i++ {
@@ -1729,7 +1735,7 @@ func formatPython(format string, args Tuple, kwargs StringDict) (Object, error) 
 				return nil, ExceptionNewf(ValueError, "Single '{' encountered in format string")
 			}
 			body := string(runes[i+1 : j-1])
-			text, err := formatField(body, args, kwargs, &autoNum, &manual)
+			text, err := formatField(body, args, kwargs, autoNum, manual)
 			if err != nil {
 				return nil, err
 			}
@@ -1865,6 +1871,14 @@ func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manua
 		if value, err = GetItem(value, k); err != nil {
 			return "", err
 		}
+	}
+
+	if strings.Contains(spec, "{") {
+		exp, err := formatPythonN(spec, args, kwargs, autoNum, manual)
+		if err != nil {
+			return "", err
+		}
+		spec = string(exp.(String))
 	}
 
 	// Apply the conversion, then the spec.

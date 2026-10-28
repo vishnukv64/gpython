@@ -101,6 +101,9 @@ func (f *Function) M__get__(instance, owner Object) (Object, error) {
 
 // Properties
 func init() {
+	FunctionType.Dict.Set("__globals__", &Property{
+		Fget: func(self Object) (Object, error) { return self.(*Function).Globals, nil },
+	})
 	FunctionType.Dict.Set("__code__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return self.(*Function).Code, nil

@@ -105,7 +105,7 @@ func init() {
 	globals.Set("closing", py.MustNewMethod("closing", closing, 0, "Context to automatically close something at the end of a block."))
 	globals.Set("redirect_stdout", py.MustNewMethod("redirect_stdout", redirectStdout, 0, "Context manager for temporarily redirecting sys.stdout."))
 	globals.Set("redirect_stderr", py.MustNewMethod("redirect_stderr", redirectStderr, 0, "Context manager for temporarily redirecting sys.stderr."))
-	globals.Set("suppress", py.MustNewMethod("suppress", suppress, 0, "Context manager to suppress specified exceptions."))
+	globals.Set("suppress", suppressContextType)
 	globals.Set("ContextDecorator", ContextDecoratorType)
 
 	py.RegisterModule(&py.ModuleImpl{
@@ -412,21 +412,15 @@ const suppress_doc = `suppress(*exceptions)
 
 Context manager to suppress the specified exceptions.`
 
-func suppress(self py.Object, args py.Tuple) (py.Object, error) {
-	// The argument tuple must be COPIED: the tuple a call is given can be a
-	// slice of the interpreter's value stack, which is cleared when the call
-	// returns, so keeping it left the exception types reading as nil and
-	// nothing was ever suppressed.
-	exceptions := make(py.Tuple, len(args))
-	copy(exceptions, args)
-	return &suppressContext{exceptions: exceptions}, nil
-}
-
-type suppressContext struct{ exceptions py.Tuple }
-
-var suppressContextType = py.NewType("contextlib.suppress", suppress_doc)
-
-func (s *suppressContext) Type() *py.Type { return suppressContextType }
+// suppress is a class, as in CPython, so it can be a base: jaraco.context
+// (vendored by setuptools) derives from it.  The exceptions live on the
+// instance as _exceptions.
+var suppressContextType = py.NewTypeX("contextlib.suppress", suppress_doc, py.ObjectNew,
+	func(self py.Object, args py.Tuple, kwargs py.StringDict) error {
+		// The tuple can be a slice of the value stack: copy it.
+		_, err := py.SetAttrString(self, "_exceptions", append(py.Tuple(nil), args...))
+		return err
+	})
 
 func init() {
 	suppressContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -434,7 +428,11 @@ func init() {
 	}, 0, "Do nothing."))
 
 	suppressContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		s := self.(*suppressContext)
+		exc, err := py.GetAttrString(self, "_exceptions")
+		if err != nil {
+			return nil, err
+		}
+		wantedTypes, _ := exc.(py.Tuple)
 		var excType, excValue, traceback py.Object
 		if err := py.UnpackTuple(args, py.StringDict{}, "__exit__", 0, 3, &excType, &excValue, &traceback); err != nil {
 			return nil, err
@@ -446,7 +444,7 @@ func init() {
 		if !ok {
 			return py.False, nil
 		}
-		for _, wanted := range s.exceptions {
+		for _, wanted := range wantedTypes {
 			if wantedType, ok := wanted.(*py.Type); ok {
 				for t := typ; t != nil; t = t.Base {
 					if t == wantedType {

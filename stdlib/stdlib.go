@@ -36,6 +36,7 @@ import (
 	_ "github.com/vishnukv64/gpython/stdlib/copy"
 	_ "github.com/vishnukv64/gpython/stdlib/csv"
 	_ "github.com/vishnukv64/gpython/stdlib/ctypes"
+	_ "github.com/vishnukv64/gpython/stdlib/dismod"
 	_ "github.com/vishnukv64/gpython/stdlib/email"
 	_ "github.com/vishnukv64/gpython/stdlib/encodings"
 	_ "github.com/vishnukv64/gpython/stdlib/enum"

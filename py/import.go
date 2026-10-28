@@ -208,6 +208,33 @@ func metaPathList(ctx Context) Object {
 	return list
 }
 
+// MetaPathFindSpec asks each finder on sys.meta_path for name's spec, as
+// importlib's _find_spec does, and returns the first one, or nil.
+func MetaPathFindSpec(ctx Context, name string) (Object, error) {
+	list := metaPathList(ctx)
+	if list == nil {
+		return nil, nil
+	}
+	var spec Object
+	var findErr error
+	err := Iterate(list, func(finder Object) bool {
+		s, ferr := callFinder(finder, name)
+		if ferr != nil {
+			findErr = ferr
+			return true
+		}
+		if s != nil && s != None {
+			spec = s
+			return true
+		}
+		return false
+	})
+	if err == nil {
+		err = findErr
+	}
+	return spec, err
+}
+
 // callFinder asks one finder for a spec, trying find_spec then find_module.
 func callFinder(finder Object, name string) (Object, error) {
 	if findSpec := attrOrNil(finder, "find_spec"); findSpec != nil {

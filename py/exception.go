@@ -561,7 +561,7 @@ type excSlot struct {
 func SetCurrentException(e *Exception) {
 	gCurrentException.mu.Lock()
 	defer gCurrentException.mu.Unlock()
-	id := CurrentGoroutineID()
+	id := GoroutineID()
 	if e == nil {
 		delete(gCurrentException.exc, id)
 		return
@@ -602,13 +602,8 @@ func ChainContext(e *Exception, frame *Frame) {
 func CurrentException() *Exception {
 	gCurrentException.mu.Lock()
 	defer gCurrentException.mu.Unlock()
-	return gCurrentException.exc[CurrentGoroutineID()]
+	return gCurrentException.exc[GoroutineID()]
 }
-
-// CurrentGoroutineID is set by the vm package at init to the same
-// goroutine-id lookup it uses for the current frame.  It is a function
-// variable to avoid a dependency from py on vm.
-var CurrentGoroutineID = func() uint64 { return 0 }
 
 func (e *Exception) M__str__() (Object, error) {
 	args, ok := e.Args.(Tuple)

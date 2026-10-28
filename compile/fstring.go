@@ -6,6 +6,7 @@ package compile
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/vishnukv64/gpython/ast"
 	"github.com/vishnukv64/gpython/parser"
@@ -26,7 +27,11 @@ func (c *compiler) compileFString(node *ast.FString) {
 		c.panicSyntaxErrorf(node, "f-string: %v", err)
 		return
 	}
+	c.fstringParts(node, parts)
+}
 
+// fstringParts pushes the concatenation of parts.
+func (c *compiler) fstringParts(node *ast.FString, parts []ast.FStringPart) {
 	// An f-string with a single literal part is just that constant.
 	if len(parts) == 1 && !parts[0].Field {
 		c.LoadConst(py.String(unescapePart(parts[0].Text, node.Raw)))
@@ -80,7 +85,18 @@ func (c *compiler) compileFString(node *ast.FString) {
 				c.callBuiltin1("str")
 			}
 
-			if part.FormatSpec != "" {
+			if strings.Contains(part.FormatSpec, "{") {
+				// A nested spec, f"{x:{w}d}", is itself an f-string.
+				specParts, err := ast.ParseFString(part.FormatSpec)
+				if err != nil {
+					c.panicSyntaxErrorf(node, "f-string: %v", err)
+					return
+				}
+				c.NameOp("format", ast.Load)
+				c.Op(vm.ROT_TWO)
+				c.fstringParts(node, specParts)
+				c.OpArg(vm.CALL_FUNCTION, 2)
+			} else if part.FormatSpec != "" {
 				c.callFormat(part.FormatSpec)
 			} else if part.Conversion == 0 && !part.Debug {
 				// A debug field defaults to repr, not str.  format(x, "") is

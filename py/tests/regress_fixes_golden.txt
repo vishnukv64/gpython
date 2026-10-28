@@ -1,0 +1,18 @@
+getattr 5
+escape a\ b\	c\
+
+id None True
+ne False True
+fstr (['1z', '2z'], '1z')
+nested spec     3.14|    3
+atomic aaab None
+io S B hi
+mod M mm
+desc ('got', True) ('got', False)
+struct 6 b'\x01\x00\x02\x00\x00\x00' (1, 2)
+iter_unpack [(1,), (2,)]
+pack_into b'\x07\x00\t\x00\x00\x00'
+kwonly (1, 2)
+fz True 1
+range 2 9 3 True
+reraise KeyError('k')

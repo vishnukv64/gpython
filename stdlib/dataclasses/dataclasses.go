@@ -904,6 +904,27 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 			seen[f.name] = true
 		}
 
+		// init=False fields are not parameters but still get their default
+		// (or a fresh default_factory value).
+		for _, f := range fields {
+			if f.init {
+				continue
+			}
+			var value py.Object
+			if f.defaultFactory != missing {
+				if value, err = py.Call(f.defaultFactory, nil, py.StringDict{}); err != nil {
+					return nil, err
+				}
+			} else if f.defaultVal != missing {
+				value = f.defaultVal
+			} else {
+				continue
+			}
+			if err := setFieldValue(self, f.name, value); err != nil {
+				return nil, err
+			}
+		}
+
 		// An unknown keyword is an error, not a silent attribute.
 		known := map[string]bool{}
 		for _, f := range positional {

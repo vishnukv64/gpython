@@ -21,10 +21,8 @@ objects so they can be GCed
 */
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -1872,6 +1870,17 @@ func do_DELETE_DEREF(vm *Vm, i int32) error {
 func (vm *Vm) raise(exc, cause py.Object) error {
 	if exc == nil {
 		// raise (with no parameters == re-raise)
+		// A bare raise in a function called from an except block re-raises
+		// the exception the CALLER is handling, so look down the stack.
+		if !vm.exc.IsSet() {
+			for f := vm.frame; f != nil; f = f.Back {
+				if e, ok := f.Handling.(*py.Exception); ok {
+					tb, _ := e.Traceback.(*py.Traceback)
+					vm.exc = py.ExceptionInfo{Type: e.Type(), Value: e, Traceback: tb}
+					break
+				}
+			}
+		}
 		if !vm.exc.IsSet() {
 			return py.ExceptionNewf(py.RuntimeError, "No active exception to reraise")
 		} else {
@@ -2550,7 +2559,7 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 	if caller != nil {
 		gid, prevFrame = caller.GID, caller
 	} else {
-		gid = goroutineID()
+		gid = py.GoroutineID()
 		prevFrame = gCurrentFrame.getFor(gid)
 	}
 	frame.Back = prevFrame
@@ -3325,7 +3334,6 @@ func init() {
 	py.SetCurrentFrame(func() *py.Frame {
 		return gCurrentFrame.get()
 	})
-	py.CurrentGoroutineID = goroutineID
 }
 
 // gCurrentFrame is the frame THIS goroutine is executing, recorded by RunFrame
@@ -3344,7 +3352,7 @@ type frameSlot struct {
 	frames map[uint64]*py.Frame
 }
 
-func (f *frameSlot) get() *py.Frame { return f.getFor(goroutineID()) }
+func (f *frameSlot) get() *py.Frame { return f.getFor(py.GoroutineID()) }
 
 func (f *frameSlot) getFor(id uint64) *py.Frame {
 	f.mu.Lock()
@@ -3360,41 +3368,4 @@ func (f *frameSlot) setFor(id uint64, frame *py.Frame) {
 		return
 	}
 	f.frames[id] = frame
-}
-
-// goroutineID returns the calling goroutine's id.
-//
-// Go deliberately provides no supported way to get this: goroutine-local
-// storage is discouraged because it does not compose with the scheduler, and
-// the runtime does not expose the id.  It is needed here because "the frame
-// currently executing" is genuinely per-goroutine state with no context to
-// hang it off - a builtin method receives only its arguments, so super() has
-// nothing else to ask.
-//
-// The implementation reads the id from the goroutine's own stack header,
-// which the runtime writes as "goroutine N [status]:" at a documented
-// location.  This is a well-known trick rather than a contract, so it is
-// confined to this one function: if a future Go release changes the header
-// the parse below returns 0 for every goroutine, which degrades to the old
-// shared-variable behaviour (correct in the single-threaded case, racy in the
-// concurrent one) rather than crashing.
-func goroutineID() uint64 {
-	var buf [32]byte
-	n := runtime.Stack(buf[:], false)
-	// The header is "goroutine 123 [running]:"; parse the digits after the
-	// space.
-	s := buf[:n]
-	const prefix = "goroutine "
-	if !bytes.HasPrefix(s, []byte(prefix)) {
-		return 0
-	}
-	s = s[len(prefix):]
-	var id uint64
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			break
-		}
-		id = id*10 + uint64(c-'0')
-	}
-	return id
 }

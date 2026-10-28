@@ -10,6 +10,7 @@ package py
 
 import (
 	"bytes"
+	"sort"
 	"strings"
 )
 
@@ -472,11 +473,7 @@ func (s *Set) M__iter__() (Object, error) {
 	}
 	// A stable sort by slot: two members in the same slot keep their relative
 	// arrival order, which is what a linear-probing table does.
-	for i := 1; i < len(slots); i++ {
-		for j := i; j > 0 && slots[j].index < slots[j-1].index; j-- {
-			slots[j], slots[j-1] = slots[j-1], slots[j]
-		}
-	}
+	sort.SliceStable(slots, func(i, j int) bool { return slots[i].index < slots[j].index })
 	items := make(Tuple, 0, len(slots))
 	for _, sl := range slots {
 		items = append(items, sl.value)
@@ -1027,16 +1024,7 @@ func init() {
 			return nil, ExceptionNewf(TypeError, "issuperset() takes exactly one argument (%d given)", len(args))
 		}
 		s := asSet(self)
-		other, err := SequenceSet(args[0])
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range other.setItems() {
-			if !s.setHas(item) {
-				return False, nil
-			}
-		}
-		return True, nil
+		return anyMember(s, args[0], false)
 	}, 0, "issuperset(other) -> True if every element of other is here"))
 
 	SetType.Dict.Set("isdisjoint", MustNewMethod("isdisjoint", func(self Object, args Tuple) (Object, error) {
@@ -1044,16 +1032,7 @@ func init() {
 			return nil, ExceptionNewf(TypeError, "isdisjoint() takes exactly one argument (%d given)", len(args))
 		}
 		s := asSet(self)
-		other, err := SequenceSet(args[0])
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range other.setItems() {
-			if s.setHas(item) {
-				return False, nil
-			}
-		}
-		return True, nil
+		return anyMember(s, args[0], true)
 	}, 0, "isdisjoint(other) -> True if the two sets share no element"))
 
 	SetType.Dict.Set("__len__", MustNewMethod("__len__", func(self Object, args Tuple) (Object, error) {
@@ -1086,4 +1065,23 @@ func init() {
 		"__le__", "__lt__", "__ge__", "__gt__"} {
 		FrozenSetType.Dict.Set(name, SetType.Dict.GetOrNil(name))
 	}
+}
+
+// anyMember streams other and stops at the first item whose membership in s
+// equals stopOn, as CPython's issuperset/isdisjoint do - building a set of
+// other first made each call cost all of other, even when the first item
+// decides it.  It returns False when it stopped, True when it ran out.
+func anyMember(s *Set, other Object, stopOn bool) (Object, error) {
+	res := True
+	err := Iterate(other, func(item Object) bool {
+		if s.setHas(item) == stopOn {
+			res = False
+			return true
+		}
+		return false
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }

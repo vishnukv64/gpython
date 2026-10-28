@@ -173,3 +173,27 @@ func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (n
 	}
 	return !baseHasDict && !addDict, nil
 }
+
+// CopySlots copies the __slots__ values of src onto dst, passing each through
+// conv (nil to copy as is); copy.copy and copy.deepcopy use it, since slot
+// values live outside __dict__.
+func CopySlots(src, dst Object, conv func(Object) (Object, error)) error {
+	s, ok := src.(*Type)
+	d, ok2 := dst.(*Type)
+	if !ok || !ok2 || s.slotVals == nil {
+		return nil
+	}
+	if d.slotVals == nil {
+		d.slotVals = make(map[string]Object, len(s.slotVals))
+	}
+	for k, v := range s.slotVals {
+		if conv != nil {
+			var err error
+			if v, err = conv(v); err != nil {
+				return err
+			}
+		}
+		d.slotVals[k] = v
+	}
+	return nil
+}

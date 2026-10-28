@@ -50,6 +50,7 @@ func init() {
 			py.MustNewMethod("iter_importers", iterImportersFn, 0, iter_importers_doc),
 			py.MustNewMethod("iter_modules", iterModulesFn, 0, iter_modules_doc),
 			py.MustNewMethod("walk_packages", walkPackagesFn, 0, walk_packages_doc),
+			py.MustNewMethod("extend_path", extendPathFn, 0, "Extend a package's __path__ with the same-named subdirectories of every sys.path entry."),
 			py.MustNewMethod("get_data", getDataFn, 0, get_data_doc),
 			py.MustNewMethod("resolve_name", resolveNameFn, 0, resolve_name_doc),
 			py.MustNewMethod("read_code", func(self py.Object, args py.Tuple) (py.Object, error) {
@@ -907,4 +908,53 @@ func currentContext(self py.Object) py.Context {
 		}
 	}
 	return nil
+}
+
+// extendPathFn is pkgutil.extend_path.  ponytail: *.pkg files are not read.
+func extendPathFn(self py.Object, args py.Tuple) (py.Object, error) {
+	var path, name py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "extend_path", 2, 2, &path, &name); err != nil {
+		return nil, err
+	}
+	pl, ok := path.(*py.List)
+	if !ok {
+		return path, nil // CPython also leaves a non-list path alone
+	}
+	n, err := py.StrAsString(name)
+	if err != nil {
+		return nil, err
+	}
+	m, ok := self.(*py.Module)
+	if !ok || m.Context == nil {
+		return path, nil
+	}
+	sysMod, err := m.Context.GetModule("sys")
+	if err != nil || sysMod == nil {
+		return path, nil
+	}
+	obj, _ := sysMod.Globals.Get("path")
+	sp, ok := obj.(*py.List)
+	if !ok {
+		return path, nil
+	}
+	out := py.NewListFromItems(append([]py.Object(nil), pl.Items...))
+	have := map[string]bool{}
+	for _, it := range out.Items {
+		if s, ok := it.(py.String); ok {
+			have[string(s)] = true
+		}
+	}
+	rel := filepath.Join(strings.Split(n, ".")...)
+	for _, it := range sp.Items {
+		d, ok := it.(py.String)
+		if !ok {
+			continue
+		}
+		sub := filepath.Join(string(d), rel)
+		if st, err := os.Stat(sub); err == nil && st.IsDir() && !have[sub] {
+			have[sub] = true
+			out.Append(py.String(sub))
+		}
+	}
+	return out, nil
 }

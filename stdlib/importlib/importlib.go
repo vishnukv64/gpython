@@ -431,7 +431,14 @@ func utilFindSpec(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		&nameObj, &pkgObj, &pathObj); err != nil {
 		return nil, err
 	}
-	return findSpec(currentContext(self), string(nameObj.(py.String)))
+	ctx := currentContext(self)
+	name := string(nameObj.(py.String))
+	// sys.meta_path first, as importlib does: a program's finder (pip's
+	// __pip-runner__ redirects "pip" this way) outranks the path search.
+	if spec, err := py.MetaPathFindSpec(ctx, name); err != nil || spec != nil {
+		return spec, err
+	}
+	return findSpec(ctx, name)
 }
 
 const find_spec_doc = `find_spec(name, package=None) -> ModuleSpec or None
@@ -552,6 +559,26 @@ func init() {
 	ModuleSpecType.Dict.Set("loader", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) { return self.(*ModuleSpec).Loader, nil },
 		Doc:  "the loader for this module",
+	})
+	ModuleSpecType.Dict.Set("cached", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) { return py.None, nil },
+		Doc:  "the cached bytecode location; there is none",
+	})
+	ModuleSpecType.Dict.Set("has_location", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			return py.NewBool(self.(*ModuleSpec).Origin != "built-in"), nil
+		},
+		Doc: "whether origin is a file location",
+	})
+	ModuleSpecType.Dict.Set("parent", &py.Property{
+		Fget: func(self py.Object) (py.Object, error) {
+			s := self.(*ModuleSpec)
+			if s.IsPkg {
+				return py.String(s.Name), nil
+			}
+			return py.String(s.Name[:max(strings.LastIndex(s.Name, "."), 0)]), nil
+		},
+		Doc: "the package this module belongs to",
 	})
 	ModuleSpecType.Dict.Set("submodule_search_locations", &py.Property{
 		Fget: func(self py.Object) (py.Object, error) {

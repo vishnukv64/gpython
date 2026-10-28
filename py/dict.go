@@ -1352,6 +1352,36 @@ func HashValue(o Object) (int64, bool) {
 		// ...)" reported "unhashable type: 'function'", which is how pip's
 		// metadata backend stopped loading.
 		return identityHash(o), true
+	case *Range:
+		// Equal ranges (same elements) hash alike: empty ranges are all one,
+		// a length-1 range ignores its step.
+		if v.Length == 0 {
+			return HashValue(Tuple{Int(0), None, None})
+		}
+		step := v.Step
+		if v.Length == 1 {
+			step = 0
+		}
+		return HashValue(Tuple{v.Length, v.Start, step})
+	case *FrozenSet:
+		// CPython's frozenset hash: order-independent XOR of shuffled member
+		// hashes.
+		var h uint64
+		for _, item := range v.setItems() {
+			ih, ok := HashValue(item)
+			if !ok {
+				return 0, false
+			}
+			x := uint64(ih)
+			h ^= ((x ^ 89869747) ^ (x << 16)) * 3644798167
+		}
+		h ^= (uint64(len(v.items)) + 1) * 1927868237
+		h ^= (h >> 11) ^ (h >> 25)
+		h = h*69069 + 907133923
+		if int64(h) == -1 {
+			return 590923713, true
+		}
+		return int64(h), true
 	case *Module:
 		// A module hashes by identity.  Its Globals holds the module's own
 		// storage, and Ptr reports that storage's address - reflecting into the
