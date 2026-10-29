@@ -40,3 +40,15 @@ True
 hello lzma worl
 b'\x10' {'id': 33, 'dict_size': 1048576}
 b']\x00\x00\x01\x00' {'id': 4611686018427387905, 'lc': 3, 'lp': 0, 'pb': 2, 'dict_size': 65536}
+True True 10 False
+b'hello worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello world' True b'TRAIL'
+b'' False True 10
+b'hello' False False
+b' worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello world' True b'Z'
+EOF Already at end of stream
+b'' b'alone!alone!alone!alone!alone!' True b'tail' 0
+b'' 0 b'alone!alone!alone!alone!alone!' True
+LZMAError
+LZMAError
+True
+b'hello'

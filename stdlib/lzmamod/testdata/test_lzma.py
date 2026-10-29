@@ -71,3 +71,24 @@ with lzma.open(io.BytesIO(X10), "rt") as t:
     print(t.read(15))
 print(lzma._encode_filter_properties({"id": lzma.FILTER_LZMA2, "dict_size": 1 << 20}), lzma._decode_filter_properties(lzma.FILTER_LZMA2, b"\x10"))
 print(lzma._encode_filter_properties({"id": lzma.FILTER_LZMA1, "dict_size": 1 << 16}), lzma._decode_filter_properties(lzma.FILTER_LZMA1, b"\x5d\x00\x00\x01\x00"))
+
+# streamed decompression: one decoder over many small chunks, stream end, trailing data and corrupt input
+# trailing data, byte-at-a-time, multi-call max_length, check, needs_input, errors
+x = lzma.compress(b"hello world" * 10, check=lzma.CHECK_SHA256)
+d = lzma.LZMADecompressor(); res = b""
+for i in range(len(x)):
+    res += d.decompress(x[i:i+1]); 
+print(res == b"hello world" * 10, d.eof, d.check, d.needs_input)
+d = lzma.LZMADecompressor(); print(d.decompress(x + b"TRAIL" ), d.eof, d.unused_data)
+d = lzma.LZMADecompressor(); print(d.decompress(x[:20]), d.eof, d.needs_input, d.check); print(d.decompress(x[20:] + b"Z", 5), d.needs_input, d.eof); print(d.decompress(b"", -1), d.eof, d.unused_data)
+d = lzma.LZMADecompressor(); d.decompress(x)
+try: d.decompress(b"x")
+except EOFError as e: print("EOF", e)
+a = lzma.compress(b"alone!" * 5, format=lzma.FORMAT_ALONE)
+d = lzma.LZMADecompressor(lzma.FORMAT_ALONE); print(d.decompress(a[:7]), d.decompress(a[7:] + b"tail"), d.eof, d.unused_data, d.check)
+d = lzma.LZMADecompressor(lzma.FORMAT_AUTO); print(d.decompress(a[:3]), d.check, d.decompress(a[3:]), d.eof)
+for bad in (b"\xfd7zXZ\x00\x00\x01garbagegarbage", x[:30] + bytes(40)):
+    try: print(lzma.LZMADecompressor().decompress(bad))
+    except lzma.LZMAError as e: print("LZMAError")
+print(lzma.decompress(x + x) == b"hello world" * 20)
+import io; print(lzma.open(io.BytesIO(x)).read(5))

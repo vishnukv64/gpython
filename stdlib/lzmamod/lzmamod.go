@@ -15,8 +15,11 @@ package lzmamod
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"io"
+	"runtime"
 
 	"github.com/ulikunitz/xz"
 	"github.com/ulikunitz/xz/lzma"
@@ -31,49 +34,177 @@ const (
 	formatAlone = 2
 )
 
-// decode decodes the first stream in data.  It returns the output, how many
-// bytes of data the stream used and whether the stream was complete.
-// Incomplete input is not an error: the caller waits for more.  A non-empty
-// msg is a corrupt-data error.
-func decode(data []byte, format int) (out []byte, used int, complete bool, msg string) {
-	if format == formatAuto {
-		switch {
-		case len(data) < len(xzMagic) && bytes.HasPrefix(xzMagic, data):
-			return nil, 0, false, ""
-		case bytes.HasPrefix(data, xzMagic):
-			format = formatXZ
-		default:
-			format = formatAlone
+// decoder is an incremental decompressor: one library reader runs in a
+// goroutine over a feeder, so each input byte is decoded once.  The feeder
+// blocks when it runs dry and hands control back to decompress().
+type decoder struct {
+	format  int
+	pre     []byte // FORMAT_AUTO input held until the format is known
+	started bool
+	done    bool
+	f       *feeder
+}
+
+// feeder is the input side.  The goroutine owns buf, out, err and finished
+// while it runs; the main side reads them only after a receive on idle.
+type feeder struct {
+	buf      []byte
+	out      []byte
+	err      error
+	finished bool
+	more     chan []byte   // new input; closed means EOF
+	idle     chan struct{} // the goroutine is waiting for input or has finished
+	closed   bool
+	head     [12]byte // xz stream header (magic, flags, crc)
+	headN    int
+	tail     [12]byte // last 12 input bytes consumed
+}
+
+var decoderType = py.NewTypeX("_lzma.decoder", "Go decompressor handle.", nil, nil)
+
+func (*decoder) Type() *py.Type { return decoderType }
+
+func (f *feeder) wait() bool {
+	if len(f.buf) == 0 {
+		f.idle <- struct{}{}
+		b, ok := <-f.more
+		if !ok {
+			return false
 		}
+		f.buf = b
 	}
-	br := bytes.NewReader(data)
+	return true
+}
+
+func (f *feeder) consumed(b []byte) {
+	if f.headN < len(f.head) {
+		f.headN += copy(f.head[f.headN:], b)
+	}
+	if len(b) >= len(f.tail) {
+		copy(f.tail[:], b[len(b)-len(f.tail):])
+	} else {
+		copy(f.tail[:], f.tail[len(b):])
+		copy(f.tail[len(f.tail)-len(b):], b)
+	}
+}
+
+func (f *feeder) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if !f.wait() {
+		return 0, io.EOF
+	}
+	n := copy(p, f.buf)
+	f.consumed(f.buf[:n])
+	f.buf = f.buf[n:]
+	return n, nil
+}
+
+// ReadByte keeps the lzma reader from wrapping the feeder in a buffer that
+// would read past the end of the stream.
+func (f *feeder) ReadByte() (byte, error) {
+	if !f.wait() {
+		return 0, io.EOF
+	}
+	c := f.buf[0]
+	f.consumed(f.buf[:1])
+	f.buf = f.buf[1:]
+	return c, nil
+}
+
+// atFooter reports whether the input consumed so far ends in a valid xz
+// footer for this stream's header.  The single-stream reader probes for one
+// more byte after the footer, so a reader starved right after one has a
+// finished stream (and the CRC rules out a block boundary that looks alike).
+func (f *feeder) atFooter() bool {
+	t := f.tail[:]
+	return f.headN == len(f.head) && t[10] == 'Y' && t[11] == 'Z' &&
+		t[8] == f.head[6] && t[9] == f.head[7] &&
+		crc32.ChecksumIEEE(t[4:10]) == binary.LittleEndian.Uint32(t[:4])
+}
+
+func (f *feeder) run(format int) {
 	var r io.Reader
 	var err error
 	if format == formatXZ {
-		r, err = xz.ReaderConfig{SingleStream: true}.NewReader(br)
+		r, err = xz.ReaderConfig{SingleStream: true}.NewReader(f)
 	} else {
-		r, err = lzma.NewReader(br)
+		r, err = lzma.NewReader(f)
 	}
-	if err == nil {
-		out, err = io.ReadAll(r)
+	chunk := make([]byte, 32<<10)
+	for err == nil {
+		var n int
+		n, err = r.Read(chunk)
+		f.out = append(f.out, chunk[:n]...)
 	}
-	used = len(data) - br.Len()
-	switch {
-	case err == nil:
-		return out, used, format == formatAlone || footerAt(data, used), ""
-	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return out, 0, false, ""
-	case err.Error() == "xz: unexpected data after stream":
-		// the single-stream probe consumed the first trailing byte
-		return out, used - 1, format == formatAlone || footerAt(data, used-1), ""
-	}
-	return nil, 0, false, err.Error()
+	f.err, f.finished = err, true
+	f.idle <- struct{}{}
 }
 
-// footerAt reports whether an xz stream footer ends at data[end]: the library
-// takes a stream cut off at a block boundary for a finished one.
-func footerAt(data []byte, end int) bool {
-	return end >= 24 && end%4 == 0 && data[end-2] == 'Y' && data[end-1] == 'Z'
+// stop ends the goroutine: a decoder dropped mid-stream would leak it.
+func (f *feeder) stop() {
+	if !f.closed {
+		f.closed = true
+		close(f.more)
+	}
+}
+
+func newDecoder(format int) *decoder {
+	d := &decoder{format: format, f: &feeder{more: make(chan []byte), idle: make(chan struct{}, 1)}}
+	runtime.AddCleanup(d, (*feeder).stop, d.f)
+	return d
+}
+
+// feed decodes data.  It returns the new output, whether the stream ended,
+// the input left after the stream and, for corrupt data, an error message.
+// Incomplete input is not an error: the caller waits for more.
+func (d *decoder) feed(data []byte) (out []byte, complete bool, unused []byte, msg string) {
+	if d.done {
+		return nil, true, data, ""
+	}
+	if !d.started {
+		if d.format == formatAuto {
+			d.pre = append(d.pre, data...)
+			switch {
+			case len(d.pre) < len(xzMagic) && bytes.HasPrefix(xzMagic, d.pre):
+				return nil, false, nil, ""
+			case bytes.HasPrefix(d.pre, xzMagic):
+				d.format = formatXZ
+			default:
+				d.format = formatAlone
+			}
+			data, d.pre = d.pre, nil
+		}
+		d.started = true
+		go d.f.run(d.format)
+		<-d.f.idle
+	}
+	f := d.f
+	if !f.finished {
+		f.more <- data
+		<-f.idle
+		if !f.finished && d.format == formatXZ && f.atFooter() {
+			f.stop()
+			<-f.idle
+		}
+	}
+	out, f.out = f.out, nil
+	if !f.finished {
+		return out, false, nil, ""
+	}
+	d.done = true
+	unused = f.buf
+	switch err := f.err; {
+	case errors.Is(err, io.EOF):
+	case err.Error() == "xz: unexpected data after stream":
+		// the single-stream probe consumed the first trailing byte
+		unused = append([]byte{f.tail[len(f.tail)-1]}, unused...)
+	default:
+		return nil, false, nil, err.Error()
+	}
+	f.stop()
+	return out, true, unused, ""
 }
 
 // encoder is an incremental compressor.
@@ -234,14 +365,15 @@ class LZMADecompressor:
         if filters is not None:
             raise ValueError("Cannot specify filters except with FORMAT_RAW")
         self._format = format
+        self._h = _dec_new(format)
         self._buf = b''
-        self._given = 0
         self._eof = False
         self._unused = b''
         self._pending = b''
         self._check = CHECK_UNKNOWN
 
     def _set_check(self):
+        # only the stream header matters; _buf keeps just its first 8 bytes
         b = self._buf
         if b[:6] == b'\xfd7zXZ\x00' and self._format != FORMAT_ALONE:
             if len(b) >= 8:
@@ -280,21 +412,16 @@ class LZMADecompressor:
         if self._eof:
             self._unused += data
         elif data:
-            # ponytail: re-decodes the buffered stream on every call, so a
-            # stream fed in n chunks costs O(n^2); a goroutine+pipe fixes it.
-            self._buf += data
-            self._set_check()
-            out, used, complete, err = _decode(self._buf, self._format)
+            if len(self._buf) < 8:
+                self._buf = (self._buf + data)[:8]
+                self._set_check()
+            out, complete, unused, err = _dec_feed(self._h, data)
             if err:
                 raise LZMAError(err)
-            self._pending += out[self._given:]
+            self._pending += out
             if complete:
                 self._eof = True
-                self._unused = self._buf[used:]
-                self._buf = b''
-                self._given = 0
-            else:
-                self._given = len(out)
+                self._unused = unused
         if max_length is None or max_length < 0:
             res, self._pending = self._pending, b''
         else:
@@ -332,9 +459,12 @@ func init() {
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{Name: "_lzma", Doc: "Implementation module for lzma (xz and lzma-alone)."},
 		Methods: []*py.Method{
-			py.MustNewMethod("_decode", func(self py.Object, args py.Tuple) (py.Object, error) {
-				out, used, complete, msg := decode([]byte(args[0].(py.Bytes)), int(args[1].(py.Int)))
-				return py.Tuple{py.Bytes(out), py.Int(used), py.Bool(complete), py.String(msg)}, nil
+			py.MustNewMethod("_dec_new", func(self py.Object, args py.Tuple) (py.Object, error) {
+				return newDecoder(int(args[0].(py.Int))), nil
+			}, 0, ""),
+			py.MustNewMethod("_dec_feed", func(self py.Object, args py.Tuple) (py.Object, error) {
+				out, complete, unused, msg := args[0].(*decoder).feed([]byte(args[1].(py.Bytes)))
+				return py.Tuple{py.Bytes(out), py.Bool(complete), py.Bytes(unused), py.String(msg)}, nil
 			}, 0, ""),
 			py.MustNewMethod("_enc_new", func(self py.Object, args py.Tuple) (py.Object, error) {
 				e, err := newEncoder(int(args[0].(py.Int)), int(args[1].(py.Int)))
