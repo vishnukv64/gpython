@@ -27,6 +27,8 @@ type Function struct {
 	Name        string     // The __name__ attribute, a string object
 	Dict        StringDict // The __dict__ attribute, a dict or NULL
 	Weakreflist List       // List of weak references
+	annDone     bool       // Annotations was built from Annotate (or set)
+	Annotate    Object     // PEP 649: __annotate__, called with a format to build Annotations
 	Annotations StringDict // Annotations, a dict or NULL
 	Qualname    string     // The qualified name
 }
@@ -160,9 +162,42 @@ func init() {
 			return nil
 		},
 	})
+	FunctionType.Dict.Set("__annotate__", &Property{
+		Fget: func(self Object) (Object, error) {
+			if a := self.(*Function).Annotate; a != nil {
+				return a, nil
+			}
+			return None, nil
+		},
+		Fset: func(self, value Object) error {
+			f := self.(*Function)
+			if value == None {
+				f.Annotate = nil
+				return nil
+			}
+			if !isCallable(value) {
+				return ExceptionNewf(TypeError, "__annotate__ must be callable or None")
+			}
+			f.Annotate, f.annDone = value, false
+			return nil
+		},
+	})
 	FunctionType.Dict.Set("__annotations__", &Property{
 		Fget: func(self Object) (Object, error) {
-			return self.(*Function).Annotations, nil
+			f := self.(*Function)
+			if f.Annotate != nil && !f.annDone {
+				// First use: build the dict from __annotate__(VALUE) and keep it.
+				ann, err := Call(f.Annotate, Tuple{Int(1)}, StringDict{})
+				if err != nil {
+					return nil, err
+				}
+				d, ok := ann.(StringDict)
+				if !ok {
+					return nil, ExceptionNewf(TypeError, "__annotate__ returned non-dict of type '%s'", ann.Type().Name)
+				}
+				f.Annotations, f.annDone = d, true
+			}
+			return f.Annotations, nil
 		},
 		Fset: func(self, value Object) error {
 			f := self.(*Function)
@@ -170,7 +205,7 @@ func init() {
 			if !ok {
 				return ExceptionNewf(TypeError, "__annotations__ must be set to a dict object")
 			}
-			f.Annotations = annotations
+			f.Annotations, f.annDone = annotations, true
 			return nil
 		},
 		Fdel: func(self Object) error {
@@ -261,3 +296,8 @@ var _ Object = (*Function)(nil)
 var _ I__call__ = (*Function)(nil)
 var _ IGetDict = (*Function)(nil)
 var _ I__get__ = (*Function)(nil)
+
+func isCallable(o Object) bool {
+	_, err := GetAttrString(o, "__call__")
+	return err == nil
+}

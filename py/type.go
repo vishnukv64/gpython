@@ -380,7 +380,12 @@ func init() {
 		return String(t.Name)
 	}
 	typeMeta("__name__", "The name of the type.", shortName)
-	typeMeta("__qualname__", "The qualified name of the type.", shortName)
+	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object {
+		if t.Qualname != "" {
+			return String(t.Qualname)
+		}
+		return shortName(t)
+	})
 	// A type declared natively has no __module__ in its dict: the module is the
 	// "pkg." prefix of its name ("itertools.batched"), else "builtins".  A class
 	// statement sets __module__ itself, and its own dict is looked at first.
@@ -392,6 +397,14 @@ func init() {
 			return String(t.Name[:i])
 		}
 		return String("builtins")
+	})
+	typeMeta("__annotations__", "The annotations of the class.", func(t *Type) Object {
+		if a, ok := t.Dict.Get("__annotations__"); ok {
+			return a
+		}
+		d := NewStringDict()
+		t.Dict.Set("__annotations__", d)
+		return d
 	})
 	typeMeta("__doc__", "The documentation string of the type.", func(t *Type) Object { return String(t.Doc) })
 	typeMeta("__bases__", "The base classes of the type.", func(t *Type) Object { return t.Bases })

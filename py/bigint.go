@@ -231,7 +231,7 @@ func (a *BigInt) M__truediv__(other Object) (Object, error) {
 	}
 	fb := b.(Float)
 	if fb == 0 {
-		return nil, divisionByZero
+		return nil, divisionByZero()
 	}
 	return Float(fa / fb), nil
 }
@@ -247,7 +247,7 @@ func (a *BigInt) M__rtruediv__(other Object) (Object, error) {
 	}
 	fb := b.(Float)
 	if fa == 0 {
-		return nil, divisionByZero
+		return nil, divisionByZero()
 	}
 	return Float(fb / fa), nil
 }
@@ -288,7 +288,7 @@ func (a *BigInt) M__imod__(other Object) (Object, error) {
 
 func (a *BigInt) divMod(b *BigInt) (Object, Object, error) {
 	if (*big.Int)(b).Sign() == 0 {
-		return nil, nil, divisionByZero
+		return nil, nil, divisionByZero()
 	}
 	r := new(big.Int)
 	q := new(big.Int)

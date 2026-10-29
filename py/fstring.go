@@ -18,6 +18,11 @@ package py
 type FString struct {
 	Text string // raw contents, e.g. `a{x!r}b`
 	Raw  bool   // true for rf"" / fr"" raw f-strings
+	// Template is set for a t-string (PEP 750), which shares this carrier.
+	Template bool
+	// BodyCol and Located: see ast.FString.
+	BodyCol int
+	Located bool
 }
 
 // FStringType is the type of FString objects.

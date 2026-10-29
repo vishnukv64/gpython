@@ -1,0 +1,22 @@
+defined without evaluating Undefined/Result
+{'x': 'Undefined', 'y': <class 'int'>, 'a': <class 'str'>, 'k': 'z', 'kw': <class 'float'>, 'return': 'Result'}
+{'x': 'Undefined', 'y': 'int', 'a': 'str', 'k': 'z', 'kw': 'float', 'return': 'Result'}
+VALUE -> NameError name 'Undefined' is not defined
+VALUE via get_annotations -> NameError name 'Undefined' is not defined
+{'x': <class 'int'>, 'y': <class 'int'>, 'a': <class 'str'>, 'k': 'z', 'kw': <class 'float'>, 'return': <class 'str'>}
+{'x': <class 'int'>, 'y': <class 'int'>, 'a': <class 'str'>, 'k': 'z', 'kw': <class 'float'>, 'return': <class 'str'>}
+True
+True True
+annotate(5) -> NotImplementedError 
+{'x': <class 'int'>}
+{} None
+calls after def: []
+{'x': <class 'int'>} [1]
+{'x': <class 'int'>} [1]
+{'q': <class 'int'>, 'r': 'C', 'return': <class 'int'>}
+class self reference -> {'other': <class '__main__.C'>, 'return': None}
+True
+{'a': 1}
+{'b': 2}
+{'x': <class 'float'>}
+{'x': <class 'float'>}

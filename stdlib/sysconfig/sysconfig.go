@@ -112,9 +112,9 @@ func allConfigVars() []py.DictEntry {
 		{Key: "SOABI", Value: py.String(soabi)},
 		{Key: "SO", Value: py.String(".so")},
 		{Key: "MULTIARCH", Value: py.String("")},
-		{Key: "py_version", Value: py.String("3.10.0")},
-		{Key: "py_version_short", Value: py.String("3.4")},
-		{Key: "py_version_nodot", Value: py.String("34")},
+		{Key: "py_version", Value: py.String("3.14.7")},
+		{Key: "py_version_short", Value: py.String("3.14")},
+		{Key: "py_version_nodot", Value: py.String("314")},
 		{Key: "prefix", Value: py.String(prefix())},
 		{Key: "exec_prefix", Value: py.String(prefix())},
 		{Key: "projectbase", Value: py.String(prefix())},
@@ -222,7 +222,7 @@ func getPythonVersion(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "get_python_version() takes no arguments")
 	}
-	return py.String("3.4"), nil
+	return py.String("3.14"), nil
 }
 
 type pathTemplate struct{ key, tmpl string }

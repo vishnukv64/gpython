@@ -34,7 +34,7 @@ func Neg(a Object) (Object, error) {
 	} else if ok {
 		return res, nil
 	}
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for -: '%s'", a.Type().Name)
+	return nil, ExceptionNewf(TypeError, "bad operand type for unary -: '%s'", a.Type().Name)
 }
 
 // Pos the python Object returning an Object
@@ -60,7 +60,7 @@ func Pos(a Object) (Object, error) {
 	} else if ok {
 		return res, nil
 	}
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for +: '%s'", a.Type().Name)
+	return nil, ExceptionNewf(TypeError, "bad operand type for unary +: '%s'", a.Type().Name)
 }
 
 // Abs the python Object returning an Object
@@ -86,7 +86,7 @@ func Abs(a Object) (Object, error) {
 	} else if ok {
 		return res, nil
 	}
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for abs: '%s'", a.Type().Name)
+	return nil, ExceptionNewf(TypeError, "bad operand type for abs(): '%s'", a.Type().Name)
 }
 
 // Invert the python Object returning an Object
@@ -112,7 +112,7 @@ func Invert(a Object) (Object, error) {
 	} else if ok {
 		return res, nil
 	}
-	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for ~: '%s'", a.Type().Name)
+	return nil, ExceptionNewf(TypeError, "bad operand type for unary ~: '%s'", a.Type().Name)
 }
 
 // MakeComplex the python Object returning an Object
@@ -294,6 +294,14 @@ func Add(a, b Object) (Object, error) {
 		} else if ok {
 			return res, nil
 		}
+	}
+	// A sequence on the left says it cannot concatenate the other, as CPython's
+	// sq_concat does, rather than naming the operator.
+	switch a.(type) {
+	case String, *List, Tuple:
+		return nil, ExceptionNewf(TypeError, "can only concatenate %s (not \"%s\") to %s", a.Type().Name, b.Type().Name, a.Type().Name)
+	case Bytes, *ByteArray:
+		return nil, ExceptionNewf(TypeError, "can't concat %s to %s", b.Type().Name, a.Type().Name)
 	}
 	return nil, ExceptionNewf(TypeError, "unsupported operand type(s) for +: '%s' and '%s'", a.Type().Name, b.Type().Name)
 }

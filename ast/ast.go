@@ -33,6 +33,10 @@ type Ast interface {
 	py.Object
 	GetLineno() int
 	GetColOffset() int
+	GetEndLineno() int
+	GetEndColOffset() int
+	SetEnd(lineno, col int)
+	SetPosition(Pos)
 }
 
 // All ModBase nodes implement the Mod interface
@@ -63,10 +67,24 @@ type Slicer interface {
 type Pos struct {
 	Lineno    int
 	ColOffset int
+	// EndLineno and EndColOffset are where the node ends (CPython's
+	// end_lineno and end_col_offset); EndLineno is 0 when unknown.
+	EndLineno    int
+	EndColOffset int
 }
 
-func (o *Pos) GetLineno() int    { return o.Lineno }
-func (o *Pos) GetColOffset() int { return o.ColOffset }
+func (o *Pos) GetLineno() int       { return o.Lineno }
+func (o *Pos) GetColOffset() int    { return o.ColOffset }
+func (o *Pos) GetEndLineno() int    { return o.EndLineno }
+func (o *Pos) GetEndColOffset() int { return o.EndColOffset }
+
+// SetPosition replaces the node's whole position.
+func (o *Pos) SetPosition(p Pos) { *o = p }
+
+// SetEnd records where the node ends.
+func (o *Pos) SetEnd(lineno, col int) {
+	o.EndLineno, o.EndColOffset = lineno, col
+}
 
 // Base AST node
 type AST struct {
@@ -291,6 +309,30 @@ type FunctionDef struct {
 	// every existing consumer of FunctionDef keeps working and only the
 	// compiler, which must set CO_COROUTINE and allow await, looks at it.
 	IsAsync bool
+	// TypeParams are the PEP 695 type parameters, "def f[T](...)".
+	TypeParams []*TypeParam
+	// StoreName, when set, is the name the definition is bound to, while
+	// Name stays the function's __name__.  Only DesugarTypeParams sets it.
+	StoreName Identifier
+	// Annotate, when set, is the __annotate__ function (PEP 649) built from
+	// the parameter and return annotations, which are then nil.
+	Annotate Expr
+}
+
+// Binding is the name the definition is stored under.
+func (o *FunctionDef) Binding() Identifier {
+	if o.StoreName != "" {
+		return o.StoreName
+	}
+	return o.Name
+}
+
+// Binding is the name the definition is stored under.
+func (o *ClassDef) Binding() Identifier {
+	if o.StoreName != "" {
+		return o.StoreName
+	}
+	return o.Name
 }
 
 type ClassDef struct {
@@ -302,6 +344,39 @@ type ClassDef struct {
 	Kwargs        Expr
 	Body          []Stmt
 	DecoratorList []Expr
+	// TypeParams are the PEP 695 type parameters, "class C[T]: ...".
+	TypeParams []*TypeParam
+	// StoreName: see FunctionDef.StoreName.
+	StoreName Identifier
+}
+
+// TypeAlias is a PEP 695 "type X[T] = value" statement.
+type TypeAlias struct {
+	StmtBase
+	Name       *Name
+	TypeParams []*TypeParam
+	Value      Expr
+}
+
+// TypeParamKind says which of the three PEP 695 forms a TypeParam is.
+type TypeParamKind int
+
+const (
+	TypeVarParam      TypeParamKind = iota // T, T: bound, T: (a, b)
+	TypeVarTupleParam                      // *Ts
+	ParamSpecParam                         // **P
+)
+
+// TypeParam is one entry of a PEP 695 type parameter list.  Bound holds the
+// bound of a TypeVar or, when it is a tuple written as "T: (a, b)", its
+// constraints (Constraints is then true).
+type TypeParam struct {
+	Pos
+	Kind        TypeParamKind
+	Name        Identifier
+	Bound       Expr
+	Constraints bool
+	Default     Expr // PEP 696
 }
 
 type Return struct {
@@ -658,6 +733,13 @@ type FString struct {
 	ExprBase
 	Text string
 	Raw  bool
+	// Template marks a t-string (PEP 750).
+	Template bool
+	// BodyCol is the byte offset from the start of the literal to the first
+	// character of its body (prefix and quote); Located says it is known,
+	// which it is not for concatenated literals.
+	BodyCol int
+	Located bool
 }
 
 type Bytes struct {
@@ -799,6 +881,7 @@ type ExceptHandler struct {
 	ExprType Expr
 	Name     Identifier
 	Body     []Stmt
+	Star     bool // except* (PEP 654)
 }
 
 type Arguments struct {
@@ -947,6 +1030,8 @@ var IfType = StmtBaseType.NewType("If", "If Node", nil, nil)
 var WithType = StmtBaseType.NewType("With", "With Node", nil, nil)
 var RaiseType = StmtBaseType.NewType("Raise", "Raise Node", nil, nil)
 var TryType = StmtBaseType.NewType("Try", "Try Node", nil, nil)
+var TypeAliasType = StmtBaseType.NewType("TypeAlias", "TypeAlias Node", nil, nil)
+var TryStarType = StmtBaseType.NewType("TryStar", "TryStar Node", nil, nil)
 var AssertType = StmtBaseType.NewType("Assert", "Assert Node", nil, nil)
 var ImportType = StmtBaseType.NewType("Import", "Import Node", nil, nil)
 var ImportFromType = StmtBaseType.NewType("ImportFrom", "ImportFrom Node", nil, nil)
@@ -1002,25 +1087,31 @@ var AliasType = ASTType.NewType("Alias", "Alias Node", nil, nil)
 var WithItemType = ASTType.NewType("WithItem", "WithItem Node", nil, nil)
 
 // Python type definitions
-func (o *AST) Type() *py.Type           { return ASTType }
-func (o *ModBase) Type() *py.Type       { return ModBaseType }
-func (o *Module) Type() *py.Type        { return ModuleType }
-func (o *Interactive) Type() *py.Type   { return InteractiveType }
-func (o *Expression) Type() *py.Type    { return ExpressionType }
-func (o *Suite) Type() *py.Type         { return SuiteType }
-func (o *StmtBase) Type() *py.Type      { return StmtBaseType }
-func (o *FunctionDef) Type() *py.Type   { return FunctionDefType }
-func (o *ClassDef) Type() *py.Type      { return ClassDefType }
-func (o *Return) Type() *py.Type        { return ReturnType }
-func (o *Delete) Type() *py.Type        { return DeleteType }
-func (o *Assign) Type() *py.Type        { return AssignType }
-func (o *AugAssign) Type() *py.Type     { return AugAssignType }
-func (o *For) Type() *py.Type           { return ForType }
-func (o *While) Type() *py.Type         { return WhileType }
-func (o *If) Type() *py.Type            { return IfType }
-func (o *With) Type() *py.Type          { return WithType }
-func (o *Raise) Type() *py.Type         { return RaiseType }
-func (o *Try) Type() *py.Type           { return TryType }
+func (o *AST) Type() *py.Type         { return ASTType }
+func (o *ModBase) Type() *py.Type     { return ModBaseType }
+func (o *Module) Type() *py.Type      { return ModuleType }
+func (o *Interactive) Type() *py.Type { return InteractiveType }
+func (o *Expression) Type() *py.Type  { return ExpressionType }
+func (o *Suite) Type() *py.Type       { return SuiteType }
+func (o *StmtBase) Type() *py.Type    { return StmtBaseType }
+func (o *FunctionDef) Type() *py.Type { return FunctionDefType }
+func (o *ClassDef) Type() *py.Type    { return ClassDefType }
+func (o *Return) Type() *py.Type      { return ReturnType }
+func (o *Delete) Type() *py.Type      { return DeleteType }
+func (o *Assign) Type() *py.Type      { return AssignType }
+func (o *AugAssign) Type() *py.Type   { return AugAssignType }
+func (o *TypeAlias) Type() *py.Type   { return TypeAliasType }
+func (o *For) Type() *py.Type         { return ForType }
+func (o *While) Type() *py.Type       { return WhileType }
+func (o *If) Type() *py.Type          { return IfType }
+func (o *With) Type() *py.Type        { return WithType }
+func (o *Raise) Type() *py.Type       { return RaiseType }
+func (o *Try) Type() *py.Type {
+	if len(o.Handlers) > 0 && o.Handlers[0].Star {
+		return TryStarType
+	}
+	return TryType
+}
 func (o *Assert) Type() *py.Type        { return AssertType }
 func (o *Import) Type() *py.Type        { return ImportType }
 func (o *ImportFrom) Type() *py.Type    { return ImportFromType }

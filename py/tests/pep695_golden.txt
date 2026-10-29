@@ -1,0 +1,46 @@
+TypeAliasType X X <class 'int'> ()
+not evaluated yet: []
+<class 'str'> ['evaluated']
+<class 'str'> ['evaluated']
+forward -> NameError name 'Undefined' is not defined
+<class 'bytes'>
+(A, B) tuple[A, B]
+(<class 'int'>, <class 'str'>)
+nongeneric subscript -> TypeError Only generic type aliases are subscriptable
+(T,) f f 3
+TypeVar T T None () False False True
+T U Ts P
+<class 'int'> ()
+None (<class 'int'>, <class 'str'>)
+TypeVarTuple ParamSpec P.args P.kwargs
+bound lazy: []
+<class 'int'> ['bound']
+<class 'int'> ['bound']
+(T,) C C (<class 'typing.Generic'>, <class 'object'>)
+T [T] 5
+C.m
+__main__.C[int]
+(K, V) [False, True]
+<class 'int'> True
+<class 'int'> True True True
+5
+outside -> NameError name 'T2' is not defined
+outside again -> NameError name 'T2' is not defined
+True (T,)
+('outer.<locals>.inner', 'outer.<locals>.Inner')
+(U,) (T, U)
+SyntaxError 'def f[T, T](): pass' duplicate type parameter 'T'
+SyntaxError 'class C[T, T]: pass' duplicate type parameter 'T'
+SyntaxError 'type X[T, T] = int' duplicate type parameter 'T'
+SyntaxError 'def f[T = int, U](): pass' non-default type parameter 'U' follows default type parameter
+ok 'def f[T: (int,)](): pass'
+SyntaxError 'def f[](): pass' Type parameter list cannot be empty
+ok 'type = 5\ntype\n'
+ok 'type X = int; type Y = str'
+ok 'type X[T] = list[T]'
+SyntaxError 'type X\n' invalid syntax
+ok 'type X[T: (a, b)] = T'
+SyntaxError 'def f[*T: int](): pass' cannot use bound with TypeVarTuple
+ok 'class C[**P = int]: pass'
+7
+matched 3

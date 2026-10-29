@@ -36,7 +36,11 @@ type Code struct {
 	Filename    string // unicode (where it was loaded from)
 	Name        string // unicode (name, for reference)
 	Firstlineno int32  // first source line number
-	Lnotab      string // string (encoding addr<->lineno mapping) See Objects/lnotab_notes.txt for details.
+	// Positions is the co_positions table: five int32 per run of instructions
+	// that share a source range - start address, line, end line, column, end
+	// column.  Empty for code the compiler did not make.
+	Positions []int32
+	Lnotab    string // string (encoding addr<->lineno mapping) See Objects/lnotab_notes.txt for details.
 
 	Weakreflist *List // to support weakrefs to code objects
 }
@@ -342,10 +346,49 @@ func init() {
 	CodeType.Dict.Set("co_lines", MustNewMethod("co_lines", func(self Object, args Tuple) (Object, error) {
 		return NewIterator(self.(*Code).Lines()), nil
 	}, 0, "co_lines() -> iterator of (start, end, line) ranges of co_code"))
+	CodeType.Dict.Set("co_positions", MustNewMethod("co_positions", func(self Object, args Tuple) (Object, error) {
+		// One (line, end line, column, end column) per code unit, as CPython
+		// does; the bytecode here is variable width, so one per byte.
+		co := self.(*Code)
+		out := make(Tuple, 0, len(co.Code))
+		for addr := range co.Code {
+			line, endLine, col, endCol, ok := co.PositionAt(int32(addr))
+			if !ok {
+				out = append(out, Tuple{Int(line), None, None, None})
+				continue
+			}
+			out = append(out, Tuple{Int(line), Int(endLine), Int(col), Int(endCol)})
+		}
+		return NewIterator(out), nil
+	}, 0, "co_positions() -> iterator of (line, end line, column, end column), one per byte of co_code"))
 	CodeType.Dict.Set("co_lnotab", &Property{Fget: func(self Object) (Object, error) {
 		return Bytes(self.(*Code).Lnotab), nil
 	}})
 	CodeType.Dict.Set("co_consts", &Property{Fget: func(self Object) (Object, error) {
 		return self.(*Code).Consts, nil
 	}})
+}
+
+// PositionAt is the source range (line, end line, column, end column) of the
+// instruction at address addr, as co_positions reports it; ok is false when
+// the code has no position table or no range for it.
+func (co *Code) PositionAt(addr int32) (line, endLine, col, endCol int, ok bool) {
+	t := co.Positions
+	lo, hi := 0, len(t)/5
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if t[mid*5] <= addr {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	if lo == 0 {
+		return 0, 0, 0, 0, false
+	}
+	e := t[(lo-1)*5 : lo*5]
+	if e[2] == 0 {
+		return int(e[1]), 0, 0, 0, false
+	}
+	return int(e[1]), int(e[2]), int(e[3]), int(e[4]), true
 }

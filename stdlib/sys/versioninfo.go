@@ -57,8 +57,8 @@ func (v *VersionInfo) fields() []py.Object {
 // drift apart.
 const (
 	pyVersionMajor  = 3
-	pyVersionMinor  = 10
-	pyVersionMicro  = 0
+	pyVersionMinor  = 14
+	pyVersionMicro  = 7
 	pyVersionLevel  = "final"
 	pyVersionSerial = 0
 )

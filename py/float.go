@@ -167,7 +167,11 @@ func FloatAsFloat64(obj Object) (float64, error) {
 // Arithmetic
 
 // Errors
-var floatDivisionByZero = ExceptionNewf(ZeroDivisionError, "float division by zero")
+// floatDivisionByZero is a fresh exception each time: one shared instance
+// would collect the traceback of every division by zero.
+func floatDivisionByZero() *Exception {
+	return ExceptionNewf(ZeroDivisionError, "float division by zero")
+}
 
 // Convert an Object to an Float
 //
@@ -254,7 +258,7 @@ func (a Float) M__imul__(other Object) (Object, error) {
 func (a Float) M__truediv__(other Object) (Object, error) {
 	if b, ok := convertToFloat(other); ok {
 		if b == 0 {
-			return nil, floatDivisionByZero
+			return nil, floatDivisionByZero()
 		}
 		return Float(a / b), nil
 	}
@@ -264,7 +268,7 @@ func (a Float) M__truediv__(other Object) (Object, error) {
 func (a Float) M__rtruediv__(other Object) (Object, error) {
 	if b, ok := convertToFloat(other); ok {
 		if a == 0 {
-			return nil, floatDivisionByZero
+			return nil, floatDivisionByZero()
 		}
 		return Float(b / a), nil
 	}
@@ -296,7 +300,7 @@ func (a Float) M__ifloordiv__(other Object) (Object, error) {
 // Does DivMod of two floating point numbers
 func floatDivMod(a, b Float) (Float, Float, error) {
 	if b == 0 {
-		return 0, 0, floatDivisionByZero
+		return 0, 0, floatDivisionByZero()
 	}
 	q := Float(math.Floor(float64(a / b)))
 	r := a - q*b

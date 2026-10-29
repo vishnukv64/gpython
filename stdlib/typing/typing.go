@@ -28,7 +28,6 @@
 package typing
 
 import (
-	"strings"
 	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
@@ -391,40 +390,6 @@ func form(name string) *specialForm {
 	return &specialForm{name: name}
 }
 
-// TypeVarObj is what TypeVar() returns: a named placeholder that may be
-// constrained, and that is subscriptable by a type checker only.
-type TypeVarObj struct {
-	name          string
-	constraints   []py.Object
-	bound         py.Object
-	covariant     bool
-	contravariant bool
-}
-
-var TypeVarType = py.NewTypeX("typing.TypeVar", "A type variable.", nil, nil)
-
-func (t *TypeVarObj) Type() *py.Type { return TypeVarType }
-
-func (t *TypeVarObj) M__repr__() (py.Object, error) {
-	if len(t.constraints) > 0 {
-		parts := make([]string, 0, len(t.constraints))
-		for _, c := range t.constraints {
-			s, err := py.ReprAsString(c)
-			if err != nil {
-				return nil, err
-			}
-			parts = append(parts, s)
-		}
-		return py.String("~" + t.name + "(" + strings.Join(parts, ", ") + ")"), nil
-	}
-	return py.String("~" + t.name), nil
-}
-
-func (t *TypeVarObj) M__getitem__(key py.Object) (py.Object, error) { return t, nil }
-
-// IsTypeParam lets a generic alias find and substitute this TypeVar.
-func (t *TypeVarObj) IsTypeParam() {}
-
 // newType is what NewType() returns: a callable whose only behaviour is to
 // return what it is given, which is all it does in CPython too.
 type newType struct {
@@ -465,14 +430,14 @@ func init() {
 		"List", "Literal", "LiteralString", "Mapping", "MappingView",
 		"Match", "Pattern", "MutableMapping", "MutableSequence", "MutableSet",
 		"NamedTuple", "Never", "NoReturn", "NotRequired", "Optional",
-		"OrderedDict", "ParamSpec", "Pattern", "ReadOnly", "Required",
+		"OrderedDict", "Pattern", "ReadOnly", "Required",
 		"Reversible", "Self", "Sequence", "Set", "Sized", "Text",
 		"TextIO", "Tuple", "Type", "TypeAlias", "TypeGuard", "Union",
 		"Unpack", "ValuesView", "final", "overload", "runtime_checkable",
 		"SupportsInt", "SupportsFloat", "SupportsComplex", "SupportsBytes",
 		"SupportsAbs", "SupportsRound", "SupportsIndex", "SupportsRichComparison",
 		"Buffer", "LiteralString", "Self", "Never", "NoReturn", "AnyStr",
-		"TypeVarTuple", "TypeAliasType", "Generic", "Protocol",
+		"Generic", "Protocol",
 	} {
 		globals.Set(name, form(name))
 	}
@@ -577,7 +542,6 @@ func init() {
 	globals.Set("no_type_check", py.MustNewMethod("no_type_check", passthrough, 0, "Decorator to indicate no type checking: returns the object."))
 	globals.Set("runtime_checkable", py.MustNewMethod("runtime_checkable", runtimeCheckable, 0, "Mark a protocol as runtime checkable: returns the class."))
 
-	globals.Set("TypeVar", py.MustNewMethod("TypeVar", typeVarNew, 0, "TypeVar(name, *constraints, bound=None, covariant=False, contravariant=False)"))
 	globals.Set("NewType", py.MustNewMethod("NewType", newTypeNew, 0, "NewType(name, tp) -> a callable that returns its argument."))
 	globals.Set("NamedTuple", namedTupleType)
 	// Generic and Protocol are used as bases, so they are real classes with
@@ -640,18 +604,7 @@ func init() {
 	// ParamSpec and Concatenate are used in signatures: P = ParamSpec("P"),
 	// then Callable[Concatenate[T, P], R].  They need to be callable and
 	// subscriptable, which the inert forms already are.
-	globals.Set("ParamSpec", py.MustNewMethod("ParamSpec", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return form("ParamSpec"), nil
-	}, 0, "Return a parameter specification, subscriptable by a type checker only."))
-	globals.Set("TypeVarTuple", py.MustNewMethod("TypeVarTuple", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return form("TypeVarTuple"), nil
-	}, 0, "Return a variadic type variable."))
-	globals.Set("TypeAliasType", py.MustNewMethod("TypeAliasType", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-		if len(args) > 1 {
-			return args[1], nil
-		}
-		return form("TypeAliasType"), nil
-	}, 0, "Create a type alias."))
+	registerTypeParams(globals)
 	globals.Set("get_protocol_members", py.MustNewMethod("get_protocol_members", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewListFromItems(nil), nil
 	}, 0, "Return the members of a protocol."))
@@ -714,34 +667,6 @@ func passthrough(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	return obj, nil
 }
-
-func typeVarNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	if len(args) < 1 {
-		return nil, py.ExceptionNewf(py.TypeError, "TypeVar() missing required argument 'name'")
-	}
-	name := args[0]
-	text, err := py.StrAsString(name)
-	if err != nil {
-		return nil, err
-	}
-	tv := &TypeVarObj{name: text}
-	// The remaining positional arguments are constraints.
-	if len(args) > 1 {
-		tv.constraints = append(tv.constraints, args[1:]...)
-	}
-	if bound, ok := kwargs.Get("bound"); ok {
-		tv.bound = bound
-	}
-	if cov, ok := kwargs.Get("covariant"); ok && cov == py.True {
-		tv.covariant = true2()
-	}
-	if contra, ok := kwargs.Get("contravariant"); ok && contra == py.True {
-		tv.contravariant = true2()
-	}
-	return tv, nil
-}
-
-func true2() bool { return true }
 
 func newTypeNew(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var name, tp py.Object

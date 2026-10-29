@@ -59,6 +59,11 @@ type yyLex struct {
 	// lexer knows whether a soft keyword (match, case) sits where a
 	// statement could begin.
 	lastToken int
+
+	// curEnd and prevEnd are where the last token and the one before it
+	// ended; setEnd uses them to find the last token a reduction consumed.
+	realEnd, prevRealEnd ast.Pos // ends of the last two tokens that are not layout
+	lookIsReal           bool    // the last token lexed is not layout
 }
 
 // Create a new lexer
@@ -391,7 +396,13 @@ func (x *yyLex) Lex(yylval *yySymType) (ret int) {
 	// know whether they sit where a statement can begin.  Doing it here
 	// covers every return path in this method rather than only the ones
 	// that were easy to find.
-	defer func() { x.lastToken = ret }()
+	defer func() {
+		x.lastToken = ret
+		x.lookIsReal = ret != NEWLINE && ret != INDENT && ret != DEDENT && ret != ENDMARKER && ret != eofError
+		if x.lookIsReal {
+			x.prevRealEnd, x.realEnd = x.realEnd, x.pos
+		}
+	}()
 	if yyDebug >= 2 {
 		defer func() {
 			lt := newLexToken(ret, yylval)
@@ -862,9 +873,11 @@ func (x *yyLex) readString() (token int, value py.Object) {
 		}
 	}
 
+	startCol := x.pos.ColOffset
 	rawString := false  // whether we are parsing a r"" string
 	byteString := false // whether we are parsing a b"" string
 	fString := false    // whether we are parsing a f"" string (PEP 498)
+	tString := false    // whether it is a t"" string (PEP 750); fString is set too
 	// u"" strings are just normal strings so we ignore that qualifier
 
 	// Start of string
@@ -876,6 +889,28 @@ func (x *yyLex) readString() (token int, value py.Object) {
 	if (r0 == 'f' || r0 == 'F') && (r1 == '\'' || r1 == '"') {
 		fString = true
 		x.cut(1)
+		goto found
+	}
+	// t cannot be combined with b, f or u
+	if (r2 == '\'' || r2 == '"') && len(x.line) >= 3 {
+		a, b := lower(r0), lower(r1)
+		if a > b {
+			a, b = b, a
+		}
+		if a == 'b' && b == 't' || a == 'f' && b == 't' || a == 't' && b == 'u' {
+			x.SyntaxErrorf("'%c' and '%c' prefixes are incompatible", a, b)
+			return eofError, nil
+		}
+	}
+	// Or start of t"" T"" rt"" tr"": a template string, lexed like an f-string
+	if (r0 == 't' || r0 == 'T') && (r1 == '\'' || r1 == '"') {
+		fString, tString = true, true
+		x.cut(1)
+		goto found
+	}
+	if ((r0 == 'r' || r0 == 'R') && (r1 == 't' || r1 == 'T') || (r0 == 't' || r0 == 'T') && (r1 == 'r' || r1 == 'R')) && (r2 == '\'' || r2 == '"') {
+		rawString, fString, tString = true, true, true
+		x.cut(2)
 		goto found
 	}
 	// Or start of rf"" fr"" and the other case variants
@@ -943,6 +978,7 @@ found:
 	} else {
 		panic("Bad string start")
 	}
+	bodyCol := x.pos.ColOffset - startCol
 	buf := new(bytes.Buffer)
 	for {
 		escape := false
@@ -956,26 +992,28 @@ found:
 				_, _ = buf.WriteRune(c)
 				escape = false
 			} else {
-				if strings.HasPrefix(x.line[i:], stringEnd) {
+				if strings.HasPrefix(x.line[i:], stringEnd) && !(fString && ast.FStringOpen(buf.String())) {
 					x.cut(i + len(stringEnd))
 					goto foundEndOfString
 				}
 				if c == '\\' {
 					escape = true
 				}
-				if !multiLineString && c == '\n' {
+				if !multiLineString && c == '\n' && !(fString && ast.FStringOpen(buf.String())) {
 					break
 				}
 				_, _ = buf.WriteRune(c)
 			}
 		}
-		if !multiLineString {
+		if !multiLineString && !(fString && ast.FStringOpen(buf.String())) {
 			x.SyntaxErrorf("EOL while scanning string literal")
 			return eofError, nil
 		}
 	readMore:
 		if x.eof {
-			if multiLineString {
+			if fString && ast.FStringOpen(buf.String()) {
+				x.SyntaxErrorf("f-string: expecting '}'")
+			} else if multiLineString {
 				x.SyntaxErrorf("EOF while scanning triple-quoted string literal")
 			} else {
 				x.SyntaxErrorf("EOL while scanning string literal")
@@ -988,7 +1026,10 @@ foundEndOfString:
 	// f-strings are handed to the compiler exactly as written: no
 	// escape processing and no brace processing happens here.
 	if fString {
-		return STRING, py.NewFString(buf.String(), rawString)
+		fs := py.NewFString(buf.String(), rawString)
+		fs.Template = tString
+		fs.BodyCol, fs.Located = bodyCol, true
+		return STRING, fs
 	}
 	if !rawString {
 		var err error
@@ -1099,4 +1140,65 @@ func Lex(in io.Reader, filename string, mode py.CompileMode) (lts LexTokens, err
 // Lex a string
 func LexString(in string, mode py.CompileMode) (lts LexTokens, err error) {
 	return Lex(bytes.NewBufferString(in), "<string>", mode)
+}
+
+func lower(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return b + 'a' - 'A'
+	}
+	return b
+}
+
+// setEnd records on node, a freshly reduced expression or statement, the end
+// of the last token it consumed.  lookahead is yyrcvr.char: when it is not
+// negative the parser has already lexed the token after the node.
+func bracketEnd(yylex yyLexer, lookahead int, node ast.Expr, start ast.Pos) {
+	// A freshly built node (or a set/dict display) spans its brackets; an
+	// expression that was only parenthesised keeps the position it had.
+	switch node.(type) {
+	case *ast.Dict, *ast.Set, *ast.DictComp, *ast.SetComp:
+	default:
+		if node.GetEndLineno() != 0 {
+			return
+		}
+	}
+	forceEnd(yylex, lookahead, node)
+	setStart(node, start)
+}
+
+func setStart(node ast.Expr, start ast.Pos) {
+	switch n := node.(type) {
+	case *ast.Tuple:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.List:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.Dict:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.Set:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.ListComp:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.SetComp:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.DictComp:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	case *ast.GeneratorExp:
+		n.Lineno, n.ColOffset = start.Lineno, start.ColOffset
+	}
+}
+
+func setEnd(yylex yyLexer, lookahead int, node ast.Ast) {
+	if node == nil || node.GetEndLineno() != 0 {
+		return
+	}
+	forceEnd(yylex, lookahead, node)
+}
+
+func forceEnd(yylex yyLexer, lookahead int, node ast.Ast) {
+	x := yylex.(*yyLex)
+	end := x.realEnd
+	if lookahead >= 0 && x.lookIsReal {
+		end = x.prevRealEnd
+	}
+	node.SetEnd(end.Lineno, end.ColOffset)
 }

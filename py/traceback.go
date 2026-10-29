@@ -59,8 +59,8 @@ func (tb *Traceback) TracebackDump(w io.Writer) {
 // FormatLines renders the frames of tb the way CPython's StackSummary.format
 // does: a File line and the stripped source line per frame, with a run of more
 // than three identical frames (recursion) cut to three and a
-// "[Previous line repeated N more times]" line.
-// ponytail: no "~^^^" caret lines; the compiler records no column positions.
+// "[Previous line repeated N more times]" line.  Where the compiler recorded a
+// source range, the source and "~~~^^^" caret lines follow CPython's.
 func (tb *Traceback) FormatLines() []string {
 	var out []string
 	var lastFile, lastName string
@@ -76,23 +76,44 @@ func (tb *Traceback) FormatLines() []string {
 			out = append(out, fmt.Sprintf("  [Previous line repeated %d more time%s]\n", n, s))
 		}
 	}
+	scope := ""
 	for ; tb != nil; tb = tb.Next {
 		code := tb.Frame.Code
-		if code.Filename != lastFile || tb.Lineno != lastLine || code.Name != lastName {
+		// CPython inlines list, set and dict comprehensions (PEP 709): they
+		// have no frame of their own, so the frame that calls one is shown
+		// at the failing position inside it.  Here they do have one, so the
+		// calling entry is dropped and the comprehension's is shown under
+		// the caller's name.
+		if tb.Next != nil && isInlinedComprehension(tb.Next.Frame.Code) && tb.Next.Frame.Code.Filename == code.Filename {
+			if scope == "" {
+				scope = code.Name
+			}
+			continue
+		}
+		name := code.Name
+		if isInlinedComprehension(code) {
+			if scope != "" {
+				name = scope
+			}
+		}
+		scope = ""
+		if code.Filename != lastFile || tb.Lineno != lastLine || name != lastName {
 			flush()
-			lastFile, lastLine, lastName = code.Filename, tb.Lineno, code.Name
+			lastFile, lastLine, lastName = code.Filename, tb.Lineno, name
 			count = 0
 		}
 		count++
 		if count > 3 {
 			continue
 		}
-		out = append(out, fmt.Sprintf("  File \"%s\", line %d, in %s\n", code.Filename, tb.Lineno, code.Name))
-		if line, ok := SourceLine(code.Filename, int(tb.Lineno)); ok {
-			if text := strings.TrimSpace(line); text != "" {
-				out = append(out, "    "+text+"\n")
-			}
+		out = append(out, fmt.Sprintf("  File \"%s\", line %d, in %s\n", code.Filename, tb.Lineno, name))
+		line, endLine, col, endCol, hasCols := code.PositionAt(max(tb.Lasti-1, 0))
+		if line != int(tb.Lineno) || endLine < line {
+			// The table and the line number disagree (a frame traced past
+			// its last instruction): fall back to the plain source line.
+			line, endLine, hasCols = int(tb.Lineno), int(tb.Lineno), false
 		}
+		out = append(out, frameSourceLines(code.Filename, line, endLine, col, endCol, hasCols)...)
 	}
 	flush()
 	return out
@@ -165,3 +186,13 @@ func init() {
 
 // Make sure it satisfies the interface
 var _ Object = (*Traceback)(nil)
+
+// isInlinedComprehension reports whether code is the body of a list, set or
+// dict comprehension, which CPython runs in the frame of its caller.
+func isInlinedComprehension(code *Code) bool {
+	switch code.Name {
+	case "<listcomp>", "<setcomp>", "<dictcomp>":
+		return true
+	}
+	return false
+}

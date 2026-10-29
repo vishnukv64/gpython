@@ -1340,9 +1340,9 @@ func do_COMPARE_OP(vm *Vm, opname int32) error {
 		in, err = py.SequenceContains(b, a)
 		r = py.NewBool(!in)
 	case PyCmp_IS:
-		r = py.NewBool(a == b)
+		r = py.NewBool(sameObject(a, b))
 	case PyCmp_IS_NOT:
-		r = py.NewBool(a != b)
+		r = py.NewBool(!sameObject(a, b))
 	case PyCmp_EXC_MATCH:
 		if bTuple, ok := b.(py.Tuple); ok {
 			for _, exc := range bTuple {
@@ -1894,6 +1894,7 @@ func (vm *Vm) raise(exc, cause py.Object) error {
 				py.RestoreTraceback(e)
 			}
 			vm.curexc = vm.exc
+			vm.bareRaised, vm.bareRaisedFrame = vm.exc.Value, vm.frame
 			// Signal the existing exception again
 			vm.why = whyException
 
@@ -2905,6 +2906,14 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 			err = do_MAP_ADD(&vm, arg)
 		case LOAD_CLASSDEREF:
 			err = do_LOAD_CLASSDEREF(&vm, arg)
+		case EG_PREP:
+			err = do_EG_PREP(&vm, arg)
+		case EG_MATCH:
+			err = do_EG_MATCH(&vm, arg)
+		case EG_RECORD:
+			err = do_EG_RECORD(&vm, arg)
+		case EG_RERAISE:
+			err = do_EG_RERAISE(&vm, arg)
 		default:
 			err = do_ILLEGAL(&vm, arg)
 		}
@@ -3398,4 +3407,19 @@ func (f *frameSlot) setFor(id uint64, frame *py.Frame) {
 		return
 	}
 	f.frames[id] = frame
+}
+
+// sameObject is the "is" operator.  Interface equality panics for the
+// by-value types that wrap a map or slice (a function's annotations dict, a
+// tuple), so those compare by identity of what they wrap.
+func sameObject(a, b py.Object) (same bool) {
+	switch x := a.(type) {
+	case py.StringDict:
+		y, ok := b.(py.StringDict)
+		return ok && x.Ptr() == y.Ptr()
+	case py.Tuple:
+		y, ok := b.(py.Tuple)
+		return ok && len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
+	}
+	return a == b
 }

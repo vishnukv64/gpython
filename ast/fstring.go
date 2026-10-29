@@ -5,9 +5,8 @@
 package ast
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/vishnukv64/gpython/py"
 )
 
 // FStringPart is one piece of an f-string: either a literal or a
@@ -16,95 +15,175 @@ type FStringPart struct {
 	// Text is the literal text (used when Field is false)
 	Text string
 	// field parts
-	Field      bool
-	Expr       string
+	Field bool
+	Expr  string
+	// Offset is the index, in runes of the text given to ParseFString, of the
+	// first character of Expr.
+	Offset     int
 	Conversion byte // 0, 'r', 's' or 'a'
 	FormatSpec string
-	// debug is the self-documenting form, f"{x=}": the rendered output is
+	// Debug is the self-documenting form, f"{x=}": the rendered output is
 	// prefixed with the source text of the expression and an "=".
 	Debug     bool
 	DebugText string
 }
 
-// ParseFString splits the raw text of an f-string literal into literal
-// parts and replacement fields.
-//
-// Limitations: a replacement field may not itself contain an f-string, and
-// a `!` or `:` inside the field is taken as the conversion/format separator
-// unless it appears inside a string, a bracket or a nested call.  Nested
-// f-strings are reported as a SyntaxError rather than silently mis-parsed.
+// fieldScan locates the parts of one replacement field.  All positions are
+// indexes into the rune slice, or -1 when absent.
+type fieldScan struct {
+	end, eq, conv, spec int
+}
+
+func isPrefixLetter(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+}
+
+func hasQuote(r []rune, i int, q string) bool {
+	if i+len(q) > len(r) {
+		return false
+	}
+	for k := 0; k < len(q); k++ {
+		if r[i+k] != rune(q[k]) {
+			return false
+		}
+	}
+	return true
+}
+
+// skipString returns the index of the last rune of the string literal whose
+// opening quote is r[j].  Nested f-strings and t-strings are scanned for
+// their own replacement fields (PEP 701), so a quote inside one does not end
+// the outer string.
+func skipString(r []rune, j int) (int, error) {
+	q := string(r[j])
+	if hasQuote(r, j, q+q+q) {
+		q = q + q + q
+	}
+	k := j
+	for k > 0 && isPrefixLetter(r[k-1]) {
+		k--
+	}
+	interp := strings.ContainsAny(string(r[k:j]), "fFtT")
+	for p := j + len(q); p < len(r); p++ {
+		switch c := r[p]; {
+		case hasQuote(r, p, q):
+			return p + len(q) - 1, nil
+		case c == '\\' && p+1 < len(r) && !(interp && (r[p+1] == '{' || r[p+1] == '}')):
+			p++
+		case interp && c == '{':
+			if p+1 < len(r) && r[p+1] == '{' {
+				p++
+				continue
+			}
+			fs, err := scanField(r, p+1)
+			if err != nil {
+				return 0, err
+			}
+			p = fs.end
+		case interp && c == '}' && p+1 < len(r) && r[p+1] == '}':
+			p++
+		case c == '\n' && len(q) == 1:
+			return 0, fmt.Errorf("unterminated string literal")
+		}
+	}
+	return 0, fmt.Errorf("unterminated string literal")
+}
+
+// scanField scans a replacement field whose first rune after the "{" is
+// r[i].  It returns where the field ends (the index of its closing "}") and
+// where its "=", "!" and ":" markers are.
+func scanField(r []rune, i int) (fieldScan, error) {
+	fs := fieldScan{end: -1, eq: -1, conv: -1, spec: -1}
+	depth := 0
+	for j := i; j < len(r); j++ {
+		switch c := r[j]; c {
+		case '\'', '"':
+			e, err := skipString(r, j)
+			if err != nil {
+				return fs, err
+			}
+			j = e
+		case '#':
+			for j+1 < len(r) && r[j+1] != '\n' {
+				j++
+			}
+		case '(', '[', '{':
+			depth++
+		case ')', ']':
+			depth--
+		case '}':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			fs.end = j
+			return fs, nil
+		case '!':
+			if j+1 < len(r) && r[j+1] == '=' {
+				j++
+			} else if depth == 0 && fs.conv < 0 && fs.spec < 0 {
+				fs.conv = j
+			}
+		case ':':
+			if depth != 0 || fs.spec >= 0 {
+				continue
+			}
+			fs.spec = j
+			for j++; j < len(r); j++ {
+				if r[j] == '{' {
+					sub, err := scanField(r, j+1)
+					if err != nil {
+						return fs, err
+					}
+					j = sub.end
+				} else if r[j] == '}' {
+					fs.end = j
+					return fs, nil
+				}
+			}
+		case '=':
+			if j+1 < len(r) && r[j+1] == '=' {
+				j++
+				continue
+			}
+			if depth == 0 && fs.eq < 0 && fs.conv < 0 && fs.spec < 0 && j > i && !strings.ContainsRune("<>=!", r[j-1]) {
+				fs.eq = j
+			}
+		}
+	}
+	return fs, fmt.Errorf("f-string: expecting '}'")
+}
+
+// ParseFString splits the raw text of an f-string or t-string literal into
+// literal parts and replacement fields.
 func ParseFString(text string) ([]FStringPart, error) {
 	var parts []FStringPart
 	var lit strings.Builder
 
-	runes := []rune(text)
-	i := 0
-	for i < len(runes) {
-		c := runes[i]
-		switch c {
-		case '{':
-			if i+1 < len(runes) && runes[i+1] == '{' {
-				lit.WriteRune('{')
-				i += 2
-				continue
+	r := []rune(text)
+	for i := 0; i < len(r); {
+		c := r[i]
+		switch {
+		case c == '{' && i+1 < len(r) && r[i+1] == '{', c == '}' && i+1 < len(r) && r[i+1] == '}':
+			lit.WriteRune(c)
+			i += 2
+		case c == '{':
+			fs, err := scanField(r, i+1)
+			if err != nil {
+				return nil, err
 			}
-			// replacement field: find its matching close brace
-			depth := 1
-			j := i + 1
-			var inStr rune // quote char when inside a string literal
-			var brackets int
-			for ; j < len(runes); j++ {
-				r := runes[j]
-				if inStr != 0 {
-					if r == '\\' {
-						j++
-						continue
-					}
-					if r == inStr {
-						inStr = 0
-					}
-					continue
-				}
-				switch r {
-				case '\'', '"':
-					inStr = r
-				case '(', '[', '{':
-					brackets++
-				case ')', ']':
-					brackets--
-				case '}':
-					if brackets == 0 {
-						depth--
-					} else {
-						brackets--
-					}
-				}
-				if depth == 0 {
-					break
-				}
+			field, err := buildField(r, i+1, fs)
+			if err != nil {
+				return nil, err
 			}
-			if j >= len(runes) {
-				return nil, py.ExceptionNewf(py.SyntaxError, "f-string: expecting '}'")
-			}
-			body := string(runes[i+1 : j])
-
 			if lit.Len() > 0 {
 				parts = append(parts, FStringPart{Text: lit.String()})
 				lit.Reset()
 			}
-			field, err := parseField(body)
-			if err != nil {
-				return nil, err
-			}
 			parts = append(parts, field)
-			i = j + 1
-		case '}':
-			if i+1 < len(runes) && runes[i+1] == '}' {
-				lit.WriteRune('}')
-				i += 2
-				continue
-			}
-			return nil, py.ExceptionNewf(py.SyntaxError, "f-string: single '}' is not allowed")
+			i = fs.end + 1
+		case c == '}':
+			return nil, fmt.Errorf("f-string: single '}' is not allowed")
 		default:
 			lit.WriteRune(c)
 			i++
@@ -116,133 +195,101 @@ func ParseFString(text string) ([]FStringPart, error) {
 	return parts, nil
 }
 
-// parseField splits a replacement field ("expr[!conv][:spec]") into its parts.
-func parseField(body string) (FStringPart, error) {
+// buildField turns the scan of the field starting at r[start] into a part.
+func buildField(r []rune, start int, fs fieldScan) (FStringPart, error) {
 	field := FStringPart{Field: true}
-
-	// f"{x=}" renders as "x=<repr of x>".  The trailing "=" has to be found
-	// before the conversion and format scan, because it is the last
-	// character of the expression and everything after it is ordinary
-	// conversions and format specs.
-	// The marker is the first "=" at depth 0 outside a string that is not
-	// part of a comparison: it is followed by the conversion, the format
-	// spec or the end of the field, and preceded by the end of the
-	// expression.  Everything after it is parsed as usual, so "f"{x=:>5}""
-	// keeps its format spec.
-	{
-		runes := []rune(body)
-		depth := 0
-		var inStr rune
-		for i := 0; i < len(runes); i++ {
-			r := runes[i]
-			if inStr != 0 {
-				if r == '\\' {
-					i++
-					continue
-				}
-				if r == inStr {
-					inStr = 0
-				}
-				continue
-			}
-			switch r {
-			case '\'', '"':
-				inStr = r
-			case '(', '[', '{':
-				depth++
-			case ')', ']', '}':
-				depth--
-			case '=':
-				if depth != 0 || i == 0 {
-					continue
-				}
-				prev, next := runes[i-1], ' '
-				if i+1 < len(runes) {
-					next = runes[i+1]
-				}
-				// "==", "!=", "<=", ">=" are comparisons, not the marker.
-				if prev == '=' || prev == '!' || prev == '<' || prev == '>' || next == '=' {
-					continue
-				}
-				field.Debug = true
-				// The source text is kept EXACTLY as written, padding and
-				// all, because CPython echoes it back: f"{ x = }" renders
-				// " x = 5".  The whitespace that followed the "=" is part of
-				// it too, but only up to the conversion or the format spec.
-				// Only the expression compiled below is trimmed.
-				field.DebugText = string(runes[:i]) + "="
-				rest := runes[i+1:]
-				for len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
-					field.DebugText += string(rest[0])
-					rest = rest[1:]
-				}
-				body = string(runes[:i]) + string(rest)
-				i = len(runes)
-			}
+	exprEnd := fs.end
+	for _, m := range []int{fs.spec, fs.conv, fs.eq} {
+		if m >= 0 && m < exprEnd {
+			exprEnd = m
 		}
 	}
-
-	// Find the conversion and format separators at depth 0, outside strings.
-	runes := []rune(body)
-	depth := 0
-	var inStr rune
-	conv := -1
-	spec := -1
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-		if inStr != 0 {
-			if r == '\\' {
-				i++
-				continue
-			}
-			if r == inStr {
-				inStr = 0
-			}
-			continue
+	if fs.eq >= 0 {
+		// The source text is echoed back EXACTLY as written, padding and
+		// all: f"{ x = }" renders " x = 5".
+		field.Debug = true
+		t := fs.eq + 1
+		for t < len(r) && (r[t] == ' ' || r[t] == '\t') {
+			t++
 		}
-		switch r {
-		case '\'', '"':
-			inStr = r
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-		case '!':
-			if depth == 0 && conv < 0 && spec < 0 {
-				conv = i
-			}
-		case ':':
-			if depth == 0 && spec < 0 {
-				spec = i
-			}
+		field.DebugText = string(r[start:fs.eq+1]) + string(r[fs.eq+1:t])
+	}
+	field.Expr = string(r[start:exprEnd])
+	field.Offset = start
+	if strings.TrimSpace(stripComments(field.Expr)) == "" {
+		return field, fmt.Errorf("f-string: valid expression required before '%s'", string(r[exprEnd]))
+	}
+	if fs.spec >= 0 && strings.HasPrefix(strings.TrimSpace(field.Expr), "lambda") {
+		return field, fmt.Errorf("f-string: lambda expressions are not allowed without parentheses")
+	}
+	if fs.conv >= 0 {
+		if fs.conv+1 >= len(r) || fs.conv+1 >= fs.end {
+			return field, fmt.Errorf("f-string: missing conversion character")
+		}
+		field.Conversion = byte(r[fs.conv+1])
+		if r[fs.conv+1] > 127 || !strings.ContainsRune("rsa", r[fs.conv+1]) {
+			return field, fmt.Errorf("f-string: invalid conversion character '%s': expected 's', 'r', or 'a'", string(r[fs.conv+1]))
+		}
+		if n := fs.conv + 2; n < fs.end && r[n] != ':' {
+			return field, fmt.Errorf("f-string: expecting ':' or '}'")
 		}
 	}
-
-	end := len(runes)
-	if conv >= 0 {
-		end = conv
-		if conv+1 >= len(runes) {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: missing conversion character")
-		}
-		field.Conversion = byte(runes[conv+1])
-		if field.Conversion != 'r' && field.Conversion != 's' && field.Conversion != 'a' {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: invalid conversion character %q", string(field.Conversion))
-		}
-	}
-	if spec >= 0 {
-		if conv >= 0 && spec < conv {
-			return field, py.ExceptionNewf(py.SyntaxError, "f-string: format specifier before conversion")
-		}
-		start := spec
-		if conv < 0 {
-			end = spec
-		}
-		field.FormatSpec = string(runes[start+1:])
-	}
-
-	field.Expr = strings.TrimSpace(string(runes[:end]))
-	if field.Expr == "" {
-		return field, py.ExceptionNewf(py.SyntaxError, "f-string: empty expression not allowed")
+	if fs.spec >= 0 {
+		field.FormatSpec = string(r[fs.spec+1 : fs.end])
 	}
 	return field, nil
+}
+
+// stripComments drops "# ..." comments (not those inside strings) from an
+// expression, for the emptiness check only.
+func stripComments(s string) string {
+	r := []rune(s)
+	var out strings.Builder
+	for j := 0; j < len(r); j++ {
+		switch r[j] {
+		case '\'', '"':
+			e, err := skipString(r, j)
+			if err != nil {
+				return s
+			}
+			out.WriteString(string(r[j : e+1]))
+			j = e
+		case '#':
+			for j+1 < len(r) && r[j+1] != '\n' {
+				j++
+			}
+		default:
+			out.WriteRune(r[j])
+		}
+	}
+	return out.String()
+}
+
+// FStringOpen reports whether text, the start of an f-string body, ends
+// inside a replacement field.  The lexer uses it to decide whether a quote
+// or a newline belongs to the field (PEP 701) or ends the string.
+func FStringOpen(text string) bool {
+	if !strings.Contains(text, "{") {
+		return false
+	}
+	r := []rune(text)
+	for i := 0; i < len(r); i++ {
+		switch {
+		case r[i] == '{' && i+1 < len(r) && r[i+1] == '{':
+			i++
+		case r[i] == '{':
+			fs, err := scanField(r, i+1)
+			if err != nil {
+				return true
+			}
+			i = fs.end
+		}
+	}
+	return false
+}
+
+// ParseExpr parses the field's expression.  It is parenthesised so that a
+// multi-line expression, or one that ends in a comment, parses (PEP 701).
+func (p FStringPart) ParseExpr() (Expr, error) {
+	return ParseExpr("(" + p.Expr + "\n)")
 }

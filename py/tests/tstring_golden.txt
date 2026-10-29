@@ -1,0 +1,30 @@
+Template(strings=('a', 'b', 'cx=', ''), interpolations=(Interpolation(5, 'x', None, ''), Interpolation('hi', 'y', 'r', '>5'), Interpolation(5, 'x', 'r', '')))
+('a', 'b', 'cx=', '') (5, 'hi', 5)
+Interpolation(5, 'x', None, '') 5 x None 
+Interpolation('hi', 'y', 'r', '>5') hi y r >5
+Interpolation(5, 'x', 'r', '') 5 x r 
+['a', Interpolation(5, 'x', None, ''), 'b', Interpolation('hi', 'y', 'r', '>5'), 'cx=', Interpolation(5, 'x', 'r', '')]
+Template(strings=('', ''), interpolations=(Interpolation(5, ' x', None, ''),)) Template(strings=('',), interpolations=()) Template(strings=('abc',), interpolations=()) Template(strings=('', '', ''), interpolations=(Interpolation(5, 'x', None, ''), Interpolation('hi', 'y', None, '')))
+Template(strings=('ab', ''), interpolations=(Interpolation(5, 'x', None, ''),)) Template(strings=('\\n', ''), interpolations=(Interpolation(5, 'x', None, ''),)) Template(strings=('\n', ''), interpolations=(Interpolation(5, 'x', None, ''),))
+Template(strings=('a', 'b', ''), interpolations=(Interpolation(5, 'x', None, ''), Interpolation('hi', 'y', None, '')))
+can only concatenate string.templatelib.Template (not "str") to string.templatelib.Template
+Template(strings=('a', 'b'), interpolations=(Interpolation(1, 'x', None, ''),))
+Template(strings=('',), interpolations=()) Template(strings=('ab',), interpolations=()) Template(strings=('', ''), interpolations=(Interpolation(1, '', None, ''),))
+<class 'string.templatelib.Template'> string.templatelib ('value', 'expression', 'conversion', 'format_spec') None
+True False True
+Template.__new__ *args need to be of type 'str' or 'Interpolation', got int
+ValueError Interpolation() argument 'conversion' must be one of 's', 'a' or 'r'
+Template(strings=('a', 'b', 'cx=', ''), interpolations=(Interpolation(5, 'x', None, ''), Interpolation('hi', 'y', 'r', '>5'), Interpolation(5, 'x', 'r', '')))
+3 e r f
+'a' a
+('a', 'b', 'cx=', '')
+SE t"a" "b" cannot mix t-string literals with string or bytes literals
+SE f"a" t"b" cannot mix t-string literals with string or bytes literals
+SE t"a" b"x" cannot mix t-string literals with string or bytes literals
+SE t"{x!z}" t-string: invalid conversion character 'z': expected 's', 'r', or 'a'
+SE tb"x" 'b' and 't' prefixes are incompatible
+SE ft"x" 'f' and 't' prefixes are incompatible
+SE t"{}" t-string: valid expression required before '}'
+Template(strings=('', ''), interpolations=(Interpolation(5, 'x', None, 'hi'),)) Template(strings=('', ''), interpolations=(Interpolation(5, 'x', 's', ''),)) Template(strings=('x = ', ''), interpolations=(Interpolation(5, 'x', 'r', ''),)) Template(strings=('x=', ''), interpolations=(Interpolation(5, 'x', None, '>3'),)) Template(strings=('{}',), interpolations=())
+Template(strings=('a', 'b', 'cx=', ''), interpolations=(Interpolation(5, 'x', None, ''), Interpolation('hi', 'y', 'r', '>5'), Interpolation(5, 'x', 'r', ''))) 
+'Template' Interpolation string.templatelib

@@ -50,6 +50,10 @@ type Vm struct {
 	// restores the previous state on handler exit and reports (None, None,
 	// None) once no handler is active.
 	excStack []py.ExceptionInfo
+	// bareRaised is the exception a bare "raise" last re-signalled, and the
+	// frame that did it; except* uses it to tell a re-raise from a new raise.
+	bareRaised      py.Object
+	bareRaisedFrame *py.Frame
 	// VM access to state / modules
 	context py.Context
 }

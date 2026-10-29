@@ -1,0 +1,176 @@
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 14, in f1
+    def f1(a, b): return a + b
+                         ~~^~~
+TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 15, in f2
+    def f2(a): return a[5]
+                      ~^^^
+IndexError: list index out of range
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 16, in f3
+    def f3(a): return a.missing
+                      ^^^^^^^^^
+AttributeError: 'int' object has no attribute 'missing'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 17, in f4
+    def f4(x): return len(x)
+                      ~~~^^^
+TypeError: object of type 'int' has no len()
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 19, in f5
+    y = int(x)
+ValueError: invalid literal for int() with base 10: 'q'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 21, in f6
+    def f6(a, b, c): return a * (b + c) - 1
+                                 ~~^~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 23, in f7
+    return (a
+            ~
+            + 1)
+            ^~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 25, in f8
+    def f8(a): return [1][a] + 2
+                      ~~~^^^
+IndexError: list index out of range
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 26, in f9
+    def f9(): raise ValueError("boom")
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: boom
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 27, in f10
+    def f10(a): return a.b.c.d
+                       ^^^
+AttributeError: 'int' object has no attribute 'b'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 28, in f11
+    def f11(a): x = a(1)(2); return x
+                    ~~~~^^^
+TypeError: 'int' object is not callable
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 29, in f12
+    def f12(): return 1/0
+                      ~^~
+ZeroDivisionError: division by zero
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 30, in f13
+    def f13(a): d["k"]["j"]
+                ~^^^^^
+KeyError: 'k'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 31, in f14
+    def f14(a): return -a
+                       ^^
+TypeError: bad operand type for unary -: 'str'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 32, in f15
+    def f15(a): return a < 3
+                       ^^^^^
+TypeError: '<' not supported between instances of 'str' and 'int'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 34, in f16
+    for i in a: pass
+             ^
+TypeError: 'int' object is not iterable
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 13, in m
+    def m(self): return self.nope
+                        ^^^^^^^^^
+AttributeError: 'K' object has no attribute 'nope'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 39, in f18
+    return foo(a)
+  File "FILE", line 38, in <lambda>
+    foo = lambda q: q.zz
+                    ^^^^
+AttributeError: 'int' object has no attribute 'zz'
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 40, in f19
+    def f19(a): return unknown_name + 1
+                       ^^^^^^^^^^^^
+NameError: name 'unknown_name' is not defined
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 41, in f20
+    def f20(a): return "é" + a + "日本"
+                       ~~~~^~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "FILE", line 7, in call
+    try: f(*a)
+         ~^^^^
+  File "FILE", line 43, in f21
+    return f1(
+        a,
+        None
+    )
+  File "FILE", line 14, in f1
+    def f1(a, b): return a + b
+                         ~~^~~
+TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'

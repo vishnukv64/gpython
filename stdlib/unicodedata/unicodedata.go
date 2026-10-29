@@ -876,3 +876,14 @@ func isNormalizedMethod(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	return py.Bool(out == data), nil
 }
+
+func init() {
+	py.EastAsianWide = func(r rune) bool {
+		t, err := ucd()
+		if err != nil {
+			return false
+		}
+		w := t.eastAsianWidth(r)
+		return w == "W" || w == "F"
+	}
+}

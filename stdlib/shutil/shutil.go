@@ -837,9 +837,15 @@ func rmtree(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	var pathObj py.Object
 	ignoreErrors := py.Object(py.False)
 	onerror := py.Object(py.None)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OO:rmtree",
-		[]string{"path", "ignore_errors", "onerror"}, &pathObj, &ignoreErrors, &onerror); err != nil {
+	onexc := py.Object(py.None)
+	dirFd := py.Object(py.None)
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|OO$OO:rmtree",
+		[]string{"path", "ignore_errors", "onerror", "onexc", "dir_fd"}, &pathObj, &ignoreErrors, &onerror, &onexc, &dirFd); err != nil {
 		return nil, err
+	}
+	// onexc (3.12) is called with the exception, onerror with exc_info; onexc wins.
+	if onexc != py.None {
+		onerror = &excHandler{onexc}
 	}
 	path, err := fspath(pathObj)
 	if err != nil {
@@ -894,10 +900,22 @@ func rmtreePath(path string, ignoreErrors bool, onerror py.Object) error {
 	return nil
 }
 
+// excHandler marks an onexc callback (called with the exception) apart from
+// an onerror one (called with exc_info) while both travel as one py.Object.
+type excHandler struct{ fn py.Object }
+
+func (h *excHandler) Type() *py.Type { return py.ObjectType }
+
 // handleRmError routes one rmtree failure to onerror, swallows it under
 // ignore_errors, or returns it.
 func handleRmError(err error, path, function string, ignoreErrors bool, onerror py.Object) error {
 	exc := oserr(err)
+	if h, ok := onerror.(*excHandler); ok {
+		if _, callErr := py.Call(h.fn, py.Tuple{py.String(function), py.String(path), exc}, py.StringDict{}); callErr != nil {
+			return callErr
+		}
+		return nil
+	}
 	if onerror != nil && onerror != py.None {
 		// the exc_info triple, with no traceback available for a Go error.
 		info := py.Tuple{exc.Type(), exc, py.None}

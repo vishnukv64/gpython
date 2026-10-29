@@ -71,7 +71,7 @@ func packageSearchPaths(ctx Context, name string) ([]string, error) {
 		return nil, err
 	}
 	if !isPkg {
-		return nil, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
+		return nil, ExceptionNewf(ModuleNotFoundError, "No module named '%s'", name)
 	}
 	// A namespace package is reported as its DIRECTORY; a regular one as its
 	// __init__.py, so the directory holding it is that file's parent.
@@ -95,7 +95,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		base = name[i+1:]
 		searchPaths, err = packageSearchPaths(ctx, name[:i])
 		if err != nil {
-			return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
+			return "", false, ExceptionNewf(ModuleNotFoundError, "No module named '%s'", name)
 		}
 	}
 
@@ -146,7 +146,7 @@ func findModule(ctx Context, name string) (path string, isPkg bool, err error) {
 		return strings.Join(nsDirs, string(os.PathListSeparator)), true, nil
 	}
 
-	return "", false, ExceptionNewf(ModuleNotFoundError, "No module named %q", name)
+	return "", false, ExceptionNewf(ModuleNotFoundError, "No module named '%s'", name)
 }
 
 // initModuleFromPath compiles and runs the module at path into a new Module

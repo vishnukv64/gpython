@@ -29,7 +29,11 @@ var (
 	abstract = map[string]string{"mod": "AST", "stmt": "AST", "expr": "AST", "expr_context": "AST",
 		"boolop": "AST", "operator": "AST", "unaryop": "AST", "cmpop": "AST", "excepthandler": "AST"}
 	ctxNames = map[string]string{"Load": "expr_context", "Store": "expr_context", "Del": "expr_context",
-		"And": "boolop", "Or": "boolop", "Invert": "unaryop", "Not": "unaryop", "UAdd": "unaryop", "USub": "unaryop"}
+		"And": "boolop", "Or": "boolop", "Invert": "unaryop", "Not": "unaryop", "UAdd": "unaryop", "USub": "unaryop",
+		"Add": "operator", "Sub": "operator", "Mult": "operator", "MatMult": "operator", "Div": "operator", "Mod": "operator",
+		"Pow": "operator", "LShift": "operator", "RShift": "operator", "BitOr": "operator", "BitXor": "operator",
+		"BitAnd": "operator", "FloorDiv": "operator", "Eq": "cmpop", "NotEq": "cmpop", "Lt": "cmpop", "LtE": "cmpop",
+		"Gt": "cmpop", "GtE": "cmpop", "Is": "cmpop", "IsNot": "cmpop", "In": "cmpop", "NotIn": "cmpop"}
 )
 
 // classFor returns the Python class for a node name, creating it (and its
@@ -84,10 +88,10 @@ func setFields(c *py.Type, fields []string) {
 // exportedClasses is the module namespace: every node class by name.
 func exportedClasses() py.StringDict {
 	d := py.NewStringDict()
-	stmts := "FunctionDef AsyncFunctionDef ClassDef Return Delete Assign AugAssign AnnAssign For AsyncFor While If With AsyncWith Raise Try Assert Import ImportFrom Global Nonlocal Expr Pass Break Continue Match"
+	stmts := "FunctionDef AsyncFunctionDef ClassDef Return Delete Assign AugAssign AnnAssign For AsyncFor While If With AsyncWith Raise Try Assert Import ImportFrom Global Nonlocal Expr Pass Break Continue Match TryStar TypeAlias"
 	exprs := "BoolOp BinOp UnaryOp Lambda IfExp NamedExpr Dict Set ListComp SetComp DictComp GeneratorExp Yield YieldFrom Await Compare Call Constant JoinedStr Attribute Subscript Starred Name List Tuple Slice"
 	for kind, names := range map[string]string{"stmt": stmts, "expr": exprs, "mod": "Module Interactive Expression",
-		"": "comprehension arguments arg keyword alias withitem Load Store Del And Or Invert Not UAdd USub"} {
+		"": "comprehension arguments arg keyword alias withitem Load Store Del And Or Invert Not UAdd USub Add Sub Mult MatMult Div Mod Pow LShift RShift BitOr BitXor BitAnd FloorDiv Eq NotEq Lt LtE Gt GtE Is IsNot In NotIn"} {
 		for _, n := range strings.Fields(names) {
 			classFor(n, kind, nil)
 		}
@@ -274,7 +278,10 @@ func nodeFor(n pyast.Ast, ends map[int]int) py.Object {
 	node.Dict.Set("col_offset", py.Int(n.GetColOffset()))
 	node.Dict.Set("end_lineno", py.None)
 	node.Dict.Set("end_col_offset", py.None)
-	if name == "FunctionDef" || name == "AsyncFunctionDef" || name == "ClassDef" {
+	if n.GetEndLineno() != 0 {
+		node.Dict.Set("end_lineno", py.Int(n.GetEndLineno()))
+		node.Dict.Set("end_col_offset", py.Int(n.GetEndColOffset()))
+	} else if name == "FunctionDef" || name == "AsyncFunctionDef" || name == "ClassDef" {
 		if e, ok := ends[n.GetLineno()]; ok {
 			node.Dict.Set("end_lineno", py.Int(e))
 		}

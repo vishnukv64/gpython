@@ -37,7 +37,7 @@ class BaseExceptionGroup(BaseException):
         return "%s (%d sub-exception%s)" % (self._message, n, "" if n == 1 else "s")
 
     def __repr__(self):
-        return "%s(%r, %r)" % (type(self).__name__, self._message, list(self._exceptions))
+        return "%s(%r, %r)" % (type(self).__name__, self._message, self.args[1])
 
     def derive(self, excs):
         return BaseExceptionGroup(self._message, excs)

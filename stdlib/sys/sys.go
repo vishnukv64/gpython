@@ -671,7 +671,7 @@ func init() {
 		py.DictEntry{Key: "maxunicode", Value: py.Int(0x10FFFF)},
 		py.DictEntry{Key: "float_info", Value: floatInfo()},
 		py.DictEntry{Key: "hash_info", Value: hashInfo()},
-		py.DictEntry{Key: "hexversion", Value: py.Int(0x030A00F0)},
+		py.DictEntry{Key: "hexversion", Value: py.Int(0x030E07F0)},
 		py.DictEntry{Key: "argv", Value: py.NewListFromStrings(os.Args[1:])},
 		// sys.meta_path is the list of finders consulted before built-in
 		// resolution.  It is EMPTY here, and that is honest: this interpreter's
@@ -694,7 +694,7 @@ func init() {
 		// The platform and version attributes, which code branches on.
 		py.DictEntry{Key: "platform", Value: py.String(platform)},
 		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
-		py.DictEntry{Key: "version", Value: py.String("3.10.0 (gpython)")},
+		py.DictEntry{Key: "version", Value: py.String("3.14.7 (gpython)")},
 		py.DictEntry{Key: "version_info", Value: currentVersionInfo()},
 		py.DictEntry{Key: "prefix", Value: py.String(prefix())},
 		py.DictEntry{Key: "exec_prefix", Value: py.String(prefix())},
@@ -909,8 +909,8 @@ func implementationInfo() py.Object {
 	// "'tuple' object has no attribute 'major'", so pip could not evaluate an
 	// environment marker and "pip show" reported every distribution missing.
 	d.Set("version", currentVersionInfo())
-	d.Set("hexversion", py.Int(0x030A00F0))
-	d.Set("cache_tag", py.String("gpython-310"))
+	d.Set("hexversion", py.Int(0x030E07F0))
+	d.Set("cache_tag", py.String("gpython-314"))
 	return d
 }
 

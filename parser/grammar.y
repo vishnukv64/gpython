@@ -32,6 +32,12 @@ func fstringLiteral(value py.String) string {
 	return strings.ReplaceAll(s, "}", "}}")
 }
 
+// isTemplateLit reports whether a string literal is a t-string.
+func isTemplateLit(o py.Object) bool {
+	f, ok := o.(*py.FString)
+	return ok && f.Template
+}
+
 // fstringPartText re-encodes the text of an f-string carrier for a merge.
 func fstringPartText(f *py.FString) string {
 	if f.Raw {
@@ -63,14 +69,18 @@ type posonlyArgs struct {
 // "@os.path.join" raised NameError instead of reaching the function.
 func dottedNameExpr(pos ast.Pos, name string) ast.Expr {
 	parts := strings.Split(name, ".")
+	// The parts are written without spaces, so every end is known.
+	end := pos
+	end.EndLineno, end.EndColOffset = pos.Lineno, pos.ColOffset+len(parts[0])
 	var expr ast.Expr = &ast.Name{
-		ExprBase: ast.ExprBase{Pos: pos},
+		ExprBase: ast.ExprBase{Pos: end},
 		Id:       ast.Identifier(parts[0]),
 		Ctx:      ast.Load,
 	}
 	for _, part := range parts[1:] {
+		end.EndColOffset += 1 + len(part)
 		expr = &ast.Attribute{
-			ExprBase: ast.ExprBase{Pos: pos},
+			ExprBase: ast.ExprBase{Pos: end},
 			Value:    expr,
 			Attr:     ast.Identifier(part),
 			Ctx:      ast.Load,
@@ -92,16 +102,19 @@ func tupleOrExpr(pos ast.Pos, elts []ast.Expr, optional_comma bool) ast.Expr {
 // Apply trailers (if any) to expr
 //
 // trailers are half made Call, Subscript or Attribute
-func applyTrailers(expr ast.Expr, trailers []ast.Expr) ast.Expr {
+func applyTrailers(start ast.Pos, expr ast.Expr, trailers []ast.Expr) ast.Expr {
 	//trailers := $1
 	for _, trailer := range trailers {
 		switch x := trailer.(type) {
 		case *ast.Call:
 			x.Func, expr = expr, x
+			x.Pos.Lineno, x.Pos.ColOffset = start.Lineno, start.ColOffset
 		case *ast.Subscript:
 			x.Value, expr = expr, x
+			x.Pos.Lineno, x.Pos.ColOffset = start.Lineno, start.ColOffset
 		case *ast.Attribute:
 			x.Value, expr = expr, x
+			x.Pos.Lineno, x.Pos.ColOffset = start.Lineno, start.ColOffset
 		default:
 			panic(fmt.Sprintf("Unknown trailer type: %T", expr))
 		}
@@ -277,9 +290,14 @@ func finishArglist(items []argItem) *ast.Call {
 	posonly		posonlyArgs
 	args		[]*ast.Arg
 	arguments	*ast.Arguments
+	typeparam	*ast.TypeParam
+	typeparams	[]*ast.TypeParam
 }
 
 %type <obj> strings
+%type <typeparam> type_param
+%type <typeparams> type_params type_param_list optional_type_params
+%type <stmt> type_alias_stmt
 %type <mod> inputs file_input single_input eval_input
 %type <stmts> simple_stmt stmt nl_or_stmt small_stmts stmts suite optional_else
 %type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated async_stmt async_funcdef
@@ -291,8 +309,8 @@ func finishArglist(items []argItem) *ast.Call {
 %type <expr> namedexpr
 %type <expr> pattern or_pattern closed_pattern value_pattern
 %type <matchthing> sequence_patterns mapping_patterns mapping_patterns1 mapping_item
-%type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause optional_return_type decorator
-%type <exprs> exprlist comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators sequence_patterns1
+%type <expr> expr_or_star_expr expr star_expr xor_expr and_expr shift_expr arith_expr term factor power trailer atom test_or_star_expr test not_test lambdef test_nocond lambdef_nocond or_test and_test comparison testlist testlist_star_expr yield_expr_or_testlist yield_expr yield_expr_or_testlist_star_expr dictorsetmaker sliceop except_clause except_star_clause except_types optional_return_type decorator
+%type <exprs> except_list exprlist comp_if comp_iter expr_or_star_exprs test_or_star_exprs tests trailers equals_yield_expr_or_testlist_star_expr decorators sequence_patterns1
 %type <cmpop> comp_op
 %type <comma> optional_comma
 %type <comprehensions> comp_for
@@ -496,7 +514,7 @@ optional_arglist_call:
 decorator:
 	'@' dotted_name optional_arglist_call NEWLINE
 	{
-		fn := dottedNameExpr($<pos>$, $2)
+		fn := dottedNameExpr($<pos>2, $2)
 		if $3 == nil {
 			$$ = fn
 		} else {
@@ -504,6 +522,7 @@ decorator:
 			call.Func = fn
 			$$ = &call
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 decorators:
@@ -521,14 +540,17 @@ classdef_or_funcdef:
 	classdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	funcdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |async_funcdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 async_funcdef:
@@ -536,6 +558,7 @@ async_funcdef:
 	{
 		($2).(*ast.FunctionDef).IsAsync = true
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 decorated:
@@ -551,21 +574,113 @@ decorated:
 		default:
 			panic("bad type for decorated")
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 optional_return_type:
 	{
 		$$ = nil
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	MINUSGT test
 	{
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 funcdef:
-	DEF NAME parameters optional_return_type ':' suite
+	DEF NAME optional_type_params parameters optional_return_type ':' suite
 	{
-		$$ = &ast.FunctionDef{StmtBase: ast.StmtBase{Pos: $<pos>$}, Name: ast.Identifier($2), Args: $3, Body: $6, Returns: $4}
+		$$ = &ast.FunctionDef{StmtBase: ast.StmtBase{Pos: $<pos>$}, Name: ast.Identifier($2), TypeParams: $3, Args: $4, Body: $7, Returns: $5}
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+
+// PEP 695 type parameters: [T, T: int, T: (int, str), *Ts, **P, T = int]
+optional_type_params:
+	{
+		$$ = nil
+	}
+|	type_params
+	{
+		$$ = $1
+	}
+
+type_params:
+	'[' type_param_list optional_comma ']'
+	{
+		$$ = $2
+	}
+|	'[' ']'
+	{
+		yylex.(*yyLex).SyntaxError("Type parameter list cannot be empty")
+		$$ = nil
+	}
+
+type_param_list:
+	type_param
+	{
+		$$ = []*ast.TypeParam{$1}
+	}
+|	type_param_list ',' type_param
+	{
+		$$ = append($1, $3)
+	}
+
+type_param:
+	NAME
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarParam, Name: ast.Identifier($1)}
+	}
+|	NAME ':' test
+	{
+		_, isTuple := $3.(*ast.Tuple)
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarParam, Name: ast.Identifier($1), Bound: $3, Constraints: isTuple}
+	}
+|	NAME '=' test
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarParam, Name: ast.Identifier($1), Default: $3}
+	}
+|	NAME ':' test '=' test
+	{
+		_, isTuple := $3.(*ast.Tuple)
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarParam, Name: ast.Identifier($1), Bound: $3, Constraints: isTuple, Default: $5}
+	}
+|	'*' NAME
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarTupleParam, Name: ast.Identifier($2)}
+	}
+|	'*' NAME ':' test
+	{
+		yylex.(*yyLex).SyntaxError("cannot use bound with TypeVarTuple")
+		$$ = nil
+	}
+|	'*' NAME '=' test_or_star_expr
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.TypeVarTupleParam, Name: ast.Identifier($2), Default: $4}
+	}
+|	STARSTAR NAME
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.ParamSpecParam, Name: ast.Identifier($2)}
+	}
+|	STARSTAR NAME ':' test
+	{
+		yylex.(*yyLex).SyntaxError("cannot use bound with ParamSpec")
+		$$ = nil
+	}
+|	STARSTAR NAME '=' test
+	{
+		$$ = &ast.TypeParam{Pos: $<pos>$, Kind: ast.ParamSpecParam, Name: ast.Identifier($2), Default: $4}
+	}
+
+// "type" is a soft keyword: it is the NAME "type" here, checked in the action.
+type_alias_stmt:
+	NAME NAME optional_type_params '=' test
+	{
+		if $1 != "type" {
+			yylex.(*yyLex).SyntaxError("invalid syntax")
+		}
+		$$ = &ast.TypeAlias{StmtBase: ast.StmtBase{Pos: $<pos>$}, Name: &ast.Name{ExprBase: ast.ExprBase{Pos: $<pos>$}, Id: ast.Identifier($2), Ctx: ast.Store}, TypeParams: $3, Value: $5}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 parameters:
@@ -890,34 +1005,47 @@ small_stmt:
 	expr_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	del_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	pass_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	flow_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	import_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	global_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	nonlocal_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	assert_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+|	type_alias_stmt
+	{
+		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 /*
@@ -947,6 +1075,7 @@ expr_stmt:
 		target := $1
 		setCtx(yylex, target, ast.Store)
 		$$ = &ast.AugAssign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: target, Op: $2, Value: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist_star_expr equals_yield_expr_or_testlist_star_expr
 	{
@@ -956,40 +1085,48 @@ expr_stmt:
 		targets = targets[:len(targets)-1]
 		setCtxs(yylex, targets, ast.Store)
 		$$ = &ast.Assign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Targets: targets, Value: value}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist_star_expr
 	{
 		$$ = &ast.ExprStmt{StmtBase: ast.StmtBase{Pos: $<pos>$}, Value: $1}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist_star_expr ':' test
 	{
 		setCtx(yylex, $1, ast.Store)
 		$$ = &ast.AnnAssign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: $1, Annotation: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist_star_expr ':' test '=' testlist_star_expr
 	{
 		setCtx(yylex, $1, ast.Store)
 		$$ = &ast.AnnAssign{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: $1, Annotation: $3, Value: $5}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 yield_expr_or_testlist:
 	yield_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 yield_expr_or_testlist_star_expr:
 	yield_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	testlist_star_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 equals_yield_expr_or_testlist_star_expr:
@@ -1018,10 +1155,12 @@ test_or_star_expr:
 	namedexpr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	star_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 optional_comma:
@@ -1037,6 +1176,7 @@ testlist_star_expr:
 	test_or_star_exprs optional_comma
 	{
 		$$ = tupleOrExpr($<pos>$, $1, $2)
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 augassign:
@@ -1095,92 +1235,110 @@ del_stmt:
 	{
 		setCtxs(yylex, $2, ast.Del)
 		$$ = &ast.Delete{StmtBase: ast.StmtBase{Pos: $<pos>$}, Targets: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 pass_stmt:
 	PASS
 	{
 		$$ = &ast.Pass{StmtBase: ast.StmtBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 flow_stmt:
 	break_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	continue_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	return_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	raise_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	yield_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 break_stmt:
 	BREAK
 	{
 		$$ = &ast.Break{StmtBase: ast.StmtBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 continue_stmt:
 	CONTINUE
 	{
 		$$ = &ast.Continue{StmtBase: ast.StmtBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 return_stmt:
 	RETURN
 	{
 		$$ = &ast.Return{StmtBase: ast.StmtBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	RETURN testlist
 	{
 		$$ = &ast.Return{StmtBase: ast.StmtBase{Pos: $<pos>$}, Value: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 yield_stmt:
 	yield_expr
 	{
 		$$ = &ast.ExprStmt{StmtBase: ast.StmtBase{Pos: $<pos>$}, Value: $1}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 raise_stmt:
 	RAISE
 	{
 		$$ = &ast.Raise{StmtBase: ast.StmtBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	RAISE test
 	{
 		$$ = &ast.Raise{StmtBase: ast.StmtBase{Pos: $<pos>$}, Exc: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	RAISE test FROM test
 	{
 		$$ = &ast.Raise{StmtBase: ast.StmtBase{Pos: $<pos>$}, Exc: $2, Cause: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 import_stmt:
 	import_name
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	import_from
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 import_name:
 	IMPORT dotted_as_names
 	{
 		$$ = &ast.Import{StmtBase: ast.StmtBase{Pos: $<pos>$}, Names: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // note below: the '.' | ELIPSIS is necessary because '...' is tokenized as ELIPSIS
@@ -1239,6 +1397,7 @@ import_from:
 	FROM from_arg IMPORT import_from_arg
 	{
 		$$ = &ast.ImportFrom{StmtBase: ast.StmtBase{Pos: $<pos>$}, Module: ast.Identifier($2), Names: $4, Level: $<level>2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 import_as_name:
@@ -1308,12 +1467,14 @@ global_stmt:
 	GLOBAL names
 	{
 		$$ = &ast.Global{StmtBase: ast.StmtBase{Pos: $<pos>$}, Names: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 nonlocal_stmt:
 	NONLOCAL names
 	{
 		$$ = &ast.Nonlocal{StmtBase: ast.StmtBase{Pos: $<pos>$}, Names: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 tests:
@@ -1331,52 +1492,64 @@ assert_stmt:
 	ASSERT test
 	{
 		$$ = &ast.Assert{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	ASSERT test ',' test
 	{
 		$$ = &ast.Assert{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $2, Msg: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 compound_stmt:
 	match_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	if_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	while_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	for_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	try_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	with_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	funcdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	classdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	decorated
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |async_stmt
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 async_stmt:
@@ -1384,16 +1557,19 @@ async_stmt:
 	{
 		($2).(*ast.FunctionDef).IsAsync = true
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |ASYNC with_stmt
 	{
 		($2).(*ast.With).IsAsync = true
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |ASYNC for_stmt
 	{
 		($2).(*ast.For).IsAsync = true
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 elifs:
@@ -1404,7 +1580,7 @@ elifs:
 |	elifs ELIF namedexpr ':' suite
 	{
 		elifs := $$
-		newif := &ast.If{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $3, Body: $5}
+		newif := &ast.If{StmtBase: ast.StmtBase{Pos: $<pos>2}, Test: $3, Body: $5}
 		if elifs == nil {
 			$$ = newif
 		} else {
@@ -1433,6 +1609,7 @@ match_stmt:
 			m.Cases = append(m.Cases, c.(*ast.MatchCase))
 		}
 		$$ = m
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 match_cases:
@@ -1450,6 +1627,7 @@ match_case:
 	CASE pattern ':' suite
 	{
 		$$ = &ast.MatchCase{StmtBase: ast.StmtBase{Pos: $<pos>$}, Pattern: $2, Body: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	CASE pattern IF test ':' suite
 	{
@@ -1457,6 +1635,7 @@ match_case:
 		// the guard alongside it.
 		guarded := &ast.MatchGuard{ExprBase: ast.ExprBase{Pos: $<pos>$}, Pattern: $2, Guard: $4}
 		$$ = &ast.MatchCase{StmtBase: ast.StmtBase{Pos: $<pos>$}, Pattern: guarded, Body: $6}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // pattern covers the forms real code writes.  Each alternative is listed so
@@ -1465,16 +1644,19 @@ pattern:
 	or_pattern
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	pattern AS NAME
 	{
 		$$ = &ast.MatchAs{ExprBase: ast.ExprBase{Pos: $<pos>$}, Pattern: $1, Name: ast.Identifier($3)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 or_pattern:
 	closed_pattern
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	or_pattern '|' closed_pattern
 	{
@@ -1485,6 +1667,7 @@ or_pattern:
 		} else {
 			$$ = &ast.MatchOr{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: []ast.Expr{$1, $3}}
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 closed_pattern:
@@ -1499,61 +1682,75 @@ closed_pattern:
 		} else {
 			$$ = &ast.MatchCapture{ExprBase: ast.ExprBase{Pos: $<pos>$}, Name: ast.Identifier($1)}
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	value_pattern
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	NUMBER
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $1}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	strings
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: $1.(py.String)}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'-' NUMBER
 	{
 		inner := &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $2}
 		neg := &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.USub, Operand: inner}
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: neg}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	NONE
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.None}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	TRUE
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.True}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	FALSE
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.False}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'(' pattern ')'
 	{
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'[' sequence_patterns ']'
 	{
 		$$ = &ast.MatchSequence{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: $2.([]ast.Expr)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'(' sequence_patterns ')'
 	{
 		$$ = &ast.MatchSequence{ExprBase: ast.ExprBase{Pos: $<pos>$}, Patterns: $2.([]ast.Expr)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'{' mapping_patterns '}'
 	{
 		$$ = $2.(*ast.MatchMapping)
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	dotted_name '(' sequence_patterns ')'
 	{
 		// A class pattern: Class(...) with positional sub-patterns.
 		$$ = &ast.MatchClass{ExprBase: ast.ExprBase{Pos: $<pos>$}, Cls: dottedNameExpr($<pos>$, $1), Patterns: $3.([]ast.Expr)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	dotted_name '(' ')'
 	{
 		$$ = &ast.MatchClass{ExprBase: ast.ExprBase{Pos: $<pos>$}, Cls: dottedNameExpr($<pos>$, $1)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // A dotted name is a value pattern: it names a constant.
@@ -1561,6 +1758,7 @@ value_pattern:
 	dotted_name
 	{
 		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: dottedNameExpr($<pos>$, $1)}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 sequence_patterns:
@@ -1657,6 +1855,7 @@ namedexpr:
 	test
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	test COLONEQUAL test
 	{
@@ -1667,6 +1866,7 @@ namedexpr:
 			yylex.(*yyLex).SyntaxError("cannot use assignment expressions with this target")
 		}
 		$$ = &ast.NamedExpr{ExprBase: ast.ExprBase{Pos: $<pos>$}, Target: name, Value: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 if_stmt:
@@ -1688,12 +1888,23 @@ if_stmt:
 				newif.Orelse = []ast.Stmt{elifs}
 			}
 		}
+		setEnd(yylex, yyrcvr.char, $$)
+		// An elif spans the rest of the chain.
+		for n := newif; len(n.Orelse) == 1; {
+			next, ok := n.Orelse[0].(*ast.If)
+			if !ok || next.EndLineno != 0 {
+				break
+			}
+			next.SetEnd(newif.EndLineno, newif.EndColOffset)
+			n = next
+		}
 	}
 
 while_stmt:
 	WHILE namedexpr ':' suite optional_else
 	{
 		$$ = &ast.While{StmtBase: ast.StmtBase{Pos: $<pos>$}, Test: $2, Body: $4, Orelse: $5}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 for_stmt:
@@ -1702,6 +1913,7 @@ for_stmt:
 		target := tupleOrExpr($<pos>$, $2, false)
 		setCtx(yylex, target, ast.Store)
 		$$ = &ast.For{StmtBase: ast.StmtBase{Pos: $<pos>$}, Target: target, Iter: $4, Body: $6, Orelse: $7}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 except_clauses:
@@ -1710,7 +1922,12 @@ except_clauses:
 	}
 |	except_clauses except_clause ':' suite
 	{
-		exc := &ast.ExceptHandler{Pos: $<pos>$, ExprType: $2, Name: ast.Identifier($<str>2), Body: $4}
+		exc := &ast.ExceptHandler{Pos: $<pos>2, ExprType: $2, Name: ast.Identifier($<str>2), Body: $4}
+		$$ = append($$, exc)
+	}
+|	except_clauses except_star_clause ':' suite
+	{
+		exc := &ast.ExceptHandler{Pos: $<pos>2, ExprType: $2, Name: ast.Identifier($<str>2), Body: $4, Star: true}
 		$$ = append($$, exc)
 	}
 
@@ -1718,18 +1935,22 @@ try_stmt:
 	TRY ':' suite except_clauses
 	{
 		$$ = &ast.Try{StmtBase: ast.StmtBase{Pos: $<pos>$}, Body: $3, Handlers: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	TRY ':' suite except_clauses ELSE ':' suite
 	{
 		$$ = &ast.Try{StmtBase: ast.StmtBase{Pos: $<pos>$}, Body: $3, Handlers: $4, Orelse: $7}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	TRY ':' suite except_clauses FINALLY ':' suite
 	{
 		$$ = &ast.Try{StmtBase: ast.StmtBase{Pos: $<pos>$}, Body: $3, Handlers: $4, Finalbody: $7}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	TRY ':' suite except_clauses ELSE ':' suite FINALLY ':' suite
 	{
 		$$ = &ast.Try{StmtBase: ast.StmtBase{Pos: $<pos>$}, Body: $3, Handlers: $4, Orelse: $7, Finalbody: $10}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 with_items:
@@ -1747,6 +1968,7 @@ with_stmt:
 	WITH with_items ':' suite
 	{
 		$$ = &ast.With{StmtBase: ast.StmtBase{Pos: $<pos>$}, Items: $2, Body: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 with_item:
@@ -1767,16 +1989,63 @@ except_clause:
 	{
 		$$ = nil
 		$<str>$ = ""
+		setEnd(yylex, yyrcvr.char, $$)
 	}
-|	EXCEPT test
+|	EXCEPT except_types
 	{
 		$$ = $2
 		$<str>$ = ""
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	EXCEPT test AS NAME
 	{
 		$$ = $2
 		$<str>$ = $4
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+
+except_star_clause:
+	EXCEPT '*'
+	{
+		$$ = nil
+		$<str>$ = ""
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+|	EXCEPT '*' except_types
+	{
+		$$ = $3
+		$<str>$ = ""
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+|	EXCEPT '*' test AS NAME
+	{
+		$$ = $3
+		$<str>$ = $5
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+
+// PEP 758: the types of an except clause may be listed without
+// parentheses when there is no "as".
+except_types:
+	test
+	{
+		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+|	test ',' except_list
+	{
+		$$ = &ast.Tuple{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elts: append([]ast.Expr{$1}, $3...), Ctx: ast.Load}
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+
+except_list:
+	test
+	{
+		$$ = []ast.Expr{$1}
+	}
+|	except_list ',' test
+	{
+		$$ = append($1, $3)
 	}
 
 stmts:
@@ -1804,24 +2073,29 @@ test:
 	or_test
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	or_test IF or_test ELSE test
 	{
 		$$ = &ast.IfExp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Test:$3, Body: $1, Orelse: $5}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	lambdef
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 test_nocond:
 	or_test
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	lambdef_nocond
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 lambdef:
@@ -1829,10 +2103,12 @@ lambdef:
 	{
 		args := &ast.Arguments{Pos: $<pos>$}
 		$$ = &ast.Lambda{ExprBase: ast.ExprBase{Pos: $<pos>$}, Args: args, Body: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	LAMBDA varargslist ':' test
 	{
 		$$ = &ast.Lambda{ExprBase: ast.ExprBase{Pos: $<pos>$}, Args: $2, Body: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 lambdef_nocond:
@@ -1840,10 +2116,12 @@ lambdef_nocond:
 	{
 		args := &ast.Arguments{Pos: $<pos>$}
 		$$ = &ast.Lambda{ExprBase: ast.ExprBase{Pos: $<pos>$}, Args: args, Body: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	LAMBDA varargslist ':' test_nocond
 	{
 		$$ = &ast.Lambda{ExprBase: ast.ExprBase{Pos: $<pos>$}, Args: $2, Body: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 or_test:
@@ -1851,16 +2129,19 @@ or_test:
 	{
 		$$ = $1
 		$<isExpr>$ = true
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	or_test OR and_test
 	{
 		if !$<isExpr>1 {
 			boolop := $$.(*ast.BoolOp)
 			boolop.Values = append(boolop.Values, $3)
+			boolop.EndLineno = 0
 		} else {
 			$$ = &ast.BoolOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.Or, Values: []ast.Expr{$$, $3}}
 		}
 		$<isExpr>$ = false
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 and_test:
@@ -1868,26 +2149,31 @@ and_test:
 	{
 		$$ = $1
 		$<isExpr>$ = true
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	and_test AND not_test
 	{
 		if !$<isExpr>1 {
 			boolop := $$.(*ast.BoolOp)
 			boolop.Values = append(boolop.Values, $3)
+			boolop.EndLineno = 0
 		} else {
 			$$ = &ast.BoolOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.And, Values: []ast.Expr{$$, $3}}
 		}
 		$<isExpr>$ = false
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 not_test:
 	NOT not_test
 	{
 		$$ = &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.Not, Operand: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	comparison
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 comparison:
@@ -1895,6 +2181,7 @@ comparison:
 	{
 		$$ = $1
 		$<isExpr>$ = true
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	comparison comp_op expr
 	{
@@ -1902,10 +2189,12 @@ comparison:
 			comp := $$.(*ast.Compare)
 			comp.Ops = append(comp.Ops, $2)
 			comp.Comparators = append(comp.Comparators, $3)
+			comp.EndLineno = 0
 		} else{
 			$$ = &ast.Compare{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $$, Ops: []ast.CmpOp{$2}, Comparators: []ast.Expr{$3}}
 		}
 		$<isExpr>$ = false
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // <> LTGT isn't actually a valid comparison operator in Python. It's here for the
@@ -1960,118 +2249,143 @@ star_expr:
 	'*' expr
 	{
 		$$ = &ast.Starred{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $2, Ctx: ast.Load}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 expr:
 	xor_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	expr '|' xor_expr
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.BitOr, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 xor_expr:
 	and_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	xor_expr '^' and_expr
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.BitXor, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 and_expr:
 	shift_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	and_expr '&' shift_expr
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.BitAnd, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 shift_expr:
 	arith_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	shift_expr LTLT arith_expr
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.LShift, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	shift_expr GTGT arith_expr
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.RShift, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 arith_expr:
 	term
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	arith_expr '+' term
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.Add, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	arith_expr '-' term
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.Sub, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 term:
 	factor
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	term '*' factor
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.Mult, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	term '/' factor
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.Div, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	term '%' factor
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.Modulo, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	term DIVDIV factor
 	{
 		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: $1, Op: ast.FloorDiv, Right: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 factor:
 	'+' factor
 	{
 		$$ = &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.UAdd, Operand: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'-' factor
 	{
 		$$ = &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.USub, Operand: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'~' factor
 	{
 		$$ = &ast.UnaryOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Op: ast.Invert, Operand: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	power
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |AWAIT power
 	{
 		$$ = &ast.Await{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 power:
 	atom trailers
 	{
-		$$ = applyTrailers($1, $2)
+		$$ = applyTrailers($<pos>1, $1, $2)
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	atom trailers STARSTAR factor
 	{
-		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: applyTrailers($1, $2), Op: ast.Pow, Right: $4}
+		$$ = &ast.BinOp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Left: applyTrailers($<pos>1, $1, $2), Op: ast.Pow, Right: $4}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // Trailers are half made Call, Attribute or Subscript
@@ -2097,6 +2411,19 @@ strings:
 		// carrier, which is what "a" f"{b}" requires.  The result is always
 		// non-raw, with any raw part re-encoded, so that one Raw flag still
 		// describes the whole literal.
+		if a, ok := $$.(*py.FString); ok {
+			if b, ok := $2.(*py.FString); ok && a.Template && b.Template {
+				// Two t-strings: one template; raw parts are re-encoded as for f-strings.
+				t := py.NewFString(fstringPartText(a)+fstringPartText(b), false)
+				t.Template = true
+				$$ = t
+				goto merged
+			}
+		}
+		if isTemplateLit($$) || isTemplateLit($2) {
+			yylex.(*yyLex).SyntaxError("cannot mix t-string literals with string or bytes literals")
+			goto merged
+		}
 		switch a := $$.(type) {
 		case py.String:
 			switch b := $2.(type) {
@@ -2124,52 +2451,64 @@ strings:
 				yylex.(*yyLex).SyntaxError("cannot mix bytes and nonbytes literals")
 			}
 		}
+	merged:
 	}
 
 atom:
 	'(' ')'
 	{
 		$$ = &ast.Tuple{ExprBase: ast.ExprBase{Pos: $<pos>$}, Ctx: ast.Load}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'(' yield_expr ')'
 	{
 		$$ = $2
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'(' test_or_star_expr comp_for ')'
 	{
 		$$ = &ast.GeneratorExp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elt: $2, Generators: $3}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'(' test_or_star_exprs optional_comma ')' 
 	{
 		$$ = tupleOrExpr($<pos>$, $2, $3)
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'[' ']'
 	{
 		$$ = &ast.List{ExprBase: ast.ExprBase{Pos: $<pos>$}, Ctx: ast.Load}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'[' test_or_star_expr comp_for ']'
 	{
 		$$ = &ast.ListComp{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elt: $2, Generators: $3}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'[' test_or_star_exprs optional_comma ']'
 	{
 		$$ = &ast.List{ExprBase: ast.ExprBase{Pos: $<pos>$}, Elts: $2, Ctx: ast.Load}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'{' '}'
 	{
 		$$ = &ast.Dict{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	'{' dictorsetmaker '}'
 	{
 		$$ = $2
+		bracketEnd(yylex, yyrcvr.char, $$, $<pos>1)
 	}
 |	NAME
 	{
 		$$ = &ast.Name{ExprBase: ast.ExprBase{Pos: $<pos>$}, Id: ast.Identifier($1), Ctx: ast.Load}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	NUMBER
 	{
 		$$ = &ast.Num{ExprBase: ast.ExprBase{Pos: $<pos>$}, N: $1}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	strings
 	{
@@ -2179,26 +2518,31 @@ atom:
 		case py.Bytes:
 			$$ = &ast.Bytes{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: s}
 		case *py.FString:
-			$$ = &ast.FString{ExprBase: ast.ExprBase{Pos: $<pos>$}, Text: s.Text, Raw: s.Raw}
+			$$ = &ast.FString{ExprBase: ast.ExprBase{Pos: $<pos>$}, Text: s.Text, Raw: s.Raw, Template: s.Template, BodyCol: s.BodyCol, Located: s.Located}
 		default:
 			panic("not Bytes or String in strings")
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	ELIPSIS
 	{
 		$$ = &ast.Ellipsis{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	NONE
 	{
 		$$ = &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.None}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	TRUE
 	{
 		$$ = &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.True}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	FALSE
 	{
 		$$ = &ast.NameConstant{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: py.False}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // Trailers are half made Call, Attribute or Subscript
@@ -2206,15 +2550,18 @@ trailer:
 	'(' ')'
 	{
 		$$ = &ast.Call{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'(' arglist ')'
 	{
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'[' subscriptlist ']'
 	{
 		slice := $2
 		// If all items of a ExtSlice are just Index then return as tuple
+		var tpos ast.Pos
 		if extslice, ok := slice.(*ast.ExtSlice); ok {
 			elts := make([]ast.Expr, len(extslice.Dims))
 			for i, item := range(extslice.Dims) {
@@ -2224,14 +2571,17 @@ trailer:
 					goto notAllIndex
 				}
 			}
-                slice = &ast.Index{SliceBase: extslice.SliceBase, Value: &ast.Tuple{ExprBase: ast.ExprBase{Pos: extslice.SliceBase.Pos}, Elts: elts, Ctx: ast.Load}}
+                tpos = ast.Pos{Lineno: elts[0].GetLineno(), ColOffset: elts[0].GetColOffset(), EndLineno: elts[len(elts)-1].GetEndLineno(), EndColOffset: elts[len(elts)-1].GetEndColOffset()}
+                slice = &ast.Index{SliceBase: extslice.SliceBase, Value: &ast.Tuple{ExprBase: ast.ExprBase{Pos: tpos}, Elts: elts, Ctx: ast.Load}}
 		notAllIndex:
 		}
 		$$ = &ast.Subscript{ExprBase: ast.ExprBase{Pos: $<pos>$}, Slice: slice, Ctx: ast.Load}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'.' NAME
 	{
 		$$ = &ast.Attribute{ExprBase: ast.ExprBase{Pos: $<pos>$}, Attr: ast.Identifier($2), Ctx: ast.Load}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 subscripts:
@@ -2303,20 +2653,24 @@ sliceop:
 	':'
 	{
 		$$ = nil
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	':' test
 	{
 		$$ = $2
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 expr_or_star_expr:
 	expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	star_expr
 	{
 		$$ = $1
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 expr_or_star_exprs:
@@ -2346,6 +2700,7 @@ testlist:
 		} else {
 			$$ = elts[0]
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 // (',' test ':' test)*
@@ -2403,17 +2758,18 @@ dictorsetmaker:
 	}
 
 classdef:
-	CLASS NAME optional_arglist_call ':' suite
+	CLASS NAME optional_type_params optional_arglist_call ':' suite
 	{
-		classDef := &ast.ClassDef{StmtBase: ast.StmtBase{Pos: $<pos>$}, Name: ast.Identifier($2), Body: $5}
+		classDef := &ast.ClassDef{StmtBase: ast.StmtBase{Pos: $<pos>$}, Name: ast.Identifier($2), TypeParams: $3, Body: $6}
 		$$ = classDef
-		args := $3
+		args := $4
 		if args != nil {
 			classDef.Bases = args.Args
 			classDef.Keywords = args.Keywords
 			classDef.Starargs = args.Starargs
 			classDef.Kwargs = args.Kwargs
 		}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 
 arglist:
@@ -2551,12 +2907,15 @@ yield_expr:
 	YIELD
 	{
 		$$ = &ast.Yield{ExprBase: ast.ExprBase{Pos: $<pos>$}}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	YIELD FROM test
 	{
 		$$= &ast.YieldFrom{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $3}
+		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	YIELD testlist
 	{
 		$$= &ast.Yield{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: $2}
+		setEnd(yylex, yyrcvr.char, $$)
 	}

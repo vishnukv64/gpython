@@ -73,6 +73,18 @@ func dump(ast interface{}, name string) string {
 		switch fname {
 		case "stmtbase", "exprbase", "modbase", "slicebase", "pos", "default":
 			continue
+		case "star":
+			// Only ExceptHandler has it; the node is reported as TryStar instead.
+			continue
+		case "constraints":
+			continue
+		case "storename", "annotate":
+			continue
+		case "typeparams":
+			fname = "type_params"
+			if fieldValue.Len() == 0 {
+				continue // keep every pre-PEP 695 expectation byte-identical
+			}
 		case "isasync":
 			// Not part of the AST shape CPython's ast.dump prints (it uses a
 			// distinct AsyncFunctionDef node), so it is left out of the dump

@@ -1,0 +1,35 @@
+1
+      1|
+2
+5
+a
+3
+a
+b
+\
+x=5 x =     5 x=  5    d["k"]=1
+      5       5       5
+{}5{
+a
+2
+3 3
+x
+5 5 \n5 { }
+ok
+['a', 'b', 'c']
+10
+True True True
+ab ab
+    3.5|
+SyntaxError 'f"{}"' f-string: valid expression required before '}'
+SyntaxError 'f"{ }"' f-string: valid expression required before '}'
+SyntaxError 'f"{x"' f-string: expecting '}'
+SyntaxError 'f"{x!}"' f-string: missing conversion character
+SyntaxError 'f"{x!z}"' f-string: invalid conversion character 'z': expected 's', 'r', or 'a'
+SyntaxError 'f"}"' f-string: single '}' is not allowed
+SyntaxError 'f"{x!r:{}}"' f-string: valid expression required before '}'
+SyntaxError 'f"{# c\n}"' f-string: valid expression required before '}'
+ok 'f"{x:{y:{z}}}"'
+SyntaxError 'f"{x!r!s}"' f-string: expecting ':' or '}'
+SyntaxError 'f"{lambda x: 1}"' f-string: lambda expressions are not allowed without parentheses
+SyntaxError 'f"{1 +}"' f-string: expecting '=', or '!', or ':', or '}'

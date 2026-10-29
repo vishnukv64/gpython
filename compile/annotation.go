@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/vishnukv64/gpython/ast"
+	"github.com/vishnukv64/gpython/parser"
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/vm"
 )
@@ -256,4 +257,74 @@ func (c *compiler) ensureAnnotations() {
 	// __annotations__ = {}
 	c.OpArg(vm.BUILD_MAP, 0)
 	c.NameOp("__annotations__", ast.Store)
+}
+
+func init() {
+	py.CaretShapeOf = caretShapeOf
+	py.FullLineCall = fullLineCall
+}
+
+// caretShapeOf parses "(\n"+segment+"\n)" for py's caret anchors.
+func caretShapeOf(segment string) (py.CaretShape, bool) {
+	tree, err := parser.Parse(strings.NewReader("(\n"+segment+"\n)\n"), "<segment>", py.ExecMode)
+	if err != nil {
+		return py.CaretShape{}, false
+	}
+	mod, ok := tree.(*ast.Module)
+	if !ok || len(mod.Body) != 1 {
+		return py.CaretShape{}, false
+	}
+	stmt, ok := mod.Body[0].(*ast.ExprStmt)
+	if !ok {
+		return py.CaretShape{}, false
+	}
+	end := func(e ast.Ast) (int, int) { return e.GetEndLineno(), e.GetEndColOffset() }
+	var sh py.CaretShape
+	switch e := stmt.Value.(type) {
+	case *ast.BinOp:
+		sh.Kind = 1
+		sh.LeftEndLine, sh.LeftEndCol = end(e.Left)
+		sh.RightStartLine, sh.RightStartCol = e.Right.GetLineno(), e.Right.GetColOffset()
+	case *ast.Subscript:
+		sh.Kind = 2
+		sh.LeftEndLine, sh.LeftEndCol = end(e.Value)
+	case *ast.Call:
+		sh.Kind = 3
+		sh.LeftEndLine, sh.LeftEndCol = end(e.Func)
+	default:
+		return py.CaretShape{}, false
+	}
+	sh.EndLine, sh.EndCol = end(stmt.Value)
+	return sh, sh.LeftEndLine != 0 && sh.EndLine != 0
+}
+
+// fullLineCall reports the position of a "return f(...)" / "x = f(...)" call.
+func fullLineCall(src string) (int, int, int, int, bool) {
+	tree, err := parser.Parse(strings.NewReader(src+"\n"), "<segment>", py.ExecMode)
+	if err != nil {
+		return 0, 0, 0, 0, false
+	}
+	mod, ok := tree.(*ast.Module)
+	if !ok || len(mod.Body) == 0 {
+		return 0, 0, 0, 0, false
+	}
+	var value ast.Expr
+	switch s := mod.Body[0].(type) {
+	case *ast.Return:
+		value = s.Value
+	case *ast.Assign:
+		if _, ok := s.Value.(*ast.Call); ok && len(s.Targets) == 1 {
+			if _, ok := s.Targets[0].(*ast.Name); ok {
+				value = s.Value
+			}
+		}
+	}
+	call, ok := value.(*ast.Call)
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
+	if _, ok := call.Func.(*ast.Name); !ok {
+		return 0, 0, 0, 0, false
+	}
+	return call.GetLineno(), call.GetEndLineno(), call.GetColOffset(), call.GetEndColOffset(), true
 }

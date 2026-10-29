@@ -1,0 +1,37 @@
+V ExceptionGroup('g', [ValueError(1)])
+T/K ExceptionGroup('g', [TypeError(2), KeyError(3)])
+split_two -> no exception
+V ExceptionGroup('o', [ValueError(1), ExceptionGroup('i', [ValueError(3)])])
+T ExceptionGroup('o', [ExceptionGroup('i', [TypeError(2)])])
+nested -> no exception
+wrapped ExceptionGroup('', (ValueError(1),)) (ValueError(1),)
+naked -> no exception
+naked_nomatch -> ValueError ValueError(1) [] None
+bare_raise_naked -> ExceptionGroup ExceptionGroup('', (ValueError(1),)) ['ValueError(1)'] None
+unmatched_rest -> ExceptionGroup ExceptionGroup('g', [TypeError(3)]) ['TypeError(3)'] None
+raise_new_only -> KeyError KeyError(2) [] ExceptionGroup('g', [ValueError(1)])
+raise_new_with_rest -> ExceptionGroup ExceptionGroup('', [KeyError(2), ExceptionGroup('g', [TypeError(3)])]) ['KeyError(2)', "ExceptionGroup('g', [TypeError(3)])"] None
+T handled
+bare_reraise_group -> ExceptionGroup ExceptionGroup('g', [ValueError(1)]) ['ValueError(1)'] None
+reraise_named -> ExceptionGroup ExceptionGroup('', [ExceptionGroup('g', [ValueError(1)]), ExceptionGroup('g', [TypeError(3)])]) ["ExceptionGroup('g', [ValueError(1)])", "ExceptionGroup('g', [TypeError(3)])"] None
+both_raise -> ExceptionGroup ExceptionGroup('', [KeyError(5), ExceptionGroup('g', [TypeError(3)])]) ['KeyError(5)', "ExceptionGroup('g', [TypeError(3)])"] None
+['handler', 'finally']
+['else', 'finally']
+NameError name 'e' is not defined
+loop ended at 2
+ExceptionGroup('g', [ValueError(1)])
+ExceptionGroup('g', [TypeError(2)])
+bad_type -> TypeError TypeError('catching classes that do not inherit from BaseException is not allowed') [] ValueError(1)
+bad_type -> TypeError TypeError('catching ExceptionGroup with except* is not allowed. Use except instead.') [] ValueError(1)
+bad_type -> TypeError TypeError('catching ExceptionGroup with except* is not allowed. Use except instead.') [] ValueError(1)
+PEP 758 tuple without parens
+caught
+caught*
+SyntaxError cannot have both 'except' and 'except*' on the same 'try' 5
+SyntaxError cannot have both 'except' and 'except*' on the same 'try' 5
+SyntaxError expected one or more exception types 3
+SyntaxError 'break', 'continue' and 'return' cannot appear in an except* block 5
+SyntaxError 'break', 'continue' and 'return' cannot appear in an except* block 5
+SyntaxError 'break', 'continue' and 'return' cannot appear in an except* block 5
+ok
+ok

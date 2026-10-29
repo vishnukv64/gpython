@@ -205,7 +205,6 @@ func (a Int) M__repr__() (Object, error) {
 
 // Errors
 var (
-	divisionByZero     = ExceptionNewf(ZeroDivisionError, "division by zero")
 	negativeShiftCount = ExceptionNewf(ValueError, "negative shift count")
 )
 
@@ -422,7 +421,7 @@ func (a Int) M__truediv__(other Object) (Object, error) {
 	fa := Float(a)
 	fb := b.(Float)
 	if fb == 0 {
-		return nil, divisionByZero
+		return nil, divisionByZero()
 	}
 	return Float(fa / fb), nil
 }
@@ -441,7 +440,7 @@ func (a Int) M__rtruediv__(other Object) (Object, error) {
 	fa := Float(a)
 	fb := b.(Float)
 	if fa == 0 {
-		return nil, divisionByZero
+		return nil, divisionByZero()
 	}
 	return Float(fb / fa), nil
 }
@@ -482,7 +481,7 @@ func (a Int) M__imod__(other Object) (Object, error) {
 
 func (a Int) divMod(b Int) (Object, Object, error) {
 	if b == 0 {
-		return nil, nil, divisionByZero
+		return nil, nil, divisionByZero()
 	}
 	// Can't overflow
 	result, remainder := Int(a/b), Int(a%b)
@@ -767,4 +766,9 @@ func init() {
 			return op.fn(self, args[0])
 		}, 0, "Implement the arithmetic operator."))
 	}
+}
+
+// divisionByZero is a fresh exception each time: see floatDivisionByZero.
+func divisionByZero() *Exception {
+	return ExceptionNewf(ZeroDivisionError, "division by zero")
 }

@@ -324,16 +324,23 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			// used only inside an f-string must still count as a use, or a
 			// nested scope (a comprehension, a lambda) never captures it.
 			// An invalid f-string is reported by the compiler, not here.
-			if parts, err := ast.ParseFString(node.Text); err == nil {
+			var visit func(text string)
+			visit = func(text string) {
+				parts, err := ast.ParseFString(text)
+				if err != nil {
+					return
+				}
 				for _, part := range parts {
 					if !part.Field {
 						continue
 					}
-					if expr, err := ast.ParseExpr(part.Expr); err == nil {
+					if expr, err := part.ParseExpr(); err == nil {
 						st.Parse(expr)
 					}
+					visit(part.FormatSpec)
 				}
 			}
+			visit(node.Text)
 		case *ast.Name:
 			if node.Ctx == ast.Load {
 				st.AddDef(node, node.Id, DefUse)
@@ -346,7 +353,7 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			}
 		case *ast.FunctionDef:
 			// Add the function name to the SymTable
-			st.AddDef(node, node.Name, DefLocal)
+			st.AddDef(node, node.Binding(), DefLocal)
 			name := string(node.Name)
 
 			// Walk these things in original symbol table
@@ -357,6 +364,9 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 				st.Parse(expr)
 			}
 			st.Parse(node.Returns)
+			if node.Annotate != nil {
+				st.Parse(node.Annotate)
+			}
 
 			// Make a new symtable
 			stNew := newSymTableBlock(Ast, FunctionBlock, name, st)
@@ -372,7 +382,7 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			// return false to stop the parse
 			return false
 		case *ast.ClassDef:
-			st.AddDef(node, node.Name, DefLocal)
+			st.AddDef(node, node.Binding(), DefLocal)
 			name := string(node.Name)
 			// Parse in the original symtable
 			for _, expr := range node.Bases {

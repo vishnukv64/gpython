@@ -181,6 +181,12 @@ const (
 	// the exception is silenced (it pushes Int(whySilenced) instead of the
 	// exc-type END_FINALLY would see).
 	WITH_CLEANUP_FINISH_ASYNC OpCode = 161
+
+	// except* (PEP 654); see exceptstar.go
+	EG_PREP    OpCode = 162
+	EG_MATCH   OpCode = 163
+	EG_RECORD  OpCode = 164
+	EG_RERAISE OpCode = 165
 )
 
 // Rich comparison opcodes

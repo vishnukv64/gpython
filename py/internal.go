@@ -377,6 +377,12 @@ func GetAttrString(self Object, key string) (res Object, err error) {
 	return getAttrString(self, key, true)
 }
 
+// ObjectGetAttribute is object.__getattribute__: the default lookup, for a
+// native type's own __getattribute__ to fall back on.
+func ObjectGetAttribute(self Object, key string) (Object, error) {
+	return getAttrString(self, key, false)
+}
+
 // getAttrString is GetAttrString; hooks=false is object.__getattribute__:
 // the default lookup, without __getattribute__/__getattr__ overrides.
 func getAttrString(self Object, key string, hooks bool) (res Object, err error) {

@@ -19,6 +19,8 @@ func init() {
 		},
 		Methods: []*py.Method{
 			py.MustNewMethod("capwords", capwords, 0, capwords_doc),
+			py.MustNewMethod("_gpy_template", gpyTemplate, 0, "Internal: lowering of t-strings."),
+			py.MustNewMethod("_gpy_interp", gpyInterp, 0, "Internal: lowering of t-string fields."),
 		},
 		Globals: py.NewStringDictFrom(
 			py.DictEntry{Key: "whitespace", Value: whitespace},
@@ -31,6 +33,8 @@ func init() {
 			py.DictEntry{Key: "punctuation", Value: punctuation},
 			py.DictEntry{Key: "printable", Value: printable},
 			py.DictEntry{Key: "Template", Value: TemplateType},
+			// string is a package: string.templatelib is CPython's own file.
+			py.DictEntry{Key: "__path__", Value: py.NewListFromStrings([]string{py.EmbeddedLibRoot + "/string"})},
 		),
 	})
 }

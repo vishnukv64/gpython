@@ -29,6 +29,7 @@ const (
 	exceptLoop
 	finallyTryLoop
 	finallyEndLoop
+	exceptStarBody // marks an except* clause body; see checkExceptStarJump
 )
 
 // Loop - used to track loops, try/except and try/finally
@@ -73,12 +74,14 @@ const (
 type compiler struct {
 	Code        *py.Code // code being built up
 	Filename    string
-	Lineno      int // current line number
+	Lineno      int    // current line number
+	at          srcPos // current source range, copied onto each instruction
 	OpCodes     Instructions
 	loops       loopstack
 	SymTable    *symtable.SymTable
 	scopeType   compilerScopeType
 	qualname    string
+	genericBase string // qualname prefix children of a generic scope use
 	private     string
 	parent      *compiler
 	depth       int
@@ -143,6 +146,13 @@ func Compile(src, srcDesc string, mode py.CompileMode, futureFlags int, dont_inh
 		return nil, err
 	}
 	// Make symbol table
+	lazyAnnotations(Ast, srcDesc)
+	if err := ast.DesugarTypeParams(Ast); err != nil {
+		if e, ok := err.(*py.Exception); ok {
+			e.Dict.Set("filename", py.String(srcDesc))
+		}
+		return nil, err
+	}
 	SymTable, err := symtable.NewSymTable(Ast, srcDesc)
 	if err != nil {
 		return nil, err
@@ -241,6 +251,7 @@ func (c *compiler) panicSyntaxErrorf(Ast ast.Ast, format string, a ...interface{
 // Sets Lineno from an ast node
 func (c *compiler) SetLineno(node ast.Ast) {
 	c.Lineno = node.GetLineno()
+	c.at = srcPos{c.Lineno, node.GetEndLineno(), node.GetColOffset(), node.GetEndColOffset()}
 }
 
 // Create a new compiler object at Ast, using private for name mangling
@@ -437,6 +448,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	code.Stacksize = int32(c.OpCodes.StackDepth())
 	code.Nlocals = int32(len(code.Varnames))
 	code.Lnotab = string(c.OpCodes.Lnotab(int(code.Firstlineno)))
+	code.Positions = c.OpCodes.Positions()
 	code.InitCell2arg()
 	return nil
 }
@@ -544,6 +556,7 @@ func (c *compiler) OpArg(Op vm.OpCode, Arg uint32) {
 	}
 	instr := &OpArg{Op: Op, Arg: Arg}
 	instr.SetLineno(c.Lineno)
+	instr.SetPosition(c.at)
 	c.OpCodes.Add(instr)
 }
 
@@ -554,6 +567,7 @@ func (c *compiler) Op(op vm.OpCode) {
 	}
 	instr := &Op{Op: op}
 	instr.SetLineno(c.Lineno)
+	instr.SetPosition(c.at)
 	c.OpCodes.Add(instr)
 }
 
@@ -561,6 +575,7 @@ func (c *compiler) Op(op vm.OpCode) {
 func (c *compiler) OpNoArg(op vm.OpCode) {
 	instr := &OpArg{Op: op, Arg: 0}
 	instr.SetLineno(c.Lineno)
+	instr.SetPosition(c.at)
 	c.OpCodes.Add(instr)
 }
 
@@ -588,6 +603,7 @@ func (c *compiler) Jump(Op vm.OpCode, Dest *Label) {
 		panic("Jump called with non jump instruction")
 	}
 	instr.SetLineno(c.Lineno)
+	instr.SetPosition(c.at)
 	c.OpCodes.Add(instr)
 }
 
@@ -694,7 +710,7 @@ func (c *compiler) setQualname() {
 		if parent == nil {
 			panic("compile: setQualname: expecting a parent")
 		}
-		if c.scopeType == compilerScopeFunction || c.scopeType == compilerScopeClass {
+		if (c.scopeType == compilerScopeFunction || c.scopeType == compilerScopeClass) && !ast.IsGenericScopeName(parent.Code.Name) {
 			// FIXME mangled = _Py_Mangle(parent.u_private, u.u_name)
 			mangled := c.Code.Name
 			scope := parent.SymTable.GetScope(mangled)
@@ -706,13 +722,17 @@ func (c *compiler) setQualname() {
 			}
 		}
 		if !force_global {
-			if parent.scopeType == compilerScopeFunction || parent.scopeType == compilerScopeLambda {
+			if ast.IsGenericScopeName(parent.Code.Name) {
+				// A generic scope is invisible in qualified names.
+				base = parent.genericBase
+			} else if parent.scopeType == compilerScopeFunction || parent.scopeType == compilerScopeLambda {
 				base = parent.qualname + ".<locals>"
 			} else {
 				base = parent.qualname
 			}
 		}
 	}
+	c.genericBase = base
 	if base != "" {
 		c.qualname = base + "." + c.Code.Name
 	} else {
@@ -721,7 +741,7 @@ func (c *compiler) setQualname() {
 }
 
 // Compile a function
-func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Args *ast.Arguments, DecoratorList []ast.Expr, Returns ast.Expr) {
+func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Args *ast.Arguments, DecoratorList []ast.Expr, Returns ast.Expr, annotate ast.Expr) {
 	newC := c.newCompilerScope(compilerScope, Ast, "")
 	newC.Code.Argcount = int32(len(Args.Args))
 	newC.Code.Kwonlyargcount = int32(len(Args.Kwonlyargs))
@@ -790,6 +810,14 @@ func (c *compiler) compileFunc(compilerScope compilerScopeType, Ast ast.Ast, Arg
 	args := uint32(posdefaults + (kwdefaults << 8) + (num_annotations << 16))
 	c.makeClosure(newC.Code, args, newC, newC.qualname)
 
+	// PEP 649: fn.__annotate__ = <annotate function>, before any decorator.
+	if annotate != nil {
+		c.Op(vm.DUP_TOP)
+		c.Expr(annotate)
+		c.Op(vm.ROT_TWO)
+		c.OpArg(vm.STORE_ATTR, c.Name("__annotate__"))
+	}
+
 	// Apply the decorators, innermost first
 	for range DecoratorList {
 		c.OpArg(vm.CALL_FUNCTION, 1) // 1 positional, 0 keyword pair
@@ -845,7 +873,7 @@ func (c *compiler) class(Ast ast.Ast, class *ast.ClassDef) {
 	}
 
 	/* 7. store into <name> */
-	c.NameOp(string(class.Name), ast.Store)
+	c.NameOp(string(class.Binding()), ast.Store)
 }
 
 /*
@@ -881,6 +909,7 @@ func (c *compiler) with(node *ast.With, pos int) {
 
 	/* Evaluate EXPR */
 	c.Expr(item.ContextExpr)
+	c.SetLineno(item.ContextExpr)
 	c.Jump(vm.SETUP_WITH, finally)
 
 	/* SETUP_WITH pushes a finally block. */
@@ -925,6 +954,7 @@ func (c *compiler) asyncWith(node *ast.With, pos int) {
 
 	/* Evaluate EXPR */
 	c.Expr(item.ContextExpr)
+	c.SetLineno(item.ContextExpr)
 	c.Jump(vm.SETUP_ASYNC_WITH, finally)
 
 	/* SETUP_ASYNC_WITH leaves the __aenter__() awaitable on TOS (and the
@@ -1055,6 +1085,18 @@ Value stack          Label   Instruction     Argument
 Of course, parts are not generated if Vi or Ei is not present.
 */
 func (c *compiler) tryExcept(node *ast.Try) {
+	for _, h := range node.Handlers {
+		if h.Star != node.Handlers[0].Star {
+			c.panicSyntaxErrorf(h, "cannot have both 'except' and 'except*' on the same 'try'")
+		}
+		if h.Star && h.ExprType == nil {
+			c.panicSyntaxErrorf(h, "expected one or more exception types")
+		}
+	}
+	if node.Handlers[0].Star {
+		c.tryExceptStar(node)
+		return
+	}
 	c.loops.Push(loop{Type: exceptLoop})
 	except := new(Label)
 	orelse := new(Label)
@@ -1069,9 +1111,7 @@ func (c *compiler) tryExcept(node *ast.Try) {
 		if handler.ExprType == nil && i < n-1 {
 			c.panicSyntaxErrorf(handler, "default 'except:' must be last")
 		}
-		// FIXME c.u.u_lineno_set = 0
-		// c.u.u_lineno = handler.lineno
-		// c.u.u_col_offset = handler.col_offset
+		c.SetLineno(handler)
 		except := new(Label)
 		if handler.ExprType != nil {
 			c.Op(vm.DUP_TOP)
@@ -1126,6 +1166,95 @@ func (c *compiler) tryExcept(node *ast.Try) {
 		c.Label(except)
 	}
 	c.Op(vm.END_FINALLY)
+	c.Label(orelse)
+	c.Stmts(node.Orelse)
+	c.Label(end)
+	c.loops.Pop()
+}
+
+// checkExceptStarJump rejects break/continue/return that would leave an
+// except* clause body.  A loop opened inside the body is fine; function
+// scopes have their own loop stack.
+func (c *compiler) checkExceptStarJump(node ast.Ast, wholeStack bool) {
+	for i := len(c.loops) - 1; i >= 0; i-- {
+		switch c.loops[i].Type {
+		case loopLoop:
+			if !wholeStack {
+				return
+			}
+		case exceptStarBody:
+			c.panicSyntaxErrorf(node, "'break', 'continue' and 'return' cannot appear in an except* block")
+		}
+	}
+}
+
+/*
+Code generated for "try: S except* E1 as V1: S1 except* E2: S2 ...".  The
+handler entry keeps [orig, raised, rest] on the stack (see vm/exceptstar.go):
+
+	L1:  EG_PREP
+	     <E1>; EG_MATCH; DUP_TOP; POP_JUMP_IF_FALSE skip
+	     <store or pop match>
+	     SETUP_EXCEPT hexc; <S1>; POP_BLOCK; JUMP_FORWARD done
+	hexc: EG_RECORD; POP_EXCEPT; JUMP_FORWARD done
+	skip: POP_TOP
+	done: ...next clause...
+	     EG_RERAISE; POP_EXCEPT; JUMP_FORWARD end
+*/
+func (c *compiler) tryExceptStar(node *ast.Try) {
+	c.loops.Push(loop{Type: exceptLoop})
+	except := new(Label)
+	orelse := new(Label)
+	end := new(Label)
+	c.Jump(vm.SETUP_EXCEPT, except)
+	c.Stmts(node.Body)
+	c.Op(vm.POP_BLOCK)
+	c.Jump(vm.JUMP_FORWARD, orelse)
+	c.Label(except)
+	c.OpArg(vm.EG_PREP, 0)
+	for _, handler := range node.Handlers {
+		skip := new(Label)
+		hexc := new(Label)
+		done := new(Label)
+		c.Expr(handler.ExprType)
+		c.OpArg(vm.EG_MATCH, 0)
+		c.Op(vm.DUP_TOP)
+		c.Jump(vm.POP_JUMP_IF_FALSE, skip)
+		if handler.Name != "" {
+			c.NameOp(string(handler.Name), ast.Store)
+		} else {
+			c.Op(vm.POP_TOP)
+		}
+		c.Jump(vm.SETUP_EXCEPT, hexc)
+		c.loops.Push(loop{Type: exceptStarBody})
+		if handler.Name != "" {
+			cleanup_end := new(Label)
+			c.Jump(vm.SETUP_FINALLY, cleanup_end)
+			c.Stmts(handler.Body)
+			c.Op(vm.POP_BLOCK)
+			c.LoadConst(py.None)
+			c.Label(cleanup_end)
+			c.LoadConst(py.None)
+			c.NameOp(string(handler.Name), ast.Store)
+			c.NameOp(string(handler.Name), ast.Del)
+			c.Op(vm.END_FINALLY)
+		} else {
+			c.Stmts(handler.Body)
+		}
+		c.loops.Pop()
+		c.Op(vm.POP_BLOCK)
+		c.Jump(vm.JUMP_FORWARD, done)
+		c.Label(hexc)
+		c.OpArg(vm.EG_RECORD, 0)
+		c.Op(vm.POP_EXCEPT)
+		c.Jump(vm.JUMP_FORWARD, done)
+		c.Label(skip)
+		c.Op(vm.POP_TOP)
+		c.Label(done)
+	}
+	c.OpArg(vm.EG_RERAISE, 0)
+	c.Op(vm.POP_EXCEPT)
+	c.Jump(vm.JUMP_FORWARD, end)
 	c.Label(orelse)
 	c.Stmts(node.Orelse)
 	c.Label(end)
@@ -1245,8 +1374,8 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		// Body          []Stmt
 		// DecoratorList []Expr
 		// Returns       Expr
-		c.compileFunc(compilerScopeFunction, stmt, node.Args, node.DecoratorList, node.Returns)
-		c.NameOp(string(node.Name), ast.Store)
+		c.compileFunc(compilerScopeFunction, stmt, node.Args, node.DecoratorList, node.Returns, node.Annotate)
+		c.NameOp(string(node.Binding()), ast.Store)
 
 	case *ast.ClassDef:
 		// Name          Identifier
@@ -1262,6 +1391,7 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		if c.SymTable.Type != symtable.FunctionBlock {
 			c.panicSyntaxErrorf(node, "'return' outside function")
 		}
+		c.checkExceptStarJump(node, true)
 		if node.Value != nil {
 			c.Expr(node.Value)
 		} else {
@@ -1372,7 +1502,7 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		endfor := new(Label)
 		endpopblock := new(Label)
 		c.Jump(vm.SETUP_LOOP, endpopblock)
-		c.Expr(node.Iter)
+		c.iterExpr(node.Iter)
 		if node.IsAsync {
 			// "async for": TOS becomes the async iterator; each step
 			// awaits __anext__() through the YIELD_FROM machinery, then
@@ -1491,9 +1621,12 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 		label := new(Label)
 		c.Expr(node.Test)
 		c.Jump(vm.POP_JUMP_IF_TRUE, label)
+		// The raise is attributed to the test, as CPython's traceback shows.
+		c.SetLineno(node.Test)
 		c.OpArg(vm.LOAD_GLOBAL, c.Name("AssertionError"))
 		if node.Msg != nil {
 			c.Expr(node.Msg)
+			c.SetLineno(node.Test)
 			c.OpArg(vm.CALL_FUNCTION, 1) // 1 positional, 0 keyword pair
 		}
 		c.OpArg(vm.RAISE_VARARGS, 1)
@@ -1529,6 +1662,7 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 	case *ast.Pass:
 		// Do nothing
 	case *ast.Break:
+		c.checkExceptStarJump(node, false)
 		l := c.loops.Top()
 		if l == nil {
 			c.panicSyntaxErrorf(node, "'break' outside loop")
@@ -1537,6 +1671,7 @@ func (c *compiler) Stmt(stmt ast.Stmt) {
 	case *ast.Continue:
 		const loopError = "'continue' not properly in loop"
 		const inFinallyError = "'continue' not supported inside 'finally' clause"
+		c.checkExceptStarJump(node, false)
 		l := c.loops.Top()
 		if l == nil {
 			c.panicSyntaxErrorf(node, loopError)
@@ -1847,7 +1982,7 @@ func (c *compiler) comprehensionGenerator(generators []ast.Comprehension, gen_in
 		c.OpArg(vm.LOAD_FAST, 0) // already an iterator / async iterator
 	} else {
 		/* Sub-iter - calculate on the fly */
-		c.Expr(gen.Iter)
+		c.iterExpr(gen.Iter)
 		if gen.IsAsync {
 			c.OpArg(vm.GET_AITER, 0)
 		} else {
@@ -1909,7 +2044,7 @@ func (c *compiler) comprehension(expr ast.Expr, generators []ast.Comprehension) 
 	newC := c.newCompilerScope(compilerScopeComprehension, expr, "")
 	c.makeClosure(newC.Code, 0, newC, newC.Code.Name)
 	outermost_iter := generators[0].Iter
-	c.Expr(outermost_iter)
+	c.iterExpr(outermost_iter)
 	if generators[0].IsAsync {
 		c.OpArg(vm.GET_AITER, 0)
 	} else {
@@ -2131,6 +2266,22 @@ func (c *compiler) Exprs(exprs []ast.Expr) {
 
 // Compile and expression
 func (c *compiler) Expr(expr ast.Expr) {
+	// An opcode a node emits after its children (the CALL of a call, the
+	// BINARY_OP of an operation) belongs to the node, not to its last child.
+	lineno, at := c.Lineno, c.at
+	c.expr(expr)
+	c.Lineno, c.at = lineno, at
+}
+
+// iterExpr compiles the iterable of a for loop or comprehension and leaves
+// the position on it, so that GET_ITER (which raises "not iterable") points
+// at the iterable.
+func (c *compiler) iterExpr(e ast.Expr) {
+	c.Expr(e)
+	c.SetLineno(e)
+}
+
+func (c *compiler) expr(expr ast.Expr) {
 	c.SetLineno(expr)
 	switch node := expr.(type) {
 	case *ast.BoolOp:
@@ -2211,7 +2362,7 @@ func (c *compiler) Expr(expr ast.Expr) {
 		// Args *Arguments
 		// Body Expr
 		// newC := Compiler
-		c.compileFunc(compilerScopeLambda, expr, node.Args, nil, nil)
+		c.compileFunc(compilerScopeLambda, expr, node.Args, nil, nil, nil)
 	case *ast.IfExp:
 		// Test   Expr
 		// Body   Expr

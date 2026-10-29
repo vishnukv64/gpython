@@ -83,6 +83,9 @@ func Walk(ast Ast, Visit func(Ast) bool) {
 		walkStmts(node.Body)
 		walkExprs(node.DecoratorList)
 		walk(node.Returns)
+		if node.Annotate != nil {
+			walk(node.Annotate)
+		}
 
 	case *ClassDef:
 		// Name          Identifier

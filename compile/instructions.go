@@ -132,6 +132,10 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return -2
 	case vm.BEFORE_AWAIT:
 		return 0
+	case vm.EG_PREP, vm.EG_MATCH:
+		return 0
+	case vm.EG_RECORD, vm.EG_RERAISE:
+		return -3
 	case vm.GET_AITER:
 		return 0
 	case vm.GET_ANEXT:
@@ -326,6 +330,8 @@ type Instruction interface {
 	Number() int
 	Lineno() int
 	SetLineno(int)
+	Position() srcPos
+	SetPosition(srcPos)
 	SetPos(int, uint32) bool
 	Size() uint32
 	Output() []byte
@@ -341,7 +347,21 @@ type pos struct {
 	n      uint32
 	p      uint32
 	lineno int
+	at     srcPos // the full source range, for co_positions
 }
+
+// srcPos is where in the source an instruction comes from: CPython's
+// co_positions entry (line, end line, column, end column).  Columns are
+// UTF-8 byte offsets; a zero endLine means no range is known.
+type srcPos struct {
+	line, endLine, col, endCol int
+}
+
+// Read the source range
+func (p *pos) Position() srcPos { return p.at }
+
+// Set the source range
+func (p *pos) SetPosition(at srcPos) { p.at = at }
 
 // Read instruction number
 func (p *pos) Number() int {
@@ -516,4 +536,24 @@ func (is Instructions) Lnotab(firstlineno int) []byte {
 		old_offset = offset
 	}
 	return lnotab
+}
+
+// Positions builds the position table: for each run of instructions that
+// share a source range, (start address, line, end line, column, end column).
+// Code.PositionAt searches it.
+func (is Instructions) Positions() []int32 {
+	var out []int32
+	var last srcPos
+	first := true
+	for _, instr := range is {
+		if instr.Size() == 0 {
+			continue
+		}
+		at := instr.Position()
+		if first || at != last {
+			out = append(out, int32(instr.Pos()), int32(at.line), int32(at.endLine), int32(at.col), int32(at.endCol))
+			last, first = at, false
+		}
+	}
+	return out
 }
