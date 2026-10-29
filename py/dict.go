@@ -33,7 +33,6 @@ dict(**kwargs) -> new dictionary initialized with the name=value pairs
 var (
 	StringDictType = NewTypeX("dict", dictDoc, DictNew, nil)
 	DictType       = NewType("dict", dictDoc)
-	expectingDict  = ExceptionNewf(TypeError, "a dict is required")
 )
 
 // mappingStorage reports whether an object is a mapping and, if so, its
@@ -1668,7 +1667,7 @@ func NewStringDictSized(n int) StringDict {
 func DictCheckExact(obj Object) (StringDict, error) {
 	dict, ok := obj.(StringDict)
 	if !ok {
-		return NewStringDict(), expectingDict
+		return NewStringDict(), ExceptionNewf(TypeError, "a dict is required")
 	}
 	return dict, nil
 }

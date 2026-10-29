@@ -130,13 +130,14 @@ func FloatFromString(str string) (Object, error) {
 	return Float(f), nil
 }
 
-var expectingFloat = ExceptionNewf(TypeError, "a float is required")
+// newExpectingFloat is raised fresh each time (see newOverflowError).
+func newExpectingFloat() *Exception { return ExceptionNewf(TypeError, "a float is required") }
 
 // Returns the float value of obj if it is exactly a float
 func FloatCheckExact(obj Object) (Float, error) {
 	f, ok := obj.(Float)
 	if !ok {
-		return 0, expectingFloat
+		return 0, newExpectingFloat()
 	}
 	return f, nil
 }

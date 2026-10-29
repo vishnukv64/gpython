@@ -181,7 +181,7 @@ error:
 func (x Int) GoInt() (int, error) {
 	r := int(x)
 	if Int(r) != x {
-		return 0, overflowErrorGo
+		return 0, overflowErrorGo()
 	}
 	return int(r), nil
 }
@@ -203,10 +203,8 @@ func (a Int) M__repr__() (Object, error) {
 
 // Arithmetic
 
-// Errors
-var (
-	negativeShiftCount = ExceptionNewf(ValueError, "negative shift count")
-)
+// negativeShiftCount is made fresh per raise (see newOverflowError).
+func negativeShiftCount() *Exception { return ExceptionNewf(ValueError, "negative shift count") }
 
 // Constructs a TypeError
 func cantConvert(a Object, to string) (Object, error) {
@@ -344,7 +342,7 @@ func intMul(a, b Int) Object {
 // Left shift a << b
 func intLshift(a, b Int) (Object, error) {
 	if b < 0 {
-		return nil, negativeShiftCount
+		return nil, negativeShiftCount()
 	}
 	shift := uint(b)
 	r := a << shift
@@ -544,7 +542,7 @@ func (a Int) M__ilshift__(other Object) (Object, error) {
 func (a Int) M__rshift__(other Object) (Object, error) {
 	if b, ok := convertToInt(other); ok {
 		if b < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		// Can't overflow
 		return Int(a >> uint64(b)), nil
@@ -555,7 +553,7 @@ func (a Int) M__rshift__(other Object) (Object, error) {
 func (a Int) M__rrshift__(other Object) (Object, error) {
 	if b, ok := convertToInt(other); ok {
 		if b < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		// Can't overflow
 		return Int(b >> uint64(a)), nil

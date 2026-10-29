@@ -1,0 +1,6 @@
+shift ValueError False 2 2 True
+bigshift ValueError False 2 2 True
+float OverflowError False 2 2 True
+chr ValueError False 2 2 True
+closed ValueError False 2 2 True
+zerodiv ZeroDivisionError False 2 2 True

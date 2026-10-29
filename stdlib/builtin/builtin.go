@@ -1488,12 +1488,24 @@ Return a Unicode string of one character with ordinal i; 0 <= i <= 0x10ffff.`
 func builtin_chr(self py.Object, args py.Tuple) (py.Object, error) {
 	var xObj py.Object
 
-	err := py.ParseTuple(args, "i:chr", &xObj)
+	err := py.ParseTuple(args, "O:chr", &xObj)
 	if err != nil {
 		return nil, err
 	}
 
-	x := xObj.(py.Int)
+	// Any integer is accepted; one too big for a machine int is simply out of
+	// range, as in CPython (the "i" code rejected big ints as not int).
+	var x py.Int
+	switch v := xObj.(type) {
+	case py.Int:
+		x = v
+	case *py.BigInt:
+		x = -1
+	default:
+		if x, err = py.Index(xObj); err != nil {
+			return nil, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", xObj.Type().Name)
+		}
+	}
 	if x < 0 || x >= 0x110000 {
 		return nil, py.ExceptionNewf(py.ValueError, "chr() arg not in range(0x110000)")
 	}

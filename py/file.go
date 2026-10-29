@@ -16,7 +16,9 @@ import (
 )
 
 var FileType = NewType("file", `represents an open file`)
-var errClosed = ExceptionNewf(ValueError, "I/O operation on closed file.")
+
+// errClosed is raised fresh each time (see newOverflowError).
+func errClosed() *Exception { return ExceptionNewf(ValueError, "I/O operation on closed file.") }
 
 func init() {
 	FileType.Dict.Set("write", MustNewMethod("write", func(self Object, value Object) (Object, error) {
@@ -64,7 +66,7 @@ func init() {
 	FileType.Dict.Set("seek", MustNewMethod("seek", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		off := int64(0)
 		var whence int = 0
@@ -92,7 +94,7 @@ func init() {
 	FileType.Dict.Set("tell", MustNewMethod("tell", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		pos, err := f.File.Seek(0, io.SeekCurrent)
 		if err != nil {
@@ -104,7 +106,7 @@ func init() {
 	FileType.Dict.Set("fileno", MustNewMethod("fileno", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		return Int(f.File.Fd()), nil
 	}, 0, "The underlying file descriptor."))
@@ -115,7 +117,7 @@ func init() {
 	FileType.Dict.Set("isatty", MustNewMethod("isatty", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		return NewBool(IsTerminal(f.File.Fd())), nil
 	}, 0, "True if the file is connected to a TTY device."))
@@ -123,7 +125,7 @@ func init() {
 	FileType.Dict.Set("readable", MustNewMethod("readable", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		return NewBool(f.Can(FileRead)), nil
 	}, 0, "True when the file was opened for reading."))
@@ -131,7 +133,7 @@ func init() {
 	FileType.Dict.Set("writable", MustNewMethod("writable", func(self Object, args Tuple) (Object, error) {
 		f, ok := self.(*File)
 		if !ok || f.File == nil {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 		return NewBool(f.Can(FileWrite)), nil
 	}, 0, "True when the file was opened for writing."))
@@ -274,7 +276,7 @@ func (o *File) Write(value Object) (Object, error) {
 
 	n, err := o.File.Write(b)
 	if err != nil && err.(*os.PathError).Err == os.ErrClosed {
-		return nil, errClosed
+		return nil, errClosed()
 	}
 	return Int(n), err
 }
@@ -333,7 +335,7 @@ func (o *File) Read(args Tuple, kwargs StringDict) (Object, error) {
 			return o.readResult(nil)
 		}
 		if perr, ok := err.(*os.PathError); ok && perr.Err == os.ErrClosed {
-			return nil, errClosed
+			return nil, errClosed()
 		}
 
 		return nil, err
@@ -388,7 +390,7 @@ func (o *File) Close() (Object, error) {
 func (o *File) Flush() (Object, error) {
 	err := o.File.Sync()
 	if perr, ok := err.(*os.PathError); ok && perr.Err == os.ErrClosed {
-		return nil, errClosed
+		return nil, errClosed()
 	}
 
 	return None, nil

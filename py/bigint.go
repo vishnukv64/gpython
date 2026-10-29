@@ -38,19 +38,22 @@ var (
 	bigIntMax = (*BigInt)(big.NewInt(IntMax))
 )
 
-// Errors
-var (
-	overflowError      = ExceptionNewf(OverflowError, "Python int too large to convert to int64")
-	overflowErrorGo    = ExceptionNewf(OverflowError, "Python int too large to convert to a go int")
-	overflowErrorFloat = ExceptionNewf(OverflowError, "long int too large to convert to float")
-	expectingBigInt    = ExceptionNewf(TypeError, "a big int is required")
-)
+// Errors are made fresh per raise (see newOverflowError).
+func overflowErrorGo() *Exception {
+	return ExceptionNewf(OverflowError, "Python int too large to convert to a go int")
+}
+
+func overflowErrorFloat() *Exception {
+	return ExceptionNewf(OverflowError, "long int too large to convert to float")
+}
+
+func expectingBigInt() *Exception { return ExceptionNewf(TypeError, "a big int is required") }
 
 // Checks that obj is exactly a BigInt and returns an error if not
 func BigIntCheckExact(obj Object) (*BigInt, error) {
 	bigInt, ok := obj.(*BigInt)
 	if !ok {
-		return nil, expectingBigInt
+		return nil, expectingBigInt()
 	}
 	return bigInt, nil
 }
@@ -89,7 +92,7 @@ func (x *BigInt) Int() (Int, error) {
 	if (*big.Int)(x).Cmp((*big.Int)(bigIntMax)) <= 0 && (*big.Int)(x).Cmp((*big.Int)(bigIntMin)) >= 0 {
 		return Int((*big.Int)(x).Int64()), nil
 	}
-	return 0, overflowError
+	return 0, newOverflowError()
 }
 
 // MaybeInt truncates to Int if it can, otherwise returns the original BigInt
@@ -148,7 +151,7 @@ func (a *BigInt) Float() (Float, error) {
 	// FIXME this is a bit approximate but errs on the low side so
 	// we won't ever produce +Infs
 	if exp > float64MaxExponent-63 {
-		return 0, overflowErrorFloat
+		return 0, overflowErrorFloat()
 	}
 	return Float(math.Ldexp(frac, exp)), nil
 }
@@ -371,7 +374,7 @@ func (a *BigInt) M__lshift__(other Object) (Object, error) {
 			return nil, err
 		}
 		if bb < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		return (*BigInt)(new(big.Int).Lsh((*big.Int)(a), uint(bb))).MaybeInt(), nil
 	}
@@ -385,7 +388,7 @@ func (a *BigInt) M__rlshift__(other Object) (Object, error) {
 			return nil, err
 		}
 		if aa < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		return (*BigInt)(new(big.Int).Lsh((*big.Int)(b), uint(aa))).MaybeInt(), nil
 	}
@@ -403,7 +406,7 @@ func (a *BigInt) M__rshift__(other Object) (Object, error) {
 			return nil, err
 		}
 		if bb < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		return (*BigInt)(new(big.Int).Rsh((*big.Int)(a), uint(bb))).MaybeInt(), nil
 	}
@@ -417,7 +420,7 @@ func (a *BigInt) M__rrshift__(other Object) (Object, error) {
 			return nil, err
 		}
 		if aa < 0 {
-			return nil, negativeShiftCount
+			return nil, negativeShiftCount()
 		}
 		return (*BigInt)(new(big.Int).Rsh((*big.Int)(b), uint(aa))).MaybeInt(), nil
 	}
@@ -592,3 +595,9 @@ var _ I__index__ = (*BigInt)(nil)
 var _ richComparison = (*BigInt)(nil)
 var _ IGoInt = (*BigInt)(nil)
 var _ IGoInt64 = (*BigInt)(nil)
+
+// newOverflowError is raised fresh each time: one shared exception object
+// would accumulate tracebacks and __context__ across unrelated raises.
+func newOverflowError() *Exception {
+	return ExceptionNewf(OverflowError, "Python int too large to convert to int64")
+}
