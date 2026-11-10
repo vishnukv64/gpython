@@ -5,17 +5,20 @@
 package py
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/petermattis/goid"
 )
 
-// Goroutine identity.  Go exposes no goroutine id, and the only way to read
-// one (runtime.Stack) walks the whole Go stack, so its cost grows with call
-// depth - it dominated pip install.  Instead every goroutine that runs Python
-// concurrently with others registers with EnterGoroutine and gets a small
-// logical id; everything else is goroutine 1.  While nothing is registered
-// GoroutineID is one atomic load.
+// Goroutine identity.  Every goroutine that runs Python concurrently with
+// others registers with EnterGoroutine and gets a small logical id; everything
+// else is goroutine 1.  While nothing is registered GoroutineID is one atomic
+// load; once a thread exists it is a map lookup keyed by the runtime's own
+// goroutine id, read by petermattis/goid in a few nanoseconds.  (It used to be
+// parsed out of runtime.Stack, which walks the whole Go stack: ~35us at depth
+// 200, on every Go-to-Python call, which made any threaded program ~35x
+// slower - poetry's schema compiles went from 0.02s to 5s.)
 var (
 	registered atomic.Int32
 	nextID     atomic.Uint64
@@ -37,8 +40,7 @@ func GoroutineID() uint64 {
 // EnterGoroutine registers the calling goroutine as a Python thread; call it
 // first thing in the goroutine and defer the returned func.  A goroutine that
 // runs Python while another does, without registering, shares id 1 and so its
-// frame and exception state.  ponytail: slow runtime.Stack path while any
-// thread is live; make it a per-thread context if that matters.
+// frame and exception state.
 func EnterGoroutine() (leave func()) {
 	rid := runtimeGoID()
 	byRuntime.Store(rid, nextID.Add(1)+1)
@@ -49,16 +51,5 @@ func EnterGoroutine() (leave func()) {
 	}
 }
 
-// runtimeGoID parses the id from the stack header "goroutine 123 [running]:".
-func runtimeGoID() uint64 {
-	var buf [32]byte
-	s := buf[:runtime.Stack(buf[:], false)]
-	var id uint64
-	for _, c := range s[len("goroutine "):] {
-		if c < '0' || c > '9' {
-			break
-		}
-		id = id*10 + uint64(c-'0')
-	}
-	return id
-}
+// runtimeGoID is the runtime's id for the calling goroutine.
+func runtimeGoID() uint64 { return uint64(goid.Get()) }
