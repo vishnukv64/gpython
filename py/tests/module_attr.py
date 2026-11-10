@@ -9,7 +9,8 @@ def t(f):
     try:
         f()
     except Exception as e:
-        print(type(e).__name__, str(e).replace(D[0], "<T>") if D else e)
+        # the temp dir becomes <T>; Windows writes '<T>\circ_a.py' (as CPython)
+        print(type(e).__name__, str(e).replace(D[0], "<T>").replace("<T>" + os.sep, "<T>/") if D else e)
 t(lambda: sys.nope)
 t(lambda: os.nope)
 import posixpath  # os.path is ntpath on Windows; posixpath exists everywhere
