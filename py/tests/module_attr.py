@@ -12,7 +12,8 @@ def t(f):
         print(type(e).__name__, str(e).replace(D[0], "<T>") if D else e)
 t(lambda: sys.nope)
 t(lambda: os.nope)
-t(lambda: os.path.nope)
+import posixpath  # os.path is ntpath on Windows; posixpath exists everywhere
+t(lambda: posixpath.nope)
 import json
 t(lambda: json.nope)
 m = types.ModuleType("mm")

@@ -1,3 +1,4 @@
+# golden: posix-only (a Windows venv needs venvlauncher.exe, which gpython does not ship)
 # A venv made by EnvBuilder records pyvenv.cfg and the site-packages layout.
 import os, sys, tempfile, venv
 

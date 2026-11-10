@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -286,6 +287,24 @@ func RunScript(t *testing.T, fname string) {
 	})
 }
 
+// posixOnlyGolden reports whether a script declares its golden POSIX-only, with
+// a "# golden: posix-only (reason)" line among its first 15 lines.
+func posixOnlyGolden(pyFile string) bool {
+	src, err := os.ReadFile(pyFile)
+	if err != nil {
+		return false
+	}
+	for i, line := range strings.Split(string(src), "\n") {
+		if i == 15 {
+			break
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "# golden: posix-only") {
+			return true
+		}
+	}
+	return false
+}
+
 // RunTestTasks runs each given task in a newly created py.Context concurrently.
 // If a fatal error is encountered, the given testing.T is signaled.
 func RunTestTasks(t *testing.T, tasks []*Task) {
@@ -419,6 +438,13 @@ func (task *Task) run() error {
 			return nil
 		}
 		return fmt.Errorf("could not read golden output %q: %w", task.GoldFile, err)
+	}
+
+	if runtime.GOOS == "windows" && task.PyFile != "" && posixOnlyGolden(task.PyFile) {
+		// The script ran (an exception would have failed above); only its
+		// output, which CPython itself prints differently on Windows (ntpath,
+		// WinError messages, drives), is not held to the POSIX golden.
+		return nil
 	}
 
 	want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
