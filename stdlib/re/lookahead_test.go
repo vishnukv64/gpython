@@ -92,13 +92,12 @@ func TestNegativeLookaheadPositions(t *testing.T) {
 // implementation cannot do - and returning "no match" there would be a wrong
 // answer, which is worse than a refusal.
 func TestUnsupportedLookaroundRefuses(t *testing.T) {
+	// Shapes the lifted engine cannot place (a quantified prefix, a lookbehind
+	// after consuming text) go to the backtracking engine and are answered;
+	// py/tests/re_lookaround checks those against CPython.  What remains
+	// refused is what CPython refuses too, or a conditional.
 	for _, pattern := range []string{
-		`\d+(?!%)`,   // quantified prefix: needs backtracking
-		`a(?(1)b|c)`, // conditional
-		// A lookbehind IS supported now (see lookbehind_test.go), but only
-		// where its position in the match is determined: leading, or followed
-		// by a FIXED-width tail.  A variable tail cannot be anchored.
-		`x(?<!a)y.*`,   // lookbehind whose TAIL is variable width
+		`a(?(1)b|c)`,   // conditional
 		`(?<=(a|bc))d`, // lookbehind whose BODY is not fixed width
 	} {
 		if _, err := compile(pattern, 0); err == nil {

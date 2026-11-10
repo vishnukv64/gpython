@@ -120,9 +120,6 @@ func pathNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object,
 			"cannot instantiate %s on your system", reprOf(shortName(concrete.Name)))
 	}
 
-	if len(args) == 0 {
-		return nil, py.ExceptionNewf(py.TypeError, "missing argument")
-	}
 	return newPath(concrete, shortName(concrete.Name), f, args)
 }
 

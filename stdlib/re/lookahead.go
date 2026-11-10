@@ -47,6 +47,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -76,12 +77,6 @@ type assertion struct {
 	width int
 	// positive marks (?<=...) / (?=...) as opposed to the negative forms.
 	positive bool
-	// trailing is the fixed width of what FOLLOWS the assertion within its
-	// branch.  When that is fixed, the assertion's position in the match is
-	// exactly "end of match minus trailing", which is how a lookbehind in the
-	// MIDDLE of a pattern is located - rich needs one, in
-	// 'b?".*?(?<!\)"'.
-	trailing int
 	// at is the alternation branch the assertion was written in.  Go's
 	// alternation is leftmost-first and non-overlapping, so a match comes from
 	// exactly one branch and an assertion only governs that branch.
@@ -377,35 +372,23 @@ func lift(pattern string) (lifted, error) {
 				// afterwards.  Where it is checked depends on where it sits:
 				//
 				//   leading - "(?<!x)y" - the position it governs is the start
-				//   of the match, which is exactly where Go begins.
+				//   of the match, which is exactly where Go begins, so a
+				//   failed check means no match at that start at all.
 				//
-				//   mid-pattern - 'b?".*?(?<!\)"' - the position is "end of
-				//   match minus the width of what follows it in its branch".
-				//   That requires the tail to be fixed-width, and a variable
-				//   one is refused rather than mis-anchored.
+				//   after consuming text - 'b?".*?(?<!\)"', "\w+(?<!s)" -
+				//   the position depends on how much the prefix took, and Go
+				//   commits to one length per start where CPython backtracks
+				//   through the others.  Checking Go's one candidate gave
+				//   wrong answers, so such a pattern goes to the backtracking
+				//   engine, which explores them as CPython does.
 				// "Leading" means nothing that CONSUMES text precedes the
 				// assertion in its branch - the enclosing group's head and a
-				// zero-width prefix like "(?P<name>" are not consumption, and
-				// counting the output length treated them as if they were, so
-				// "(?P<number>(?<!\w)...)" was refused.
-				// Only the text BETWEEN the branch start and the assertion can
-				// consume - passing the whole prefix scanned everything before
-				// the branch as well, so a lookbehind leading its own branch
-				// was judged to be mid-pattern.
-				trailing := 0
+				// zero-width prefix like "(?P<name>" are not consumption, so
+				// "(?P<number>(?<!\w)...)" stays leading.
 				bp := branchPos(pattern, i)
 				if consumesBefore(pattern[bp:i], len(pattern[bp:i])) {
-					rest, ok := branchRest(pattern, end)
-					if !ok {
-						return lifted{}, py.ExceptionNewf(ErrorType,
-							"a lookbehind in the middle of a pattern is supported only when what follows it in its branch is fixed-width")
-					}
-					w2, err := widthOf(rest)
-					if err != nil || w2 < 0 {
-						return lifted{}, py.ExceptionNewf(ErrorType,
-							"a lookbehind in the middle of a pattern is supported only when what follows it in its branch is fixed-width")
-					}
-					trailing = w2
+					return lifted{}, py.ExceptionNewf(ErrorType,
+						"a lookbehind after consuming text needs backtracking")
 				}
 				assertions = append(assertions, assertion{
 					lookbehind: true,
@@ -414,7 +397,6 @@ func lift(pattern string) (lifted, error) {
 					negative:   strings.HasPrefix(pattern[i:], "(?<!"),
 					body:       body,
 					at:         -1,
-					trailing:   trailing,
 				})
 				i = end
 				continue
@@ -713,15 +695,11 @@ func (p *Pattern) assertionsHold(l lifted, text string, idx []int, start, end in
 			// there is not enough text: a POSITIVE lookbehind cannot hold
 			// there, and a NEGATIVE one holds because nothing matched - which
 			// is CPython's answer for "re.search(r"(?<!x)y", "y")".
-			check := start
-			if a.trailing > 0 {
-				check = end - a.trailing
-			}
-			before := check - a.width
+			before, ok := runesBefore(text, start, a.width)
 			matched := false
-			if before >= 0 {
-				loc := re.FindStringIndex(text[before:check])
-				matched = loc != nil && loc[0] == 0 && loc[1] == a.width
+			if ok {
+				loc := re.FindStringIndex(text[before:start])
+				matched = loc != nil && loc[0] == 0 && loc[1] == start-before
 			} else if a.positive {
 				return false
 			}
@@ -849,25 +827,33 @@ func (p *Pattern) lookbehindHolds(a assertion, s string, start, end int) bool {
 	if err != nil {
 		return false
 	}
-	check := start
-	if a.trailing > 0 {
-		check = end - a.trailing
-	}
-	if check > len(s) {
-		check = len(s)
-	}
-	before := check - a.width
-	if before < 0 {
+	before, ok := runesBefore(s, start, a.width)
+	if !ok {
 		// Not enough text before: a POSITIVE lookbehind cannot hold, and a
 		// negative one holds because nothing matched.
 		return !a.positive
 	}
-	if before > check {
-		return !a.positive
-	}
-	loc := re.FindStringIndex(s[before:check])
-	matched := loc != nil && loc[0] == 0 && loc[1] == a.width
+	loc := re.FindStringIndex(s[before:start])
+	matched := loc != nil && loc[0] == 0 && loc[1] == start-before
 	return a.positive == matched
+}
+
+// runesBefore returns the byte offset n characters before at in s, and false
+// when s has fewer than n characters there.  A lookbehind's width counts
+// characters while match offsets are bytes: subtracting one from the other
+// cut a preceding multi-byte character in half.
+func runesBefore(s string, at, n int) (int, bool) {
+	if at > len(s) {
+		at = len(s)
+	}
+	for ; n > 0; n-- {
+		if at == 0 {
+			return 0, false
+		}
+		_, size := utf8.DecodeLastRuneInString(s[:at])
+		at -= size
+	}
+	return at, true
 }
 
 // matchWithAssertionsAnchored matches at the START of text only, which is what
@@ -1011,32 +997,6 @@ func scanLookaheadAt(pattern string, i int) (string, int, bool) {
 	return scanLookahead(pattern, i)
 }
 
-// branchRest returns the pattern text from i up to the end of the current
-// branch, and whether such a boundary was found.
-func branchRest(pattern string, i int) (string, bool) {
-	depth := 0
-	for j := i; j < len(pattern); j++ {
-		switch pattern[j] {
-		case '\\':
-			j++
-		case '[':
-			j = skipClass(pattern, j)
-		case '(':
-			depth++
-		case ')':
-			if depth == 0 {
-				return pattern[i:j], true
-			}
-			depth--
-		case '|':
-			if depth == 0 {
-				return pattern[i:j], true
-			}
-		}
-	}
-	return pattern[i:], true
-}
-
 // scanLookbehind returns the body of the (?<=...) or (?<!...) group at i and
 // the offset just past its closing parenthesis.
 func scanLookbehind(pattern string, i int) (string, int, bool) {
@@ -1140,7 +1100,8 @@ func splitAlternation(pattern string) []string {
 // widthOf returns the fixed character width of a pattern fragment, or -1 when
 // it is not fixed.
 func widthOf(pattern string) (int, error) {
-	total := 0
+	// last is the width of the most recent atom, which a {n} repeats.
+	total, last := 0, 0
 	for i := 0; i < len(pattern); {
 		switch c := pattern[i]; {
 		case c == '\\':
@@ -1149,15 +1110,33 @@ func widthOf(pattern string) (int, error) {
 				switch pattern[i+1] {
 				case 'b', 'B', 'A', 'z', 'Z':
 					// A zero-width assertion contributes nothing.
+					last = 0
 					i += 2
 					continue
 				}
 			}
-			total++
-			i += 2
+			// \p{Nd} / \P{..} (the translation of \d, \w and friends) and
+			// \x{e9} (of \u00e9) are one character, braces and all; \xhh is
+			// one character too.
+			if i+2 < len(pattern) && strings.IndexByte("pPx", pattern[i+1]) >= 0 && pattern[i+2] == '{' {
+				if close := strings.IndexByte(pattern[i:], '}'); close > 0 {
+					total, last = total+1, 1
+					i += close + 1
+					continue
+				}
+			}
+			if pattern[i+1] == 'x' && i+4 <= len(pattern) {
+				total, last = total+1, 1
+				i += 4
+				continue
+			}
+			total, last = total+1, 1
+			// The escaped character may itself be multi-byte (\é).
+			_, size := utf8.DecodeRuneInString(pattern[i+1:])
+			i += 1 + size
 			continue
 		case c == '[':
-			total++
+			total, last = total+1, 1
 			i = skipClass(pattern, i)
 			continue
 		case c == '(':
@@ -1170,7 +1149,7 @@ func widthOf(pattern string) (int, error) {
 				if err != nil || w < 0 {
 					return -1, err
 				}
-				total += w
+				total, last = total+w, w
 				i = end
 				continue
 			}
@@ -1187,7 +1166,7 @@ func widthOf(pattern string) (int, error) {
 			if err != nil || w < 0 {
 				return -1, err
 			}
-			total += w
+			total, last = total+w, w
 			i = end
 			continue
 		case c == '|':
@@ -1210,13 +1189,20 @@ func widthOf(pattern string) (int, error) {
 			if err != nil {
 				return -1, nil
 			}
-			total += n
+			// The atom was counted once already; {n} makes it n times.
+			total += last * (n - 1)
+			last = 0
 			i += close + 1
 			continue
 		case c == '^' || c == '$':
 			// Zero-width anchors.
+			last = 0
 		default:
-			total++
+			// One character, however many bytes it takes in UTF-8.
+			_, size := utf8.DecodeRuneInString(pattern[i:])
+			total, last = total+1, 1
+			i += size
+			continue
 		}
 		i++
 	}

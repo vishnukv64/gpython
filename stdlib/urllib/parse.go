@@ -1190,6 +1190,47 @@ func registerResultFields(t *py.Type, names []string,
 	t.Dict.Set("__iter__", py.MustNewMethod("__iter__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.NewIterator(self), nil
 	}, 0, "iter(x)"))
+	// A result is a namedtuple in CPython, so it compares and hashes as the
+	// tuple of its fields: equal to another result or plain tuple of the same
+	// strings.  pip's resolver relies on this (links_equivalent compares
+	// SplitResults).
+	asTuple := func(o py.Object) (py.Tuple, bool) {
+		switch v := o.(type) {
+		case *splitResult:
+			return fieldsTuple(splitFields(v)), true
+		case *parseResult:
+			return fieldsTuple(parseFields(v)), true
+		case py.Tuple:
+			return v, true
+		}
+		return nil, false
+	}
+	cmp := func(want bool) func(py.Object, py.Tuple) (py.Object, error) {
+		return func(self py.Object, args py.Tuple) (py.Object, error) {
+			if len(args) != 1 {
+				return nil, py.ExceptionNewf(py.TypeError, "expected 1 argument, got %d", len(args))
+			}
+			other, ok := asTuple(args[0])
+			if !ok {
+				return py.NotImplemented, nil
+			}
+			eq, err := py.Eq(fieldsTuple(fields(self)), other)
+			if err != nil {
+				return nil, err
+			}
+			b, err := py.MakeBool(eq)
+			if err != nil {
+				return nil, err
+			}
+			return py.NewBool((b == py.True) == want), nil
+		}
+	}
+	t.Dict.Set("__eq__", py.MustNewMethod("__eq__", cmp(true), 0, "x==y"))
+	t.Dict.Set("__ne__", py.MustNewMethod("__ne__", cmp(false), 0, "x!=y"))
+	t.Dict.Set("__hash__", py.MustNewMethod("__hash__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		h, _ := py.HashValue(fieldsTuple(fields(self)))
+		return py.Int(h), nil
+	}, 0, "hash(x)"))
 	t.Dict.Set("__str__", py.MustNewMethod("__str__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.String(resultRepr(typeName, names, fields(self))), nil
 	}, 0, "str(x)"))
@@ -1260,4 +1301,12 @@ func urllibDefragNamed(self py.Object, args py.Tuple, kwargs py.StringDict) (py.
 		return &defragResult{url: u, fragment: "", Dict: py.NewStringDict()}, nil
 	}
 	return &defragResult{url: u[:i], fragment: u[i+1:], Dict: py.NewStringDict()}, nil
+}
+
+func fieldsTuple(f []string) py.Tuple {
+	t := make(py.Tuple, len(f))
+	for i, s := range f {
+		t[i] = py.String(s)
+	}
+	return t
 }

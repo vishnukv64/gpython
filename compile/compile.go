@@ -342,6 +342,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 	code.Firstlineno = firstLineno(Ast)
 	switch node := Ast.(type) {
 	case *ast.Module:
+		c.setupAnnotations(node.Body)
 		c.Stmts(c.docString(node.Body, false))
 	case *ast.Interactive:
 		c.interactive = true
@@ -393,6 +394,7 @@ func (c *compiler) compileAst(Ast ast.Ast, filename string, futureFlags int, don
 		c.NameOp("__qualname__", ast.Store)
 
 		/* compile the body proper */
+		c.setupAnnotations(node.Body)
 		c.Stmts(c.docString(node.Body, false))
 
 		if SymTable.NeedsClassClosure {

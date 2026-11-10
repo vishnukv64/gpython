@@ -1,0 +1,2841 @@
+3.14.6
+distance ('', '') [] 0 int
+distance ('', 'ab') [] 2 int
+distance ('', 'kitten') [] 6 int
+distance ('', 'levenshtein') [] 11 int
+distance ('', 'héllo') [] 5 int
+distance ('', '日本人') [] 3 int
+distance ('', 'install') [] 7 int
+distance ('', 'new') [] 3 int
+distance ('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('', 'quick the brown fox') [] 19 int
+distance ('a', '') [] 1 int
+distance ('a', 'ab') [] 1 int
+distance ('a', 'kitten') [] 6 int
+distance ('a', 'levenshtein') [] 11 int
+distance ('a', 'héllo') [] 5 int
+distance ('a', '日本人') [] 3 int
+distance ('a', 'install') [] 6 int
+distance ('a', 'new') [] 3 int
+distance ('a', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('a', 'quick the brown fox') [] 19 int
+distance ('b', '') [] 1 int
+distance ('b', 'ab') [] 1 int
+distance ('b', 'kitten') [] 6 int
+distance ('b', 'levenshtein') [] 11 int
+distance ('b', 'héllo') [] 5 int
+distance ('b', '日本人') [] 3 int
+distance ('b', 'install') [] 7 int
+distance ('b', 'new') [] 3 int
+distance ('b', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('b', 'quick the brown fox') [] 18 int
+distance ('ab', '') [] 2 int
+distance ('ab', 'ab') [] 0 int
+distance ('ab', 'kitten') [] 6 int
+distance ('ab', 'levenshtein') [] 11 int
+distance ('ab', 'héllo') [] 5 int
+distance ('ab', '日本人') [] 3 int
+distance ('ab', 'install') [] 6 int
+distance ('ab', 'new') [] 3 int
+distance ('ab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('ab', 'quick the brown fox') [] 18 int
+distance ('abc', '') [] 3 int
+distance ('abc', 'ab') [] 1 int
+distance ('abc', 'kitten') [] 6 int
+distance ('abc', 'levenshtein') [] 11 int
+distance ('abc', 'héllo') [] 5 int
+distance ('abc', '日本人') [] 3 int
+distance ('abc', 'install') [] 6 int
+distance ('abc', 'new') [] 3 int
+distance ('abc', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('abc', 'quick the brown fox') [] 18 int
+distance ('abd', '') [] 3 int
+distance ('abd', 'ab') [] 1 int
+distance ('abd', 'kitten') [] 6 int
+distance ('abd', 'levenshtein') [] 11 int
+distance ('abd', 'héllo') [] 5 int
+distance ('abd', '日本人') [] 3 int
+distance ('abd', 'install') [] 6 int
+distance ('abd', 'new') [] 3 int
+distance ('abd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('abd', 'quick the brown fox') [] 18 int
+distance ('kitten', '') [] 6 int
+distance ('kitten', 'ab') [] 6 int
+distance ('kitten', 'kitten') [] 0 int
+distance ('kitten', 'levenshtein') [] 8 int
+distance ('kitten', 'héllo') [] 6 int
+distance ('kitten', '日本人') [] 6 int
+distance ('kitten', 'install') [] 6 int
+distance ('kitten', 'new') [] 5 int
+distance ('kitten', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('kitten', 'quick the brown fox') [] 15 int
+distance ('sitting', '') [] 7 int
+distance ('sitting', 'ab') [] 7 int
+distance ('sitting', 'kitten') [] 3 int
+distance ('sitting', 'levenshtein') [] 8 int
+distance ('sitting', 'héllo') [] 7 int
+distance ('sitting', '日本人') [] 7 int
+distance ('sitting', 'install') [] 6 int
+distance ('sitting', 'new') [] 7 int
+distance ('sitting', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('sitting', 'quick the brown fox') [] 16 int
+distance ('lewenstein', '') [] 10 int
+distance ('lewenstein', 'ab') [] 10 int
+distance ('lewenstein', 'kitten') [] 7 int
+distance ('lewenstein', 'levenshtein') [] 2 int
+distance ('lewenstein', 'héllo') [] 10 int
+distance ('lewenstein', '日本人') [] 10 int
+distance ('lewenstein', 'install') [] 7 int
+distance ('lewenstein', 'new') [] 8 int
+distance ('lewenstein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('lewenstein', 'quick the brown fox') [] 16 int
+distance ('levenshtein', '') [] 11 int
+distance ('levenshtein', 'ab') [] 11 int
+distance ('levenshtein', 'kitten') [] 8 int
+distance ('levenshtein', 'levenshtein') [] 0 int
+distance ('levenshtein', 'héllo') [] 10 int
+distance ('levenshtein', '日本人') [] 11 int
+distance ('levenshtein', 'install') [] 8 int
+distance ('levenshtein', 'new') [] 9 int
+distance ('levenshtein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('levenshtein', 'quick the brown fox') [] 17 int
+distance ('Hello, World', '') [] 12 int
+distance ('Hello, World', 'ab') [] 12 int
+distance ('Hello, World', 'kitten') [] 12 int
+distance ('Hello, World', 'levenshtein') [] 11 int
+distance ('Hello, World', 'héllo') [] 9 int
+distance ('Hello, World', '日本人') [] 12 int
+distance ('Hello, World', 'install') [] 11 int
+distance ('Hello, World', 'new') [] 11 int
+distance ('Hello, World', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('Hello, World', 'quick the brown fox') [] 17 int
+distance ('hello world', '') [] 11 int
+distance ('hello world', 'ab') [] 11 int
+distance ('hello world', 'kitten') [] 11 int
+distance ('hello world', 'levenshtein') [] 10 int
+distance ('hello world', 'héllo') [] 7 int
+distance ('hello world', '日本人') [] 11 int
+distance ('hello world', 'install') [] 10 int
+distance ('hello world', 'new') [] 9 int
+distance ('hello world', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('hello world', 'quick the brown fox') [] 16 int
+distance ('héllo', '') [] 5 int
+distance ('héllo', 'ab') [] 5 int
+distance ('héllo', 'kitten') [] 6 int
+distance ('héllo', 'levenshtein') [] 10 int
+distance ('héllo', 'héllo') [] 0 int
+distance ('héllo', '日本人') [] 5 int
+distance ('héllo', 'install') [] 6 int
+distance ('héllo', 'new') [] 5 int
+distance ('héllo', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('héllo', 'quick the brown fox') [] 17 int
+distance ('hello', '') [] 5 int
+distance ('hello', 'ab') [] 5 int
+distance ('hello', 'kitten') [] 6 int
+distance ('hello', 'levenshtein') [] 10 int
+distance ('hello', 'héllo') [] 1 int
+distance ('hello', '日本人') [] 5 int
+distance ('hello', 'install') [] 6 int
+distance ('hello', 'new') [] 4 int
+distance ('hello', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('hello', 'quick the brown fox') [] 16 int
+distance ('日本語', '') [] 3 int
+distance ('日本語', 'ab') [] 3 int
+distance ('日本語', 'kitten') [] 6 int
+distance ('日本語', 'levenshtein') [] 11 int
+distance ('日本語', 'héllo') [] 5 int
+distance ('日本語', '日本人') [] 1 int
+distance ('日本語', 'install') [] 7 int
+distance ('日本語', 'new') [] 3 int
+distance ('日本語', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('日本語', 'quick the brown fox') [] 19 int
+distance ('日本人', '') [] 3 int
+distance ('日本人', 'ab') [] 3 int
+distance ('日本人', 'kitten') [] 6 int
+distance ('日本人', 'levenshtein') [] 11 int
+distance ('日本人', 'héllo') [] 5 int
+distance ('日本人', '日本人') [] 0 int
+distance ('日本人', 'install') [] 7 int
+distance ('日本人', 'new') [] 3 int
+distance ('日本人', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('日本人', 'quick the brown fox') [] 19 int
+distance ('😀x', '') [] 2 int
+distance ('😀x', 'ab') [] 2 int
+distance ('😀x', 'kitten') [] 6 int
+distance ('😀x', 'levenshtein') [] 11 int
+distance ('😀x', 'héllo') [] 5 int
+distance ('😀x', '日本人') [] 3 int
+distance ('😀x', 'install') [] 7 int
+distance ('😀x', 'new') [] 3 int
+distance ('😀x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('😀x', 'quick the brown fox') [] 18 int
+distance ('😁x', '') [] 2 int
+distance ('😁x', 'ab') [] 2 int
+distance ('😁x', 'kitten') [] 6 int
+distance ('😁x', 'levenshtein') [] 11 int
+distance ('😁x', 'héllo') [] 5 int
+distance ('😁x', '日本人') [] 3 int
+distance ('😁x', 'install') [] 7 int
+distance ('😁x', 'new') [] 3 int
+distance ('😁x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('😁x', 'quick the brown fox') [] 18 int
+distance ('install', '') [] 7 int
+distance ('install', 'ab') [] 6 int
+distance ('install', 'kitten') [] 6 int
+distance ('install', 'levenshtein') [] 8 int
+distance ('install', 'héllo') [] 6 int
+distance ('install', '日本人') [] 7 int
+distance ('install', 'install') [] 0 int
+distance ('install', 'new') [] 6 int
+distance ('install', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('install', 'quick the brown fox') [] 17 int
+distance ('instal', '') [] 6 int
+distance ('instal', 'ab') [] 5 int
+distance ('instal', 'kitten') [] 5 int
+distance ('instal', 'levenshtein') [] 8 int
+distance ('instal', 'héllo') [] 6 int
+distance ('instal', '日本人') [] 6 int
+distance ('instal', 'install') [] 1 int
+distance ('instal', 'new') [] 5 int
+distance ('instal', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('instal', 'quick the brown fox') [] 17 int
+distance ('add', '') [] 3 int
+distance ('add', 'ab') [] 2 int
+distance ('add', 'kitten') [] 6 int
+distance ('add', 'levenshtein') [] 11 int
+distance ('add', 'héllo') [] 5 int
+distance ('add', '日本人') [] 3 int
+distance ('add', 'install') [] 6 int
+distance ('add', 'new') [] 3 int
+distance ('add', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+distance ('add', 'quick the brown fox') [] 19 int
+distance ('new', '') [] 3 int
+distance ('new', 'ab') [] 3 int
+distance ('new', 'kitten') [] 5 int
+distance ('new', 'levenshtein') [] 9 int
+distance ('new', 'héllo') [] 5 int
+distance ('new', '日本人') [] 3 int
+distance ('new', 'install') [] 6 int
+distance ('new', 'new') [] 0 int
+distance ('new', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('new', 'quick the brown fox') [] 17 int
+distance ('poetry', '') [] 6 int
+distance ('poetry', 'ab') [] 6 int
+distance ('poetry', 'kitten') [] 5 int
+distance ('poetry', 'levenshtein') [] 9 int
+distance ('poetry', 'héllo') [] 6 int
+distance ('poetry', '日本人') [] 6 int
+distance ('poetry', 'install') [] 6 int
+distance ('poetry', 'new') [] 5 int
+distance ('poetry', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('poetry', 'quick the brown fox') [] 17 int
+distance ('poerty', '') [] 6 int
+distance ('poerty', 'ab') [] 6 int
+distance ('poerty', 'kitten') [] 6 int
+distance ('poerty', 'levenshtein') [] 9 int
+distance ('poerty', 'héllo') [] 6 int
+distance ('poerty', '日本人') [] 6 int
+distance ('poerty', 'install') [] 7 int
+distance ('poerty', 'new') [] 5 int
+distance ('poerty', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('poerty', 'quick the brown fox') [] 17 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ab') [] 39 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'kitten') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'levenshtein') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'héllo') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '日本人') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'install') [] 39 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'new') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'quick the brown fox') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'ab') [] 38 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'kitten') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'levenshtein') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'héllo') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '日本人') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'install') [] 39 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'new') [] 40 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'quick the brown fox') [] 40 int
+distance ('the quick brown fox', '') [] 19 int
+distance ('the quick brown fox', 'ab') [] 18 int
+distance ('the quick brown fox', 'kitten') [] 17 int
+distance ('the quick brown fox', 'levenshtein') [] 17 int
+distance ('the quick brown fox', 'héllo') [] 17 int
+distance ('the quick brown fox', '日本人') [] 19 int
+distance ('the quick brown fox', 'install') [] 18 int
+distance ('the quick brown fox', 'new') [] 17 int
+distance ('the quick brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('the quick brown fox', 'quick the brown fox') [] 8 int
+distance ('quick the brown fox', '') [] 19 int
+distance ('quick the brown fox', 'ab') [] 18 int
+distance ('quick the brown fox', 'kitten') [] 15 int
+distance ('quick the brown fox', 'levenshtein') [] 17 int
+distance ('quick the brown fox', 'héllo') [] 17 int
+distance ('quick the brown fox', '日本人') [] 19 int
+distance ('quick the brown fox', 'install') [] 17 int
+distance ('quick the brown fox', 'new') [] 17 int
+distance ('quick the brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+distance ('quick the brown fox', 'quick the brown fox') [] 0 int
+distance ('kitten', 'sitting') [('weights', None)] 3 int
+distance ('', 'abc') [('weights', None)] 3 int
+distance ('abc', '') [('weights', None)] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', None)] 2 int
+distance ('日本語', '日本人') [('weights', None)] 1 int
+distance ('kitten', 'sitting') [('weights', (1, 1, 1))] 3 int
+distance ('', 'abc') [('weights', (1, 1, 1))] 3 int
+distance ('abc', '') [('weights', (1, 1, 1))] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 1))] 2 int
+distance ('日本語', '日本人') [('weights', (1, 1, 1))] 1 int
+distance ('kitten', 'sitting') [('weights', (1, 1, 2))] 5 int
+distance ('', 'abc') [('weights', (1, 1, 2))] 3 int
+distance ('abc', '') [('weights', (1, 1, 2))] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 2))] 3 int
+distance ('日本語', '日本人') [('weights', (1, 1, 2))] 2 int
+distance ('kitten', 'sitting') [('weights', (2, 3, 4))] 10 int
+distance ('', 'abc') [('weights', (2, 3, 4))] 6 int
+distance ('abc', '') [('weights', (2, 3, 4))] 9 int
+distance ('lewenstein', 'levenshtein') [('weights', (2, 3, 4))] 6 int
+distance ('日本語', '日本人') [('weights', (2, 3, 4))] 4 int
+distance ('kitten', 'sitting') [('weights', (1, 2, 3))] 7 int
+distance ('', 'abc') [('weights', (1, 2, 3))] 3 int
+distance ('abc', '') [('weights', (1, 2, 3))] 6 int
+distance ('lewenstein', 'levenshtein') [('weights', (1, 2, 3))] 4 int
+distance ('日本語', '日本人') [('weights', (1, 2, 3))] 3 int
+distance ('kitten', 'sitting') [('weights', (3, 1, 2))] 7 int
+distance ('', 'abc') [('weights', (3, 1, 2))] 9 int
+distance ('abc', '') [('weights', (3, 1, 2))] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', (3, 1, 2))] 5 int
+distance ('日本語', '日本人') [('weights', (3, 1, 2))] 2 int
+distance ('kitten', 'sitting') [('weights', (0, 1, 1))] 2 int
+distance ('', 'abc') [('weights', (0, 1, 1))] 0 int
+distance ('abc', '') [('weights', (0, 1, 1))] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', (0, 1, 1))] 1 int
+distance ('日本語', '日本人') [('weights', (0, 1, 1))] 1 int
+distance ('kitten', 'sitting') [('weights', (1, 1, 0))] 1 int
+distance ('', 'abc') [('weights', (1, 1, 0))] 3 int
+distance ('abc', '') [('weights', (1, 1, 0))] 3 int
+distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 0))] 1 int
+distance ('日本語', '日本人') [('weights', (1, 1, 0))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', None)] 3 int
+distance ('kitten', 'sitting') [('score_cutoff', None), ('weights', (1, 1, 2))] 5 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', None)] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', None), ('weights', (1, 1, 2))] 3 int
+distance ('', '') [('score_cutoff', None)] 0 int
+distance ('', '') [('score_cutoff', None), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', None)] 0 int
+distance ('abc', 'abc') [('score_cutoff', None), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 0)] 1 int
+distance ('kitten', 'sitting') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0)] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1 int
+distance ('', '') [('score_cutoff', 0)] 0 int
+distance ('', '') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 1)] 2 int
+distance ('kitten', 'sitting') [('score_cutoff', 1), ('weights', (1, 1, 2))] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 1)] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 1), ('weights', (1, 1, 2))] 2 int
+distance ('', '') [('score_cutoff', 1)] 0 int
+distance ('', '') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 1)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 2)] 3 int
+distance ('kitten', 'sitting') [('score_cutoff', 2), ('weights', (1, 1, 2))] 3 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 2)] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 2), ('weights', (1, 1, 2))] 3 int
+distance ('', '') [('score_cutoff', 2)] 0 int
+distance ('', '') [('score_cutoff', 2), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 2)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 2), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 3)] 3 int
+distance ('kitten', 'sitting') [('score_cutoff', 3), ('weights', (1, 1, 2))] 4 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 3)] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 3), ('weights', (1, 1, 2))] 3 int
+distance ('', '') [('score_cutoff', 3)] 0 int
+distance ('', '') [('score_cutoff', 3), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 3)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 3), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.2)] 1 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.2)] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 1 int
+distance ('', '') [('score_cutoff', 0.2)] 0 int
+distance ('', '') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.2)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.5)] 1 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.5)] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 1 int
+distance ('', '') [('score_cutoff', 0.5)] 0 int
+distance ('', '') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.5)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.85)] 1 int
+distance ('kitten', 'sitting') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.85)] 1 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 1 int
+distance ('', '') [('score_cutoff', 0.85)] 0 int
+distance ('', '') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.85)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0 int
+distance ('kitten', 'sitting') [('score_cutoff', 1.0)] 2 int
+distance ('kitten', 'sitting') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 1.0)] 2 int
+distance ('lewenstein', 'levenshtein') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 2 int
+distance ('', '') [('score_cutoff', 1.0)] 0 int
+distance ('', '') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0 int
+distance ('abc', 'abc') [('score_cutoff', 1.0)] 0 int
+distance ('abc', 'abc') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0 int
+distance ('ab', 'AB') [('processor', 'lower')] 0 int
+distance ('  Ab!', 'ab') [('processor', 'default_process')] 0 int
+distance (['lewenstein'], ['levenshtein']) [('processor', '<lambda>')] 2 int
+distance ('kitten', 'sitting') [('score_hint', 2)] 3 int
+distance (None, 'a') [] EXC TypeError
+distance ('a', None) [] EXC TypeError
+distance (nan, 'a') [] EXC TypeError
+distance (1, 2) [] EXC TypeError
+distance ('a',) [] EXC TypeError
+distance ('a', 'b') [('weights', (1, 2))] EXC ValueError
+distance ('a', 'b') [('weights', (-1, 1, 1))] EXC OverflowError
+distance ('a', ['x', [1]]) [] EXC TypeError
+distance ([], []) [] 0 int
+distance ([], [1, 2, 3]) [] 3 int
+distance ([], [1, 3]) [] 2 int
+distance ([], ['a', 'bc', 'd']) [] 3 int
+distance ([], ['a', 'bc', 'e']) [] 3 int
+distance ([], (1, -1, 2)) [] 3 int
+distance ([], [-1]) [] 1 int
+distance ([], ['ab', ('t', 1)]) [] 2 int
+distance ([], b'') [] 0 int
+distance ([], b'abc') [] 3 int
+distance ([], b'abd') [] 3 int
+distance ([], bytearray(b'abc')) [] 3 int
+distance ([], ['a', 'b']) [] 2 int
+distance ([], 'ab') [] 2 int
+distance ([1, 2, 3], []) [] 3 int
+distance ([1, 2, 3], [1, 2, 3]) [] 0 int
+distance ([1, 2, 3], [1, 3]) [] 1 int
+distance ([1, 2, 3], ['a', 'bc', 'd']) [] 3 int
+distance ([1, 2, 3], ['a', 'bc', 'e']) [] 3 int
+distance ([1, 2, 3], (1, -1, 2)) [] 2 int
+distance ([1, 2, 3], [-1]) [] 3 int
+distance ([1, 2, 3], ['ab', ('t', 1)]) [] 3 int
+distance ([1, 2, 3], b'') [] 3 int
+distance ([1, 2, 3], b'abc') [] 3 int
+distance ([1, 2, 3], b'abd') [] 3 int
+distance ([1, 2, 3], bytearray(b'abc')) [] 3 int
+distance ([1, 2, 3], ['a', 'b']) [] 3 int
+distance ([1, 2, 3], 'ab') [] 3 int
+distance ([1, 3], []) [] 2 int
+distance ([1, 3], [1, 2, 3]) [] 1 int
+distance ([1, 3], [1, 3]) [] 0 int
+distance ([1, 3], ['a', 'bc', 'd']) [] 3 int
+distance ([1, 3], ['a', 'bc', 'e']) [] 3 int
+distance ([1, 3], (1, -1, 2)) [] 2 int
+distance ([1, 3], [-1]) [] 2 int
+distance ([1, 3], ['ab', ('t', 1)]) [] 2 int
+distance ([1, 3], b'') [] 2 int
+distance ([1, 3], b'abc') [] 3 int
+distance ([1, 3], b'abd') [] 3 int
+distance ([1, 3], bytearray(b'abc')) [] 3 int
+distance ([1, 3], ['a', 'b']) [] 2 int
+distance ([1, 3], 'ab') [] 2 int
+distance (['a', 'bc', 'd'], []) [] 3 int
+distance (['a', 'bc', 'd'], [1, 2, 3]) [] 3 int
+distance (['a', 'bc', 'd'], [1, 3]) [] 3 int
+distance (['a', 'bc', 'd'], ['a', 'bc', 'd']) [] 0 int
+distance (['a', 'bc', 'd'], ['a', 'bc', 'e']) [] 1 int
+distance (['a', 'bc', 'd'], (1, -1, 2)) [] 3 int
+distance (['a', 'bc', 'd'], [-1]) [] 3 int
+distance (['a', 'bc', 'd'], ['ab', ('t', 1)]) [] 3 int
+distance (['a', 'bc', 'd'], b'') [] 3 int
+distance (['a', 'bc', 'd'], b'abc') [] 2 int
+distance (['a', 'bc', 'd'], b'abd') [] 1 int
+distance (['a', 'bc', 'd'], bytearray(b'abc')) [] 2 int
+distance (['a', 'bc', 'd'], ['a', 'b']) [] 2 int
+distance (['a', 'bc', 'd'], 'ab') [] 2 int
+distance (['a', 'bc', 'e'], []) [] 3 int
+distance (['a', 'bc', 'e'], [1, 2, 3]) [] 3 int
+distance (['a', 'bc', 'e'], [1, 3]) [] 3 int
+distance (['a', 'bc', 'e'], ['a', 'bc', 'd']) [] 1 int
+distance (['a', 'bc', 'e'], ['a', 'bc', 'e']) [] 0 int
+distance (['a', 'bc', 'e'], (1, -1, 2)) [] 3 int
+distance (['a', 'bc', 'e'], [-1]) [] 3 int
+distance (['a', 'bc', 'e'], ['ab', ('t', 1)]) [] 3 int
+distance (['a', 'bc', 'e'], b'') [] 3 int
+distance (['a', 'bc', 'e'], b'abc') [] 2 int
+distance (['a', 'bc', 'e'], b'abd') [] 2 int
+distance (['a', 'bc', 'e'], bytearray(b'abc')) [] 2 int
+distance (['a', 'bc', 'e'], ['a', 'b']) [] 2 int
+distance (['a', 'bc', 'e'], 'ab') [] 2 int
+distance ((1, -1, 2), []) [] 3 int
+distance ((1, -1, 2), [1, 2, 3]) [] 2 int
+distance ((1, -1, 2), [1, 3]) [] 2 int
+distance ((1, -1, 2), ['a', 'bc', 'd']) [] 3 int
+distance ((1, -1, 2), ['a', 'bc', 'e']) [] 3 int
+distance ((1, -1, 2), (1, -1, 2)) [] 0 int
+distance ((1, -1, 2), [-1]) [] 2 int
+distance ((1, -1, 2), ['ab', ('t', 1)]) [] 3 int
+distance ((1, -1, 2), b'') [] 3 int
+distance ((1, -1, 2), b'abc') [] 3 int
+distance ((1, -1, 2), b'abd') [] 3 int
+distance ((1, -1, 2), bytearray(b'abc')) [] 3 int
+distance ((1, -1, 2), ['a', 'b']) [] 3 int
+distance ((1, -1, 2), 'ab') [] 3 int
+distance ([-1], []) [] 1 int
+distance ([-1], [1, 2, 3]) [] 3 int
+distance ([-1], [1, 3]) [] 2 int
+distance ([-1], ['a', 'bc', 'd']) [] 3 int
+distance ([-1], ['a', 'bc', 'e']) [] 3 int
+distance ([-1], (1, -1, 2)) [] 2 int
+distance ([-1], [-1]) [] 0 int
+distance ([-1], ['ab', ('t', 1)]) [] 2 int
+distance ([-1], b'') [] 1 int
+distance ([-1], b'abc') [] 3 int
+distance ([-1], b'abd') [] 3 int
+distance ([-1], bytearray(b'abc')) [] 3 int
+distance ([-1], ['a', 'b']) [] 2 int
+distance ([-1], 'ab') [] 2 int
+distance (['ab', ('t', 1)], []) [] 2 int
+distance (['ab', ('t', 1)], [1, 2, 3]) [] 3 int
+distance (['ab', ('t', 1)], [1, 3]) [] 2 int
+distance (['ab', ('t', 1)], ['a', 'bc', 'd']) [] 3 int
+distance (['ab', ('t', 1)], ['a', 'bc', 'e']) [] 3 int
+distance (['ab', ('t', 1)], (1, -1, 2)) [] 3 int
+distance (['ab', ('t', 1)], [-1]) [] 2 int
+distance (['ab', ('t', 1)], ['ab', ('t', 1)]) [] 0 int
+distance (['ab', ('t', 1)], b'') [] 2 int
+distance (['ab', ('t', 1)], b'abc') [] 3 int
+distance (['ab', ('t', 1)], b'abd') [] 3 int
+distance (['ab', ('t', 1)], bytearray(b'abc')) [] 3 int
+distance (['ab', ('t', 1)], ['a', 'b']) [] 2 int
+distance (['ab', ('t', 1)], 'ab') [] 2 int
+distance (b'', []) [] 0 int
+distance (b'', [1, 2, 3]) [] 3 int
+distance (b'', [1, 3]) [] 2 int
+distance (b'', ['a', 'bc', 'd']) [] 3 int
+distance (b'', ['a', 'bc', 'e']) [] 3 int
+distance (b'', (1, -1, 2)) [] 3 int
+distance (b'', [-1]) [] 1 int
+distance (b'', ['ab', ('t', 1)]) [] 2 int
+distance (b'', b'') [] 0 int
+distance (b'', b'abc') [] 3 int
+distance (b'', b'abd') [] 3 int
+distance (b'', bytearray(b'abc')) [] 3 int
+distance (b'', ['a', 'b']) [] 2 int
+distance (b'', 'ab') [] 2 int
+distance (b'abc', []) [] 3 int
+distance (b'abc', [1, 2, 3]) [] 3 int
+distance (b'abc', [1, 3]) [] 3 int
+distance (b'abc', ['a', 'bc', 'd']) [] 2 int
+distance (b'abc', ['a', 'bc', 'e']) [] 2 int
+distance (b'abc', (1, -1, 2)) [] 3 int
+distance (b'abc', [-1]) [] 3 int
+distance (b'abc', ['ab', ('t', 1)]) [] 3 int
+distance (b'abc', b'') [] 3 int
+distance (b'abc', b'abc') [] 0 int
+distance (b'abc', b'abd') [] 1 int
+distance (b'abc', bytearray(b'abc')) [] 0 int
+distance (b'abc', ['a', 'b']) [] 1 int
+distance (b'abc', 'ab') [] 1 int
+distance (b'abd', []) [] 3 int
+distance (b'abd', [1, 2, 3]) [] 3 int
+distance (b'abd', [1, 3]) [] 3 int
+distance (b'abd', ['a', 'bc', 'd']) [] 1 int
+distance (b'abd', ['a', 'bc', 'e']) [] 2 int
+distance (b'abd', (1, -1, 2)) [] 3 int
+distance (b'abd', [-1]) [] 3 int
+distance (b'abd', ['ab', ('t', 1)]) [] 3 int
+distance (b'abd', b'') [] 3 int
+distance (b'abd', b'abc') [] 1 int
+distance (b'abd', b'abd') [] 0 int
+distance (b'abd', bytearray(b'abc')) [] 1 int
+distance (b'abd', ['a', 'b']) [] 1 int
+distance (b'abd', 'ab') [] 1 int
+distance (bytearray(b'abc'), []) [] 3 int
+distance (bytearray(b'abc'), [1, 2, 3]) [] 3 int
+distance (bytearray(b'abc'), [1, 3]) [] 3 int
+distance (bytearray(b'abc'), ['a', 'bc', 'd']) [] 2 int
+distance (bytearray(b'abc'), ['a', 'bc', 'e']) [] 2 int
+distance (bytearray(b'abc'), (1, -1, 2)) [] 3 int
+distance (bytearray(b'abc'), [-1]) [] 3 int
+distance (bytearray(b'abc'), ['ab', ('t', 1)]) [] 3 int
+distance (bytearray(b'abc'), b'') [] 3 int
+distance (bytearray(b'abc'), b'abc') [] 0 int
+distance (bytearray(b'abc'), b'abd') [] 1 int
+distance (bytearray(b'abc'), bytearray(b'abc')) [] 0 int
+distance (bytearray(b'abc'), ['a', 'b']) [] 1 int
+distance (bytearray(b'abc'), 'ab') [] 1 int
+distance (['a', 'b'], []) [] 2 int
+distance (['a', 'b'], [1, 2, 3]) [] 3 int
+distance (['a', 'b'], [1, 3]) [] 2 int
+distance (['a', 'b'], ['a', 'bc', 'd']) [] 2 int
+distance (['a', 'b'], ['a', 'bc', 'e']) [] 2 int
+distance (['a', 'b'], (1, -1, 2)) [] 3 int
+distance (['a', 'b'], [-1]) [] 2 int
+distance (['a', 'b'], ['ab', ('t', 1)]) [] 2 int
+distance (['a', 'b'], b'') [] 2 int
+distance (['a', 'b'], b'abc') [] 1 int
+distance (['a', 'b'], b'abd') [] 1 int
+distance (['a', 'b'], bytearray(b'abc')) [] 1 int
+distance (['a', 'b'], ['a', 'b']) [] 0 int
+distance (['a', 'b'], 'ab') [] 0 int
+distance ('ab', []) [] 2 int
+distance ('ab', [1, 2, 3]) [] 3 int
+distance ('ab', [1, 3]) [] 2 int
+distance ('ab', ['a', 'bc', 'd']) [] 2 int
+distance ('ab', ['a', 'bc', 'e']) [] 2 int
+distance ('ab', (1, -1, 2)) [] 3 int
+distance ('ab', [-1]) [] 2 int
+distance ('ab', ['ab', ('t', 1)]) [] 2 int
+distance ('ab', b'') [] 2 int
+distance ('ab', b'abc') [] 1 int
+distance ('ab', b'abd') [] 1 int
+distance ('ab', bytearray(b'abc')) [] 1 int
+distance ('ab', ['a', 'b']) [] 0 int
+distance ('ab', 'ab') [] 0 int
+similarity ('', '') [] 0 int
+similarity ('', 'ab') [] 0 int
+similarity ('', 'kitten') [] 0 int
+similarity ('', 'levenshtein') [] 0 int
+similarity ('', 'héllo') [] 0 int
+similarity ('', '日本人') [] 0 int
+similarity ('', 'install') [] 0 int
+similarity ('', 'new') [] 0 int
+similarity ('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('', 'quick the brown fox') [] 0 int
+similarity ('a', '') [] 0 int
+similarity ('a', 'ab') [] 1 int
+similarity ('a', 'kitten') [] 0 int
+similarity ('a', 'levenshtein') [] 0 int
+similarity ('a', 'héllo') [] 0 int
+similarity ('a', '日本人') [] 0 int
+similarity ('a', 'install') [] 1 int
+similarity ('a', 'new') [] 0 int
+similarity ('a', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('a', 'quick the brown fox') [] 0 int
+similarity ('b', '') [] 0 int
+similarity ('b', 'ab') [] 1 int
+similarity ('b', 'kitten') [] 0 int
+similarity ('b', 'levenshtein') [] 0 int
+similarity ('b', 'héllo') [] 0 int
+similarity ('b', '日本人') [] 0 int
+similarity ('b', 'install') [] 0 int
+similarity ('b', 'new') [] 0 int
+similarity ('b', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('b', 'quick the brown fox') [] 1 int
+similarity ('ab', '') [] 0 int
+similarity ('ab', 'ab') [] 2 int
+similarity ('ab', 'kitten') [] 0 int
+similarity ('ab', 'levenshtein') [] 0 int
+similarity ('ab', 'héllo') [] 0 int
+similarity ('ab', '日本人') [] 0 int
+similarity ('ab', 'install') [] 1 int
+similarity ('ab', 'new') [] 0 int
+similarity ('ab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('ab', 'quick the brown fox') [] 1 int
+similarity ('abc', '') [] 0 int
+similarity ('abc', 'ab') [] 2 int
+similarity ('abc', 'kitten') [] 0 int
+similarity ('abc', 'levenshtein') [] 0 int
+similarity ('abc', 'héllo') [] 0 int
+similarity ('abc', '日本人') [] 0 int
+similarity ('abc', 'install') [] 1 int
+similarity ('abc', 'new') [] 0 int
+similarity ('abc', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('abc', 'quick the brown fox') [] 1 int
+similarity ('abd', '') [] 0 int
+similarity ('abd', 'ab') [] 2 int
+similarity ('abd', 'kitten') [] 0 int
+similarity ('abd', 'levenshtein') [] 0 int
+similarity ('abd', 'héllo') [] 0 int
+similarity ('abd', '日本人') [] 0 int
+similarity ('abd', 'install') [] 1 int
+similarity ('abd', 'new') [] 0 int
+similarity ('abd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('abd', 'quick the brown fox') [] 1 int
+similarity ('kitten', '') [] 0 int
+similarity ('kitten', 'ab') [] 0 int
+similarity ('kitten', 'kitten') [] 6 int
+similarity ('kitten', 'levenshtein') [] 3 int
+similarity ('kitten', 'héllo') [] 0 int
+similarity ('kitten', '日本人') [] 0 int
+similarity ('kitten', 'install') [] 1 int
+similarity ('kitten', 'new') [] 1 int
+similarity ('kitten', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('kitten', 'quick the brown fox') [] 4 int
+similarity ('sitting', '') [] 0 int
+similarity ('sitting', 'ab') [] 0 int
+similarity ('sitting', 'kitten') [] 4 int
+similarity ('sitting', 'levenshtein') [] 3 int
+similarity ('sitting', 'héllo') [] 0 int
+similarity ('sitting', '日本人') [] 0 int
+similarity ('sitting', 'install') [] 1 int
+similarity ('sitting', 'new') [] 0 int
+similarity ('sitting', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('sitting', 'quick the brown fox') [] 3 int
+similarity ('lewenstein', '') [] 0 int
+similarity ('lewenstein', 'ab') [] 0 int
+similarity ('lewenstein', 'kitten') [] 3 int
+similarity ('lewenstein', 'levenshtein') [] 9 int
+similarity ('lewenstein', 'héllo') [] 0 int
+similarity ('lewenstein', '日本人') [] 0 int
+similarity ('lewenstein', 'install') [] 3 int
+similarity ('lewenstein', 'new') [] 2 int
+similarity ('lewenstein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('lewenstein', 'quick the brown fox') [] 3 int
+similarity ('levenshtein', '') [] 0 int
+similarity ('levenshtein', 'ab') [] 0 int
+similarity ('levenshtein', 'kitten') [] 3 int
+similarity ('levenshtein', 'levenshtein') [] 11 int
+similarity ('levenshtein', 'héllo') [] 1 int
+similarity ('levenshtein', '日本人') [] 0 int
+similarity ('levenshtein', 'install') [] 3 int
+similarity ('levenshtein', 'new') [] 2 int
+similarity ('levenshtein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('levenshtein', 'quick the brown fox') [] 2 int
+similarity ('Hello, World', '') [] 0 int
+similarity ('Hello, World', 'ab') [] 0 int
+similarity ('Hello, World', 'kitten') [] 0 int
+similarity ('Hello, World', 'levenshtein') [] 1 int
+similarity ('Hello, World', 'héllo') [] 3 int
+similarity ('Hello, World', '日本人') [] 0 int
+similarity ('Hello, World', 'install') [] 1 int
+similarity ('Hello, World', 'new') [] 1 int
+similarity ('Hello, World', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('Hello, World', 'quick the brown fox') [] 2 int
+similarity ('hello world', '') [] 0 int
+similarity ('hello world', 'ab') [] 0 int
+similarity ('hello world', 'kitten') [] 0 int
+similarity ('hello world', 'levenshtein') [] 1 int
+similarity ('hello world', 'héllo') [] 4 int
+similarity ('hello world', '日本人') [] 0 int
+similarity ('hello world', 'install') [] 1 int
+similarity ('hello world', 'new') [] 2 int
+similarity ('hello world', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('hello world', 'quick the brown fox') [] 3 int
+similarity ('héllo', '') [] 0 int
+similarity ('héllo', 'ab') [] 0 int
+similarity ('héllo', 'kitten') [] 0 int
+similarity ('héllo', 'levenshtein') [] 1 int
+similarity ('héllo', 'héllo') [] 5 int
+similarity ('héllo', '日本人') [] 0 int
+similarity ('héllo', 'install') [] 1 int
+similarity ('héllo', 'new') [] 0 int
+similarity ('héllo', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('héllo', 'quick the brown fox') [] 2 int
+similarity ('hello', '') [] 0 int
+similarity ('hello', 'ab') [] 0 int
+similarity ('hello', 'kitten') [] 0 int
+similarity ('hello', 'levenshtein') [] 1 int
+similarity ('hello', 'héllo') [] 4 int
+similarity ('hello', '日本人') [] 0 int
+similarity ('hello', 'install') [] 1 int
+similarity ('hello', 'new') [] 1 int
+similarity ('hello', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('hello', 'quick the brown fox') [] 3 int
+similarity ('日本語', '') [] 0 int
+similarity ('日本語', 'ab') [] 0 int
+similarity ('日本語', 'kitten') [] 0 int
+similarity ('日本語', 'levenshtein') [] 0 int
+similarity ('日本語', 'héllo') [] 0 int
+similarity ('日本語', '日本人') [] 2 int
+similarity ('日本語', 'install') [] 0 int
+similarity ('日本語', 'new') [] 0 int
+similarity ('日本語', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('日本語', 'quick the brown fox') [] 0 int
+similarity ('日本人', '') [] 0 int
+similarity ('日本人', 'ab') [] 0 int
+similarity ('日本人', 'kitten') [] 0 int
+similarity ('日本人', 'levenshtein') [] 0 int
+similarity ('日本人', 'héllo') [] 0 int
+similarity ('日本人', '日本人') [] 3 int
+similarity ('日本人', 'install') [] 0 int
+similarity ('日本人', 'new') [] 0 int
+similarity ('日本人', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('日本人', 'quick the brown fox') [] 0 int
+similarity ('😀x', '') [] 0 int
+similarity ('😀x', 'ab') [] 0 int
+similarity ('😀x', 'kitten') [] 0 int
+similarity ('😀x', 'levenshtein') [] 0 int
+similarity ('😀x', 'héllo') [] 0 int
+similarity ('😀x', '日本人') [] 0 int
+similarity ('😀x', 'install') [] 0 int
+similarity ('😀x', 'new') [] 0 int
+similarity ('😀x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('😀x', 'quick the brown fox') [] 1 int
+similarity ('😁x', '') [] 0 int
+similarity ('😁x', 'ab') [] 0 int
+similarity ('😁x', 'kitten') [] 0 int
+similarity ('😁x', 'levenshtein') [] 0 int
+similarity ('😁x', 'héllo') [] 0 int
+similarity ('😁x', '日本人') [] 0 int
+similarity ('😁x', 'install') [] 0 int
+similarity ('😁x', 'new') [] 0 int
+similarity ('😁x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('😁x', 'quick the brown fox') [] 1 int
+similarity ('install', '') [] 0 int
+similarity ('install', 'ab') [] 1 int
+similarity ('install', 'kitten') [] 1 int
+similarity ('install', 'levenshtein') [] 3 int
+similarity ('install', 'héllo') [] 1 int
+similarity ('install', '日本人') [] 0 int
+similarity ('install', 'install') [] 7 int
+similarity ('install', 'new') [] 1 int
+similarity ('install', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('install', 'quick the brown fox') [] 2 int
+similarity ('instal', '') [] 0 int
+similarity ('instal', 'ab') [] 1 int
+similarity ('instal', 'kitten') [] 1 int
+similarity ('instal', 'levenshtein') [] 3 int
+similarity ('instal', 'héllo') [] 0 int
+similarity ('instal', '日本人') [] 0 int
+similarity ('instal', 'install') [] 6 int
+similarity ('instal', 'new') [] 1 int
+similarity ('instal', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('instal', 'quick the brown fox') [] 2 int
+similarity ('add', '') [] 0 int
+similarity ('add', 'ab') [] 1 int
+similarity ('add', 'kitten') [] 0 int
+similarity ('add', 'levenshtein') [] 0 int
+similarity ('add', 'héllo') [] 0 int
+similarity ('add', '日本人') [] 0 int
+similarity ('add', 'install') [] 1 int
+similarity ('add', 'new') [] 0 int
+similarity ('add', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1 int
+similarity ('add', 'quick the brown fox') [] 0 int
+similarity ('new', '') [] 0 int
+similarity ('new', 'ab') [] 0 int
+similarity ('new', 'kitten') [] 1 int
+similarity ('new', 'levenshtein') [] 2 int
+similarity ('new', 'héllo') [] 0 int
+similarity ('new', '日本人') [] 0 int
+similarity ('new', 'install') [] 1 int
+similarity ('new', 'new') [] 3 int
+similarity ('new', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('new', 'quick the brown fox') [] 2 int
+similarity ('poetry', '') [] 0 int
+similarity ('poetry', 'ab') [] 0 int
+similarity ('poetry', 'kitten') [] 1 int
+similarity ('poetry', 'levenshtein') [] 2 int
+similarity ('poetry', 'héllo') [] 0 int
+similarity ('poetry', '日本人') [] 0 int
+similarity ('poetry', 'install') [] 1 int
+similarity ('poetry', 'new') [] 1 int
+similarity ('poetry', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('poetry', 'quick the brown fox') [] 2 int
+similarity ('poerty', '') [] 0 int
+similarity ('poerty', 'ab') [] 0 int
+similarity ('poerty', 'kitten') [] 0 int
+similarity ('poerty', 'levenshtein') [] 2 int
+similarity ('poerty', 'héllo') [] 0 int
+similarity ('poerty', '日本人') [] 0 int
+similarity ('poerty', 'install') [] 0 int
+similarity ('poerty', 'new') [] 1 int
+similarity ('poerty', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('poerty', 'quick the brown fox') [] 2 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ab') [] 1 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'kitten') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'levenshtein') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'héllo') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '日本人') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'install') [] 1 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'new') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 40 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'quick the brown fox') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'ab') [] 2 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'kitten') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'levenshtein') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'héllo') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '日本人') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'install') [] 1 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'new') [] 0 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 39 int
+similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'quick the brown fox') [] 0 int
+similarity ('the quick brown fox', '') [] 0 int
+similarity ('the quick brown fox', 'ab') [] 1 int
+similarity ('the quick brown fox', 'kitten') [] 2 int
+similarity ('the quick brown fox', 'levenshtein') [] 2 int
+similarity ('the quick brown fox', 'héllo') [] 2 int
+similarity ('the quick brown fox', '日本人') [] 0 int
+similarity ('the quick brown fox', 'install') [] 1 int
+similarity ('the quick brown fox', 'new') [] 2 int
+similarity ('the quick brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('the quick brown fox', 'quick the brown fox') [] 11 int
+similarity ('quick the brown fox', '') [] 0 int
+similarity ('quick the brown fox', 'ab') [] 1 int
+similarity ('quick the brown fox', 'kitten') [] 4 int
+similarity ('quick the brown fox', 'levenshtein') [] 2 int
+similarity ('quick the brown fox', 'héllo') [] 2 int
+similarity ('quick the brown fox', '日本人') [] 0 int
+similarity ('quick the brown fox', 'install') [] 2 int
+similarity ('quick the brown fox', 'new') [] 2 int
+similarity ('quick the brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0 int
+similarity ('quick the brown fox', 'quick the brown fox') [] 19 int
+similarity ('kitten', 'sitting') [('weights', None)] 4 int
+similarity ('', 'abc') [('weights', None)] 0 int
+similarity ('abc', '') [('weights', None)] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', None)] 9 int
+similarity ('日本語', '日本人') [('weights', None)] 2 int
+similarity ('kitten', 'sitting') [('weights', (1, 1, 1))] 4 int
+similarity ('', 'abc') [('weights', (1, 1, 1))] 0 int
+similarity ('abc', '') [('weights', (1, 1, 1))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 1))] 9 int
+similarity ('日本語', '日本人') [('weights', (1, 1, 1))] 2 int
+similarity ('kitten', 'sitting') [('weights', (1, 1, 2))] 8 int
+similarity ('', 'abc') [('weights', (1, 1, 2))] 0 int
+similarity ('abc', '') [('weights', (1, 1, 2))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 2))] 18 int
+similarity ('日本語', '日本人') [('weights', (1, 1, 2))] 4 int
+similarity ('kitten', 'sitting') [('weights', (2, 3, 4))] 16 int
+similarity ('', 'abc') [('weights', (2, 3, 4))] 0 int
+similarity ('abc', '') [('weights', (2, 3, 4))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (2, 3, 4))] 36 int
+similarity ('日本語', '日本人') [('weights', (2, 3, 4))] 8 int
+similarity ('kitten', 'sitting') [('weights', (1, 2, 3))] 12 int
+similarity ('', 'abc') [('weights', (1, 2, 3))] 0 int
+similarity ('abc', '') [('weights', (1, 2, 3))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (1, 2, 3))] 27 int
+similarity ('日本語', '日本人') [('weights', (1, 2, 3))] 6 int
+similarity ('kitten', 'sitting') [('weights', (3, 1, 2))] 8 int
+similarity ('', 'abc') [('weights', (3, 1, 2))] 0 int
+similarity ('abc', '') [('weights', (3, 1, 2))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (3, 1, 2))] 18 int
+similarity ('日本語', '日本人') [('weights', (3, 1, 2))] 4 int
+similarity ('kitten', 'sitting') [('weights', (0, 1, 1))] 4 int
+similarity ('', 'abc') [('weights', (0, 1, 1))] 0 int
+similarity ('abc', '') [('weights', (0, 1, 1))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (0, 1, 1))] 9 int
+similarity ('日本語', '日本人') [('weights', (0, 1, 1))] 2 int
+similarity ('kitten', 'sitting') [('weights', (1, 1, 0))] 0 int
+similarity ('', 'abc') [('weights', (1, 1, 0))] 0 int
+similarity ('abc', '') [('weights', (1, 1, 0))] 0 int
+similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 0))] 0 int
+similarity ('日本語', '日本人') [('weights', (1, 1, 0))] 0 int
+similarity ('kitten', 'sitting') [('score_cutoff', None)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', None), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', None)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', None), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', None)] 0 int
+similarity ('', '') [('score_cutoff', None), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', None)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', None), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 0)] 0 int
+similarity ('', '') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 0)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 0), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 1)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 1), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 1)] 0 int
+similarity ('', '') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 1)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 1), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 2)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 2), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 2)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 2), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 2)] 0 int
+similarity ('', '') [('score_cutoff', 2), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 2)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 2), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 3)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 3), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 3)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 3), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 3)] 0 int
+similarity ('', '') [('score_cutoff', 3), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 3)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 3), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.2)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.2)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 0.2)] 0 int
+similarity ('', '') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 0.2)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.5)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.5)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 0.5)] 0 int
+similarity ('', '') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 0.5)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.85)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.85)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 0.85)] 0 int
+similarity ('', '') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 0.85)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 6 int
+similarity ('kitten', 'sitting') [('score_cutoff', 1.0)] 4 int
+similarity ('kitten', 'sitting') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 8 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1.0)] 9 int
+similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 18 int
+similarity ('', '') [('score_cutoff', 1.0)] 0 int
+similarity ('', '') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0 int
+similarity ('abc', 'abc') [('score_cutoff', 1.0)] 3 int
+similarity ('abc', 'abc') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 6 int
+similarity ('ab', 'AB') [('processor', 'lower')] 2 int
+similarity ('  Ab!', 'ab') [('processor', 'default_process')] 2 int
+similarity (['lewenstein'], ['levenshtein']) [('processor', '<lambda>')] 9 int
+similarity ('kitten', 'sitting') [('score_hint', 2)] 4 int
+similarity (None, 'a') [] EXC TypeError
+similarity ('a', None) [] EXC TypeError
+similarity (nan, 'a') [] EXC TypeError
+similarity (1, 2) [] EXC TypeError
+similarity ('a',) [] EXC TypeError
+similarity ('a', 'b') [('weights', (1, 2))] EXC ValueError
+similarity ('a', 'b') [('weights', (-1, 1, 1))] EXC OverflowError
+similarity ('a', ['x', [1]]) [] EXC TypeError
+similarity ([], []) [] 0 int
+similarity ([], [1, 2, 3]) [] 0 int
+similarity ([], [1, 3]) [] 0 int
+similarity ([], ['a', 'bc', 'd']) [] 0 int
+similarity ([], ['a', 'bc', 'e']) [] 0 int
+similarity ([], (1, -1, 2)) [] 0 int
+similarity ([], [-1]) [] 0 int
+similarity ([], ['ab', ('t', 1)]) [] 0 int
+similarity ([], b'') [] 0 int
+similarity ([], b'abc') [] 0 int
+similarity ([], b'abd') [] 0 int
+similarity ([], bytearray(b'abc')) [] 0 int
+similarity ([], ['a', 'b']) [] 0 int
+similarity ([], 'ab') [] 0 int
+similarity ([1, 2, 3], []) [] 0 int
+similarity ([1, 2, 3], [1, 2, 3]) [] 3 int
+similarity ([1, 2, 3], [1, 3]) [] 2 int
+similarity ([1, 2, 3], ['a', 'bc', 'd']) [] 0 int
+similarity ([1, 2, 3], ['a', 'bc', 'e']) [] 0 int
+similarity ([1, 2, 3], (1, -1, 2)) [] 1 int
+similarity ([1, 2, 3], [-1]) [] 0 int
+similarity ([1, 2, 3], ['ab', ('t', 1)]) [] 0 int
+similarity ([1, 2, 3], b'') [] 0 int
+similarity ([1, 2, 3], b'abc') [] 0 int
+similarity ([1, 2, 3], b'abd') [] 0 int
+similarity ([1, 2, 3], bytearray(b'abc')) [] 0 int
+similarity ([1, 2, 3], ['a', 'b']) [] 0 int
+similarity ([1, 2, 3], 'ab') [] 0 int
+similarity ([1, 3], []) [] 0 int
+similarity ([1, 3], [1, 2, 3]) [] 2 int
+similarity ([1, 3], [1, 3]) [] 2 int
+similarity ([1, 3], ['a', 'bc', 'd']) [] 0 int
+similarity ([1, 3], ['a', 'bc', 'e']) [] 0 int
+similarity ([1, 3], (1, -1, 2)) [] 1 int
+similarity ([1, 3], [-1]) [] 0 int
+similarity ([1, 3], ['ab', ('t', 1)]) [] 0 int
+similarity ([1, 3], b'') [] 0 int
+similarity ([1, 3], b'abc') [] 0 int
+similarity ([1, 3], b'abd') [] 0 int
+similarity ([1, 3], bytearray(b'abc')) [] 0 int
+similarity ([1, 3], ['a', 'b']) [] 0 int
+similarity ([1, 3], 'ab') [] 0 int
+similarity (['a', 'bc', 'd'], []) [] 0 int
+similarity (['a', 'bc', 'd'], [1, 2, 3]) [] 0 int
+similarity (['a', 'bc', 'd'], [1, 3]) [] 0 int
+similarity (['a', 'bc', 'd'], ['a', 'bc', 'd']) [] 3 int
+similarity (['a', 'bc', 'd'], ['a', 'bc', 'e']) [] 2 int
+similarity (['a', 'bc', 'd'], (1, -1, 2)) [] 0 int
+similarity (['a', 'bc', 'd'], [-1]) [] 0 int
+similarity (['a', 'bc', 'd'], ['ab', ('t', 1)]) [] 0 int
+similarity (['a', 'bc', 'd'], b'') [] 0 int
+similarity (['a', 'bc', 'd'], b'abc') [] 1 int
+similarity (['a', 'bc', 'd'], b'abd') [] 2 int
+similarity (['a', 'bc', 'd'], bytearray(b'abc')) [] 1 int
+similarity (['a', 'bc', 'd'], ['a', 'b']) [] 1 int
+similarity (['a', 'bc', 'd'], 'ab') [] 1 int
+similarity (['a', 'bc', 'e'], []) [] 0 int
+similarity (['a', 'bc', 'e'], [1, 2, 3]) [] 0 int
+similarity (['a', 'bc', 'e'], [1, 3]) [] 0 int
+similarity (['a', 'bc', 'e'], ['a', 'bc', 'd']) [] 2 int
+similarity (['a', 'bc', 'e'], ['a', 'bc', 'e']) [] 3 int
+similarity (['a', 'bc', 'e'], (1, -1, 2)) [] 0 int
+similarity (['a', 'bc', 'e'], [-1]) [] 0 int
+similarity (['a', 'bc', 'e'], ['ab', ('t', 1)]) [] 0 int
+similarity (['a', 'bc', 'e'], b'') [] 0 int
+similarity (['a', 'bc', 'e'], b'abc') [] 1 int
+similarity (['a', 'bc', 'e'], b'abd') [] 1 int
+similarity (['a', 'bc', 'e'], bytearray(b'abc')) [] 1 int
+similarity (['a', 'bc', 'e'], ['a', 'b']) [] 1 int
+similarity (['a', 'bc', 'e'], 'ab') [] 1 int
+similarity ((1, -1, 2), []) [] 0 int
+similarity ((1, -1, 2), [1, 2, 3]) [] 1 int
+similarity ((1, -1, 2), [1, 3]) [] 1 int
+similarity ((1, -1, 2), ['a', 'bc', 'd']) [] 0 int
+similarity ((1, -1, 2), ['a', 'bc', 'e']) [] 0 int
+similarity ((1, -1, 2), (1, -1, 2)) [] 3 int
+similarity ((1, -1, 2), [-1]) [] 1 int
+similarity ((1, -1, 2), ['ab', ('t', 1)]) [] 0 int
+similarity ((1, -1, 2), b'') [] 0 int
+similarity ((1, -1, 2), b'abc') [] 0 int
+similarity ((1, -1, 2), b'abd') [] 0 int
+similarity ((1, -1, 2), bytearray(b'abc')) [] 0 int
+similarity ((1, -1, 2), ['a', 'b']) [] 0 int
+similarity ((1, -1, 2), 'ab') [] 0 int
+similarity ([-1], []) [] 0 int
+similarity ([-1], [1, 2, 3]) [] 0 int
+similarity ([-1], [1, 3]) [] 0 int
+similarity ([-1], ['a', 'bc', 'd']) [] 0 int
+similarity ([-1], ['a', 'bc', 'e']) [] 0 int
+similarity ([-1], (1, -1, 2)) [] 1 int
+similarity ([-1], [-1]) [] 1 int
+similarity ([-1], ['ab', ('t', 1)]) [] 0 int
+similarity ([-1], b'') [] 0 int
+similarity ([-1], b'abc') [] 0 int
+similarity ([-1], b'abd') [] 0 int
+similarity ([-1], bytearray(b'abc')) [] 0 int
+similarity ([-1], ['a', 'b']) [] 0 int
+similarity ([-1], 'ab') [] 0 int
+similarity (['ab', ('t', 1)], []) [] 0 int
+similarity (['ab', ('t', 1)], [1, 2, 3]) [] 0 int
+similarity (['ab', ('t', 1)], [1, 3]) [] 0 int
+similarity (['ab', ('t', 1)], ['a', 'bc', 'd']) [] 0 int
+similarity (['ab', ('t', 1)], ['a', 'bc', 'e']) [] 0 int
+similarity (['ab', ('t', 1)], (1, -1, 2)) [] 0 int
+similarity (['ab', ('t', 1)], [-1]) [] 0 int
+similarity (['ab', ('t', 1)], ['ab', ('t', 1)]) [] 2 int
+similarity (['ab', ('t', 1)], b'') [] 0 int
+similarity (['ab', ('t', 1)], b'abc') [] 0 int
+similarity (['ab', ('t', 1)], b'abd') [] 0 int
+similarity (['ab', ('t', 1)], bytearray(b'abc')) [] 0 int
+similarity (['ab', ('t', 1)], ['a', 'b']) [] 0 int
+similarity (['ab', ('t', 1)], 'ab') [] 0 int
+similarity (b'', []) [] 0 int
+similarity (b'', [1, 2, 3]) [] 0 int
+similarity (b'', [1, 3]) [] 0 int
+similarity (b'', ['a', 'bc', 'd']) [] 0 int
+similarity (b'', ['a', 'bc', 'e']) [] 0 int
+similarity (b'', (1, -1, 2)) [] 0 int
+similarity (b'', [-1]) [] 0 int
+similarity (b'', ['ab', ('t', 1)]) [] 0 int
+similarity (b'', b'') [] 0 int
+similarity (b'', b'abc') [] 0 int
+similarity (b'', b'abd') [] 0 int
+similarity (b'', bytearray(b'abc')) [] 0 int
+similarity (b'', ['a', 'b']) [] 0 int
+similarity (b'', 'ab') [] 0 int
+similarity (b'abc', []) [] 0 int
+similarity (b'abc', [1, 2, 3]) [] 0 int
+similarity (b'abc', [1, 3]) [] 0 int
+similarity (b'abc', ['a', 'bc', 'd']) [] 1 int
+similarity (b'abc', ['a', 'bc', 'e']) [] 1 int
+similarity (b'abc', (1, -1, 2)) [] 0 int
+similarity (b'abc', [-1]) [] 0 int
+similarity (b'abc', ['ab', ('t', 1)]) [] 0 int
+similarity (b'abc', b'') [] 0 int
+similarity (b'abc', b'abc') [] 3 int
+similarity (b'abc', b'abd') [] 2 int
+similarity (b'abc', bytearray(b'abc')) [] 3 int
+similarity (b'abc', ['a', 'b']) [] 2 int
+similarity (b'abc', 'ab') [] 2 int
+similarity (b'abd', []) [] 0 int
+similarity (b'abd', [1, 2, 3]) [] 0 int
+similarity (b'abd', [1, 3]) [] 0 int
+similarity (b'abd', ['a', 'bc', 'd']) [] 2 int
+similarity (b'abd', ['a', 'bc', 'e']) [] 1 int
+similarity (b'abd', (1, -1, 2)) [] 0 int
+similarity (b'abd', [-1]) [] 0 int
+similarity (b'abd', ['ab', ('t', 1)]) [] 0 int
+similarity (b'abd', b'') [] 0 int
+similarity (b'abd', b'abc') [] 2 int
+similarity (b'abd', b'abd') [] 3 int
+similarity (b'abd', bytearray(b'abc')) [] 2 int
+similarity (b'abd', ['a', 'b']) [] 2 int
+similarity (b'abd', 'ab') [] 2 int
+similarity (bytearray(b'abc'), []) [] 0 int
+similarity (bytearray(b'abc'), [1, 2, 3]) [] 0 int
+similarity (bytearray(b'abc'), [1, 3]) [] 0 int
+similarity (bytearray(b'abc'), ['a', 'bc', 'd']) [] 1 int
+similarity (bytearray(b'abc'), ['a', 'bc', 'e']) [] 1 int
+similarity (bytearray(b'abc'), (1, -1, 2)) [] 0 int
+similarity (bytearray(b'abc'), [-1]) [] 0 int
+similarity (bytearray(b'abc'), ['ab', ('t', 1)]) [] 0 int
+similarity (bytearray(b'abc'), b'') [] 0 int
+similarity (bytearray(b'abc'), b'abc') [] 3 int
+similarity (bytearray(b'abc'), b'abd') [] 2 int
+similarity (bytearray(b'abc'), bytearray(b'abc')) [] 3 int
+similarity (bytearray(b'abc'), ['a', 'b']) [] 2 int
+similarity (bytearray(b'abc'), 'ab') [] 2 int
+similarity (['a', 'b'], []) [] 0 int
+similarity (['a', 'b'], [1, 2, 3]) [] 0 int
+similarity (['a', 'b'], [1, 3]) [] 0 int
+similarity (['a', 'b'], ['a', 'bc', 'd']) [] 1 int
+similarity (['a', 'b'], ['a', 'bc', 'e']) [] 1 int
+similarity (['a', 'b'], (1, -1, 2)) [] 0 int
+similarity (['a', 'b'], [-1]) [] 0 int
+similarity (['a', 'b'], ['ab', ('t', 1)]) [] 0 int
+similarity (['a', 'b'], b'') [] 0 int
+similarity (['a', 'b'], b'abc') [] 2 int
+similarity (['a', 'b'], b'abd') [] 2 int
+similarity (['a', 'b'], bytearray(b'abc')) [] 2 int
+similarity (['a', 'b'], ['a', 'b']) [] 2 int
+similarity (['a', 'b'], 'ab') [] 2 int
+similarity ('ab', []) [] 0 int
+similarity ('ab', [1, 2, 3]) [] 0 int
+similarity ('ab', [1, 3]) [] 0 int
+similarity ('ab', ['a', 'bc', 'd']) [] 1 int
+similarity ('ab', ['a', 'bc', 'e']) [] 1 int
+similarity ('ab', (1, -1, 2)) [] 0 int
+similarity ('ab', [-1]) [] 0 int
+similarity ('ab', ['ab', ('t', 1)]) [] 0 int
+similarity ('ab', b'') [] 0 int
+similarity ('ab', b'abc') [] 2 int
+similarity ('ab', b'abd') [] 2 int
+similarity ('ab', bytearray(b'abc')) [] 2 int
+similarity ('ab', ['a', 'b']) [] 2 int
+similarity ('ab', 'ab') [] 2 int
+normalized_distance ('', '') [] 0.0 float
+normalized_distance ('', 'ab') [] 1.0 float
+normalized_distance ('', 'kitten') [] 1.0 float
+normalized_distance ('', 'levenshtein') [] 1.0 float
+normalized_distance ('', 'héllo') [] 1.0 float
+normalized_distance ('', '日本人') [] 1.0 float
+normalized_distance ('', 'install') [] 1.0 float
+normalized_distance ('', 'new') [] 1.0 float
+normalized_distance ('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('', 'quick the brown fox') [] 1.0 float
+normalized_distance ('a', '') [] 1.0 float
+normalized_distance ('a', 'ab') [] 0.5 float
+normalized_distance ('a', 'kitten') [] 1.0 float
+normalized_distance ('a', 'levenshtein') [] 1.0 float
+normalized_distance ('a', 'héllo') [] 1.0 float
+normalized_distance ('a', '日本人') [] 1.0 float
+normalized_distance ('a', 'install') [] 0.8571428571428571 float
+normalized_distance ('a', 'new') [] 1.0 float
+normalized_distance ('a', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('a', 'quick the brown fox') [] 1.0 float
+normalized_distance ('b', '') [] 1.0 float
+normalized_distance ('b', 'ab') [] 0.5 float
+normalized_distance ('b', 'kitten') [] 1.0 float
+normalized_distance ('b', 'levenshtein') [] 1.0 float
+normalized_distance ('b', 'héllo') [] 1.0 float
+normalized_distance ('b', '日本人') [] 1.0 float
+normalized_distance ('b', 'install') [] 1.0 float
+normalized_distance ('b', 'new') [] 1.0 float
+normalized_distance ('b', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('b', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('ab', '') [] 1.0 float
+normalized_distance ('ab', 'ab') [] 0.0 float
+normalized_distance ('ab', 'kitten') [] 1.0 float
+normalized_distance ('ab', 'levenshtein') [] 1.0 float
+normalized_distance ('ab', 'héllo') [] 1.0 float
+normalized_distance ('ab', '日本人') [] 1.0 float
+normalized_distance ('ab', 'install') [] 0.8571428571428571 float
+normalized_distance ('ab', 'new') [] 1.0 float
+normalized_distance ('ab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('ab', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('abc', '') [] 1.0 float
+normalized_distance ('abc', 'ab') [] 0.3333333333333333 float
+normalized_distance ('abc', 'kitten') [] 1.0 float
+normalized_distance ('abc', 'levenshtein') [] 1.0 float
+normalized_distance ('abc', 'héllo') [] 1.0 float
+normalized_distance ('abc', '日本人') [] 1.0 float
+normalized_distance ('abc', 'install') [] 0.8571428571428571 float
+normalized_distance ('abc', 'new') [] 1.0 float
+normalized_distance ('abc', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('abc', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('abd', '') [] 1.0 float
+normalized_distance ('abd', 'ab') [] 0.3333333333333333 float
+normalized_distance ('abd', 'kitten') [] 1.0 float
+normalized_distance ('abd', 'levenshtein') [] 1.0 float
+normalized_distance ('abd', 'héllo') [] 1.0 float
+normalized_distance ('abd', '日本人') [] 1.0 float
+normalized_distance ('abd', 'install') [] 0.8571428571428571 float
+normalized_distance ('abd', 'new') [] 1.0 float
+normalized_distance ('abd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('abd', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('kitten', '') [] 1.0 float
+normalized_distance ('kitten', 'ab') [] 1.0 float
+normalized_distance ('kitten', 'kitten') [] 0.0 float
+normalized_distance ('kitten', 'levenshtein') [] 0.7272727272727273 float
+normalized_distance ('kitten', 'héllo') [] 1.0 float
+normalized_distance ('kitten', '日本人') [] 1.0 float
+normalized_distance ('kitten', 'install') [] 0.8571428571428571 float
+normalized_distance ('kitten', 'new') [] 0.8333333333333334 float
+normalized_distance ('kitten', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('kitten', 'quick the brown fox') [] 0.7894736842105263 float
+normalized_distance ('sitting', '') [] 1.0 float
+normalized_distance ('sitting', 'ab') [] 1.0 float
+normalized_distance ('sitting', 'kitten') [] 0.42857142857142855 float
+normalized_distance ('sitting', 'levenshtein') [] 0.7272727272727273 float
+normalized_distance ('sitting', 'héllo') [] 1.0 float
+normalized_distance ('sitting', '日本人') [] 1.0 float
+normalized_distance ('sitting', 'install') [] 0.8571428571428571 float
+normalized_distance ('sitting', 'new') [] 1.0 float
+normalized_distance ('sitting', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('sitting', 'quick the brown fox') [] 0.8421052631578947 float
+normalized_distance ('lewenstein', '') [] 1.0 float
+normalized_distance ('lewenstein', 'ab') [] 1.0 float
+normalized_distance ('lewenstein', 'kitten') [] 0.7 float
+normalized_distance ('lewenstein', 'levenshtein') [] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'héllo') [] 1.0 float
+normalized_distance ('lewenstein', '日本人') [] 1.0 float
+normalized_distance ('lewenstein', 'install') [] 0.7 float
+normalized_distance ('lewenstein', 'new') [] 0.8 float
+normalized_distance ('lewenstein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('lewenstein', 'quick the brown fox') [] 0.8421052631578947 float
+normalized_distance ('levenshtein', '') [] 1.0 float
+normalized_distance ('levenshtein', 'ab') [] 1.0 float
+normalized_distance ('levenshtein', 'kitten') [] 0.7272727272727273 float
+normalized_distance ('levenshtein', 'levenshtein') [] 0.0 float
+normalized_distance ('levenshtein', 'héllo') [] 0.9090909090909091 float
+normalized_distance ('levenshtein', '日本人') [] 1.0 float
+normalized_distance ('levenshtein', 'install') [] 0.7272727272727273 float
+normalized_distance ('levenshtein', 'new') [] 0.8181818181818182 float
+normalized_distance ('levenshtein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('levenshtein', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('Hello, World', '') [] 1.0 float
+normalized_distance ('Hello, World', 'ab') [] 1.0 float
+normalized_distance ('Hello, World', 'kitten') [] 1.0 float
+normalized_distance ('Hello, World', 'levenshtein') [] 0.9166666666666666 float
+normalized_distance ('Hello, World', 'héllo') [] 0.75 float
+normalized_distance ('Hello, World', '日本人') [] 1.0 float
+normalized_distance ('Hello, World', 'install') [] 0.9166666666666666 float
+normalized_distance ('Hello, World', 'new') [] 0.9166666666666666 float
+normalized_distance ('Hello, World', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('Hello, World', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('hello world', '') [] 1.0 float
+normalized_distance ('hello world', 'ab') [] 1.0 float
+normalized_distance ('hello world', 'kitten') [] 1.0 float
+normalized_distance ('hello world', 'levenshtein') [] 0.9090909090909091 float
+normalized_distance ('hello world', 'héllo') [] 0.6363636363636364 float
+normalized_distance ('hello world', '日本人') [] 1.0 float
+normalized_distance ('hello world', 'install') [] 0.9090909090909091 float
+normalized_distance ('hello world', 'new') [] 0.8181818181818182 float
+normalized_distance ('hello world', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('hello world', 'quick the brown fox') [] 0.8421052631578947 float
+normalized_distance ('héllo', '') [] 1.0 float
+normalized_distance ('héllo', 'ab') [] 1.0 float
+normalized_distance ('héllo', 'kitten') [] 1.0 float
+normalized_distance ('héllo', 'levenshtein') [] 0.9090909090909091 float
+normalized_distance ('héllo', 'héllo') [] 0.0 float
+normalized_distance ('héllo', '日本人') [] 1.0 float
+normalized_distance ('héllo', 'install') [] 0.8571428571428571 float
+normalized_distance ('héllo', 'new') [] 1.0 float
+normalized_distance ('héllo', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('héllo', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('hello', '') [] 1.0 float
+normalized_distance ('hello', 'ab') [] 1.0 float
+normalized_distance ('hello', 'kitten') [] 1.0 float
+normalized_distance ('hello', 'levenshtein') [] 0.9090909090909091 float
+normalized_distance ('hello', 'héllo') [] 0.2 float
+normalized_distance ('hello', '日本人') [] 1.0 float
+normalized_distance ('hello', 'install') [] 0.8571428571428571 float
+normalized_distance ('hello', 'new') [] 0.8 float
+normalized_distance ('hello', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('hello', 'quick the brown fox') [] 0.8421052631578947 float
+normalized_distance ('日本語', '') [] 1.0 float
+normalized_distance ('日本語', 'ab') [] 1.0 float
+normalized_distance ('日本語', 'kitten') [] 1.0 float
+normalized_distance ('日本語', 'levenshtein') [] 1.0 float
+normalized_distance ('日本語', 'héllo') [] 1.0 float
+normalized_distance ('日本語', '日本人') [] 0.3333333333333333 float
+normalized_distance ('日本語', 'install') [] 1.0 float
+normalized_distance ('日本語', 'new') [] 1.0 float
+normalized_distance ('日本語', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('日本語', 'quick the brown fox') [] 1.0 float
+normalized_distance ('日本人', '') [] 1.0 float
+normalized_distance ('日本人', 'ab') [] 1.0 float
+normalized_distance ('日本人', 'kitten') [] 1.0 float
+normalized_distance ('日本人', 'levenshtein') [] 1.0 float
+normalized_distance ('日本人', 'héllo') [] 1.0 float
+normalized_distance ('日本人', '日本人') [] 0.0 float
+normalized_distance ('日本人', 'install') [] 1.0 float
+normalized_distance ('日本人', 'new') [] 1.0 float
+normalized_distance ('日本人', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('日本人', 'quick the brown fox') [] 1.0 float
+normalized_distance ('😀x', '') [] 1.0 float
+normalized_distance ('😀x', 'ab') [] 1.0 float
+normalized_distance ('😀x', 'kitten') [] 1.0 float
+normalized_distance ('😀x', 'levenshtein') [] 1.0 float
+normalized_distance ('😀x', 'héllo') [] 1.0 float
+normalized_distance ('😀x', '日本人') [] 1.0 float
+normalized_distance ('😀x', 'install') [] 1.0 float
+normalized_distance ('😀x', 'new') [] 1.0 float
+normalized_distance ('😀x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('😀x', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('😁x', '') [] 1.0 float
+normalized_distance ('😁x', 'ab') [] 1.0 float
+normalized_distance ('😁x', 'kitten') [] 1.0 float
+normalized_distance ('😁x', 'levenshtein') [] 1.0 float
+normalized_distance ('😁x', 'héllo') [] 1.0 float
+normalized_distance ('😁x', '日本人') [] 1.0 float
+normalized_distance ('😁x', 'install') [] 1.0 float
+normalized_distance ('😁x', 'new') [] 1.0 float
+normalized_distance ('😁x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('😁x', 'quick the brown fox') [] 0.9473684210526315 float
+normalized_distance ('install', '') [] 1.0 float
+normalized_distance ('install', 'ab') [] 0.8571428571428571 float
+normalized_distance ('install', 'kitten') [] 0.8571428571428571 float
+normalized_distance ('install', 'levenshtein') [] 0.7272727272727273 float
+normalized_distance ('install', 'héllo') [] 0.8571428571428571 float
+normalized_distance ('install', '日本人') [] 1.0 float
+normalized_distance ('install', 'install') [] 0.0 float
+normalized_distance ('install', 'new') [] 0.8571428571428571 float
+normalized_distance ('install', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('install', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('instal', '') [] 1.0 float
+normalized_distance ('instal', 'ab') [] 0.8333333333333334 float
+normalized_distance ('instal', 'kitten') [] 0.8333333333333334 float
+normalized_distance ('instal', 'levenshtein') [] 0.7272727272727273 float
+normalized_distance ('instal', 'héllo') [] 1.0 float
+normalized_distance ('instal', '日本人') [] 1.0 float
+normalized_distance ('instal', 'install') [] 0.14285714285714285 float
+normalized_distance ('instal', 'new') [] 0.8333333333333334 float
+normalized_distance ('instal', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('instal', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('add', '') [] 1.0 float
+normalized_distance ('add', 'ab') [] 0.6666666666666666 float
+normalized_distance ('add', 'kitten') [] 1.0 float
+normalized_distance ('add', 'levenshtein') [] 1.0 float
+normalized_distance ('add', 'héllo') [] 1.0 float
+normalized_distance ('add', '日本人') [] 1.0 float
+normalized_distance ('add', 'install') [] 0.8571428571428571 float
+normalized_distance ('add', 'new') [] 1.0 float
+normalized_distance ('add', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_distance ('add', 'quick the brown fox') [] 1.0 float
+normalized_distance ('new', '') [] 1.0 float
+normalized_distance ('new', 'ab') [] 1.0 float
+normalized_distance ('new', 'kitten') [] 0.8333333333333334 float
+normalized_distance ('new', 'levenshtein') [] 0.8181818181818182 float
+normalized_distance ('new', 'héllo') [] 1.0 float
+normalized_distance ('new', '日本人') [] 1.0 float
+normalized_distance ('new', 'install') [] 0.8571428571428571 float
+normalized_distance ('new', 'new') [] 0.0 float
+normalized_distance ('new', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('new', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('poetry', '') [] 1.0 float
+normalized_distance ('poetry', 'ab') [] 1.0 float
+normalized_distance ('poetry', 'kitten') [] 0.8333333333333334 float
+normalized_distance ('poetry', 'levenshtein') [] 0.8181818181818182 float
+normalized_distance ('poetry', 'héllo') [] 1.0 float
+normalized_distance ('poetry', '日本人') [] 1.0 float
+normalized_distance ('poetry', 'install') [] 0.8571428571428571 float
+normalized_distance ('poetry', 'new') [] 0.8333333333333334 float
+normalized_distance ('poetry', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('poetry', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('poerty', '') [] 1.0 float
+normalized_distance ('poerty', 'ab') [] 1.0 float
+normalized_distance ('poerty', 'kitten') [] 1.0 float
+normalized_distance ('poerty', 'levenshtein') [] 0.8181818181818182 float
+normalized_distance ('poerty', 'héllo') [] 1.0 float
+normalized_distance ('poerty', '日本人') [] 1.0 float
+normalized_distance ('poerty', 'install') [] 1.0 float
+normalized_distance ('poerty', 'new') [] 0.8333333333333334 float
+normalized_distance ('poerty', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('poerty', 'quick the brown fox') [] 0.8947368421052632 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ab') [] 0.975 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'kitten') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'levenshtein') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'héllo') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '日本人') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'install') [] 0.975 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'new') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'quick the brown fox') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'ab') [] 0.95 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'kitten') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'levenshtein') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'héllo') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '日本人') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'install') [] 0.975 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'new') [] 1.0 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025 float
+normalized_distance ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'quick the brown fox') [] 1.0 float
+normalized_distance ('the quick brown fox', '') [] 1.0 float
+normalized_distance ('the quick brown fox', 'ab') [] 0.9473684210526315 float
+normalized_distance ('the quick brown fox', 'kitten') [] 0.8947368421052632 float
+normalized_distance ('the quick brown fox', 'levenshtein') [] 0.8947368421052632 float
+normalized_distance ('the quick brown fox', 'héllo') [] 0.8947368421052632 float
+normalized_distance ('the quick brown fox', '日本人') [] 1.0 float
+normalized_distance ('the quick brown fox', 'install') [] 0.9473684210526315 float
+normalized_distance ('the quick brown fox', 'new') [] 0.8947368421052632 float
+normalized_distance ('the quick brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('the quick brown fox', 'quick the brown fox') [] 0.42105263157894735 float
+normalized_distance ('quick the brown fox', '') [] 1.0 float
+normalized_distance ('quick the brown fox', 'ab') [] 0.9473684210526315 float
+normalized_distance ('quick the brown fox', 'kitten') [] 0.7894736842105263 float
+normalized_distance ('quick the brown fox', 'levenshtein') [] 0.8947368421052632 float
+normalized_distance ('quick the brown fox', 'héllo') [] 0.8947368421052632 float
+normalized_distance ('quick the brown fox', '日本人') [] 1.0 float
+normalized_distance ('quick the brown fox', 'install') [] 0.8947368421052632 float
+normalized_distance ('quick the brown fox', 'new') [] 0.8947368421052632 float
+normalized_distance ('quick the brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_distance ('quick the brown fox', 'quick the brown fox') [] 0.0 float
+normalized_distance ('kitten', 'sitting') [('weights', None)] 0.42857142857142855 float
+normalized_distance ('', 'abc') [('weights', None)] 1.0 float
+normalized_distance ('abc', '') [('weights', None)] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', None)] 0.18181818181818182 float
+normalized_distance ('日本語', '日本人') [('weights', None)] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (1, 1, 1))] 0.42857142857142855 float
+normalized_distance ('', 'abc') [('weights', (1, 1, 1))] 1.0 float
+normalized_distance ('abc', '') [('weights', (1, 1, 1))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 1))] 0.18181818181818182 float
+normalized_distance ('日本語', '日本人') [('weights', (1, 1, 1))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('', 'abc') [('weights', (1, 1, 2))] 1.0 float
+normalized_distance ('abc', '') [('weights', (1, 1, 2))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('日本語', '日本人') [('weights', (1, 1, 2))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (2, 3, 4))] 0.38461538461538464 float
+normalized_distance ('', 'abc') [('weights', (2, 3, 4))] 1.0 float
+normalized_distance ('abc', '') [('weights', (2, 3, 4))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (2, 3, 4))] 0.14285714285714285 float
+normalized_distance ('日本語', '日本人') [('weights', (2, 3, 4))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (1, 2, 3))] 0.3684210526315789 float
+normalized_distance ('', 'abc') [('weights', (1, 2, 3))] 1.0 float
+normalized_distance ('abc', '') [('weights', (1, 2, 3))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (1, 2, 3))] 0.12903225806451613 float
+normalized_distance ('日本語', '日本人') [('weights', (1, 2, 3))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (3, 1, 2))] 0.4666666666666667 float
+normalized_distance ('', 'abc') [('weights', (3, 1, 2))] 1.0 float
+normalized_distance ('abc', '') [('weights', (3, 1, 2))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (3, 1, 2))] 0.21739130434782608 float
+normalized_distance ('日本語', '日本人') [('weights', (3, 1, 2))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (0, 1, 1))] 0.3333333333333333 float
+normalized_distance ('', 'abc') [('weights', (0, 1, 1))] 0.0 float
+normalized_distance ('abc', '') [('weights', (0, 1, 1))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (0, 1, 1))] 0.1 float
+normalized_distance ('日本語', '日本人') [('weights', (0, 1, 1))] 0.3333333333333333 float
+normalized_distance ('kitten', 'sitting') [('weights', (1, 1, 0))] 1.0 float
+normalized_distance ('', 'abc') [('weights', (1, 1, 0))] 1.0 float
+normalized_distance ('abc', '') [('weights', (1, 1, 0))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('weights', (1, 1, 0))] 1.0 float
+normalized_distance ('日本語', '日本人') [('weights', (1, 1, 0))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', None)] 0.42857142857142855 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', None)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', None)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', None)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0)] 1.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0)] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1.0 float
+normalized_distance ('', '') [('score_cutoff', 0)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 1)] 0.42857142857142855 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 1)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', 1)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 1)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 2)] EXC TypeError
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 2)] EXC TypeError
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('', '') [('score_cutoff', 2)] EXC TypeError
+normalized_distance ('', '') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('abc', 'abc') [('score_cutoff', 2)] EXC TypeError
+normalized_distance ('abc', 'abc') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 3)] EXC TypeError
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 3)] EXC TypeError
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('', '') [('score_cutoff', 3)] EXC TypeError
+normalized_distance ('', '') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('abc', 'abc') [('score_cutoff', 3)] EXC TypeError
+normalized_distance ('abc', 'abc') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.2)] 1.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 1.0 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.2)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', 0.2)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.2)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.5)] 0.42857142857142855 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.5)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', 0.5)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.5)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.85)] 0.42857142857142855 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.85)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', 0.85)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.85)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 1.0)] 0.42857142857142855 float
+normalized_distance ('kitten', 'sitting') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.38461538461538464 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 1.0)] 0.18181818181818182 float
+normalized_distance ('lewenstein', 'levenshtein') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.14285714285714285 float
+normalized_distance ('', '') [('score_cutoff', 1.0)] 0.0 float
+normalized_distance ('', '') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 1.0)] 0.0 float
+normalized_distance ('abc', 'abc') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.0 float
+normalized_distance ('ab', 'AB') [('processor', 'lower')] 0.0 float
+normalized_distance ('  Ab!', 'ab') [('processor', 'default_process')] 0.0 float
+normalized_distance (['lewenstein'], ['levenshtein']) [('processor', '<lambda>')] 0.18181818181818182 float
+normalized_distance ('kitten', 'sitting') [('score_hint', 2)] EXC TypeError
+normalized_distance (None, 'a') [] 1.0 float
+normalized_distance ('a', None) [] 1.0 float
+normalized_distance (nan, 'a') [] 1.0 float
+normalized_distance (1, 2) [] EXC TypeError
+normalized_distance ('a',) [] EXC TypeError
+normalized_distance ('a', 'b') [('weights', (1, 2))] EXC ValueError
+normalized_distance ('a', 'b') [('weights', (-1, 1, 1))] EXC OverflowError
+normalized_distance ('a', ['x', [1]]) [] EXC TypeError
+normalized_distance ([], []) [] 0.0 float
+normalized_distance ([], [1, 2, 3]) [] 1.0 float
+normalized_distance ([], [1, 3]) [] 1.0 float
+normalized_distance ([], ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance ([], ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance ([], (1, -1, 2)) [] 1.0 float
+normalized_distance ([], [-1]) [] 1.0 float
+normalized_distance ([], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ([], b'') [] 0.0 float
+normalized_distance ([], b'abc') [] 1.0 float
+normalized_distance ([], b'abd') [] 1.0 float
+normalized_distance ([], bytearray(b'abc')) [] 1.0 float
+normalized_distance ([], ['a', 'b']) [] 1.0 float
+normalized_distance ([], 'ab') [] 1.0 float
+normalized_distance ([1, 2, 3], []) [] 1.0 float
+normalized_distance ([1, 2, 3], [1, 2, 3]) [] 0.0 float
+normalized_distance ([1, 2, 3], [1, 3]) [] 0.3333333333333333 float
+normalized_distance ([1, 2, 3], ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance ([1, 2, 3], ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance ([1, 2, 3], (1, -1, 2)) [] 0.6666666666666666 float
+normalized_distance ([1, 2, 3], [-1]) [] 1.0 float
+normalized_distance ([1, 2, 3], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ([1, 2, 3], b'') [] 1.0 float
+normalized_distance ([1, 2, 3], b'abc') [] 1.0 float
+normalized_distance ([1, 2, 3], b'abd') [] 1.0 float
+normalized_distance ([1, 2, 3], bytearray(b'abc')) [] 1.0 float
+normalized_distance ([1, 2, 3], ['a', 'b']) [] 1.0 float
+normalized_distance ([1, 2, 3], 'ab') [] 1.0 float
+normalized_distance ([1, 3], []) [] 1.0 float
+normalized_distance ([1, 3], [1, 2, 3]) [] 0.3333333333333333 float
+normalized_distance ([1, 3], [1, 3]) [] 0.0 float
+normalized_distance ([1, 3], ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance ([1, 3], ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance ([1, 3], (1, -1, 2)) [] 0.6666666666666666 float
+normalized_distance ([1, 3], [-1]) [] 1.0 float
+normalized_distance ([1, 3], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ([1, 3], b'') [] 1.0 float
+normalized_distance ([1, 3], b'abc') [] 1.0 float
+normalized_distance ([1, 3], b'abd') [] 1.0 float
+normalized_distance ([1, 3], bytearray(b'abc')) [] 1.0 float
+normalized_distance ([1, 3], ['a', 'b']) [] 1.0 float
+normalized_distance ([1, 3], 'ab') [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], []) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], [1, 2, 3]) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], [1, 3]) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], ['a', 'bc', 'd']) [] 0.0 float
+normalized_distance (['a', 'bc', 'd'], ['a', 'bc', 'e']) [] 0.3333333333333333 float
+normalized_distance (['a', 'bc', 'd'], (1, -1, 2)) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], [-1]) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], b'') [] 1.0 float
+normalized_distance (['a', 'bc', 'd'], b'abc') [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'd'], b'abd') [] 0.3333333333333333 float
+normalized_distance (['a', 'bc', 'd'], bytearray(b'abc')) [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'd'], ['a', 'b']) [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'd'], 'ab') [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'e'], []) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], [1, 2, 3]) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], [1, 3]) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], ['a', 'bc', 'd']) [] 0.3333333333333333 float
+normalized_distance (['a', 'bc', 'e'], ['a', 'bc', 'e']) [] 0.0 float
+normalized_distance (['a', 'bc', 'e'], (1, -1, 2)) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], [-1]) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], b'') [] 1.0 float
+normalized_distance (['a', 'bc', 'e'], b'abc') [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'e'], b'abd') [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'e'], bytearray(b'abc')) [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'e'], ['a', 'b']) [] 0.6666666666666666 float
+normalized_distance (['a', 'bc', 'e'], 'ab') [] 0.6666666666666666 float
+normalized_distance ((1, -1, 2), []) [] 1.0 float
+normalized_distance ((1, -1, 2), [1, 2, 3]) [] 0.6666666666666666 float
+normalized_distance ((1, -1, 2), [1, 3]) [] 0.6666666666666666 float
+normalized_distance ((1, -1, 2), ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance ((1, -1, 2), ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance ((1, -1, 2), (1, -1, 2)) [] 0.0 float
+normalized_distance ((1, -1, 2), [-1]) [] 0.6666666666666666 float
+normalized_distance ((1, -1, 2), ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ((1, -1, 2), b'') [] 1.0 float
+normalized_distance ((1, -1, 2), b'abc') [] 1.0 float
+normalized_distance ((1, -1, 2), b'abd') [] 1.0 float
+normalized_distance ((1, -1, 2), bytearray(b'abc')) [] 1.0 float
+normalized_distance ((1, -1, 2), ['a', 'b']) [] 1.0 float
+normalized_distance ((1, -1, 2), 'ab') [] 1.0 float
+normalized_distance ([-1], []) [] 1.0 float
+normalized_distance ([-1], [1, 2, 3]) [] 1.0 float
+normalized_distance ([-1], [1, 3]) [] 1.0 float
+normalized_distance ([-1], ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance ([-1], ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance ([-1], (1, -1, 2)) [] 0.6666666666666666 float
+normalized_distance ([-1], [-1]) [] 0.0 float
+normalized_distance ([-1], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ([-1], b'') [] 1.0 float
+normalized_distance ([-1], b'abc') [] 1.0 float
+normalized_distance ([-1], b'abd') [] 1.0 float
+normalized_distance ([-1], bytearray(b'abc')) [] 1.0 float
+normalized_distance ([-1], ['a', 'b']) [] 1.0 float
+normalized_distance ([-1], 'ab') [] 1.0 float
+normalized_distance (['ab', ('t', 1)], []) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], [1, 2, 3]) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], [1, 3]) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], (1, -1, 2)) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], [-1]) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], ['ab', ('t', 1)]) [] 0.0 float
+normalized_distance (['ab', ('t', 1)], b'') [] 1.0 float
+normalized_distance (['ab', ('t', 1)], b'abc') [] 1.0 float
+normalized_distance (['ab', ('t', 1)], b'abd') [] 1.0 float
+normalized_distance (['ab', ('t', 1)], bytearray(b'abc')) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], ['a', 'b']) [] 1.0 float
+normalized_distance (['ab', ('t', 1)], 'ab') [] 1.0 float
+normalized_distance (b'', []) [] 0.0 float
+normalized_distance (b'', [1, 2, 3]) [] 1.0 float
+normalized_distance (b'', [1, 3]) [] 1.0 float
+normalized_distance (b'', ['a', 'bc', 'd']) [] 1.0 float
+normalized_distance (b'', ['a', 'bc', 'e']) [] 1.0 float
+normalized_distance (b'', (1, -1, 2)) [] 1.0 float
+normalized_distance (b'', [-1]) [] 1.0 float
+normalized_distance (b'', ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (b'', b'') [] 0.0 float
+normalized_distance (b'', b'abc') [] 1.0 float
+normalized_distance (b'', b'abd') [] 1.0 float
+normalized_distance (b'', bytearray(b'abc')) [] 1.0 float
+normalized_distance (b'', ['a', 'b']) [] 1.0 float
+normalized_distance (b'', 'ab') [] 1.0 float
+normalized_distance (b'abc', []) [] 1.0 float
+normalized_distance (b'abc', [1, 2, 3]) [] 1.0 float
+normalized_distance (b'abc', [1, 3]) [] 1.0 float
+normalized_distance (b'abc', ['a', 'bc', 'd']) [] 0.6666666666666666 float
+normalized_distance (b'abc', ['a', 'bc', 'e']) [] 0.6666666666666666 float
+normalized_distance (b'abc', (1, -1, 2)) [] 1.0 float
+normalized_distance (b'abc', [-1]) [] 1.0 float
+normalized_distance (b'abc', ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (b'abc', b'') [] 1.0 float
+normalized_distance (b'abc', b'abc') [] 0.0 float
+normalized_distance (b'abc', b'abd') [] 0.3333333333333333 float
+normalized_distance (b'abc', bytearray(b'abc')) [] 0.0 float
+normalized_distance (b'abc', ['a', 'b']) [] 0.3333333333333333 float
+normalized_distance (b'abc', 'ab') [] 0.3333333333333333 float
+normalized_distance (b'abd', []) [] 1.0 float
+normalized_distance (b'abd', [1, 2, 3]) [] 1.0 float
+normalized_distance (b'abd', [1, 3]) [] 1.0 float
+normalized_distance (b'abd', ['a', 'bc', 'd']) [] 0.3333333333333333 float
+normalized_distance (b'abd', ['a', 'bc', 'e']) [] 0.6666666666666666 float
+normalized_distance (b'abd', (1, -1, 2)) [] 1.0 float
+normalized_distance (b'abd', [-1]) [] 1.0 float
+normalized_distance (b'abd', ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (b'abd', b'') [] 1.0 float
+normalized_distance (b'abd', b'abc') [] 0.3333333333333333 float
+normalized_distance (b'abd', b'abd') [] 0.0 float
+normalized_distance (b'abd', bytearray(b'abc')) [] 0.3333333333333333 float
+normalized_distance (b'abd', ['a', 'b']) [] 0.3333333333333333 float
+normalized_distance (b'abd', 'ab') [] 0.3333333333333333 float
+normalized_distance (bytearray(b'abc'), []) [] 1.0 float
+normalized_distance (bytearray(b'abc'), [1, 2, 3]) [] 1.0 float
+normalized_distance (bytearray(b'abc'), [1, 3]) [] 1.0 float
+normalized_distance (bytearray(b'abc'), ['a', 'bc', 'd']) [] 0.6666666666666666 float
+normalized_distance (bytearray(b'abc'), ['a', 'bc', 'e']) [] 0.6666666666666666 float
+normalized_distance (bytearray(b'abc'), (1, -1, 2)) [] 1.0 float
+normalized_distance (bytearray(b'abc'), [-1]) [] 1.0 float
+normalized_distance (bytearray(b'abc'), ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (bytearray(b'abc'), b'') [] 1.0 float
+normalized_distance (bytearray(b'abc'), b'abc') [] 0.0 float
+normalized_distance (bytearray(b'abc'), b'abd') [] 0.3333333333333333 float
+normalized_distance (bytearray(b'abc'), bytearray(b'abc')) [] 0.0 float
+normalized_distance (bytearray(b'abc'), ['a', 'b']) [] 0.3333333333333333 float
+normalized_distance (bytearray(b'abc'), 'ab') [] 0.3333333333333333 float
+normalized_distance (['a', 'b'], []) [] 1.0 float
+normalized_distance (['a', 'b'], [1, 2, 3]) [] 1.0 float
+normalized_distance (['a', 'b'], [1, 3]) [] 1.0 float
+normalized_distance (['a', 'b'], ['a', 'bc', 'd']) [] 0.6666666666666666 float
+normalized_distance (['a', 'b'], ['a', 'bc', 'e']) [] 0.6666666666666666 float
+normalized_distance (['a', 'b'], (1, -1, 2)) [] 1.0 float
+normalized_distance (['a', 'b'], [-1]) [] 1.0 float
+normalized_distance (['a', 'b'], ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance (['a', 'b'], b'') [] 1.0 float
+normalized_distance (['a', 'b'], b'abc') [] 0.3333333333333333 float
+normalized_distance (['a', 'b'], b'abd') [] 0.3333333333333333 float
+normalized_distance (['a', 'b'], bytearray(b'abc')) [] 0.3333333333333333 float
+normalized_distance (['a', 'b'], ['a', 'b']) [] 0.0 float
+normalized_distance (['a', 'b'], 'ab') [] 0.0 float
+normalized_distance ('ab', []) [] 1.0 float
+normalized_distance ('ab', [1, 2, 3]) [] 1.0 float
+normalized_distance ('ab', [1, 3]) [] 1.0 float
+normalized_distance ('ab', ['a', 'bc', 'd']) [] 0.6666666666666666 float
+normalized_distance ('ab', ['a', 'bc', 'e']) [] 0.6666666666666666 float
+normalized_distance ('ab', (1, -1, 2)) [] 1.0 float
+normalized_distance ('ab', [-1]) [] 1.0 float
+normalized_distance ('ab', ['ab', ('t', 1)]) [] 1.0 float
+normalized_distance ('ab', b'') [] 1.0 float
+normalized_distance ('ab', b'abc') [] 0.3333333333333333 float
+normalized_distance ('ab', b'abd') [] 0.3333333333333333 float
+normalized_distance ('ab', bytearray(b'abc')) [] 0.3333333333333333 float
+normalized_distance ('ab', ['a', 'b']) [] 0.0 float
+normalized_distance ('ab', 'ab') [] 0.0 float
+normalized_similarity ('', '') [] 1.0 float
+normalized_similarity ('', 'ab') [] 0.0 float
+normalized_similarity ('', 'kitten') [] 0.0 float
+normalized_similarity ('', 'levenshtein') [] 0.0 float
+normalized_similarity ('', 'héllo') [] 0.0 float
+normalized_similarity ('', '日本人') [] 0.0 float
+normalized_similarity ('', 'install') [] 0.0 float
+normalized_similarity ('', 'new') [] 0.0 float
+normalized_similarity ('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('a', '') [] 0.0 float
+normalized_similarity ('a', 'ab') [] 0.5 float
+normalized_similarity ('a', 'kitten') [] 0.0 float
+normalized_similarity ('a', 'levenshtein') [] 0.0 float
+normalized_similarity ('a', 'héllo') [] 0.0 float
+normalized_similarity ('a', '日本人') [] 0.0 float
+normalized_similarity ('a', 'install') [] 0.1428571428571429 float
+normalized_similarity ('a', 'new') [] 0.0 float
+normalized_similarity ('a', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('a', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('b', '') [] 0.0 float
+normalized_similarity ('b', 'ab') [] 0.5 float
+normalized_similarity ('b', 'kitten') [] 0.0 float
+normalized_similarity ('b', 'levenshtein') [] 0.0 float
+normalized_similarity ('b', 'héllo') [] 0.0 float
+normalized_similarity ('b', '日本人') [] 0.0 float
+normalized_similarity ('b', 'install') [] 0.0 float
+normalized_similarity ('b', 'new') [] 0.0 float
+normalized_similarity ('b', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('b', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('ab', '') [] 0.0 float
+normalized_similarity ('ab', 'ab') [] 1.0 float
+normalized_similarity ('ab', 'kitten') [] 0.0 float
+normalized_similarity ('ab', 'levenshtein') [] 0.0 float
+normalized_similarity ('ab', 'héllo') [] 0.0 float
+normalized_similarity ('ab', '日本人') [] 0.0 float
+normalized_similarity ('ab', 'install') [] 0.1428571428571429 float
+normalized_similarity ('ab', 'new') [] 0.0 float
+normalized_similarity ('ab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('ab', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('abc', '') [] 0.0 float
+normalized_similarity ('abc', 'ab') [] 0.6666666666666667 float
+normalized_similarity ('abc', 'kitten') [] 0.0 float
+normalized_similarity ('abc', 'levenshtein') [] 0.0 float
+normalized_similarity ('abc', 'héllo') [] 0.0 float
+normalized_similarity ('abc', '日本人') [] 0.0 float
+normalized_similarity ('abc', 'install') [] 0.1428571428571429 float
+normalized_similarity ('abc', 'new') [] 0.0 float
+normalized_similarity ('abc', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('abc', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('abd', '') [] 0.0 float
+normalized_similarity ('abd', 'ab') [] 0.6666666666666667 float
+normalized_similarity ('abd', 'kitten') [] 0.0 float
+normalized_similarity ('abd', 'levenshtein') [] 0.0 float
+normalized_similarity ('abd', 'héllo') [] 0.0 float
+normalized_similarity ('abd', '日本人') [] 0.0 float
+normalized_similarity ('abd', 'install') [] 0.1428571428571429 float
+normalized_similarity ('abd', 'new') [] 0.0 float
+normalized_similarity ('abd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('abd', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('kitten', '') [] 0.0 float
+normalized_similarity ('kitten', 'ab') [] 0.0 float
+normalized_similarity ('kitten', 'kitten') [] 1.0 float
+normalized_similarity ('kitten', 'levenshtein') [] 0.2727272727272727 float
+normalized_similarity ('kitten', 'héllo') [] 0.0 float
+normalized_similarity ('kitten', '日本人') [] 0.0 float
+normalized_similarity ('kitten', 'install') [] 0.1428571428571429 float
+normalized_similarity ('kitten', 'new') [] 0.16666666666666663 float
+normalized_similarity ('kitten', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('kitten', 'quick the brown fox') [] 0.21052631578947367 float
+normalized_similarity ('sitting', '') [] 0.0 float
+normalized_similarity ('sitting', 'ab') [] 0.0 float
+normalized_similarity ('sitting', 'kitten') [] 0.5714285714285714 float
+normalized_similarity ('sitting', 'levenshtein') [] 0.2727272727272727 float
+normalized_similarity ('sitting', 'héllo') [] 0.0 float
+normalized_similarity ('sitting', '日本人') [] 0.0 float
+normalized_similarity ('sitting', 'install') [] 0.1428571428571429 float
+normalized_similarity ('sitting', 'new') [] 0.0 float
+normalized_similarity ('sitting', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('sitting', 'quick the brown fox') [] 0.1578947368421053 float
+normalized_similarity ('lewenstein', '') [] 0.0 float
+normalized_similarity ('lewenstein', 'ab') [] 0.0 float
+normalized_similarity ('lewenstein', 'kitten') [] 0.30000000000000004 float
+normalized_similarity ('lewenstein', 'levenshtein') [] 0.8181818181818181 float
+normalized_similarity ('lewenstein', 'héllo') [] 0.0 float
+normalized_similarity ('lewenstein', '日本人') [] 0.0 float
+normalized_similarity ('lewenstein', 'install') [] 0.30000000000000004 float
+normalized_similarity ('lewenstein', 'new') [] 0.19999999999999996 float
+normalized_similarity ('lewenstein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('lewenstein', 'quick the brown fox') [] 0.1578947368421053 float
+normalized_similarity ('levenshtein', '') [] 0.0 float
+normalized_similarity ('levenshtein', 'ab') [] 0.0 float
+normalized_similarity ('levenshtein', 'kitten') [] 0.2727272727272727 float
+normalized_similarity ('levenshtein', 'levenshtein') [] 1.0 float
+normalized_similarity ('levenshtein', 'héllo') [] 0.09090909090909094 float
+normalized_similarity ('levenshtein', '日本人') [] 0.0 float
+normalized_similarity ('levenshtein', 'install') [] 0.2727272727272727 float
+normalized_similarity ('levenshtein', 'new') [] 0.18181818181818177 float
+normalized_similarity ('levenshtein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('levenshtein', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('Hello, World', '') [] 0.0 float
+normalized_similarity ('Hello, World', 'ab') [] 0.0 float
+normalized_similarity ('Hello, World', 'kitten') [] 0.0 float
+normalized_similarity ('Hello, World', 'levenshtein') [] 0.08333333333333337 float
+normalized_similarity ('Hello, World', 'héllo') [] 0.25 float
+normalized_similarity ('Hello, World', '日本人') [] 0.0 float
+normalized_similarity ('Hello, World', 'install') [] 0.08333333333333337 float
+normalized_similarity ('Hello, World', 'new') [] 0.08333333333333337 float
+normalized_similarity ('Hello, World', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('Hello, World', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('hello world', '') [] 0.0 float
+normalized_similarity ('hello world', 'ab') [] 0.0 float
+normalized_similarity ('hello world', 'kitten') [] 0.0 float
+normalized_similarity ('hello world', 'levenshtein') [] 0.09090909090909094 float
+normalized_similarity ('hello world', 'héllo') [] 0.36363636363636365 float
+normalized_similarity ('hello world', '日本人') [] 0.0 float
+normalized_similarity ('hello world', 'install') [] 0.09090909090909094 float
+normalized_similarity ('hello world', 'new') [] 0.18181818181818177 float
+normalized_similarity ('hello world', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('hello world', 'quick the brown fox') [] 0.1578947368421053 float
+normalized_similarity ('héllo', '') [] 0.0 float
+normalized_similarity ('héllo', 'ab') [] 0.0 float
+normalized_similarity ('héllo', 'kitten') [] 0.0 float
+normalized_similarity ('héllo', 'levenshtein') [] 0.09090909090909094 float
+normalized_similarity ('héllo', 'héllo') [] 1.0 float
+normalized_similarity ('héllo', '日本人') [] 0.0 float
+normalized_similarity ('héllo', 'install') [] 0.1428571428571429 float
+normalized_similarity ('héllo', 'new') [] 0.0 float
+normalized_similarity ('héllo', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('héllo', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('hello', '') [] 0.0 float
+normalized_similarity ('hello', 'ab') [] 0.0 float
+normalized_similarity ('hello', 'kitten') [] 0.0 float
+normalized_similarity ('hello', 'levenshtein') [] 0.09090909090909094 float
+normalized_similarity ('hello', 'héllo') [] 0.8 float
+normalized_similarity ('hello', '日本人') [] 0.0 float
+normalized_similarity ('hello', 'install') [] 0.1428571428571429 float
+normalized_similarity ('hello', 'new') [] 0.19999999999999996 float
+normalized_similarity ('hello', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('hello', 'quick the brown fox') [] 0.1578947368421053 float
+normalized_similarity ('日本語', '') [] 0.0 float
+normalized_similarity ('日本語', 'ab') [] 0.0 float
+normalized_similarity ('日本語', 'kitten') [] 0.0 float
+normalized_similarity ('日本語', 'levenshtein') [] 0.0 float
+normalized_similarity ('日本語', 'héllo') [] 0.0 float
+normalized_similarity ('日本語', '日本人') [] 0.6666666666666667 float
+normalized_similarity ('日本語', 'install') [] 0.0 float
+normalized_similarity ('日本語', 'new') [] 0.0 float
+normalized_similarity ('日本語', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('日本語', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('日本人', '') [] 0.0 float
+normalized_similarity ('日本人', 'ab') [] 0.0 float
+normalized_similarity ('日本人', 'kitten') [] 0.0 float
+normalized_similarity ('日本人', 'levenshtein') [] 0.0 float
+normalized_similarity ('日本人', 'héllo') [] 0.0 float
+normalized_similarity ('日本人', '日本人') [] 1.0 float
+normalized_similarity ('日本人', 'install') [] 0.0 float
+normalized_similarity ('日本人', 'new') [] 0.0 float
+normalized_similarity ('日本人', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('日本人', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('😀x', '') [] 0.0 float
+normalized_similarity ('😀x', 'ab') [] 0.0 float
+normalized_similarity ('😀x', 'kitten') [] 0.0 float
+normalized_similarity ('😀x', 'levenshtein') [] 0.0 float
+normalized_similarity ('😀x', 'héllo') [] 0.0 float
+normalized_similarity ('😀x', '日本人') [] 0.0 float
+normalized_similarity ('😀x', 'install') [] 0.0 float
+normalized_similarity ('😀x', 'new') [] 0.0 float
+normalized_similarity ('😀x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('😀x', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('😁x', '') [] 0.0 float
+normalized_similarity ('😁x', 'ab') [] 0.0 float
+normalized_similarity ('😁x', 'kitten') [] 0.0 float
+normalized_similarity ('😁x', 'levenshtein') [] 0.0 float
+normalized_similarity ('😁x', 'héllo') [] 0.0 float
+normalized_similarity ('😁x', '日本人') [] 0.0 float
+normalized_similarity ('😁x', 'install') [] 0.0 float
+normalized_similarity ('😁x', 'new') [] 0.0 float
+normalized_similarity ('😁x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('😁x', 'quick the brown fox') [] 0.052631578947368474 float
+normalized_similarity ('install', '') [] 0.0 float
+normalized_similarity ('install', 'ab') [] 0.1428571428571429 float
+normalized_similarity ('install', 'kitten') [] 0.1428571428571429 float
+normalized_similarity ('install', 'levenshtein') [] 0.2727272727272727 float
+normalized_similarity ('install', 'héllo') [] 0.1428571428571429 float
+normalized_similarity ('install', '日本人') [] 0.0 float
+normalized_similarity ('install', 'install') [] 1.0 float
+normalized_similarity ('install', 'new') [] 0.1428571428571429 float
+normalized_similarity ('install', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('install', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('instal', '') [] 0.0 float
+normalized_similarity ('instal', 'ab') [] 0.16666666666666663 float
+normalized_similarity ('instal', 'kitten') [] 0.16666666666666663 float
+normalized_similarity ('instal', 'levenshtein') [] 0.2727272727272727 float
+normalized_similarity ('instal', 'héllo') [] 0.0 float
+normalized_similarity ('instal', '日本人') [] 0.0 float
+normalized_similarity ('instal', 'install') [] 0.8571428571428572 float
+normalized_similarity ('instal', 'new') [] 0.16666666666666663 float
+normalized_similarity ('instal', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('instal', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('add', '') [] 0.0 float
+normalized_similarity ('add', 'ab') [] 0.33333333333333337 float
+normalized_similarity ('add', 'kitten') [] 0.0 float
+normalized_similarity ('add', 'levenshtein') [] 0.0 float
+normalized_similarity ('add', 'héllo') [] 0.0 float
+normalized_similarity ('add', '日本人') [] 0.0 float
+normalized_similarity ('add', 'install') [] 0.1428571428571429 float
+normalized_similarity ('add', 'new') [] 0.0 float
+normalized_similarity ('add', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.025000000000000022 float
+normalized_similarity ('add', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('new', '') [] 0.0 float
+normalized_similarity ('new', 'ab') [] 0.0 float
+normalized_similarity ('new', 'kitten') [] 0.16666666666666663 float
+normalized_similarity ('new', 'levenshtein') [] 0.18181818181818177 float
+normalized_similarity ('new', 'héllo') [] 0.0 float
+normalized_similarity ('new', '日本人') [] 0.0 float
+normalized_similarity ('new', 'install') [] 0.1428571428571429 float
+normalized_similarity ('new', 'new') [] 1.0 float
+normalized_similarity ('new', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('new', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('poetry', '') [] 0.0 float
+normalized_similarity ('poetry', 'ab') [] 0.0 float
+normalized_similarity ('poetry', 'kitten') [] 0.16666666666666663 float
+normalized_similarity ('poetry', 'levenshtein') [] 0.18181818181818177 float
+normalized_similarity ('poetry', 'héllo') [] 0.0 float
+normalized_similarity ('poetry', '日本人') [] 0.0 float
+normalized_similarity ('poetry', 'install') [] 0.1428571428571429 float
+normalized_similarity ('poetry', 'new') [] 0.16666666666666663 float
+normalized_similarity ('poetry', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('poetry', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('poerty', '') [] 0.0 float
+normalized_similarity ('poerty', 'ab') [] 0.0 float
+normalized_similarity ('poerty', 'kitten') [] 0.0 float
+normalized_similarity ('poerty', 'levenshtein') [] 0.18181818181818177 float
+normalized_similarity ('poerty', 'héllo') [] 0.0 float
+normalized_similarity ('poerty', '日本人') [] 0.0 float
+normalized_similarity ('poerty', 'install') [] 0.0 float
+normalized_similarity ('poerty', 'new') [] 0.16666666666666663 float
+normalized_similarity ('poerty', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('poerty', 'quick the brown fox') [] 0.10526315789473684 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ab') [] 0.025000000000000022 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'kitten') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'levenshtein') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'héllo') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '日本人') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'install') [] 0.025000000000000022 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'new') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 1.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'ab') [] 0.050000000000000044 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'kitten') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'levenshtein') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'héllo') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '日本人') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'install') [] 0.025000000000000022 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'new') [] 0.0 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.975 float
+normalized_similarity ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'quick the brown fox') [] 0.0 float
+normalized_similarity ('the quick brown fox', '') [] 0.0 float
+normalized_similarity ('the quick brown fox', 'ab') [] 0.052631578947368474 float
+normalized_similarity ('the quick brown fox', 'kitten') [] 0.10526315789473684 float
+normalized_similarity ('the quick brown fox', 'levenshtein') [] 0.10526315789473684 float
+normalized_similarity ('the quick brown fox', 'héllo') [] 0.10526315789473684 float
+normalized_similarity ('the quick brown fox', '日本人') [] 0.0 float
+normalized_similarity ('the quick brown fox', 'install') [] 0.052631578947368474 float
+normalized_similarity ('the quick brown fox', 'new') [] 0.10526315789473684 float
+normalized_similarity ('the quick brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('the quick brown fox', 'quick the brown fox') [] 0.5789473684210527 float
+normalized_similarity ('quick the brown fox', '') [] 0.0 float
+normalized_similarity ('quick the brown fox', 'ab') [] 0.052631578947368474 float
+normalized_similarity ('quick the brown fox', 'kitten') [] 0.21052631578947367 float
+normalized_similarity ('quick the brown fox', 'levenshtein') [] 0.10526315789473684 float
+normalized_similarity ('quick the brown fox', 'héllo') [] 0.10526315789473684 float
+normalized_similarity ('quick the brown fox', '日本人') [] 0.0 float
+normalized_similarity ('quick the brown fox', 'install') [] 0.10526315789473684 float
+normalized_similarity ('quick the brown fox', 'new') [] 0.10526315789473684 float
+normalized_similarity ('quick the brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+normalized_similarity ('quick the brown fox', 'quick the brown fox') [] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('weights', None)] 0.5714285714285714 float
+normalized_similarity ('', 'abc') [('weights', None)] 0.0 float
+normalized_similarity ('abc', '') [('weights', None)] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', None)] 0.8181818181818181 float
+normalized_similarity ('日本語', '日本人') [('weights', None)] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (1, 1, 1))] 0.5714285714285714 float
+normalized_similarity ('', 'abc') [('weights', (1, 1, 1))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (1, 1, 1))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 1))] 0.8181818181818181 float
+normalized_similarity ('日本語', '日本人') [('weights', (1, 1, 1))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (1, 1, 2))] 0.6153846153846154 float
+normalized_similarity ('', 'abc') [('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('日本語', '日本人') [('weights', (1, 1, 2))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (2, 3, 4))] 0.6153846153846154 float
+normalized_similarity ('', 'abc') [('weights', (2, 3, 4))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (2, 3, 4))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (2, 3, 4))] 0.8571428571428572 float
+normalized_similarity ('日本語', '日本人') [('weights', (2, 3, 4))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (1, 2, 3))] 0.631578947368421 float
+normalized_similarity ('', 'abc') [('weights', (1, 2, 3))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (1, 2, 3))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (1, 2, 3))] 0.8709677419354839 float
+normalized_similarity ('日本語', '日本人') [('weights', (1, 2, 3))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (3, 1, 2))] 0.5333333333333333 float
+normalized_similarity ('', 'abc') [('weights', (3, 1, 2))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (3, 1, 2))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (3, 1, 2))] 0.782608695652174 float
+normalized_similarity ('日本語', '日本人') [('weights', (3, 1, 2))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (0, 1, 1))] 0.6666666666666667 float
+normalized_similarity ('', 'abc') [('weights', (0, 1, 1))] 1.0 float
+normalized_similarity ('abc', '') [('weights', (0, 1, 1))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (0, 1, 1))] 0.9 float
+normalized_similarity ('日本語', '日本人') [('weights', (0, 1, 1))] 0.6666666666666667 float
+normalized_similarity ('kitten', 'sitting') [('weights', (1, 1, 0))] 0.0 float
+normalized_similarity ('', 'abc') [('weights', (1, 1, 0))] 0.0 float
+normalized_similarity ('abc', '') [('weights', (1, 1, 0))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('weights', (1, 1, 0))] 0.0 float
+normalized_similarity ('日本語', '日本人') [('weights', (1, 1, 0))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', None)] 0.5714285714285714 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.6153846153846154 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', None)] 0.8181818181818181 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', None), ('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('', '') [('score_cutoff', None)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', None), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', None)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', None), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0)] 0.5714285714285714 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0.6153846153846154 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0)] 0.8181818181818181 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0), ('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('', '') [('score_cutoff', 0)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 1)] 0.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1)] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1), ('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('', '') [('score_cutoff', 1)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 1), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 1)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 1), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 2)] EXC TypeError
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 2)] EXC TypeError
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('', '') [('score_cutoff', 2)] EXC TypeError
+normalized_similarity ('', '') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('abc', 'abc') [('score_cutoff', 2)] EXC TypeError
+normalized_similarity ('abc', 'abc') [('score_cutoff', 2), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 3)] EXC TypeError
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 3)] EXC TypeError
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('', '') [('score_cutoff', 3)] EXC TypeError
+normalized_similarity ('', '') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('abc', 'abc') [('score_cutoff', 3)] EXC TypeError
+normalized_similarity ('abc', 'abc') [('score_cutoff', 3), ('weights', (1, 1, 2))] EXC TypeError
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.2)] 0.5714285714285714 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0.6153846153846154 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.2)] 0.8181818181818181 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('', '') [('score_cutoff', 0.2)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.2)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.2), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.5)] 0.5714285714285714 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.6153846153846154 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.5)] 0.8181818181818181 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('', '') [('score_cutoff', 0.5)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.5)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.5), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.85)] 0.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.85)] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 0.8571428571428572 float
+normalized_similarity ('', '') [('score_cutoff', 0.85)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.85)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 0.85), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 1.0)] 0.0 float
+normalized_similarity ('kitten', 'sitting') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1.0)] 0.0 float
+normalized_similarity ('lewenstein', 'levenshtein') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 0.0 float
+normalized_similarity ('', '') [('score_cutoff', 1.0)] 1.0 float
+normalized_similarity ('', '') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 1.0)] 1.0 float
+normalized_similarity ('abc', 'abc') [('score_cutoff', 1.0), ('weights', (1, 1, 2))] 1.0 float
+normalized_similarity ('ab', 'AB') [('processor', 'lower')] 1.0 float
+normalized_similarity ('  Ab!', 'ab') [('processor', 'default_process')] 1.0 float
+normalized_similarity (['lewenstein'], ['levenshtein']) [('processor', '<lambda>')] 0.8181818181818181 float
+normalized_similarity ('kitten', 'sitting') [('score_hint', 2)] EXC TypeError
+normalized_similarity (None, 'a') [] 0.0 float
+normalized_similarity ('a', None) [] 0.0 float
+normalized_similarity (nan, 'a') [] 0.0 float
+normalized_similarity (1, 2) [] EXC TypeError
+normalized_similarity ('a',) [] EXC TypeError
+normalized_similarity ('a', 'b') [('weights', (1, 2))] EXC ValueError
+normalized_similarity ('a', 'b') [('weights', (-1, 1, 1))] EXC OverflowError
+normalized_similarity ('a', ['x', [1]]) [] EXC TypeError
+normalized_similarity ([], []) [] 1.0 float
+normalized_similarity ([], [1, 2, 3]) [] 0.0 float
+normalized_similarity ([], [1, 3]) [] 0.0 float
+normalized_similarity ([], ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity ([], ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity ([], (1, -1, 2)) [] 0.0 float
+normalized_similarity ([], [-1]) [] 0.0 float
+normalized_similarity ([], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ([], b'') [] 1.0 float
+normalized_similarity ([], b'abc') [] 0.0 float
+normalized_similarity ([], b'abd') [] 0.0 float
+normalized_similarity ([], bytearray(b'abc')) [] 0.0 float
+normalized_similarity ([], ['a', 'b']) [] 0.0 float
+normalized_similarity ([], 'ab') [] 0.0 float
+normalized_similarity ([1, 2, 3], []) [] 0.0 float
+normalized_similarity ([1, 2, 3], [1, 2, 3]) [] 1.0 float
+normalized_similarity ([1, 2, 3], [1, 3]) [] 0.6666666666666667 float
+normalized_similarity ([1, 2, 3], ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity ([1, 2, 3], ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity ([1, 2, 3], (1, -1, 2)) [] 0.33333333333333337 float
+normalized_similarity ([1, 2, 3], [-1]) [] 0.0 float
+normalized_similarity ([1, 2, 3], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ([1, 2, 3], b'') [] 0.0 float
+normalized_similarity ([1, 2, 3], b'abc') [] 0.0 float
+normalized_similarity ([1, 2, 3], b'abd') [] 0.0 float
+normalized_similarity ([1, 2, 3], bytearray(b'abc')) [] 0.0 float
+normalized_similarity ([1, 2, 3], ['a', 'b']) [] 0.0 float
+normalized_similarity ([1, 2, 3], 'ab') [] 0.0 float
+normalized_similarity ([1, 3], []) [] 0.0 float
+normalized_similarity ([1, 3], [1, 2, 3]) [] 0.6666666666666667 float
+normalized_similarity ([1, 3], [1, 3]) [] 1.0 float
+normalized_similarity ([1, 3], ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity ([1, 3], ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity ([1, 3], (1, -1, 2)) [] 0.33333333333333337 float
+normalized_similarity ([1, 3], [-1]) [] 0.0 float
+normalized_similarity ([1, 3], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ([1, 3], b'') [] 0.0 float
+normalized_similarity ([1, 3], b'abc') [] 0.0 float
+normalized_similarity ([1, 3], b'abd') [] 0.0 float
+normalized_similarity ([1, 3], bytearray(b'abc')) [] 0.0 float
+normalized_similarity ([1, 3], ['a', 'b']) [] 0.0 float
+normalized_similarity ([1, 3], 'ab') [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], []) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], [1, 2, 3]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], [1, 3]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], ['a', 'bc', 'd']) [] 1.0 float
+normalized_similarity (['a', 'bc', 'd'], ['a', 'bc', 'e']) [] 0.6666666666666667 float
+normalized_similarity (['a', 'bc', 'd'], (1, -1, 2)) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], [-1]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], b'') [] 0.0 float
+normalized_similarity (['a', 'bc', 'd'], b'abc') [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'd'], b'abd') [] 0.6666666666666667 float
+normalized_similarity (['a', 'bc', 'd'], bytearray(b'abc')) [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'd'], ['a', 'b']) [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'd'], 'ab') [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'e'], []) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], [1, 2, 3]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], [1, 3]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], ['a', 'bc', 'd']) [] 0.6666666666666667 float
+normalized_similarity (['a', 'bc', 'e'], ['a', 'bc', 'e']) [] 1.0 float
+normalized_similarity (['a', 'bc', 'e'], (1, -1, 2)) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], [-1]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], b'') [] 0.0 float
+normalized_similarity (['a', 'bc', 'e'], b'abc') [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'e'], b'abd') [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'e'], bytearray(b'abc')) [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'e'], ['a', 'b']) [] 0.33333333333333337 float
+normalized_similarity (['a', 'bc', 'e'], 'ab') [] 0.33333333333333337 float
+normalized_similarity ((1, -1, 2), []) [] 0.0 float
+normalized_similarity ((1, -1, 2), [1, 2, 3]) [] 0.33333333333333337 float
+normalized_similarity ((1, -1, 2), [1, 3]) [] 0.33333333333333337 float
+normalized_similarity ((1, -1, 2), ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity ((1, -1, 2), ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity ((1, -1, 2), (1, -1, 2)) [] 1.0 float
+normalized_similarity ((1, -1, 2), [-1]) [] 0.33333333333333337 float
+normalized_similarity ((1, -1, 2), ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ((1, -1, 2), b'') [] 0.0 float
+normalized_similarity ((1, -1, 2), b'abc') [] 0.0 float
+normalized_similarity ((1, -1, 2), b'abd') [] 0.0 float
+normalized_similarity ((1, -1, 2), bytearray(b'abc')) [] 0.0 float
+normalized_similarity ((1, -1, 2), ['a', 'b']) [] 0.0 float
+normalized_similarity ((1, -1, 2), 'ab') [] 0.0 float
+normalized_similarity ([-1], []) [] 0.0 float
+normalized_similarity ([-1], [1, 2, 3]) [] 0.0 float
+normalized_similarity ([-1], [1, 3]) [] 0.0 float
+normalized_similarity ([-1], ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity ([-1], ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity ([-1], (1, -1, 2)) [] 0.33333333333333337 float
+normalized_similarity ([-1], [-1]) [] 1.0 float
+normalized_similarity ([-1], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ([-1], b'') [] 0.0 float
+normalized_similarity ([-1], b'abc') [] 0.0 float
+normalized_similarity ([-1], b'abd') [] 0.0 float
+normalized_similarity ([-1], bytearray(b'abc')) [] 0.0 float
+normalized_similarity ([-1], ['a', 'b']) [] 0.0 float
+normalized_similarity ([-1], 'ab') [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], []) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], [1, 2, 3]) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], [1, 3]) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], (1, -1, 2)) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], [-1]) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], ['ab', ('t', 1)]) [] 1.0 float
+normalized_similarity (['ab', ('t', 1)], b'') [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], b'abc') [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], b'abd') [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], bytearray(b'abc')) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], ['a', 'b']) [] 0.0 float
+normalized_similarity (['ab', ('t', 1)], 'ab') [] 0.0 float
+normalized_similarity (b'', []) [] 1.0 float
+normalized_similarity (b'', [1, 2, 3]) [] 0.0 float
+normalized_similarity (b'', [1, 3]) [] 0.0 float
+normalized_similarity (b'', ['a', 'bc', 'd']) [] 0.0 float
+normalized_similarity (b'', ['a', 'bc', 'e']) [] 0.0 float
+normalized_similarity (b'', (1, -1, 2)) [] 0.0 float
+normalized_similarity (b'', [-1]) [] 0.0 float
+normalized_similarity (b'', ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (b'', b'') [] 1.0 float
+normalized_similarity (b'', b'abc') [] 0.0 float
+normalized_similarity (b'', b'abd') [] 0.0 float
+normalized_similarity (b'', bytearray(b'abc')) [] 0.0 float
+normalized_similarity (b'', ['a', 'b']) [] 0.0 float
+normalized_similarity (b'', 'ab') [] 0.0 float
+normalized_similarity (b'abc', []) [] 0.0 float
+normalized_similarity (b'abc', [1, 2, 3]) [] 0.0 float
+normalized_similarity (b'abc', [1, 3]) [] 0.0 float
+normalized_similarity (b'abc', ['a', 'bc', 'd']) [] 0.33333333333333337 float
+normalized_similarity (b'abc', ['a', 'bc', 'e']) [] 0.33333333333333337 float
+normalized_similarity (b'abc', (1, -1, 2)) [] 0.0 float
+normalized_similarity (b'abc', [-1]) [] 0.0 float
+normalized_similarity (b'abc', ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (b'abc', b'') [] 0.0 float
+normalized_similarity (b'abc', b'abc') [] 1.0 float
+normalized_similarity (b'abc', b'abd') [] 0.6666666666666667 float
+normalized_similarity (b'abc', bytearray(b'abc')) [] 1.0 float
+normalized_similarity (b'abc', ['a', 'b']) [] 0.6666666666666667 float
+normalized_similarity (b'abc', 'ab') [] 0.6666666666666667 float
+normalized_similarity (b'abd', []) [] 0.0 float
+normalized_similarity (b'abd', [1, 2, 3]) [] 0.0 float
+normalized_similarity (b'abd', [1, 3]) [] 0.0 float
+normalized_similarity (b'abd', ['a', 'bc', 'd']) [] 0.6666666666666667 float
+normalized_similarity (b'abd', ['a', 'bc', 'e']) [] 0.33333333333333337 float
+normalized_similarity (b'abd', (1, -1, 2)) [] 0.0 float
+normalized_similarity (b'abd', [-1]) [] 0.0 float
+normalized_similarity (b'abd', ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (b'abd', b'') [] 0.0 float
+normalized_similarity (b'abd', b'abc') [] 0.6666666666666667 float
+normalized_similarity (b'abd', b'abd') [] 1.0 float
+normalized_similarity (b'abd', bytearray(b'abc')) [] 0.6666666666666667 float
+normalized_similarity (b'abd', ['a', 'b']) [] 0.6666666666666667 float
+normalized_similarity (b'abd', 'ab') [] 0.6666666666666667 float
+normalized_similarity (bytearray(b'abc'), []) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), [1, 2, 3]) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), [1, 3]) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), ['a', 'bc', 'd']) [] 0.33333333333333337 float
+normalized_similarity (bytearray(b'abc'), ['a', 'bc', 'e']) [] 0.33333333333333337 float
+normalized_similarity (bytearray(b'abc'), (1, -1, 2)) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), [-1]) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (bytearray(b'abc'), b'') [] 0.0 float
+normalized_similarity (bytearray(b'abc'), b'abc') [] 1.0 float
+normalized_similarity (bytearray(b'abc'), b'abd') [] 0.6666666666666667 float
+normalized_similarity (bytearray(b'abc'), bytearray(b'abc')) [] 1.0 float
+normalized_similarity (bytearray(b'abc'), ['a', 'b']) [] 0.6666666666666667 float
+normalized_similarity (bytearray(b'abc'), 'ab') [] 0.6666666666666667 float
+normalized_similarity (['a', 'b'], []) [] 0.0 float
+normalized_similarity (['a', 'b'], [1, 2, 3]) [] 0.0 float
+normalized_similarity (['a', 'b'], [1, 3]) [] 0.0 float
+normalized_similarity (['a', 'b'], ['a', 'bc', 'd']) [] 0.33333333333333337 float
+normalized_similarity (['a', 'b'], ['a', 'bc', 'e']) [] 0.33333333333333337 float
+normalized_similarity (['a', 'b'], (1, -1, 2)) [] 0.0 float
+normalized_similarity (['a', 'b'], [-1]) [] 0.0 float
+normalized_similarity (['a', 'b'], ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity (['a', 'b'], b'') [] 0.0 float
+normalized_similarity (['a', 'b'], b'abc') [] 0.6666666666666667 float
+normalized_similarity (['a', 'b'], b'abd') [] 0.6666666666666667 float
+normalized_similarity (['a', 'b'], bytearray(b'abc')) [] 0.6666666666666667 float
+normalized_similarity (['a', 'b'], ['a', 'b']) [] 1.0 float
+normalized_similarity (['a', 'b'], 'ab') [] 1.0 float
+normalized_similarity ('ab', []) [] 0.0 float
+normalized_similarity ('ab', [1, 2, 3]) [] 0.0 float
+normalized_similarity ('ab', [1, 3]) [] 0.0 float
+normalized_similarity ('ab', ['a', 'bc', 'd']) [] 0.33333333333333337 float
+normalized_similarity ('ab', ['a', 'bc', 'e']) [] 0.33333333333333337 float
+normalized_similarity ('ab', (1, -1, 2)) [] 0.0 float
+normalized_similarity ('ab', [-1]) [] 0.0 float
+normalized_similarity ('ab', ['ab', ('t', 1)]) [] 0.0 float
+normalized_similarity ('ab', b'') [] 0.0 float
+normalized_similarity ('ab', b'abc') [] 0.6666666666666667 float
+normalized_similarity ('ab', b'abd') [] 0.6666666666666667 float
+normalized_similarity ('ab', bytearray(b'abc')) [] 0.6666666666666667 float
+normalized_similarity ('ab', ['a', 'b']) [] 1.0 float
+normalized_similarity ('ab', 'ab') [] 1.0 float
+ratio ('', '') [] 100.0 float
+ratio ('', 'b') [] 0.0 float
+ratio ('', 'abc') [] 0.0 float
+ratio ('', 'kitten') [] 0.0 float
+ratio ('', 'lewenstein') [] 0.0 float
+ratio ('', 'Hello, World') [] 0.0 float
+ratio ('', 'héllo') [] 0.0 float
+ratio ('', '日本語') [] 0.0 float
+ratio ('', '😀x') [] 0.0 float
+ratio ('', 'install') [] 0.0 float
+ratio ('', 'add') [] 0.0 float
+ratio ('', 'poetry') [] 0.0 float
+ratio ('', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('', 'the quick brown fox') [] 0.0 float
+ratio ('a', '') [] 0.0 float
+ratio ('a', 'b') [] 0.0 float
+ratio ('a', 'abc') [] 50.0 float
+ratio ('a', 'kitten') [] 0.0 float
+ratio ('a', 'lewenstein') [] 0.0 float
+ratio ('a', 'Hello, World') [] 0.0 float
+ratio ('a', 'héllo') [] 0.0 float
+ratio ('a', '日本語') [] 0.0 float
+ratio ('a', '😀x') [] 0.0 float
+ratio ('a', 'install') [] 25.0 float
+ratio ('a', 'add') [] 50.0 float
+ratio ('a', 'poetry') [] 0.0 float
+ratio ('a', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.878048780487809 float
+ratio ('a', 'the quick brown fox') [] 0.0 float
+ratio ('b', '') [] 0.0 float
+ratio ('b', 'b') [] 100.0 float
+ratio ('b', 'abc') [] 50.0 float
+ratio ('b', 'kitten') [] 0.0 float
+ratio ('b', 'lewenstein') [] 0.0 float
+ratio ('b', 'Hello, World') [] 0.0 float
+ratio ('b', 'héllo') [] 0.0 float
+ratio ('b', '日本語') [] 0.0 float
+ratio ('b', '😀x') [] 0.0 float
+ratio ('b', 'install') [] 0.0 float
+ratio ('b', 'add') [] 0.0 float
+ratio ('b', 'poetry') [] 0.0 float
+ratio ('b', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('b', 'the quick brown fox') [] 9.999999999999998 float
+ratio ('ab', '') [] 0.0 float
+ratio ('ab', 'b') [] 66.66666666666667 float
+ratio ('ab', 'abc') [] 80.0 float
+ratio ('ab', 'kitten') [] 0.0 float
+ratio ('ab', 'lewenstein') [] 0.0 float
+ratio ('ab', 'Hello, World') [] 0.0 float
+ratio ('ab', 'héllo') [] 0.0 float
+ratio ('ab', '日本語') [] 0.0 float
+ratio ('ab', '😀x') [] 0.0 float
+ratio ('ab', 'install') [] 22.22222222222222 float
+ratio ('ab', 'add') [] 40.0 float
+ratio ('ab', 'poetry') [] 0.0 float
+ratio ('ab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.761904761904767 float
+ratio ('ab', 'the quick brown fox') [] 9.523809523809524 float
+ratio ('abc', '') [] 0.0 float
+ratio ('abc', 'b') [] 50.0 float
+ratio ('abc', 'abc') [] 100.0 float
+ratio ('abc', 'kitten') [] 0.0 float
+ratio ('abc', 'lewenstein') [] 0.0 float
+ratio ('abc', 'Hello, World') [] 0.0 float
+ratio ('abc', 'héllo') [] 0.0 float
+ratio ('abc', '日本語') [] 0.0 float
+ratio ('abc', '😀x') [] 0.0 float
+ratio ('abc', 'install') [] 19.999999999999996 float
+ratio ('abc', 'add') [] 33.333333333333336 float
+ratio ('abc', 'poetry') [] 0.0 float
+ratio ('abc', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.651162790697672 float
+ratio ('abc', 'the quick brown fox') [] 9.090909090909093 float
+ratio ('abd', '') [] 0.0 float
+ratio ('abd', 'b') [] 50.0 float
+ratio ('abd', 'abc') [] 66.66666666666667 float
+ratio ('abd', 'kitten') [] 0.0 float
+ratio ('abd', 'lewenstein') [] 0.0 float
+ratio ('abd', 'Hello, World') [] 13.33333333333333 float
+ratio ('abd', 'héllo') [] 0.0 float
+ratio ('abd', '日本語') [] 0.0 float
+ratio ('abd', '😀x') [] 0.0 float
+ratio ('abd', 'install') [] 19.999999999999996 float
+ratio ('abd', 'add') [] 66.66666666666667 float
+ratio ('abd', 'poetry') [] 0.0 float
+ratio ('abd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.651162790697672 float
+ratio ('abd', 'the quick brown fox') [] 9.090909090909093 float
+ratio ('kitten', '') [] 0.0 float
+ratio ('kitten', 'b') [] 0.0 float
+ratio ('kitten', 'abc') [] 0.0 float
+ratio ('kitten', 'kitten') [] 100.0 float
+ratio ('kitten', 'lewenstein') [] 37.5 float
+ratio ('kitten', 'Hello, World') [] 11.111111111111116 float
+ratio ('kitten', 'héllo') [] 0.0 float
+ratio ('kitten', '日本語') [] 0.0 float
+ratio ('kitten', '😀x') [] 0.0 float
+ratio ('kitten', 'install') [] 30.76923076923077 float
+ratio ('kitten', 'add') [] 0.0 float
+ratio ('kitten', 'poetry') [] 16.666666666666664 float
+ratio ('kitten', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('kitten', 'the quick brown fox') [] 24.0 float
+ratio ('sitting', '') [] 0.0 float
+ratio ('sitting', 'b') [] 0.0 float
+ratio ('sitting', 'abc') [] 0.0 float
+ratio ('sitting', 'kitten') [] 61.53846153846154 float
+ratio ('sitting', 'lewenstein') [] 47.05882352941176 float
+ratio ('sitting', 'Hello, World') [] 0.0 float
+ratio ('sitting', 'héllo') [] 0.0 float
+ratio ('sitting', '日本語') [] 0.0 float
+ratio ('sitting', '😀x') [] 0.0 float
+ratio ('sitting', 'install') [] 28.57142857142857 float
+ratio ('sitting', 'add') [] 0.0 float
+ratio ('sitting', 'poetry') [] 15.384615384615385 float
+ratio ('sitting', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('sitting', 'the quick brown fox') [] 23.076923076923073 float
+ratio ('lewenstein', '') [] 0.0 float
+ratio ('lewenstein', 'b') [] 0.0 float
+ratio ('lewenstein', 'abc') [] 0.0 float
+ratio ('lewenstein', 'kitten') [] 37.5 float
+ratio ('lewenstein', 'lewenstein') [] 100.0 float
+ratio ('lewenstein', 'Hello, World') [] 9.090909090909093 float
+ratio ('lewenstein', 'héllo') [] 13.33333333333333 float
+ratio ('lewenstein', '日本語') [] 0.0 float
+ratio ('lewenstein', '😀x') [] 0.0 float
+ratio ('lewenstein', 'install') [] 35.29411764705882 float
+ratio ('lewenstein', 'add') [] 0.0 float
+ratio ('lewenstein', 'poetry') [] 25.0 float
+ratio ('lewenstein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('lewenstein', 'the quick brown fox') [] 27.586206896551722 float
+ratio ('levenshtein', '') [] 0.0 float
+ratio ('levenshtein', 'b') [] 0.0 float
+ratio ('levenshtein', 'abc') [] 0.0 float
+ratio ('levenshtein', 'kitten') [] 35.29411764705882 float
+ratio ('levenshtein', 'lewenstein') [] 85.71428571428572 float
+ratio ('levenshtein', 'Hello, World') [] 8.695652173913048 float
+ratio ('levenshtein', 'héllo') [] 12.5 float
+ratio ('levenshtein', '日本語') [] 0.0 float
+ratio ('levenshtein', '😀x') [] 0.0 float
+ratio ('levenshtein', 'install') [] 33.333333333333336 float
+ratio ('levenshtein', 'add') [] 0.0 float
+ratio ('levenshtein', 'poetry') [] 23.529411764705888 float
+ratio ('levenshtein', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('levenshtein', 'the quick brown fox') [] 26.66666666666667 float
+ratio ('Hello, World', '') [] 0.0 float
+ratio ('Hello, World', 'b') [] 0.0 float
+ratio ('Hello, World', 'abc') [] 0.0 float
+ratio ('Hello, World', 'kitten') [] 11.111111111111116 float
+ratio ('Hello, World', 'lewenstein') [] 9.090909090909093 float
+ratio ('Hello, World', 'Hello, World') [] 100.0 float
+ratio ('Hello, World', 'héllo') [] 35.29411764705882 float
+ratio ('Hello, World', '日本語') [] 0.0 float
+ratio ('Hello, World', '😀x') [] 0.0 float
+ratio ('Hello, World', 'install') [] 21.052631578947366 float
+ratio ('Hello, World', 'add') [] 13.33333333333333 float
+ratio ('Hello, World', 'poetry') [] 22.22222222222222 float
+ratio ('Hello, World', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('Hello, World', 'the quick brown fox') [] 25.806451612903224 float
+ratio ('hello world', '') [] 0.0 float
+ratio ('hello world', 'b') [] 0.0 float
+ratio ('hello world', 'abc') [] 0.0 float
+ratio ('hello world', 'kitten') [] 11.764705882352944 float
+ratio ('hello world', 'lewenstein') [] 19.047619047619047 float
+ratio ('hello world', 'Hello, World') [] 78.26086956521739 float
+ratio ('hello world', 'héllo') [] 50.0 float
+ratio ('hello world', '日本語') [] 0.0 float
+ratio ('hello world', '😀x') [] 0.0 float
+ratio ('hello world', 'install') [] 22.22222222222222 float
+ratio ('hello world', 'add') [] 14.28571428571429 float
+ratio ('hello world', 'poetry') [] 23.529411764705888 float
+ratio ('hello world', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('hello world', 'the quick brown fox') [] 33.333333333333336 float
+ratio ('héllo', '') [] 0.0 float
+ratio ('héllo', 'b') [] 0.0 float
+ratio ('héllo', 'abc') [] 0.0 float
+ratio ('héllo', 'kitten') [] 0.0 float
+ratio ('héllo', 'lewenstein') [] 13.33333333333333 float
+ratio ('héllo', 'Hello, World') [] 35.29411764705882 float
+ratio ('héllo', 'héllo') [] 100.0 float
+ratio ('héllo', '日本語') [] 0.0 float
+ratio ('héllo', '😀x') [] 0.0 float
+ratio ('héllo', 'install') [] 33.333333333333336 float
+ratio ('héllo', 'add') [] 0.0 float
+ratio ('héllo', 'poetry') [] 18.181818181818176 float
+ratio ('héllo', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('héllo', 'the quick brown fox') [] 16.666666666666664 float
+ratio ('hello', '') [] 0.0 float
+ratio ('hello', 'b') [] 0.0 float
+ratio ('hello', 'abc') [] 0.0 float
+ratio ('hello', 'kitten') [] 18.181818181818176 float
+ratio ('hello', 'lewenstein') [] 13.33333333333333 float
+ratio ('hello', 'Hello, World') [] 47.05882352941176 float
+ratio ('hello', 'héllo') [] 80.0 float
+ratio ('hello', '日本語') [] 0.0 float
+ratio ('hello', '😀x') [] 0.0 float
+ratio ('hello', 'install') [] 33.333333333333336 float
+ratio ('hello', 'add') [] 0.0 float
+ratio ('hello', 'poetry') [] 18.181818181818176 float
+ratio ('hello', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('hello', 'the quick brown fox') [] 25.0 float
+ratio ('日本語', '') [] 0.0 float
+ratio ('日本語', 'b') [] 0.0 float
+ratio ('日本語', 'abc') [] 0.0 float
+ratio ('日本語', 'kitten') [] 0.0 float
+ratio ('日本語', 'lewenstein') [] 0.0 float
+ratio ('日本語', 'Hello, World') [] 0.0 float
+ratio ('日本語', 'héllo') [] 0.0 float
+ratio ('日本語', '日本語') [] 100.0 float
+ratio ('日本語', '😀x') [] 0.0 float
+ratio ('日本語', 'install') [] 0.0 float
+ratio ('日本語', 'add') [] 0.0 float
+ratio ('日本語', 'poetry') [] 0.0 float
+ratio ('日本語', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('日本語', 'the quick brown fox') [] 0.0 float
+ratio ('日本人', '') [] 0.0 float
+ratio ('日本人', 'b') [] 0.0 float
+ratio ('日本人', 'abc') [] 0.0 float
+ratio ('日本人', 'kitten') [] 0.0 float
+ratio ('日本人', 'lewenstein') [] 0.0 float
+ratio ('日本人', 'Hello, World') [] 0.0 float
+ratio ('日本人', 'héllo') [] 0.0 float
+ratio ('日本人', '日本語') [] 66.66666666666667 float
+ratio ('日本人', '😀x') [] 0.0 float
+ratio ('日本人', 'install') [] 0.0 float
+ratio ('日本人', 'add') [] 0.0 float
+ratio ('日本人', 'poetry') [] 0.0 float
+ratio ('日本人', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('日本人', 'the quick brown fox') [] 0.0 float
+ratio ('😀x', '') [] 0.0 float
+ratio ('😀x', 'b') [] 0.0 float
+ratio ('😀x', 'abc') [] 0.0 float
+ratio ('😀x', 'kitten') [] 0.0 float
+ratio ('😀x', 'lewenstein') [] 0.0 float
+ratio ('😀x', 'Hello, World') [] 0.0 float
+ratio ('😀x', 'héllo') [] 0.0 float
+ratio ('😀x', '日本語') [] 0.0 float
+ratio ('😀x', '😀x') [] 100.0 float
+ratio ('😀x', 'install') [] 0.0 float
+ratio ('😀x', 'add') [] 0.0 float
+ratio ('😀x', 'poetry') [] 0.0 float
+ratio ('😀x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('😀x', 'the quick brown fox') [] 9.523809523809524 float
+ratio ('😁x', '') [] 0.0 float
+ratio ('😁x', 'b') [] 0.0 float
+ratio ('😁x', 'abc') [] 0.0 float
+ratio ('😁x', 'kitten') [] 0.0 float
+ratio ('😁x', 'lewenstein') [] 0.0 float
+ratio ('😁x', 'Hello, World') [] 0.0 float
+ratio ('😁x', 'héllo') [] 0.0 float
+ratio ('😁x', '日本語') [] 0.0 float
+ratio ('😁x', '😀x') [] 50.0 float
+ratio ('😁x', 'install') [] 0.0 float
+ratio ('😁x', 'add') [] 0.0 float
+ratio ('😁x', 'poetry') [] 0.0 float
+ratio ('😁x', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('😁x', 'the quick brown fox') [] 9.523809523809524 float
+ratio ('install', '') [] 0.0 float
+ratio ('install', 'b') [] 0.0 float
+ratio ('install', 'abc') [] 19.999999999999996 float
+ratio ('install', 'kitten') [] 30.76923076923077 float
+ratio ('install', 'lewenstein') [] 35.29411764705882 float
+ratio ('install', 'Hello, World') [] 21.052631578947366 float
+ratio ('install', 'héllo') [] 33.333333333333336 float
+ratio ('install', '日本語') [] 0.0 float
+ratio ('install', '😀x') [] 0.0 float
+ratio ('install', 'install') [] 100.0 float
+ratio ('install', 'add') [] 19.999999999999996 float
+ratio ('install', 'poetry') [] 15.384615384615385 float
+ratio ('install', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.255319148936165 float
+ratio ('install', 'the quick brown fox') [] 15.384615384615385 float
+ratio ('instal', '') [] 0.0 float
+ratio ('instal', 'b') [] 0.0 float
+ratio ('instal', 'abc') [] 22.22222222222222 float
+ratio ('instal', 'kitten') [] 33.333333333333336 float
+ratio ('instal', 'lewenstein') [] 37.5 float
+ratio ('instal', 'Hello, World') [] 11.111111111111116 float
+ratio ('instal', 'héllo') [] 18.181818181818176 float
+ratio ('instal', '日本語') [] 0.0 float
+ratio ('instal', '😀x') [] 0.0 float
+ratio ('instal', 'install') [] 92.3076923076923 float
+ratio ('instal', 'add') [] 22.22222222222222 float
+ratio ('instal', 'poetry') [] 16.666666666666664 float
+ratio ('instal', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.347826086956519 float
+ratio ('instal', 'the quick brown fox') [] 16.000000000000004 float
+ratio ('add', '') [] 0.0 float
+ratio ('add', 'b') [] 0.0 float
+ratio ('add', 'abc') [] 33.333333333333336 float
+ratio ('add', 'kitten') [] 0.0 float
+ratio ('add', 'lewenstein') [] 0.0 float
+ratio ('add', 'Hello, World') [] 13.33333333333333 float
+ratio ('add', 'héllo') [] 0.0 float
+ratio ('add', '日本語') [] 0.0 float
+ratio ('add', '😀x') [] 0.0 float
+ratio ('add', 'install') [] 19.999999999999996 float
+ratio ('add', 'add') [] 100.0 float
+ratio ('add', 'poetry') [] 0.0 float
+ratio ('add', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 4.651162790697672 float
+ratio ('add', 'the quick brown fox') [] 0.0 float
+ratio ('new', '') [] 0.0 float
+ratio ('new', 'b') [] 0.0 float
+ratio ('new', 'abc') [] 0.0 float
+ratio ('new', 'kitten') [] 22.22222222222222 float
+ratio ('new', 'lewenstein') [] 30.76923076923077 float
+ratio ('new', 'Hello, World') [] 13.33333333333333 float
+ratio ('new', 'héllo') [] 0.0 float
+ratio ('new', '日本語') [] 0.0 float
+ratio ('new', '😀x') [] 0.0 float
+ratio ('new', 'install') [] 19.999999999999996 float
+ratio ('new', 'add') [] 0.0 float
+ratio ('new', 'poetry') [] 22.22222222222222 float
+ratio ('new', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('new', 'the quick brown fox') [] 18.181818181818176 float
+ratio ('poetry', '') [] 0.0 float
+ratio ('poetry', 'b') [] 0.0 float
+ratio ('poetry', 'abc') [] 0.0 float
+ratio ('poetry', 'kitten') [] 16.666666666666664 float
+ratio ('poetry', 'lewenstein') [] 25.0 float
+ratio ('poetry', 'Hello, World') [] 22.22222222222222 float
+ratio ('poetry', 'héllo') [] 18.181818181818176 float
+ratio ('poetry', '日本語') [] 0.0 float
+ratio ('poetry', '😀x') [] 0.0 float
+ratio ('poetry', 'install') [] 15.384615384615385 float
+ratio ('poetry', 'add') [] 0.0 float
+ratio ('poetry', 'poetry') [] 100.0 float
+ratio ('poetry', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('poetry', 'the quick brown fox') [] 16.000000000000004 float
+ratio ('poerty', '') [] 0.0 float
+ratio ('poerty', 'b') [] 0.0 float
+ratio ('poerty', 'abc') [] 0.0 float
+ratio ('poerty', 'kitten') [] 16.666666666666664 float
+ratio ('poerty', 'lewenstein') [] 25.0 float
+ratio ('poerty', 'Hello, World') [] 22.22222222222222 float
+ratio ('poerty', 'héllo') [] 18.181818181818176 float
+ratio ('poerty', '日本語') [] 0.0 float
+ratio ('poerty', '😀x') [] 0.0 float
+ratio ('poerty', 'install') [] 15.384615384615385 float
+ratio ('poerty', 'add') [] 0.0 float
+ratio ('poerty', 'poetry') [] 83.33333333333334 float
+ratio ('poerty', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('poerty', 'the quick brown fox') [] 16.000000000000004 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'b') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'abc') [] 4.651162790697672 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'kitten') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'lewenstein') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Hello, World') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'héllo') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '日本語') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '😀x') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'install') [] 4.255319148936165 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'add') [] 4.651162790697672 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'poetry') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 100.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'the quick brown fox') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'b') [] 4.878048780487809 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'abc') [] 9.302325581395355 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'kitten') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'lewenstein') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'Hello, World') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'héllo') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '日本語') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', '😀x') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'install') [] 4.255319148936165 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'add') [] 4.651162790697672 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'poetry') [] 0.0 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 97.5 float
+ratio ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', 'the quick brown fox') [] 3.3898305084745783 float
+ratio ('the quick brown fox', '') [] 0.0 float
+ratio ('the quick brown fox', 'b') [] 9.999999999999998 float
+ratio ('the quick brown fox', 'abc') [] 9.090909090909093 float
+ratio ('the quick brown fox', 'kitten') [] 24.0 float
+ratio ('the quick brown fox', 'lewenstein') [] 27.586206896551722 float
+ratio ('the quick brown fox', 'Hello, World') [] 25.806451612903224 float
+ratio ('the quick brown fox', 'héllo') [] 16.666666666666664 float
+ratio ('the quick brown fox', '日本語') [] 0.0 float
+ratio ('the quick brown fox', '😀x') [] 9.523809523809524 float
+ratio ('the quick brown fox', 'install') [] 15.384615384615385 float
+ratio ('the quick brown fox', 'add') [] 0.0 float
+ratio ('the quick brown fox', 'poetry') [] 16.000000000000004 float
+ratio ('the quick brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('the quick brown fox', 'the quick brown fox') [] 100.0 float
+ratio ('quick the brown fox', '') [] 0.0 float
+ratio ('quick the brown fox', 'b') [] 9.999999999999998 float
+ratio ('quick the brown fox', 'abc') [] 9.090909090909093 float
+ratio ('quick the brown fox', 'kitten') [] 31.999999999999996 float
+ratio ('quick the brown fox', 'lewenstein') [] 20.68965517241379 float
+ratio ('quick the brown fox', 'Hello, World') [] 25.806451612903224 float
+ratio ('quick the brown fox', 'héllo') [] 16.666666666666664 float
+ratio ('quick the brown fox', '日本語') [] 0.0 float
+ratio ('quick the brown fox', '😀x') [] 9.523809523809524 float
+ratio ('quick the brown fox', 'install') [] 15.384615384615385 float
+ratio ('quick the brown fox', 'add') [] 0.0 float
+ratio ('quick the brown fox', 'poetry') [] 16.000000000000004 float
+ratio ('quick the brown fox', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') [] 0.0 float
+ratio ('quick the brown fox', 'the quick brown fox') [] 78.94736842105263 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', None)] 96.55172413793103 float
+ratio ('abc', 'abd') [('score_cutoff', None)] 66.66666666666667 float
+ratio ('', '') [('score_cutoff', None)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', None)] 0.0 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', 0)] 96.55172413793103 float
+ratio ('abc', 'abd') [('score_cutoff', 0)] 66.66666666666667 float
+ratio ('', '') [('score_cutoff', 0)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', 0)] 0.0 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', 50)] 96.55172413793103 float
+ratio ('abc', 'abd') [('score_cutoff', 50)] 66.66666666666667 float
+ratio ('', '') [('score_cutoff', 50)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', 50)] 0.0 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', 80)] 96.55172413793103 float
+ratio ('abc', 'abd') [('score_cutoff', 80)] 0.0 float
+ratio ('', '') [('score_cutoff', 80)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', 80)] 0.0 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', 90)] 96.55172413793103 float
+ratio ('abc', 'abd') [('score_cutoff', 90)] 0.0 float
+ratio ('', '') [('score_cutoff', 90)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', 90)] 0.0 float
+ratio ('this is a test', 'this is a test!') [('score_cutoff', 100)] 0.0 float
+ratio ('abc', 'abd') [('score_cutoff', 100)] 0.0 float
+ratio ('', '') [('score_cutoff', 100)] 100.0 float
+ratio ('a', 'b') [('score_cutoff', 100)] 0.0 float
+ratio (None, 'a') [] 0 int
+ratio ('A b', 'a B') [('processor', 'default_process')] 100.0 float
+ratio ([1, 2], [1, 3]) [] 50.0 float
+ratio ('a',) [] EXC TypeError
+default_process ('',) [] '' str
+default_process ('  ',) [] '' str
+default_process (' Hello, World! ',) [] 'hello  world' str
+default_process ('a_b-c',) [] 'a b c' str
+default_process ('Héllo',) [] 'héllo' str
+default_process ('ÀÉÎ',) [] 'àéî' str
+default_process ('x²y',) [] 'x²y' str
+default_process ('٣٤',) [] '٣٤' str
+default_process ('日本語 text',) [] '日本語 text' str
+default_process ('😀 x',) [] 'x' str
+default_process ('A\tB\nC',) [] 'a b c' str
+default_process ('İstanbul',) [] 'istanbul' str
+default_process ('ß',) [] 'ß' str
+default_process ('ǅ',) [] 'ǆ' str
+default_process ('áb',) [] 'a b' str
+default_process ('\xa0nb\xa0',) [] 'nb' str
+default_process ('ΑΣ',) [] 'ασ' str
+default_process ('Σ',) [] 'σ' str
+default_process ('ⅷ',) [] 'ⅷ' str
+default_process (1,) [] EXC TypeError

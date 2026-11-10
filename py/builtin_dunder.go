@@ -140,6 +140,11 @@ func builtinDunder(t *Type, key string) Object {
 }
 
 func applyDunder(name string, rev bool, self Object, args Tuple) (Object, error) {
+	// list.__len__(self) inside a subclass's own __len__ must read the
+	// builtin storage, not dispatch back to the override (tomlkit Array).
+	if p, ok := payloadOf(self); ok {
+		self = p
+	}
 	if f := binaryDunder(name); f != nil {
 		if len(args) != 1 {
 			return nil, ExceptionNewf(TypeError, "expected 1 argument, got %d", len(args))

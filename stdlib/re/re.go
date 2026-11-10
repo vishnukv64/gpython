@@ -44,7 +44,8 @@ The supported syntax is that of Go's RE2 engine, which means backreferences
 and lookaround assertions are not available; using one raises re.error
 rather than silently mismatching.`
 
-var ErrorType = py.ExceptionType.NewType("re.error", "Exception raised for invalid regular expressions.", nil, nil)
+// The class is re.PatternError, with re.error an alias of it, as in CPython 3.13+.
+var ErrorType = py.ExceptionType.NewType("re.PatternError", "Exception raised for invalid regular expressions.", nil, nil)
 
 // The flags, with CPython's values.
 const (
@@ -336,6 +337,14 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 						b.WriteString(`\W`)
 					case 'S':
 						b.WriteString(`\S`)
+					case 'u', 'U':
+						hex, n, err := unicodeEscape(pattern, i)
+						if err != nil {
+							return "", nil, nil, 0, err
+						}
+						b.WriteString(hex)
+						i += n
+						continue
 					default:
 						b.WriteByte('\\')
 						b.WriteByte(nnext)
@@ -388,8 +397,16 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 				// tokenized and Requirement() raised InvalidRequirement.
 				b.WriteByte('\\')
 				b.WriteByte(next)
-			case 'u', 'U', 'N':
-				return "", nil, nil, 0, py.ExceptionNewf(ErrorType, `\%c escapes are not supported`, next)
+			case 'u', 'U':
+				hex, n, err := unicodeEscape(pattern, i)
+				if err != nil {
+					return "", nil, nil, 0, err
+				}
+				b.WriteString(hex)
+				i += n - 1
+				continue
+			case 'N':
+				return "", nil, nil, 0, py.ExceptionNewf(ErrorType, `\N escapes are not supported`)
 			default:
 				b.WriteByte('\\')
 				b.WriteByte(next)
@@ -611,6 +628,24 @@ func (f flagGroup) goFlags() string {
 	return string(out)
 }
 
+// unicodeEscape reads the \uXXXX or \UXXXXXXXX at pattern[i:] and returns the
+// Go spelling \x{...} and the number of bytes it occupies.
+func unicodeEscape(pattern string, i int) (string, int, error) {
+	digits := 4
+	if pattern[i+1] == 'U' {
+		digits = 8
+	}
+	end := i + 2 + digits
+	if end > len(pattern) {
+		return "", 0, py.ExceptionNewf(ErrorType, "incomplete escape %s", pattern[i:])
+	}
+	v, err := strconv.ParseUint(pattern[i+2:end], 16, 32)
+	if err != nil || v > 0x10ffff {
+		return "", 0, py.ExceptionNewf(ErrorType, "bad escape %s", pattern[i:end])
+	}
+	return `\x{` + strconv.FormatUint(v, 16) + `}`, end - i, nil
+}
+
 // goFlags turns the Python flags into the Go inline ones.
 func goFlags(flags int) string {
 	out := ""
@@ -647,10 +682,12 @@ func compile(pattern string, flags int) (*Pattern, error) {
 		l, lerr := lift(translated)
 		if lerr != nil {
 			// A shape lift cannot check exactly (a lookahead inside a repeat of
-			// a multi-character group, IPython's help-end regex) goes to the
-			// backtracking engine, which answers it.
+			// a multi-character group, IPython's help-end regex, a zero-width
+			// lookbehind such as poetry's "(?<!^)") goes to the backtracking
+			// engine, which answers it.  A pattern CPython itself rejects
+			// (variable-width lookbehind, unbalanced assertion) stays an error.
 			var berr error
-			if !strings.Contains(lerr.Error(), "inside a repeat") {
+			if msg := lerr.Error(); strings.Contains(msg, "requires fixed-width") || strings.Contains(msg, "unbalanced") {
 				return nil, lerr
 			}
 			if bt, berr = newBacktrack(translated, flags); berr != nil {

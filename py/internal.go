@@ -342,6 +342,11 @@ func GetItem(self Object, key Object) (Object, error) {
 			// The hook is CALLED, as CPython does: returning the class unasked
 			// made "__class_getitem__ = classmethod(GenericAlias)" give back the
 			// class instead of S[int].
+			if fn, isFn := t.Lookup("__class_getitem__").(*Function); isFn {
+				// __class_getitem__ is an implicit classmethod: a plain def
+				// takes the class first (lark: "def __class_getitem__(cls, _)").
+				return Call(fn, Tuple{self, key}, NewStringDict())
+			}
 			if t.Lookup("__class_getitem__") != nil {
 				hook, err := GetAttrString(self, "__class_getitem__")
 				if err != nil {
@@ -529,6 +534,15 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 		if own := ty.ObjectType.Lookup(key); own != nil && isDataDescriptor(own) {
 			skipDict = true
 		}
+	}
+
+	// A dict's contents are its items, not its attributes: with a key "items"
+	// in the data, d.items() found the value and called it (a JSON schema's
+	// "items" broke fastjsonschema).  The dict type's own methods win.  Entries
+	// stay readable as attributes for the bare dicts the interpreter uses as
+	// namespaces (sys.implementation.name).
+	if _, isDict := self.(StringDict); isDict && self.Type().Lookup(key) != nil {
+		skipDict = true
 	}
 
 	// A plain dict's items are not its attributes: d.get is the method even

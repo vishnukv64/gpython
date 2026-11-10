@@ -1171,6 +1171,9 @@ func (t *Type) construct(args Tuple, kwargs StringDict) (Object, error) {
 	// dict subclass, say) is untouched, and a __new__ returning something else
 	// entirely is left alone, as CPython does.
 	obj = wrapPayload(t, obj)
+	if err := attachListPayload(t, obj, args); err != nil {
+		return nil, err
+	}
 	// Ugly exception: when the call was type(something),
 	// don't call tp_init on the result.
 	if t == TypeType && len(args) == 1 && kwargs.Len() == 0 {

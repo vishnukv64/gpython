@@ -990,8 +990,22 @@ func asFileExit(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.None, nil
 }
 
+// textResource resolves a text resource.  read_text and open_text take
+// (package, resource, encoding='utf-8', errors='strict'); files are decoded as
+// UTF-8 with strict errors whatever is asked, so the two are checked for shape
+// and dropped.
+func textResource(self py.Object, args py.Tuple, kwargs py.StringDict) (string, string, error) {
+	var pkg, res py.Object
+	var enc, errs py.Object = py.String("utf-8"), py.String("strict")
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|OO:resource",
+		[]string{"package", "resource", "encoding", "errors"}, &pkg, &res, &enc, &errs); err != nil {
+		return "", "", err
+	}
+	return packageAndResource(currentContext(self), py.Tuple{pkg, res}, py.NewStringDict())
+}
+
 func resourceReadText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	dir, name, err := textResource(self, args, kwargs)
 	if err != nil {
 		return nil, err
 	}
@@ -1084,7 +1098,7 @@ func openResourceFile(ctx py.Context, dir, name, mode string) (py.Object, error)
 }
 
 func resourceOpenText(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	dir, name, err := packageAndResource(currentContext(self), args, kwargs)
+	dir, name, err := textResource(self, args, kwargs)
 	if err != nil {
 		return nil, err
 	}

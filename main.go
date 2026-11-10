@@ -87,6 +87,13 @@ func stripCPythonOptions(args []string) ([]string, int) {
 			// "-" means stdin, which is a positional argument too.
 			return append(out, args[i:]...), len(out)
 		}
+		// A cluster of ignorable flags ending in c or m ("-Ic", "-EsSc", "-Im"
+		// - findpython runs every interpreter it finds with -Ic) is those
+		// flags plus -c or -m.
+		if n := len(a); n > 2 && a[1] != '-' && (a[n-1] == 'c' || a[n-1] == 'm') && strings.Trim(a[1:n-1], "IEsSBuOqbdRvP") == "" {
+			a = "-" + a[n-1:]
+			args[i] = a
+		}
 		// "-c" and "-m" take the PROGRAM as their value, so their flag
 		// ends gpython's own option region: everything after it - the
 		// program's arguments, including its own "--version" - belongs to

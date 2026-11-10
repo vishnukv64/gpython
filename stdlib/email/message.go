@@ -846,6 +846,13 @@ func init() {
 	}})
 	globals := py.NewStringDict()
 	globals.Set("Message", MessageType)
+	// EmailMessage is the policy-aware Message of the modern API.  The Go
+	// Message does the work (headers, payload, parsing); the class exists so
+	// packaging.metadata can subclass it with its own policy.  The content
+	// manager API (set_content, get_content, add_attachment) is not provided.
+	emailMessageType := MessageType.NewType("email.message.EmailMessage",
+		"EmailMessage - a Message whose policy is email.policy.default.", messageNew, nil)
+	globals.Set("EmailMessage", emailMessageType)
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{

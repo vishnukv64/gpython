@@ -779,8 +779,12 @@ func builtin_open(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 		return nil, py.ExceptionNewf(py.NotImplementedError, "errors not implemented yet")
 	}
 
-	if newline != py.None {
-		return nil, py.ExceptionNewf(py.NotImplementedError, "newline not implemented yet")
+	// newline="" and newline="\n" mean no translation, which is what these
+	// files do already: "\n" is written as is on every host here and "\r\n" is
+	// read untranslated.  "\r" and "\r\n" would need translating, which is not
+	// done.
+	if nl, ok := newline.(py.String); ok && nl != "" && nl != "\n" {
+		return nil, py.ExceptionNewf(py.NotImplementedError, "newline %q not implemented yet", string(nl))
 	}
 
 	if opener != py.None {

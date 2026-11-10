@@ -30,7 +30,7 @@ func init() {
 		py.DictEntry{Key: "_unwrap_partialmethod", Value: py.MustNewMethod("_unwrap_partialmethod", unwrapPartial, 0, "Follow partial/partialmethod .func to the underlying callable.")},
 		py.DictEntry{Key: "reduce", Value: py.MustNewMethod("reduce", reduce, 0, "Apply a function of two arguments cumulatively to the items of a sequence.")},
 		py.DictEntry{Key: "lru_cache", Value: py.MustNewMethod("lru_cache", lruCache, 0, "Least-recently-used cache decorator.")},
-		py.DictEntry{Key: "cache", Value: py.MustNewMethod("cache", lruCache, 0, "Simple lightweight unbounded function cache.")},
+		py.DictEntry{Key: "cache", Value: py.MustNewMethod("cache", cacheFn, 0, "Simple lightweight unbounded function cache.")},
 		py.DictEntry{Key: "cached_property", Value: cachedPropertyType},
 		py.DictEntry{Key: "total_ordering", Value: py.MustNewMethod("total_ordering", identity, 0, "Class decorator that fills in missing ordering methods.")},
 		py.DictEntry{Key: "cmp_to_key", Value: py.MustNewMethod("cmp_to_key", cmpToKey, 0, "Convert a comparison function into a key function.")},
@@ -334,19 +334,38 @@ func reduce(self py.Object, args py.Tuple) (py.Object, error) {
 // lru_cache
 
 func lruCache(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	maxsize := -1
-	// Called either as lru_cache(maxsize) or directly as a decorator.
+	maxsize := 128
+	// Called either as lru_cache(maxsize=128, typed=False) or directly as a
+	// decorator on any callable (a bound method too: functools.cache(self._f)).
+	if len(args) == 0 {
+		if v, ok := kwargs.Get("maxsize"); ok {
+			args = py.Tuple{v}
+		}
+	}
 	if len(args) > 0 {
-		if fn, ok := args[0].(*py.Function); ok {
-			return &CachedFunction{fn: fn, maxsize: 128, cache: map[string]py.Object{}}, nil
+		if args[0] == py.None {
+			maxsize = -1
+		} else if _, isInt := args[0].(py.Int); isInt {
+			n, err := py.IndexInt(args[0])
+			if err != nil {
+				return nil, err
+			}
+			maxsize = n
+		} else if isCallable(args[0]) {
+			return &CachedFunction{fn: args[0], maxsize: 128, cache: map[string]py.Object{}}, nil
+		} else {
+			return nil, py.ExceptionNewf(py.TypeError, "Expected first argument to be an integer, a callable, or None")
 		}
-		n, err := py.IndexInt(args[0])
-		if err != nil {
-			return nil, err
-		}
-		maxsize = n
 	}
 	return &lruCacheDecorator{maxsize: maxsize}, nil
+}
+
+// cacheFn is functools.cache: an unbounded lru_cache applied to a callable.
+func cacheFn(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "cache() takes exactly one argument (%d given)", len(args))
+	}
+	return &CachedFunction{fn: args[0], maxsize: -1, cache: map[string]py.Object{}}, nil
 }
 
 type lruCacheDecorator struct{ maxsize int }
@@ -463,7 +482,11 @@ func init() {
 		d := py.NewStringDict()
 		d.Set("hits", py.Int(c.hits))
 		d.Set("misses", py.Int(c.misses))
-		d.Set("maxsize", py.Int(c.maxsize))
+		if c.maxsize < 0 {
+			d.Set("maxsize", py.None)
+		} else {
+			d.Set("maxsize", py.Int(c.maxsize))
+		}
 		d.Set("currsize", py.Int(len(c.cache)))
 		return d, nil
 	}
@@ -950,4 +973,15 @@ func unwrapPartial(self py.Object, args py.Tuple) (py.Object, error) {
 		}
 		fn = p.fn
 	}
+}
+
+// isCallable is callable(o): a type, a function, a bound method, or an object
+// whose class defines __call__.
+func isCallable(o py.Object) bool {
+	fn, ok := py.GetModuleImplOrNil("builtins").Globals.Get("callable")
+	if !ok {
+		return false
+	}
+	r, err := py.Call(fn, py.Tuple{o}, py.NewStringDict())
+	return err == nil && r == py.True
 }

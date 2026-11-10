@@ -202,6 +202,11 @@ func init() {
 			py.MustNewMethod("getusersitepackages", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 				return py.String(userSite(currentContext(self))), nil
 			}, 0, "Return the path of the user-specific site-packages directory."),
+			py.MustNewMethod("check_enableusersite", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+				// False in a venv, as for CPython (and under -s, which is not
+				// consulted here).
+				return py.NewBool(!py.GetPrefixes().Venv), nil
+			}, 0, "Check if user site directory is safe for inclusion."),
 			py.MustNewMethod("getuserbase", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 				return py.String(userBase(currentContext(self))), nil
 			}, 0, "Return the base directory of the user site-packages."),

@@ -99,6 +99,7 @@ func instanceDict(instance py.Object) (py.StringDict, bool) {
 }
 
 func init() {
+	cachedPropertyType.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 	cachedPropertyType.Dict.Set("__init__", py.MustNewMethod("__init__", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		c, ok := self.(*cachedProperty)
 		if !ok {

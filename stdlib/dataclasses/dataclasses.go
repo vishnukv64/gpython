@@ -96,6 +96,9 @@ type fieldType struct {
 	compare        bool
 	metadata       py.Object
 	kwOnly         py.Object
+	// initVar marks an InitVar pseudo-field: a parameter of __init__ that is
+	// handed to __post_init__ and never stored.
+	initVar bool
 }
 
 var FieldType = py.NewType("dataclasses.Field", "Instance of Field describes a variable in a dataclass.")
@@ -288,6 +291,8 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 	// the class dictionary, because the compiler drops annotated
 	// assignments, so the source is the only place it can be seen.
 	kwOnlyFromSource := map[string]bool{}
+	initVars := map[string]bool{}
+	classVars := map[string]bool{}
 	if len(names) == 0 {
 		src, err := classSource(cls, decoFrame)
 		if err != nil {
@@ -303,6 +308,7 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 			if pf.kwOnly {
 				kwOnlyFromSource[pf.name] = true
 			}
+			initVars[pf.name], classVars[pf.name] = pf.initVar, pf.classVar
 		}
 	}
 
@@ -311,6 +317,13 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 	for i, name := range names {
 		if kwOnlyFromSource[name] {
 			kwOnlySeen = true
+		}
+		if iv, cv := annotationKind(types[i]); iv || cv {
+			initVars[name], classVars[name] = iv, cv
+		}
+		// A ClassVar is a class attribute, not a field.
+		if classVars[name] {
+			continue
 		}
 		if value, ok := cls.Dict.Get(name); ok {
 			if _, isKwOnly := value.(kwOnlyType); isKwOnly {
@@ -362,6 +375,11 @@ func annotationFields(cls *py.Type, decoFrame *py.Frame) ([]*fieldType, error) {
 		}
 		fields = append(fields, nf)
 	}
+	for _, f := range fields {
+		if initVars[f.name] {
+			f.initVar, f.repr, f.compare = true, false, false
+		}
+	}
 	return fields, nil
 }
 
@@ -408,6 +426,8 @@ type parsedField struct {
 	name     string
 	kwOnly   bool
 	hasValue bool
+	initVar  bool
+	classVar bool
 }
 
 // classHeader finds the "class <name>(...):" header of the named class and
@@ -517,7 +537,8 @@ func parseClassFields(src, clsName string) ([]parsedField, error) {
 			kwOnly = true
 			continue
 		}
-		fields = append(fields, parsedField{name: name, kwOnly: kwOnly, hasValue: hasValue})
+		iv, cv := annotationKind(py.String(rest))
+		fields = append(fields, parsedField{name: name, kwOnly: kwOnly, hasValue: hasValue, initVar: iv, classVar: cv})
 	}
 	return fields, nil
 }
@@ -694,7 +715,7 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 	// fields are exempt.
 	seenDefault := false
 	for _, f := range fields {
-		if !initOn || f.kwOnly == py.True {
+		if !initOn || !f.init || f.kwOnly == py.True {
 			continue
 		}
 		hasDefault := f.defaultVal != missing || f.defaultFactory != missing
@@ -748,6 +769,19 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 	cls.Dict.Set("__dataclass_fields__", fieldsDict(fields))
 	cls.Dict.Set("__dataclass_field_order__", fieldOrder(fields))
 	cls.Dict.Set("__dataclass_params__", py.NewStringDict())
+	// An InitVar is not an attribute: its Field object leaves the class
+	// namespace, leaving the plain default when there is one.
+	for _, f := range fields {
+		if f.initVar && cls.Dict.GetOrNil(f.name) != nil {
+			if _, isField := cls.Dict.GetOrNil(f.name).(*fieldType); isField {
+				if f.defaultVal != missing {
+					cls.Dict.Set(f.name, f.defaultVal)
+				} else {
+					_, _ = cls.Dict.M__delitem__(py.String(f.name))
+				}
+			}
+		}
+	}
 	return cls, nil
 }
 
@@ -907,6 +941,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 				cls.Name, len(missingNames), plural(len(missingNames)), joinAnd(quoted))
 		}
 
+		var postArgs py.Tuple
 		i := 0
 		for _, f := range positional {
 			isKwOnly := false
@@ -943,6 +978,10 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 					return nil, py.ExceptionNewf(py.TypeError, "%s.__init__() missing 1 required keyword-only argument: '%s'",
 						cls.Name, f.name)
 				}
+			}
+			if f.initVar {
+				postArgs = append(postArgs, value)
+				continue
 			}
 			if err := setFieldValue(self, f.name, value); err != nil {
 				return nil, err
@@ -985,7 +1024,7 @@ func makeInit(cls *py.Type, fields []*fieldType, frozen bool) dataclassMethod {
 		// __post_init__ runs last, and is how a dataclass computes derived
 		// attributes.
 		if cls.Dict.GetOrNil("__post_init__") != nil {
-			if _, err := py.Call(bound(cls, self, "__post_init__"), nil, py.StringDict{}); err != nil {
+			if _, err := py.Call(bound(cls, self, "__post_init__"), postArgs, py.StringDict{}); err != nil {
 				return nil, err
 			}
 		}
@@ -1292,7 +1331,9 @@ func classFields(obj py.Object) ([]*fieldType, error) {
 			if !ok {
 				continue
 			}
-			fs = append(fs, f)
+			if !f.initVar {
+				fs = append(fs, f)
+			}
 		}
 		return fs, nil
 	}
@@ -1877,6 +1918,7 @@ func init() {
 			py.DictEntry{Key: "MISSING", Value: missing},
 			py.DictEntry{Key: "KW_ONLY", Value: kwOnly},
 			py.DictEntry{Key: "Field", Value: FieldType},
+			py.DictEntry{Key: "InitVar", Value: InitVar},
 			py.DictEntry{Key: "FrozenInstanceError", Value: FrozenInstanceError},
 			py.DictEntry{Key: "__doc__", Value: py.String(dataclasses_doc)},
 		),
@@ -1902,4 +1944,63 @@ func reprOf(o py.Object) string {
 		return "?"
 	}
 	return s
+}
+
+// InitVarType is the type of the InitVar marker; InitVar[T] makes an
+// initVarObj.  Only the annotation matters: applyDataclass turns an InitVar
+// field into an __init__ parameter that is passed to __post_init__.
+var InitVarType = py.NewType("dataclasses.InitVar", "Marks a dataclass field as an init-only pseudo-field.")
+
+type initVarObj struct{ typ py.Object }
+
+func (i *initVarObj) Type() *py.Type { return InitVarType }
+
+// InitVar is dataclasses.InitVar; InitVar[T] subscripts it.
+var InitVar py.Object = &initVarObj{}
+
+func init() {
+	InitVarType.Dict.Set("__getitem__", py.MustNewMethod("__getitem__", func(_ py.Object, args py.Tuple) (py.Object, error) {
+		if len(args) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "InitVar[...] takes one type")
+		}
+		return &initVarObj{typ: args[0]}, nil
+	}, 0, "InitVar[type]"))
+	InitVarType.Dict.Set("__repr__", py.MustNewMethod("__repr__", func(self py.Object, _ py.Tuple) (py.Object, error) {
+		t := self.(*initVarObj).typ
+		if t == nil {
+			return py.String("dataclasses.InitVar"), nil
+		}
+		name := ""
+		if n, err := py.GetAttrString(t, "__name__"); err == nil {
+			name = string(n.(py.String))
+		} else {
+			r, err := py.Repr(t)
+			if err != nil {
+				return nil, err
+			}
+			name = string(r.(py.String))
+		}
+		return py.String("dataclasses.InitVar[" + name + "]"), nil
+	}, 0, "repr(self)"))
+}
+
+// annotationKind classifies an annotation as InitVar or ClassVar, whether it
+// is an object or (with "from __future__ import annotations", or when read
+// from the class source) text.
+func annotationKind(a py.Object) (initVar, classVar bool) {
+	if _, ok := a.(*initVarObj); ok {
+		return true, false
+	}
+	str, ok := a.(py.String)
+	if !ok {
+		return false, false
+	}
+	t := strings.Trim(string(str), " \t\"'")
+	for _, p := range []string{"dataclasses.", "typing.", "t."} {
+		t = strings.TrimPrefix(t, p)
+	}
+	if t == "ClassVar" || strings.HasPrefix(t, "ClassVar[") {
+		return false, true
+	}
+	return t == "InitVar" || strings.HasPrefix(t, "InitVar["), false
 }

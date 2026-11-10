@@ -1,0 +1,8 @@
+b'com3' b'a-b' b'xy' b'    1|2    |00003'
+b'ff FF 10 A z' b"b'q' b'q'"
+b'%|1.50|2.500000e+00'
+b'ba' b'' b'no args'
+b'n=4'
+TypeError
+TypeError
+ValueError

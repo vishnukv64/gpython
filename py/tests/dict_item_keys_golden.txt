@@ -1,0 +1,2 @@
+[('items', {'a': 1}), ('keys', 1), ('get', 2), ('x', 3)] ['items', 'keys', 'get', 'x'] 3 {'a': 1}
+[('items', 1), ('values', 2)] [1, 2]

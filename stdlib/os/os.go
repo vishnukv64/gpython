@@ -152,6 +152,9 @@ func init() {
 		globals.Set(k, py.Int(v))
 	}
 	globals.Set("F_OK", py.Int(F_OK))
+	globals.Set("SEEK_SET", py.Int(0))
+	globals.Set("SEEK_CUR", py.Int(1))
+	globals.Set("SEEK_END", py.Int(2))
 	globals.Set("X_OK", py.Int(X_OK))
 	globals.Set("W_OK", py.Int(W_OK))
 	globals.Set("R_OK", py.Int(R_OK))

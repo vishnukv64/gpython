@@ -1751,7 +1751,7 @@ closed_pattern:
 	}
 |	strings
 	{
-		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: $1.(py.String)}}
+		$$ = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: matchLiteral($<pos>$, $1)}
 		setEnd(yylex, yyrcvr.char, $$)
 	}
 |	'-' NUMBER
@@ -1897,7 +1897,7 @@ mapping_item:
 	}
 |	strings ':' pattern
 	{
-		key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: $<pos>$}, S: $1.(py.String)}}
+		key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: $<pos>$}, Value: matchLiteral($<pos>$, $1)}
 		$$ = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: $<pos>$}, Keys: []ast.Expr{key}, Patterns: []ast.Expr{$3}}
 	}
 

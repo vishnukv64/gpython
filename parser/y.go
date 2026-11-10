@@ -2960,7 +2960,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:1753
 		{
-			yyVAL.expr = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, S: yyDollar[1].obj.(py.String)}}
+			yyVAL.expr = &ast.MatchValue{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Value: matchLiteral(yyVAL.pos, yyDollar[1].obj)}
 			setEnd(yylex, yyrcvr.char, yyVAL.expr)
 		}
 	case 226:
@@ -3151,7 +3151,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line grammar.y:1899
 		{
-			key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Value: &ast.Str{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, S: yyDollar[1].obj.(py.String)}}
+			key := &ast.MatchValue{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Value: matchLiteral(yyVAL.pos, yyDollar[1].obj)}
 			yyVAL.matchthing = &ast.MatchMapping{ExprBase: ast.ExprBase{Pos: yyVAL.pos}, Keys: []ast.Expr{key}, Patterns: []ast.Expr{yyDollar[3].expr}}
 		}
 	case 254:

@@ -259,6 +259,33 @@ func (c *compiler) ensureAnnotations() {
 	c.NameOp("__annotations__", ast.Store)
 }
 
+// setupAnnotations creates __annotations__ at the start of a module or class
+// body that annotates a name anywhere in it (inside an if/try/with/loop too,
+// but not inside a nested def or class).  Creating it lazily at the first
+// annotation, in source order, is wrong when that annotation sits on a branch
+// that does not run: the "else" of a try then indexed a dict nobody had made
+// (filelock: NameError: __annotations__).
+func (c *compiler) setupAnnotations(body []ast.Stmt) {
+	if !c.inAnnotationScope() {
+		return
+	}
+	found := false
+	for _, st := range body {
+		ast.Walk(st, func(n ast.Ast) bool {
+			switch n.(type) {
+			case *ast.FunctionDef, *ast.ClassDef, *ast.Lambda:
+				return false
+			case *ast.AnnAssign:
+				found = true
+			}
+			return !found
+		})
+	}
+	if found {
+		c.ensureAnnotations()
+	}
+}
+
 func init() {
 	py.CaretShapeOf = caretShapeOf
 	py.FullLineCall = fullLineCall

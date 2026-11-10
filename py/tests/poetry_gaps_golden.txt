@@ -1,0 +1,7 @@
+[] [] []
+[b'a'] [b'a'] [b'a']
+[b'a', b'b', b'c', b'd'] [b'a\n', b'b\r\n', b'c\r', b'd\n'] [b'a\n', b'b\r\n', b'c\r', b'd\n']
+[b'', b''] [b'\n', b'\n'] [b'\n', b'\n']
+[b'a', b'', b'b'] [b'a\r\n', b'\r\n', b'b'] [b'a\r\n', b'\r\n', b'b']
+True False True False True True False 1
+True True
