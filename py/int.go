@@ -7,7 +7,6 @@
 package py
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -194,7 +193,7 @@ func (x Int) GoInt64() (int64, error) {
 }
 
 func (a Int) M__str__() (Object, error) {
-	return String(fmt.Sprintf("%d", a)), nil
+	return String(strconv.FormatInt(int64(a), 10)), nil
 }
 
 func (a Int) M__repr__() (Object, error) {

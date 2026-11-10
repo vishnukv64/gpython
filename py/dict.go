@@ -1067,6 +1067,10 @@ type IDictKeyProxy interface {
 }
 
 func dictKey(key Object) (string, error) {
+	// A plain str stored verbatim needs no encoding buffer, copy or alloc.
+	if k, ok := key.(String); ok && !strings.HasPrefix(string(k), keyTag) {
+		return string(k), nil
+	}
 	var b []byte
 	if err := appendKey(&b, key); err != nil {
 		return "", err

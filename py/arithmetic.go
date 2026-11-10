@@ -224,6 +224,9 @@ func MakeFloat(a Object) (Object, error) {
 //
 // Will raise TypeError if can't be add can't be run on these objects
 func Add(a, b Object) (Object, error) {
+	if x, y, ok := floatPair(a, b); ok {
+		return Float(x + y), nil
+	}
 	if x, y, ok := scalarOperands(a, b, "__add__", "__radd__"); ok {
 		return Add(x, y)
 	}
@@ -331,6 +334,9 @@ func IAdd(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be sub can't be run on these objects
 func Sub(a, b Object) (Object, error) {
+	if x, y, ok := floatPair(a, b); ok {
+		return Float(x - y), nil
+	}
 	if x, y, ok := scalarOperands(a, b, "__sub__", "__rsub__"); ok {
 		return Sub(x, y)
 	}
@@ -390,6 +396,9 @@ func ISub(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be mul can't be run on these objects
 func Mul(a, b Object) (Object, error) {
+	if x, y, ok := floatPair(a, b); ok {
+		return Float(x * y), nil
+	}
 	if x, y, ok := scalarOperands(a, b, "__mul__", "__rmul__"); ok {
 		return Mul(x, y)
 	}
@@ -449,6 +458,9 @@ func IMul(a, b Object) (Object, error) {
 //
 // Will raise TypeError if can't be truediv can't be run on these objects
 func TrueDiv(a, b Object) (Object, error) {
+	if x, y, ok := floatPair(a, b); ok && y != 0 {
+		return Float(x / y), nil
+	}
 	if x, y, ok := scalarOperands(a, b, "__truediv__", "__rtruediv__"); ok {
 		return TrueDiv(x, y)
 	}
@@ -1427,4 +1439,27 @@ func callPyUnary(a Object, name string) (Object, bool, error) {
 // uncomparable dynamic type would panic).
 func sameObject(a, b Object) bool {
 	return reflect.TypeOf(a).Comparable() && a == b
+}
+
+// floatPair returns both operands as float64 when they are exact Float/Int
+// values and at least one is a Float.  Int-int stays on the integer path;
+// Int values beyond 2**53 are left to the slow path so rounding is exact.
+func floatPair(a, b Object) (x, y float64, ok bool) {
+	switch av := a.(type) {
+	case Float:
+		x = float64(av)
+		switch bv := b.(type) {
+		case Float:
+			return x, float64(bv), true
+		case Int:
+			if bv > -1<<53 && bv < 1<<53 {
+				return x, float64(bv), true
+			}
+		}
+	case Int:
+		if bv, isF := b.(Float); isF && av > -1<<53 && av < 1<<53 {
+			return float64(av), float64(bv), true
+		}
+	}
+	return 0, 0, false
 }

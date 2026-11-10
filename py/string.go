@@ -93,31 +93,42 @@ func StringEscape(a String, ascii bool) string {
 
 // standard golang strings.Fields doesn't have a 'first N' argument
 func fieldsN(s string, n int) []string {
-	out := []string{}
-	cur := []rune{}
-	for _, c := range s {
-		//until we have covered the first N elements, multiple white-spaces are 'merged'
-		if n < 0 || len(out) < n {
-			if unicode.IsSpace(c) {
-				if len(cur) > 0 {
-					out = append(out, string(cur))
-					cur = []rune{}
-				}
-			} else {
-				cur = append(cur, c)
-			}
-			//until we see the next letter, after collecting the first N fields, continue to merge whitespaces
-		} else if len(out) == n && len(cur) == 0 {
-			if !unicode.IsSpace(c) {
-				cur = append(cur, c)
-			}
-			//now that enough words have been collected, just copy into the last element
-		} else {
-			cur = append(cur, c)
-		}
+	if n < 0 {
+		return strings.Fields(s)
 	}
-	if len(cur) > 0 {
-		out = append(out, string(cur))
+	out := make([]string, 0, n+1)
+	i := 0
+	for len(out) < n {
+		for i < len(s) {
+			r, sz := rune(s[i]), 1
+			if r >= utf8.RuneSelf {
+				r, sz = utf8.DecodeRuneInString(s[i:])
+			}
+			if !unicode.IsSpace(r) {
+				break
+			}
+			i += sz
+		}
+		if i >= len(s) {
+			return out
+		}
+		start := i
+		for i < len(s) {
+			r, sz := rune(s[i]), 1
+			if r >= utf8.RuneSelf {
+				r, sz = utf8.DecodeRuneInString(s[i:])
+			}
+			if unicode.IsSpace(r) {
+				break
+			}
+			i += sz
+		}
+		out = append(out, s[start:i])
+	}
+	// the remainder, minus its leading whitespace
+	rest := strings.TrimLeftFunc(s[i:], unicode.IsSpace)
+	if rest != "" {
+		out = append(out, rest)
 	}
 	return out
 }
@@ -1421,7 +1432,7 @@ func (s String) Count(args Tuple) (Object, error) {
 	var (
 		pysub Object
 		pybeg Object = Int(0)
-		pyend Object = Int(s.len())
+		pyend Object = Int(math.MaxInt32)
 		pyfmt        = "s|ii:count"
 	)
 	err := ParseTuple(args, pyfmt, &pysub, &pybeg, &pyend)
@@ -1437,7 +1448,7 @@ func (s String) Count(args Tuple) (Object, error) {
 	beg, end = adjustIndices(beg, end, size)
 
 	var (
-		str = string(s.slice(beg, end, s.len()))
+		str = string(s.slice(beg, end, size))
 		sub = string(pysub.(String))
 	)
 	return Int(strings.Count(str, sub)), nil
@@ -1447,7 +1458,7 @@ func (s String) find(args Tuple) (Object, error) {
 	var (
 		pysub Object
 		pybeg Object = Int(0)
-		pyend Object = Int(s.len())
+		pyend Object = Int(math.MaxInt32)
 		pyfmt        = "s|ii:find"
 	)
 	err := ParseTuple(args, pyfmt, &pysub, &pybeg, &pyend)
@@ -1463,8 +1474,8 @@ func (s String) find(args Tuple) (Object, error) {
 	beg, end = adjustIndices(beg, end, size)
 
 	var (
-		off = s.slice(0, beg, s.len()).len()
-		str = string(s.slice(beg, end, s.len()))
+		off = s.slice(0, beg, size).len()
+		str = string(s.slice(beg, end, size))
 		sub = string(pysub.(String))
 		idx = strings.Index(str, sub)
 	)
@@ -1492,17 +1503,25 @@ func (s String) Split(args Tuple, kwargs StringDict) (Object, error) {
 	)
 	switch v := pyval.(type) {
 	case String:
+		if v == "" {
+			return nil, ExceptionNewf(ValueError, "empty separator")
+		}
 		vs = strings.SplitN(string(s), string(v), int(max)+1)
 	case NoneType:
 		vs = fieldsN(string(s), int(max))
 	default:
 		return nil, ExceptionNewf(TypeError, "Can't convert '%s' object to str implicitly", pyval.Type())
 	}
-	o := List{}
-	for _, j := range vs {
-		o.Items = append(o.Items, String(j))
+	return stringList(vs), nil
+}
+
+// stringList wraps parts in a list with one allocation for the items.
+func stringList(vs []string) *List {
+	items := make(Tuple, len(vs))
+	for i, j := range vs {
+		items[i] = String(j)
 	}
-	return &o, nil
+	return &List{Items: items}
 }
 
 // RSplit is split() counting from the RIGHT: at most maxsplit splits are made,
@@ -1582,11 +1601,7 @@ func (s String) RSplit(args Tuple, kwargs StringDict) (Object, error) {
 	default:
 		return nil, ExceptionNewf(TypeError, "Can't convert '%s' object to str implicitly", pyval.Type())
 	}
-	o := List{}
-	for _, j := range vs {
-		o.Items = append(o.Items, String(j))
-	}
-	return &o, nil
+	return stringList(vs), nil
 }
 
 func (s String) Replace(args Tuple) (Object, error) {
@@ -1669,6 +1684,19 @@ func (s String) Join(args Tuple) (Object, error) {
 	if len(args) != 1 {
 		return nil, ExceptionNewf(TypeError, "join() takes exactly one argument (%d given)", len(args))
 	}
+	if l, ok := args[0].(*List); ok {
+		parts := make([]string, len(l.Items))
+		n := len(s) * len(parts)
+		for i, item := range l.Items {
+			str, ok := UnwrapScalar(item).(String)
+			if !ok {
+				return nil, ExceptionNewf(TypeError, "sequence item %d: expected str instance, %s found", i, item.Type().Name)
+			}
+			parts[i] = string(str)
+			n += len(str)
+		}
+		return String(joinSized(parts, string(s), n)), nil
+	}
 	var parts []string
 	iterable, err := Iter(args[0])
 	if err != nil {
@@ -1687,6 +1715,20 @@ func (s String) Join(args Tuple) (Object, error) {
 		return nil, err
 	}
 	return String(strings.Join(parts, string(s))), nil
+}
+
+func joinSized(parts []string, sep string, n int) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(n - len(sep))
+	b.WriteString(parts[0])
+	for _, p := range parts[1:] {
+		b.WriteString(sep)
+		b.WriteString(p)
+	}
+	return b.String()
 }
 
 // Check stringerface is satisfied
@@ -2474,6 +2516,9 @@ var specialLower = map[rune][]rune{
 
 // lowerString maps a string through lower(), expanding where CPython does.
 func lowerString(s string) string {
+	if isASCII(s) {
+		return strings.ToLower(s)
+	}
 	var out strings.Builder
 	for _, r := range s {
 		if repl, ok := specialLower[r]; ok {
@@ -2487,6 +2532,9 @@ func lowerString(s string) string {
 
 // upperString maps a string through upper(), expanding where CPython does.
 func upperString(s string) string {
+	if isASCII(s) {
+		return strings.ToUpper(s)
+	}
 	var out strings.Builder
 	for _, r := range s {
 		if repl, ok := specialUpper[r]; ok {

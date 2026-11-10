@@ -7,7 +7,6 @@
 package py
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 )
@@ -22,7 +21,7 @@ func (o *BigInt) Type() *Type {
 }
 
 func (a *BigInt) M__str__() (Object, error) {
-	return String(fmt.Sprintf("%d", (*big.Int)(a))), nil
+	return String((*big.Int)(a).String()), nil
 }
 
 func (a *BigInt) M__repr__() (Object, error) {

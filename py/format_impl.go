@@ -13,14 +13,23 @@
 package py
 
 import (
-	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Format renders value according to a format spec, the way format() does.
 func Format(value Object, spec string) (Object, error) {
+	switch v := value.(type) {
+	case String:
+		return formatString(string(v), spec)
+	case Int:
+		return formatInt(v, spec)
+	case Float:
+		return formatFloat(v, spec)
+	}
 	// str.__format__ / int.__format__ on a SUBCLASS: an empty spec is str(value),
 	// which honours a Python __str__; any other spec formats the builtin value.
 	// A __format__ written in Python wins over both.
@@ -31,12 +40,10 @@ func Format(value Object, spec string) (Object, error) {
 		return Format(p, spec)
 	}
 	switch v := value.(type) {
-	case String:
-		return formatString(string(v), spec)
-	case Int, Bool:
+	case Bool:
 		return formatInt(v, spec)
-	case Float:
-		return formatFloat(v, spec)
+	case *BigInt:
+		return formatInt(v, spec)
 	case NoneType:
 		if spec == "" {
 			return String("None"), nil
@@ -57,326 +64,553 @@ func Format(value Object, spec string) (Object, error) {
 
 type formatSpec struct {
 	fill      rune
-	align     byte
-	plus      bool // '+' - a sign for positive numbers too
-	space     bool // ' ' - a space where a positive number's sign would be
-	alt       bool // '#' - the alternate form
-	zeroPad   bool // '0' - pad with zeros after the sign
+	align     byte // 0 when not given
+	sign      byte // '+', '-', ' '
+	alt       bool
+	zeroCoerc bool // 'z'
 	width     int
-	comma     bool
-	precision int // -1 when absent
-	verb      byte
+	group     byte // ',' or '_'
+	precision int  // -1 when absent
+	verb      byte // 0 when absent
 }
 
-func parseFormatSpec(spec string) (formatSpec, error) {
-	out := formatSpec{fill: ' ', precision: -1}
-	rest := spec
+func formatSpecErr(spec, typ string) error {
+	return ExceptionNewf(ValueError, "Invalid format specifier '%s' for object of type '%s'", spec, typ)
+}
 
-	// The SIGN and ALTERNATE flags come first, before alignment.  They were not
-	// parsed at all, so f"{36:+d}" raised "Invalid format specifier '+d'" and
-	// f"{255:#x}" lost its 0x prefix - both ordinary format strings.
-	for len(rest) > 0 {
-		switch rest[0] {
-		case '+':
-			out.plus = true
-		case ' ':
-			out.space = true
-		case '#':
-			out.alt = true
-		case '-':
-			// '-' means left-align, which is the default for strings but not
-			// for numbers; it sets the alignment rather than a flag.
-			out.align = '<'
-		default:
-			goto flagsDone
-		}
-		rest = rest[1:]
-	}
-flagsDone:
+func isAlign(c byte) bool { return c == '<' || c == '>' || c == '^' || c == '=' }
 
-	if len(rest) >= 2 {
-		switch rest[1] {
-		case '<', '>', '^':
-			out.fill = rune(rest[0])
-			out.align = rest[1]
-			rest = rest[2:]
+func parseNum(s string, pos *int, spec, typ string) (int, bool, error) {
+	start := *pos
+	n := 0
+	for *pos < len(s) && s[*pos] >= '0' && s[*pos] <= '9' {
+		if n > (math.MaxInt32-9)/10 {
+			return 0, false, ExceptionNewf(ValueError, "Too many decimal digits in format string")
+		}
+		n = n*10 + int(s[*pos]-'0')
+		*pos++
+	}
+	return n, *pos > start, nil
+}
+
+// parseFormatSpec follows CPython's format-spec mini-language:
+// [[fill]align][sign]["z"]["#"]["0"][width][grouping]["." precision][type]
+func parseFormatSpec(spec, typ string, defAlign byte) (formatSpec, error) {
+	f := formatSpec{fill: ' ', precision: -1, align: defAlign}
+	pos := 0
+	fillGiven := false
+	alignGiven := false
+	if len(spec) > 0 {
+		r, sz := rune(spec[0]), 1
+		if r >= utf8.RuneSelf {
+			r, sz = utf8.DecodeRuneInString(spec)
+		}
+		if sz < len(spec) && isAlign(spec[sz]) {
+			f.fill, f.align, pos = r, spec[sz], sz+1
+			fillGiven, alignGiven = true, true
+		} else if isAlign(spec[0]) {
+			f.align, pos = spec[0], 1
+			alignGiven = true
 		}
 	}
-	if out.align == 0 && len(rest) >= 1 {
-		switch rest[0] {
-		case '<', '>', '^':
-			out.align = rest[0]
-			rest = rest[1:]
+	if pos < len(spec) && (spec[pos] == '+' || spec[pos] == '-' || spec[pos] == ' ') {
+		f.sign = spec[pos]
+		pos++
+	}
+	if pos < len(spec) && spec[pos] == 'z' {
+		f.zeroCoerc = true
+		pos++
+	}
+	if pos < len(spec) && spec[pos] == '#' {
+		f.alt = true
+		pos++
+	}
+	if !fillGiven && pos < len(spec) && spec[pos] == '0' {
+		f.fill = '0'
+		if !alignGiven && defAlign == '>' {
+			f.align = '='
+		}
+		pos++
+	}
+	var err error
+	if f.width, _, err = parseNum(spec, &pos, spec, typ); err != nil {
+		return f, err
+	}
+	if pos < len(spec) && (spec[pos] == ',' || spec[pos] == '_') {
+		f.group = spec[pos]
+		pos++
+	}
+	if pos < len(spec) && (spec[pos] == ',' || spec[pos] == '_') {
+		if spec[pos] == f.group {
+			return f, formatSpecErr(spec, typ)
+		}
+		return f, ExceptionNewf(ValueError, "Cannot specify both ',' and '_'.")
+	}
+	if pos < len(spec) && spec[pos] == '.' {
+		pos++
+		var ok bool
+		if f.precision, ok, err = parseNum(spec, &pos, spec, typ); err != nil {
+			return f, err
+		}
+		if !ok {
+			return f, ExceptionNewf(ValueError, "Format specifier missing precision")
 		}
 	}
-	if strings.HasPrefix(rest, ",") {
-		out.comma = true
-		rest = rest[1:]
+	if len(spec)-pos > 1 {
+		return f, formatSpecErr(spec, typ)
 	}
-	// ',' may also appear AFTER the width or the precision - "f"{1234567:.2,}""
-	// and "f"{1234567:,.2f}"" are both legal, so every occurrence is taken.
-	for strings.Contains(rest, ",") {
-		out.comma = true
-		rest = strings.Replace(rest, ",", "", 1)
+	if pos < len(spec) {
+		f.verb = spec[pos]
 	}
-	if dot := strings.IndexByte(rest, '.'); dot >= 0 {
-		prec := rest[dot+1:]
-		rest = rest[:dot]
-		i := 0
-		for i < len(prec) && prec[i] >= '0' && prec[i] <= '9' {
-			i++
+	if f.group != 0 {
+		ok := false
+		switch f.verb {
+		case 0, 'd', 'e', 'E', 'f', 'F', 'g', 'G', '%':
+			ok = true
+		case 'b', 'o', 'x', 'X':
+			ok = f.group == '_'
 		}
-		if i == 0 {
-			return out, ExceptionNewf(ValueError, "Format specifier missing precision")
-		}
-		out.precision = 0
-		for _, r := range prec[:i] {
-			out.precision = out.precision*10 + int(r-'0')
-		}
-		rest += prec[i:]
-	}
-	// A leading '0' before the width requests zero padding.
-	if out.align == 0 && len(rest) >= 2 && rest[0] == '0' && rest[1] >= '0' && rest[1] <= '9' {
-		out.fill = '0'
-		out.zeroPad = true
-		rest = rest[1:]
-	}
-	// width: leading digits
-	i := 0
-	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
-		out.width = out.width*10 + int(rest[i]-'0')
-		i++
-	}
-	rest = rest[i:]
-	if strings.Contains(rest, ",") {
-		out.comma = true
-		rest = strings.ReplaceAll(rest, ",", "")
-	}
-	if rest != "" {
-		out.verb = rest[len(rest)-1]
-		if len(rest) != 1 {
-			return out, ExceptionNewf(ValueError, "Invalid format specifier %q", spec)
+		if !ok && f.verb != 0 && !(f.verb == 's' && typ == "str") {
+			return f, ExceptionNewf(ValueError, "Cannot specify '%c' with '%c'.", f.group, f.verb)
 		}
 	}
-	return out, nil
+	return f, nil
+}
+
+func unknownCode(verb byte, typ string) error {
+	if verb > 32 && verb < 128 {
+		return ExceptionNewf(ValueError, "Unknown format code '%c' for object of type '%s'", verb, typ)
+	}
+	return ExceptionNewf(ValueError, "Unknown format code '\\x%x' for object of type '%s'", verb, typ)
 }
 
 func formatString(value, spec string) (Object, error) {
 	if spec == "" {
 		return String(value), nil
 	}
-	f, err := parseFormatSpec(spec)
+	f, err := parseFormatSpec(spec, "str", '<')
 	if err != nil {
 		return nil, err
 	}
 	if f.verb != 0 && f.verb != 's' {
-		return nil, ExceptionNewf(ValueError, "Unknown format code %q for object of type 'str'", string(f.verb))
+		return nil, unknownCode(f.verb, "str")
 	}
-	if f.align == 0 {
-		f.align = '<' // strings are left aligned by default
+	switch {
+	case f.sign != 0:
+		return nil, ExceptionNewf(ValueError, "Sign not allowed in string format specifier")
+	case f.zeroCoerc:
+		return nil, ExceptionNewf(ValueError, "Negative zero coercion (z) not allowed in format specifier")
+	case f.alt:
+		return nil, ExceptionNewf(ValueError, "Alternate form (#) not allowed in string format specifier")
+	case f.align == '=':
+		return nil, ExceptionNewf(ValueError, "'=' alignment not allowed in string format specifier")
+	case f.group != 0:
+		return nil, ExceptionNewf(ValueError, "Cannot specify '%c' with 's'.", f.group)
 	}
-	// A PRECISION on a string TRUNCATES it: f"{'Ada':.2}" is "Ad".  It was
-	// parsed and then never applied, so the precision was silently ignored -
-	// the width still worked, which is what made it look like a formatting
-	// quirk rather than a missing feature.
-	if f.precision >= 0 {
-		runes := []rune(value)
-		if f.precision < len(runes) {
-			value = string(runes[:f.precision])
+	n := len(value)
+	if !isASCII(value) {
+		n = utf8.RuneCountInString(value)
+	}
+	if f.precision >= 0 && f.precision < n {
+		if n == len(value) {
+			value = value[:f.precision]
+		} else {
+			i := 0
+			for k := 0; k < f.precision; k++ {
+				_, sz := utf8.DecodeRuneInString(value[i:])
+				i += sz
+			}
+			value = value[:i]
+		}
+		n = f.precision
+	}
+	return String(padText("", value, n, f)), nil
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
 		}
 	}
-	return String(pad(value, f)), nil
+	return true
+}
+
+// padText lays out prefix+body (n runes of body) in f.width; '=' puts the
+// fill between prefix and body.
+func padText(prefix, body string, n int, f formatSpec) string {
+	return padParts(prefix, nil, body, n, f)
+}
+
+// padParts is padText with the body in two pieces, digits then tail, so that
+// callers can pass digits from a stack buffer without converting to string.
+func padParts(prefix string, digits []byte, tail string, n int, f formatSpec) string {
+	gap := f.width - len(prefix) - n
+	if gap < 0 {
+		gap = 0
+	}
+	var left, right, mid int
+	switch f.align {
+	case '<':
+		right = gap
+	case '^':
+		left = gap / 2
+		right = gap - left
+	case '=':
+		mid = gap
+	default:
+		left = gap
+	}
+	var b strings.Builder
+	b.Grow(len(prefix) + len(digits) + len(tail) + gap*utf8.RuneLen(f.fill))
+	writeFill(&b, f.fill, left)
+	b.WriteString(prefix)
+	writeFill(&b, f.fill, mid)
+	b.Write(digits)
+	b.WriteString(tail)
+	writeFill(&b, f.fill, right)
+	return b.String()
+}
+
+func writeFill(b *strings.Builder, r rune, n int) {
+	if r < utf8.RuneSelf {
+		for ; n > 0; n-- {
+			b.WriteByte(byte(r))
+		}
+		return
+	}
+	for ; n > 0; n-- {
+		b.WriteRune(r)
+	}
+}
+
+// groupDigits inserts sep every size digits of digits (no leading sep),
+// left-padding with zeros until the result is at least minLen long.
+func groupDigits(digits string, sep byte, size, minLen int) string {
+	n := len(digits)
+	pad := 0
+	for {
+		total := n + pad
+		l := total + (total-1)/size
+		if l >= minLen {
+			break
+		}
+		pad++
+	}
+	total := n + pad
+	out := make([]byte, 0, total+(total-1)/size)
+	for i := 0; i < total; i++ {
+		if i > 0 && (total-i)%size == 0 {
+			out = append(out, sep)
+		}
+		if k := i - pad; k >= 0 {
+			out = append(out, digits[k])
+		} else {
+			out = append(out, '0')
+		}
+	}
+	return string(out)
+}
+
+func signPrefix(neg bool, f formatSpec) string {
+	switch {
+	case neg:
+		return "-"
+	case f.sign == '+':
+		return "+"
+	case f.sign == ' ':
+		return " "
+	}
+	return ""
+}
+
+// numLayout groups the integer digits (when asked) and pads.  tail is what
+// follows the integer digits (fraction, exponent, '%').
+func numLayout(prefix, digits, tail string, f formatSpec, size int) string {
+	if f.group == 0 {
+		return padText(prefix, digits+tail, len(digits)+len(tail), f)
+	}
+	min := 0
+	if f.align == '=' && f.fill == '0' {
+		min = f.width - len(prefix) - len(tail)
+	}
+	g := groupDigits(digits, f.group, size, min)
+	return padText(prefix, g+tail, len(g)+len(tail), f)
 }
 
 func formatInt(value Object, spec string) (Object, error) {
-	i, err := Index(value)
+	if spec == "" {
+		return Str(value)
+	}
+	typ := "int"
+	if _, isBool := value.(Bool); isBool {
+		typ = "bool"
+	}
+	f, err := parseFormatSpec(spec, typ, '>')
 	if err != nil {
 		return nil, err
 	}
-
-	if spec != "" {
-		f, err := parseFormatSpec(spec)
-		if err != nil {
-			return nil, err
-		}
-		switch f.verb {
-		case 'f', 'F', 'e', 'E', 'g', 'G', '%':
-			// CPython lets an int be formatted with the float types.
-			return formatFloat(Float(i), spec)
-		}
-		body, err := intBody(Int(i), f)
-		if err != nil {
-			return nil, err
-		}
-		if f.align == 0 {
-			f.align = '>'
-		}
-		return String(pad(body, f)), nil
-	}
-
-	return Str(value)
-}
-
-// intBody renders an integer in the requested base, with separators applied.
-func intBody(value Object, f formatSpec) (string, error) {
-	verb := f.verb
-	if verb == 0 {
-		verb = 'd'
-	}
-
-	var text string
-	switch verb {
-	case 'd':
-		text = fmt.Sprintf("%d", int64(value.(Int)))
-	case 'b', 'o', 'x', 'X':
-		base := 2
-		switch verb {
-		case 'o':
-			base = 8
-		case 'x', 'X':
-			base = 16
-		}
-		n, ok := toBigInt(value)
-		if !ok {
-			return "", ExceptionNewf(ValueError, "Unknown format code %q for object of type 'int'", string(verb))
-		}
-		text = n.Text(base)
-		if verb == 'X' {
-			text = strings.ToUpper(text)
-		}
-	default:
-		return "", ExceptionNewf(ValueError, "Unknown format code %q for object of type 'int'", string(verb))
-	}
-
-	if f.comma && verb == 'd' {
-		text = groupThousands(text)
-	}
-	return text, nil
-}
-
-func toBigInt(value Object) (*big.Int, bool) {
+	var neg bool
+	var small uint64
+	var big_ *big.Int
 	switch v := value.(type) {
 	case Int:
-		return big.NewInt(int64(v)), true
+		if v < 0 {
+			neg, small = true, uint64(-(v+1))+1
+		} else {
+			small = uint64(v)
+		}
+	case Bool:
+		if v {
+			small = 1
+		}
 	case *BigInt:
-		return (*big.Int)(v), true
+		b := (*big.Int)(v)
+		neg = b.Sign() < 0
+		big_ = new(big.Int).Abs(b)
 	}
-	return nil, false
+	switch f.verb {
+	case 'e', 'E', 'f', 'F', 'g', 'G', '%':
+		var x float64
+		if big_ != nil {
+			x, _ = new(big.Float).SetInt((*big.Int)(value.(*BigInt))).Float64()
+			if math.IsInf(x, 0) {
+				return nil, ExceptionNewf(OverflowError, "int too large to convert to float")
+			}
+		} else {
+			x = float64(Index0(value))
+		}
+		return formatFloat(Float(x), spec)
+	case 0, 'd', 'n', 'b', 'o', 'x', 'X', 'c':
+	default:
+		return nil, unknownCode(f.verb, typ)
+	}
+	if f.precision >= 0 {
+		return nil, ExceptionNewf(ValueError, "Precision not allowed in integer format specifier")
+	}
+	if f.zeroCoerc {
+		return nil, ExceptionNewf(ValueError, "Negative zero coercion (z) not allowed in integer format specifier")
+	}
+	base := 10
+	prefix := ""
+	switch f.verb {
+	case 'b':
+		base, prefix = 2, "0b"
+	case 'o':
+		base, prefix = 8, "0o"
+	case 'x':
+		base, prefix = 16, "0x"
+	case 'X':
+		base, prefix = 16, "0X"
+	}
+	if f.verb == 'c' {
+		if f.sign != 0 {
+			return nil, ExceptionNewf(ValueError, "Sign not allowed with integer format specifier 'c'")
+		}
+		if f.alt {
+			return nil, ExceptionNewf(ValueError, "Alternate form (#) not allowed with integer format specifier 'c'")
+		}
+		if f.group != 0 {
+			return nil, ExceptionNewf(ValueError, "Cannot specify '%c' with 'c'.", f.group)
+		}
+		if big_ != nil {
+			return nil, ExceptionNewf(OverflowError, "Python int too large to convert to C long")
+		}
+		if neg || small > 0x10ffff {
+			return nil, ExceptionNewf(OverflowError, "%%c arg not in range(0x110000)")
+		}
+		return String(padText("", string(rune(small)), 1, f)), nil
+	}
+	if f.group == ',' && base != 10 || f.group != 0 && f.verb == 'n' {
+		return nil, ExceptionNewf(ValueError, "Cannot specify '%c' with '%c'.", f.group, f.verb)
+	}
+	if !f.alt {
+		prefix = ""
+	}
+	if big_ == nil && f.group == 0 && f.verb != 'X' {
+		var buf [64]byte
+		d := strconv.AppendUint(buf[:0], small, base)
+		return String(padParts(signPrefix(neg, f)+prefix, d, "", len(d), f)), nil
+	}
+	var digits string
+	if big_ != nil {
+		digits = big_.Text(base)
+	} else {
+		digits = strconv.FormatUint(small, base)
+	}
+	if f.verb == 'X' {
+		digits = strings.ToUpper(digits)
+	}
+	size := 3
+	if base != 10 {
+		size = 4
+	}
+	return String(numLayout(signPrefix(neg, f)+prefix, digits, "", f, size)), nil
 }
 
-// groupThousands inserts the "," separator every three digits of the integer
-// part.
-func groupThousands(text string) string {
-	neg := strings.HasPrefix(text, "-")
-	if neg {
-		text = text[1:]
-	}
-	var out strings.Builder
-	for i, r := range text {
-		if i > 0 && (len(text)-i)%3 == 0 {
-			out.WriteByte(',')
+// Index0 is the int64 of an Int or Bool.
+func Index0(v Object) int64 {
+	switch v := v.(type) {
+	case Int:
+		return int64(v)
+	case Bool:
+		if v {
+			return 1
 		}
-		out.WriteRune(r)
 	}
-	if neg {
-		return "-" + out.String()
-	}
-	return out.String()
+	return 0
 }
 
 func formatFloat(value Float, spec string) (Object, error) {
 	if spec == "" {
 		return Str(value)
 	}
-	f, err := parseFormatSpec(spec)
+	f, err := parseFormatSpec(spec, "float", '>')
 	if err != nil {
 		return nil, err
 	}
-
+	x := float64(value)
 	verb := f.verb
-	if verb == 0 {
-		verb = 'g'
-	}
-
-	format := "%"
-	if f.precision >= 0 {
-		format += "." + itoa(f.precision)
-	}
-	number := float64(value)
 	switch verb {
-	case 'f', 'F', 'e', 'E', 'g', 'G':
-		format += string(verb)
-	case '%':
-		// The '%' conversion is 'f' on the value TIMES ONE HUNDRED, with a
-		// literal sign appended.  Emitting Go's "%%" instead produced the
-		// literal text "%%!(EXTRA float64=25.6)" - Go's printf error for a
-		// verb it does not have - which is what appeared in an ordinary
-		// f-string such as f"{25.6:.1%}".
-		number *= 100
-		format += "f"
+	case 0, 'e', 'E', 'f', 'F', 'g', 'G', 'n', '%':
 	default:
-		return nil, ExceptionNewf(ValueError, "Unknown format code %q for object of type 'float'", string(verb))
+		return nil, unknownCode(verb, "float")
 	}
-
-	body := fmt.Sprintf(format, number)
+	if f.group == ',' && verb == 'n' || f.group == '_' && verb == 'n' {
+		return nil, ExceptionNewf(ValueError, "Cannot specify '%c' with 'n'.", f.group)
+	}
+	neg := math.Signbit(x)
+	if math.IsNaN(x) {
+		neg = false
+	}
+	ax := math.Abs(x)
 	if verb == '%' {
-		body += "%"
+		ax *= 100
 	}
-	if f.comma {
-		if dot := strings.IndexByte(body, '.'); dot >= 0 {
-			body = groupThousands(body[:dot]) + body[dot:]
-		} else {
-			body = groupThousands(body)
+	var body string // digits, maybe '.', fraction, exponent
+	switch {
+	case math.IsNaN(x) || math.IsInf(x, 0):
+		body = "inf"
+		if math.IsNaN(x) {
+			body = "nan"
 		}
-	}
-	if f.align == 0 {
-		f.align = '>'
-	}
-	return String(pad(body, f)), nil
-}
-
-// pad applies filling, alignment and width to an already rendered value.
-func pad(body string, f formatSpec) string {
-	// The SIGN flags are applied here, at the one place every numeric formatter
-	// funnels through - so "+d", " .2f" and their like work for every verb
-	// rather than for the handful that remembered to handle them.
-	if body != "" && body[0] != '-' {
-		switch {
-		case f.plus:
-			body = "+" + body
-		case f.space:
-			body = " " + body
+		if verb == 'E' || verb == 'F' || verb == 'G' {
+			body = strings.ToUpper(body)
 		}
-	}
-	// Zero padding goes AFTER the sign, not before it: "-0042", not "00-42".
-	if f.zeroPad && f.align == 0 {
-		neg := strings.HasPrefix(body, "-") || strings.HasPrefix(body, "+") || strings.HasPrefix(body, " ")
-		sign := ""
-		digits := body
-		if neg {
-			sign, digits = body[:1], body[1:]
+		if verb == '%' {
+			body += "%"
 		}
-		if f.width > len([]rune(body)) {
-			digits = strings.Repeat("0", f.width-len([]rune(body))) + digits
-			body = sign + digits
-		}
-	}
-	width := len([]rune(body))
-	if f.width <= width {
-		return body
-	}
-	gap := f.width - width
-	fill := string(f.fill)
-	switch f.align {
-	case '<':
-		return body + strings.Repeat(fill, gap)
-	case '^':
-		left := gap / 2
-		return strings.Repeat(fill, left) + body + strings.Repeat(fill, gap-left)
+		pre := signPrefix(neg, f)
+		return String(padText(pre, body, len(body), f)), nil
 	default:
-		return strings.Repeat(fill, gap) + body
+		body = floatBody(ax, verb, f)
 	}
+	// split body into integer digits and the rest
+	end := 0
+	for end < len(body) && body[end] >= '0' && body[end] <= '9' {
+		end++
+	}
+	digits, tail := body[:end], body[end:]
+	if f.zeroCoerc && neg && isZeroBody(digits+tail) {
+		neg = false
+	}
+	if verb == '%' {
+		tail += "%"
+	}
+	return String(numLayout(signPrefix(neg, f), digits, tail, f, 3)), nil
 }
 
-// itoa renders an int the way CPython's int formatting does.
+func isZeroBody(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '1' && c <= '9' {
+			return false
+		}
+		if c == 'e' || c == 'E' || c == '%' {
+			break
+		}
+	}
+	return true
+}
+
+func floatBody(ax float64, verb byte, f formatSpec) string {
+	prec := f.precision
+	switch verb {
+	case 'f', 'F', '%':
+		if prec < 0 {
+			prec = 6
+		}
+		s := strconv.FormatFloat(ax, 'f', prec, 64)
+		if f.alt && prec == 0 {
+			s += "."
+		}
+		return s
+	case 'e', 'E':
+		if prec < 0 {
+			prec = 6
+		}
+		s := strconv.FormatFloat(ax, 'e', prec, 64)
+		if f.alt && prec == 0 {
+			s = strings.Replace(s, "e", ".e", 1)
+		}
+		if verb == 'E' {
+			s = strings.ToUpper(s)
+		}
+		return s
+	case 0:
+		if prec < 0 {
+			s := cpythonFloatRepr(ax)
+			return s
+		}
+	}
+	// g, G, n, and the typeless form with a precision
+	if prec < 0 {
+		prec = 6
+	}
+	if prec == 0 {
+		prec = 1
+	}
+	es := strconv.FormatFloat(ax, 'e', prec-1, 64)
+	k := strings.IndexByte(es, 'e')
+	exp, _ := strconv.Atoi(es[k+1:])
+	var s string
+	if exp >= -4 && exp < prec {
+		s = strconv.FormatFloat(ax, 'f', prec-1-exp, 64)
+		if !f.alt {
+			s = trimFrac(s)
+		}
+		if verb == 0 && !strings.Contains(s, ".") {
+			s += ".0"
+		}
+	} else {
+		m := es[:k]
+		if !f.alt {
+			m = trimFrac(m)
+		}
+		if verb == 0 && !strings.Contains(m, ".") {
+			m += ".0"
+		}
+		s = m + es[k:]
+		if verb == 0 {
+			// typeless: CPython drops the ".0" before an exponent
+			s = strings.Replace(s, ".0e", "e", 1)
+		}
+	}
+	if f.alt && !strings.Contains(s, ".") && !strings.Contains(s, "e") {
+		s += "."
+	}
+	if verb == 'G' {
+		s = strings.ToUpper(s)
+	}
+	return s
+}
+
+func trimFrac(s string) string {
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	s = strings.TrimRight(s, "0")
+	return strings.TrimSuffix(s, ".")
+}
+
 func itoa(i int) string { return strconv.Itoa(i) }
