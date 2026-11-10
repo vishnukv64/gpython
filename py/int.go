@@ -263,6 +263,24 @@ func (a Int) M__invert__() (Object, error) {
 	return ^a, nil
 }
 
+// smallInts holds -5..1023 preboxed: converting an Int to an Object allocates
+// outside Go's own 0-255 cache, and the hot producers (arithmetic, range,
+// len, enumerate) mostly yield small values.
+var smallInts = func() (t [1029]Object) {
+	for i := range t {
+		t[i] = Int(i - 5)
+	}
+	return
+}()
+
+// NewInt returns i as an Object without allocating when it is small.
+func NewInt(i int64) Object {
+	if uint64(i+5) < uint64(len(smallInts)) {
+		return smallInts[i+5]
+	}
+	return Int(i)
+}
+
 // Integer add with overflow detection
 func intAdd(a, b Int) Object {
 	if a >= 0 {
@@ -282,7 +300,7 @@ func intAdd(a, b Int) Object {
 			goto overflow
 		}
 	}
-	return Int(a + b)
+	return NewInt(int64(a + b))
 
 overflow:
 	aBig := big.NewInt(int64(a))
@@ -310,7 +328,7 @@ func intSub(a, b Int) Object {
 			goto overflow
 		}
 	}
-	return Int(a - b)
+	return NewInt(int64(a - b))
 
 overflow:
 	aBig := big.NewInt(int64(a))
@@ -331,7 +349,7 @@ func intMul(a, b Int) Object {
 	}
 	// A crude but effective test!
 	if absA <= sqrtIntMax && absB <= sqrtIntMax {
-		return Int(a * b)
+		return NewInt(int64(a * b))
 	}
 	aBig := big.NewInt(int64(a))
 	bBig := big.NewInt(int64(b))

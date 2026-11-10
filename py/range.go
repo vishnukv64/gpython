@@ -132,7 +132,7 @@ func (it *RangeIterator) M__next__() (Object, error) {
 		return nil, StopIteration
 	}
 	it.Index += it.Step
-	return r, nil
+	return NewInt(int64(r)), nil
 }
 
 func computeItem(r *Range, item Int) Int {

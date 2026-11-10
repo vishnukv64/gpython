@@ -86,7 +86,7 @@ func NewFunction(ctx Context, code *Code, globals StringDict, qualname string) *
 
 // Call a function
 func (f *Function) M__call__(args Tuple, kwargs StringDict) (Object, error) {
-	result, err := VmEvalCode(f.Context, f.Code, f.Globals, NewStringDict(), args, kwargs, f.Defaults, f.KwDefaults, f.Closure)
+	result, err := VmEvalCode(f.Context, f.Code, f.Globals, StringDict{}, args, kwargs, f.Defaults, f.KwDefaults, f.Closure)
 	if err != nil {
 		return nil, err
 	}

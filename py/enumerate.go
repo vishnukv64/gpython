@@ -77,7 +77,7 @@ func (ei *EnumerateIterator) M__next__() (Object, error) {
 		return nil, err
 	}
 	res := make(Tuple, 2)
-	res[0] = ei.Index
+	res[0] = NewInt(int64(ei.Index))
 	res[1] = value
 	ei.Index += 1
 	return res, nil

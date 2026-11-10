@@ -1,0 +1,31 @@
+A set c 'A' object has no attribute 'c' and no __dict__ for setting new attributes
+A set d 'A' object has no attribute 'd' and no __dict__ for setting new attributes
+A a 97
+A b 98
+A get c 'A' object has no attribute 'c'
+A get d 'A' object has no attribute 'd'
+B set d 'B' object has no attribute 'd' and no __dict__ for setting new attributes
+B a 97
+B b 98
+B c 99
+B get d 'B' object has no attribute 'd'
+C set d 'C' object has no attribute 'd' and no __dict__ for setting new attributes
+C a 97
+C b 98
+C c 99
+C get d 'C' object has no attribute 'd'
+D a 97
+D b 98
+D c 99
+D d 100
+{'zz': 2} 1
+del a
+get 'D' object has no attribute 'a'
+5
+vars vars() argument must have __dict__ attribute
+True False
+[1] False
+[1] False
+[1] False
+multiple bases have instance lay-out conflict
+1 {'q': 2}

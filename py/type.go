@@ -115,8 +115,11 @@ type Type struct {
 	// __slots__ without "__dict__" and no base provides one.
 	NoDict bool
 
-	// slotVals holds an instance's __slots__ values; see slots.go.
-	slotVals map[string]Object
+	// slots holds an instance's __slots__ values by descriptor index (nil =
+	// unset); nslots is how many a class's instances have, inherited ones
+	// first.  See slots.go.
+	slots  []Object
+	nslots int
 
 	// Payload is where an INSTANCE of a Python subclass of a builtin container
 	// keeps its data.
@@ -1771,7 +1774,7 @@ func (t *Type) Ready() error {
 }
 
 func (t *Type) extra_ivars(base *Type) bool {
-	return false
+	return t.nslots > base.nslots
 	/* FIXME implement this
 	   	t_size := t.Basicsize;
 	   	b_size := base.Basicsize;
@@ -1885,10 +1888,12 @@ func best_base(bases Tuple) (*Type, error) {
 // Generic object allocator
 func (t *Type) Alloc() *Type {
 	// Set the type of the new object to this type
-	obj := &Type{
-		ObjectType: t,
-		Base:       t,
-		Dict:       NewStringDict(),
+	obj := &Type{ObjectType: t, Base: t}
+	if !t.NoDict {
+		obj.Dict = NewStringDict()
+	}
+	if t.nslots > 0 {
+		obj.slots = make([]Object, t.nslots)
 	}
 	return obj
 }
@@ -2033,7 +2038,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 		// 	add_weak++
 		// }
 	} else {
-		if noDict, err = setupSlots(string(name), bases, slots, dict); err != nil {
+		if noDict, nslots, err = setupSlots(string(name), bases, slots, dict, base.nslots); err != nil {
 			return nil, err
 		}
 		/* FIXME ignore slots for the moment
@@ -2151,7 +2156,6 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	}
 
 	// Allocate the type object
-	_ = nslots // FIXME
 	new_type = metatype.Alloc()
 	// A class's native constructor is exposed as __new__, so that
 	// "tuple.__new__(cls, args)" - which is how a Python subclass of a builtin
@@ -2182,6 +2186,7 @@ func TypeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	et := new_type
 	et.Name = string(name)
 	et.NoDict = noDict
+	et.nslots = base.nslots + nslots
 	slots = nil
 
 	// Initialize tp_flags

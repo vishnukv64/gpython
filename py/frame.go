@@ -103,30 +103,54 @@ func (o *Frame) Type() *Type {
 	return FrameType
 }
 
+// Frames whose locals, cells and stack fit in a small slot array are
+// allocated together with it: one allocation instead of three.
+type frame4 struct {
+	Frame
+	slots [4]Object
+}
+
+type frame8 struct {
+	Frame
+	slots [8]Object
+}
+
+type frame16 struct {
+	Frame
+	slots [16]Object
+}
+
 // Make a new frame for a code object
 func NewFrame(ctx Context, globals, locals StringDict, code *Code, closure Tuple) *Frame {
 	nlocals := int(code.Nlocals)
-	ncells := len(code.Cellvars)
-	nfrees := len(code.Freevars)
-	varsize := nlocals + ncells + nfrees
-	// Allocate the stack, locals, cells and frees in a contigious block of memory
-	allocation := make([]Object, varsize)
-	localVars := allocation[:nlocals]
-	//cellVars := allocation[nlocals : nlocals+ncells]
-	//freeVars := allocation[nlocals+ncells : varsize]
-	cellAndFreeVars := allocation[nlocals:varsize]
-
-	return &Frame{
-		Context:         ctx,
-		Globals:         globals,
-		Locals:          locals,
-		Code:            code,
-		LocalVars:       localVars,
-		CellAndFreeVars: cellAndFreeVars,
-		Builtins:        ctx.Store().Builtins.Globals,
-		Localsplus:      allocation,
-		Stack:           make([]Object, 0, code.Stacksize),
+	varsize := nlocals + len(code.Cellvars) + len(code.Freevars)
+	need := varsize + int(code.Stacksize)
+	var f *Frame
+	var all []Object
+	switch {
+	case need <= 4:
+		x := new(frame4)
+		f, all = &x.Frame, x.slots[:]
+	case need <= 8:
+		x := new(frame8)
+		f, all = &x.Frame, x.slots[:]
+	case need <= 16:
+		x := new(frame16)
+		f, all = &x.Frame, x.slots[:]
+	default:
+		f, all = new(Frame), make([]Object, need)
 	}
+	// locals, cells and frees first, then the value stack, in one block
+	f.Context = ctx
+	f.Globals = globals
+	f.Locals = locals
+	f.Code = code
+	f.LocalVars = all[:nlocals:nlocals]
+	f.CellAndFreeVars = all[nlocals:varsize:varsize]
+	f.Builtins = ctx.Store().Builtins.Globals
+	f.Localsplus = all[:varsize:varsize]
+	f.Stack = all[varsize:varsize:need]
+	return f
 }
 
 // Python globals  are looked up in two scopes

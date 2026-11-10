@@ -1,7 +1,7 @@
 // __slots__: slot descriptors and the no-__dict__ rule.
 //
 // An instance of a Python class is a *Type whose Dict is its namespace.  A
-// slot's value is kept apart from it, in Type.slotVals, so it never shows up
+// slot's value is kept apart from it, in Type.slots, so it never shows up
 // in __dict__ of a subclass that has one.  What makes a slotted class
 // different from an ordinary one is that it has no __dict__: assigning an
 // undeclared name is an AttributeError, and the instance dict is not
@@ -18,13 +18,14 @@ var MemberDescriptorType = NewType("member_descriptor", "Descriptor for a __slot
 
 type slotDescriptor struct {
 	name  string // the (mangled) attribute name
+	index int    // position in Type.slots
 	owner *Type
 }
 
 func (*slotDescriptor) Type() *Type { return MemberDescriptorType }
 
 func (s *slotDescriptor) instance(o Object) (*Type, error) {
-	if t, ok := o.(*Type); ok && t.Name == "" {
+	if t, ok := o.(*Type); ok && t.Name == "" && s.index < len(t.slots) {
 		return t, nil
 	}
 	return nil, ExceptionNewf(TypeError, "descriptor '%s' for '%s' objects doesn't apply to a '%s' object",
@@ -39,7 +40,7 @@ func (s *slotDescriptor) M__get__(instance, owner Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if v, ok := t.slotVals[s.name]; ok {
+	if v := t.slots[s.index]; v != nil {
 		return v, nil
 	}
 	return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s'", t.ObjectType.shortName(), s.name)
@@ -50,10 +51,7 @@ func (s *slotDescriptor) M__set__(instance, value Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t.slotVals == nil {
-		t.slotVals = map[string]Object{}
-	}
-	t.slotVals[s.name] = value
+	t.slots[s.index] = value
 	return None, nil
 }
 
@@ -62,10 +60,10 @@ func (s *slotDescriptor) M__delete__(instance Object) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := t.slotVals[s.name]; !ok {
+	if t.slots[s.index] == nil {
 		return nil, ExceptionNewf(AttributeError, "%s", s.name)
 	}
-	delete(t.slotVals, s.name)
+	t.slots[s.index] = nil
 	return None, nil
 }
 
@@ -114,7 +112,7 @@ func validSlotName(s string) bool {
 
 // setupSlots interprets a class body's __slots__: it adds the slot
 // descriptors to dict and reports whether instances have no __dict__.
-func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (noDict bool, err error) {
+func setupSlots(className string, bases Tuple, slots Object, dict StringDict, first int) (noDict bool, n int, err error) {
 	var names []string
 	if s, ok := slots.(String); ok {
 		names = []string{string(s)}
@@ -129,10 +127,10 @@ func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (n
 			names = append(names, string(s))
 			return false
 		}); err != nil {
-			return false, err
+			return false, 0, err
 		}
 		if bad != nil {
-			return false, bad
+			return false, 0, bad
 		}
 	}
 
@@ -146,17 +144,17 @@ func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (n
 	var slotNames []string
 	for _, n := range names {
 		if !validSlotName(n) {
-			return false, ExceptionNewf(TypeError, "__slots__ must be identifiers")
+			return false, 0, ExceptionNewf(TypeError, "__slots__ must be identifiers")
 		}
 		switch n {
 		case "__dict__":
 			if baseHasDict || addDict {
-				return false, ExceptionNewf(TypeError, "__dict__ slot disallowed: we already got one")
+				return false, 0, ExceptionNewf(TypeError, "__dict__ slot disallowed: we already got one")
 			}
 			addDict = true
 		case "__weakref__":
 			if addWeak {
-				return false, ExceptionNewf(TypeError, "__weakref__ slot disallowed: either we already got one, or __itemsize__ != 0")
+				return false, 0, ExceptionNewf(TypeError, "__weakref__ slot disallowed: either we already got one, or __itemsize__ != 0")
 			}
 			addWeak = true // every object here can be weakly referenced
 		default:
@@ -165,13 +163,13 @@ func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (n
 	}
 	sort.Strings(slotNames)
 	owner := &Type{Name: className}
-	for _, n := range slotNames {
+	for i, n := range slotNames {
 		if _, clash := dict.Get(n); clash {
-			return false, ExceptionNewf(ValueError, "'%s' in __slots__ conflicts with class variable", n)
+			return false, 0, ExceptionNewf(ValueError, "'%s' in __slots__ conflicts with class variable", n)
 		}
-		dict.Set(n, &slotDescriptor{name: n, owner: owner})
+		dict.Set(n, &slotDescriptor{name: n, index: first + i, owner: owner})
 	}
-	return !baseHasDict && !addDict, nil
+	return !baseHasDict && !addDict, len(slotNames), nil
 }
 
 // CopySlots copies the __slots__ values of src onto dst, passing each through
@@ -180,20 +178,17 @@ func setupSlots(className string, bases Tuple, slots Object, dict StringDict) (n
 func CopySlots(src, dst Object, conv func(Object) (Object, error)) error {
 	s, ok := src.(*Type)
 	d, ok2 := dst.(*Type)
-	if !ok || !ok2 || s.slotVals == nil {
+	if !ok || !ok2 || len(s.slots) != len(d.slots) {
 		return nil
 	}
-	if d.slotVals == nil {
-		d.slotVals = make(map[string]Object, len(s.slotVals))
-	}
-	for k, v := range s.slotVals {
-		if conv != nil {
+	for i, v := range s.slots {
+		if v != nil && conv != nil {
 			var err error
 			if v, err = conv(v); err != nil {
 				return err
 			}
 		}
-		d.slotVals[k] = v
+		d.slots[i] = v
 	}
 	return nil
 }

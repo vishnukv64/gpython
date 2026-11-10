@@ -218,6 +218,12 @@ func attributeOwner(self Object) string {
 
 // Returns the number of items of a sequence or mapping
 func Len(self Object) (Object, error) {
+	switch v := self.(type) {
+	case *List:
+		return NewInt(int64(len(v.Items))), nil
+	case Tuple:
+		return NewInt(int64(len(v))), nil
+	}
 	// An instance of a Python subclass of a builtin container carries its value
 	// in Payload, and the length is the VALUE's.  Unwrapping here covers every
 	// caller - the Go path and the method path alike - because this is the one

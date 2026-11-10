@@ -2294,13 +2294,13 @@ func callInternal(fn py.Object, args py.Tuple, kwargs py.StringDict, f *py.Frame
 	// goroutine up.  Anything else goes through the general call protocol.
 	switch fn := fn.(type) {
 	case *py.Function:
-		return evalCode(f, fn.Context, fn.Code, fn.Globals, py.NewStringDict(), args, kwargs, fn.Defaults, fn.KwDefaults, fn.Closure)
+		return evalCode(f, fn.Context, fn.Code, fn.Globals, py.StringDict{}, args, kwargs, fn.Defaults, fn.KwDefaults, fn.Closure)
 	case *py.BoundMethod:
 		if m, ok := fn.Method.(*py.Function); ok {
 			withSelf := make(py.Tuple, len(args)+1)
 			withSelf[0] = fn.Self
 			copy(withSelf[1:], args)
-			return evalCode(f, m.Context, m.Code, m.Globals, py.NewStringDict(), withSelf, kwargs, m.Defaults, m.KwDefaults, m.Closure)
+			return evalCode(f, m.Context, m.Code, m.Globals, py.StringDict{}, withSelf, kwargs, m.Defaults, m.KwDefaults, m.Closure)
 		}
 	}
 	return py.Call(fn, args, kwargs)
