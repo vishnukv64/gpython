@@ -60,3 +60,35 @@ func (it *Iterator) M__next__() (res Object, err error) {
 
 // Check interface is satisfied
 var _ I_iterator = (*Iterator)(nil)
+
+// A list's iterator reads the LIVE list, as CPython's does: items appended
+// during the loop are visited, and a list that shrinks ends it early.
+type ListIterator struct {
+	List *List
+	Pos  int
+}
+
+var ListIteratorType = NewType("list_iterator", "list_iterator object")
+
+func (it *ListIterator) Type() *Type { return ListIteratorType }
+
+func (it *ListIterator) M__iter__() (Object, error) { return it, nil }
+
+func (it *ListIterator) M__next__() (Object, error) {
+	l := it.List
+	if l == nil {
+		return nil, StopIteration
+	}
+	l.mu.Lock()
+	if it.Pos >= len(l.Items) {
+		l.mu.Unlock()
+		it.List = nil
+		return nil, StopIteration
+	}
+	res := l.Items[it.Pos]
+	l.mu.Unlock()
+	it.Pos++
+	return res, nil
+}
+
+var _ I_iterator = (*ListIterator)(nil)

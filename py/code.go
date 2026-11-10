@@ -8,6 +8,8 @@ package py
 
 import (
 	"strings"
+	"sync/atomic"
+	"unsafe"
 )
 
 // Code object
@@ -43,6 +45,37 @@ type Code struct {
 	Lnotab    string // string (encoding addr<->lineno mapping) See Objects/lnotab_notes.txt for details.
 
 	Weakreflist *List // to support weakrefs to code objects
+
+	// caches is the VM's inline-cache side table, allocated on first use.
+	caches atomic.Pointer[CodeCaches]
+}
+
+// GlobalCache remembers where a global name was found and the versions of the
+// dicts searched, so a hit costs two atomic loads instead of two map lookups.
+type GlobalCache struct {
+	GID, BID   unsafe.Pointer // globals / builtins storage identity
+	GVer, BVer uint64
+	Value      Object
+	InBuiltins bool
+}
+
+// CodeCaches is a code object's per-name caches, indexed by co_names slot.
+type CodeCaches struct {
+	Globals []atomic.Pointer[GlobalCache]
+	Attrs   []atomic.Pointer[AttrCache]
+}
+
+// Caches returns the code's inline caches, allocating them on first use.
+func (co *Code) Caches() *CodeCaches {
+	if c := co.caches.Load(); c != nil {
+		return c
+	}
+	n := len(co.Names)
+	c := &CodeCaches{Globals: make([]atomic.Pointer[GlobalCache], n), Attrs: make([]atomic.Pointer[AttrCache], n)}
+	if co.caches.CompareAndSwap(nil, c) {
+		return c
+	}
+	return co.caches.Load()
 }
 
 var CodeType = NewType("code", "code(argcount, kwonlyargcount, nlocals, stacksize, flags, codestring,\n      constants, names, varnames, filename, name, firstlineno,\n      lnotab[, freevars[, cellvars]])\n\nCreate a code object.  Not for the faint of heart.")

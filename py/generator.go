@@ -98,6 +98,16 @@ func (it *Generator) M__next__() (Object, error) {
 // generator, it must be called with None as the argument, because
 // there is no yield expression that could receive the value.
 func (it *Generator) Send(arg Object) (Object, error) {
+	return it.sendFrom(arg, nil)
+}
+
+// NextFrom is __next__ for a caller that is a running Python frame (FOR_ITER),
+// which spares the lookup of the current goroutine's frame chain.
+func (it *Generator) NextFrom(caller *Frame) (Object, error) {
+	return it.sendFrom(None, caller)
+}
+
+func (it *Generator) sendFrom(arg Object, caller *Frame) (Object, error) {
 	if it.Running {
 		return nil, ExceptionNewf(ValueError, "generator already executing")
 	}
@@ -114,7 +124,13 @@ func (it *Generator) Send(arg Object) (Object, error) {
 		it.Frame.Stack = append(it.Frame.Stack, arg)
 	}
 	it.Running = true
-	res, err := VmRunFrame(it.Frame)
+	var res Object
+	var err error
+	if caller != nil {
+		res, err = VmRunFrameFrom(it.Frame, caller)
+	} else {
+		res, err = VmRunFrame(it.Frame)
+	}
 	it.Running = false
 	if err != nil {
 		return nil, err

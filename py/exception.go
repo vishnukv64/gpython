@@ -606,7 +606,10 @@ func SetCurrentException(e *Exception) {
 	// are still on the stack.  SetExceptionTraceback does not overwrite a
 	// traceback an exception already carries, so a re-raise or a chain keeps
 	// the place the exception originally came from.
-	SetExceptionTraceback(e, CaptureTraceback())
+	RestoreTraceback(e)
+	if tb, _ := e.Traceback.(*Traceback); tb == nil {
+		SetExceptionTraceback(e, CaptureTraceback())
+	}
 }
 
 // ChainContext sets e.__context__ to the exception being handled by frame

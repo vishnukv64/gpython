@@ -407,10 +407,16 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 			return I.M__getattribute__(key)
 		}
 	}
-	if _, isType := self.(*Type); !isType && hooks {
+	if !IsClassObject(self) && hooks {
 		if m := self.Type().Lookup("__getattribute__"); m == Object(objectGetattribute) {
 			// the default: fall through to the ordinary lookup below
 		} else if r, found, err2 := TypeCall1(self, "__getattribute__", Object(String(key))); found {
+			// An AttributeError from the hook falls back to __getattr__.
+			if err2 != nil && isAttributeError(err2) {
+				if r2, ok2, err3 := TypeCall1(self, "__getattr__", Object(String(key))); ok2 {
+					return r2, err3
+				}
+			}
 			return r, err2
 		}
 	}
@@ -447,9 +453,17 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 		}
 	}
 
+	// A data descriptor on the class outranks the instance dictionary.
+	skipDict := false
+	if ty, isInst := self.(*Type); isInst && ty.Name == "" && ty.ObjectType != nil {
+		if own := ty.ObjectType.Lookup(key); own != nil && isDataDescriptor(own) {
+			skipDict = true
+		}
+	}
+
 	// Look in the instance dictionary if it exists
-	if I, ok := self.(IGetDict); ok {
-		dict := I.GetDict()
+	if I, ok := self.(IGetDict); ok && !skipDict {
+		dict := instanceDict(self, I)
 		res, ok = dict.Get(key)
 		if ok {
 			// A type's dict is its class namespace, and class attributes
@@ -619,7 +633,7 @@ func setAttrDict(self Object, key string, value Object) (Object, error) {
 		if t := self.Type(); t.NoDict {
 			return nil, ExceptionNewf(AttributeError, "'%s' object has no attribute '%s' and no __dict__ for setting new attributes", t.shortName(), key)
 		}
-		dict := I.GetDict()
+		dict := instanceDict(self, I)
 		if dict.IsNil() {
 			return nil, ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
 		}
@@ -688,11 +702,19 @@ func delViaDescriptor(self Object, key string) (bool, error) {
 	return false, nil
 }
 
+// instanceDict is the namespace attributes of self are stored in.
+func instanceDict(self Object, I IGetDict) StringDict {
+	if t, ok := self.(*Type); ok {
+		return t.AttrDict()
+	}
+	return I.GetDict()
+}
+
 func delAttrDict(self Object, key string) error {
 	// Otherwise delete the attribute from the instance dictionary
 	// if possible
 	if I, ok := self.(IGetDict); ok {
-		dict := I.GetDict()
+		dict := instanceDict(self, I)
 		if dict.IsNil() {
 			return ExceptionNewf(SystemError, "nil Dict in %s", self.Type().Name)
 		}

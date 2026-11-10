@@ -69,6 +69,9 @@ func RangeNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
+	if stepIndex == Int(0) {
+		return nil, ExceptionNewf(ValueError, "range() arg 3 must not be zero")
+	}
 	length := computeRangeLength(startIndex, stopIndex, stepIndex)
 	return &Range{
 		Start:  startIndex,

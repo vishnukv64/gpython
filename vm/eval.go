@@ -23,10 +23,12 @@ objects so they can be GCed
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -1259,10 +1261,12 @@ func do_BUILD_MAP(vm *Vm, count int32) error {
 func do_LOAD_METHOD(vm *Vm, namei int32) error {
 	name := vm.frame.Code.Names[namei]
 	self := vm.TOP()
-	if f := py.LookupMethod(self, name); f != nil {
-		vm.SET_TOP(f)
-		vm.PUSH(self)
-		return nil
+	if c := cachedAttr(vm.frame.Code, namei, self, name); c != nil && c.Kind == py.AttrFunc {
+		if _, shadowed := self.(*py.Type).Dict.Get(name); !shadowed {
+			vm.SET_TOP(c.Attr)
+			vm.PUSH(self)
+			return nil
+		}
 	}
 	res, err := py.GetAttrString(self, name)
 	if err != nil {
@@ -1271,6 +1275,25 @@ func do_LOAD_METHOD(vm *Vm, namei int32) error {
 	vm.SET_TOP(res)
 	vm.PUSH(nil)
 	return nil
+}
+
+// cachedAttr returns the valid inline-cache entry for "self.name" when self
+// is an instance of a Python class, filling it when stale; nil otherwise.
+func cachedAttr(code *py.Code, namei int32, self py.Object, name string) *py.AttrCache {
+	ty, ok := self.(*py.Type)
+	if !ok || ty.Name != "" {
+		return nil
+	}
+	slot := &code.Caches().Attrs[namei]
+	c := slot.Load()
+	if c == nil || c.Cls != ty.ObjectType || c.Epoch != py.TypeEpoch() {
+		c = py.FillAttrCache(ty, name)
+		slot.Store(c)
+	}
+	if c.Kind == py.AttrSlow {
+		return nil
+	}
+	return c
 }
 
 // CALL_METHOD calls the [function, self] or [callable, nil] pair below the
@@ -1297,7 +1320,25 @@ func do_CALL_METHOD(vm *Vm, argc int32) error {
 }
 
 func do_LOAD_ATTR(vm *Vm, namei int32) error {
-	return vm.setTopAndCheckErr(py.GetAttrString(vm.TOP(), vm.frame.Code.Names[namei]))
+	name := vm.frame.Code.Names[namei]
+	self := vm.TOP()
+	if c := cachedAttr(vm.frame.Code, namei, self, name); c != nil {
+		if c.Kind == py.AttrData {
+			return vm.setTopAndCheckErr(c.Attr.(py.I__get__).M__get__(self, c.Cls))
+		}
+		if v, ok := self.(*py.Type).Dict.Get(name); ok {
+			vm.SET_TOP(v)
+			return nil
+		}
+		switch c.Kind {
+		case py.AttrFunc:
+			return vm.setTopAndCheckErr(c.Attr.(*py.Function).M__get__(self, c.Cls))
+		case py.AttrPlain:
+			vm.SET_TOP(c.Attr)
+			return nil
+		}
+	}
+	return vm.setTopAndCheckErr(py.GetAttrString(self, name))
 }
 
 // Performs a Boolean operation. The operation name can be found in
@@ -1502,7 +1543,18 @@ func do_JUMP_ABSOLUTE(vm *Vm, target int32) error {
 // iterator indicates it is exhausted TOS is popped, and the bytecode
 // counter is incremented by delta.
 func do_FOR_ITER(vm *Vm, delta int32) error {
-	r, err := py.Next(vm.TOP())
+	var r py.Object
+	var err error
+	switch it := vm.TOP().(type) {
+	case *py.ListIterator:
+		r, err = it.M__next__()
+	case *py.RangeIterator:
+		r, err = it.M__next__()
+	case *py.Generator:
+		r, err = it.NextFrom(vm.frame)
+	default:
+		r, err = py.Next(it)
+	}
 	if err != nil {
 		// Only StopIteration ends the loop; any other exception the iterator
 		// raised belongs to the caller.
@@ -1689,16 +1741,38 @@ func do_SETUP_ASYNC_WITH(vm *Vm, delta int32) error {
 
 // Loads the global named co_names[namei] onto the stack.
 func do_LOAD_GLOBAL(vm *Vm, namei int32) error {
-	name := vm.frame.Code.Names[namei]
+	f := vm.frame
+	name := f.Code.Names[namei]
 	if debugging {
 		debugf("LOAD_GLOBAL %v\n", name)
 	}
-	obj, ok := vm.frame.LookupGlobal(name)
-	if !ok {
-		return py.ExceptionNewf(py.NameError, nameErrorMsg, name)
-	} else {
-		vm.PUSH(obj)
+	// Inline cache: valid while neither dict has been mutated since it was
+	// filled (see py.StringDict.Version).
+	slot := &f.Code.Caches().Globals[namei]
+	gid, gver := f.Globals.Version()
+	if c := slot.Load(); c != nil && c.GID == gid && c.GVer == gver && gid != nil {
+		if !c.InBuiltins {
+			vm.PUSH(c.Value)
+			return nil
+		}
+		if bid, bver := f.Builtins.Version(); c.BID == bid && c.BVer == bver {
+			vm.PUSH(c.Value)
+			return nil
+		}
 	}
+	bid, bver := f.Builtins.Version()
+	obj, ok := f.Globals.Get(name)
+	inBuiltins := false
+	if !ok {
+		if obj, ok = f.Builtins.Get(name); !ok {
+			return py.ExceptionNewf(py.NameError, nameErrorMsg, name)
+		}
+		inBuiltins = true
+	}
+	if gid != nil && (!inBuiltins || bid != nil) {
+		slot.Store(&py.GlobalCache{GID: gid, GVer: gver, BID: bid, BVer: bver, Value: obj, InBuiltins: inBuiltins})
+	}
+	vm.PUSH(obj)
 	return nil
 }
 
@@ -3381,6 +3455,7 @@ func evalCode(caller *py.Frame, ctx py.Context, co *py.Code, globals, locals py.
 func init() {
 	py.VmEvalCode = EvalCode
 	py.VmRunFrame = RunFrame
+	py.VmRunFrameFrom = func(frame, caller *py.Frame) (py.Object, error) { return runFrame(frame, caller) }
 }
 
 // init wires the frame accessor for the no-argument form of super(), which
@@ -3405,6 +3480,9 @@ var gCurrentFrame = &frameSlot{frames: map[uint64]*py.GoState{}}
 type frameSlot struct {
 	mu     sync.Mutex
 	frames map[uint64]*py.GoState
+	// last is the state most recently returned by state, so the common
+	// single-goroutine program skips the lock and the map.  drop clears it.
+	last atomic.Pointer[py.GoState]
 }
 
 func (f *frameSlot) get() *py.Frame {
@@ -3418,6 +3496,9 @@ func (f *frameSlot) get() *py.Frame {
 
 // state returns the goroutine's state, creating it on first use.
 func (f *frameSlot) state(id uint64) *py.GoState {
+	if gs := f.last.Load(); gs != nil && gs.ID == id {
+		return gs
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	gs := f.frames[id]
@@ -3425,11 +3506,15 @@ func (f *frameSlot) state(id uint64) *py.GoState {
 		gs = &py.GoState{ID: id}
 		f.frames[id] = gs
 	}
+	f.last.Store(gs)
 	return gs
 }
 
 func (f *frameSlot) drop(id uint64) {
 	f.mu.Lock()
+	if gs := f.frames[id]; gs != nil {
+		f.last.CompareAndSwap(gs, nil)
+	}
 	delete(f.frames, id)
 	f.mu.Unlock()
 }
@@ -3445,6 +3530,9 @@ func sameObject(a, b py.Object) (same bool) {
 	case py.Tuple:
 		y, ok := b.(py.Tuple)
 		return ok && len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
+	case py.Bytes:
+		y, ok := b.(py.Bytes)
+		return ok && len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
 	}
-	return a == b
+	return reflect.TypeOf(a).Comparable() && a == b
 }

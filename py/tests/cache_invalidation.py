@@ -120,3 +120,30 @@ for a_, b_ in [(2**62, 2**62), (-2**63, -1), (3037000500, 3037000500), (7, -3), 
     print(a_ + b_, a_ - b_, a_ * b_, a_ % b_, a_ < b_, a_ == b_)
 nan = float("nan")
 print(nan < nan, nan == nan, nan != nan)
+
+# module dict updates through exec, setattr and a shadowed builtin
+import types
+mod = types.ModuleType("m")
+exec("def f():\n    return v\n", mod.__dict__)
+mod.v = 1
+print(mod.f(), mod.f())
+setattr(mod, "v", 2)
+print(mod.f())
+exec("v = 3", mod.__dict__)
+print(mod.f())
+mod.__dict__["v"] = 4
+print(mod.f())
+exec("def g():\n    return len('abc')\n", mod.__dict__)
+print(mod.g())
+mod.len = lambda o: 99
+print(mod.g())
+del mod.len
+print(mod.g())
+mod.__dict__.update(len=lambda o: 7)
+print(mod.g())
+gg = mod.g
+mod.__dict__.clear()
+try:
+    gg()
+except NameError as e:
+    print("NameError", e)

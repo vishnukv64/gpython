@@ -28,6 +28,9 @@ var (
 	// Set in vm/eval.go - to avoid circular import
 	VmEvalCode func(ctx Context, code *Code, globals, locals StringDict, args []Object, kws StringDict, defs []Object, kwdefs StringDict, closure Tuple) (retval Object, err error)
 	VmRunFrame func(frame *Frame) (res Object, err error)
+	// VmRunFrameFrom runs frame called from the Python frame caller, which is
+	// already executing on this goroutine.
+	VmRunFrameFrom func(frame, caller *Frame) (res Object, err error)
 )
 
 // Called to create a new instance of class cls. __new__() is a static method (special-cased so you need not declare it as such) that takes the class of which an instance was requested as its first argument. The remaining arguments are those passed to the object constructor expression (the call to the class). The return value of __new__() should be the new object instance (usually an instance of cls).

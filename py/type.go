@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 )
 
 // Type flags (tp_flags)
@@ -121,6 +123,9 @@ type Type struct {
 	slots  []Object
 	nslots int
 
+	// ctorp is a *ctorInfo, read and replaced atomically; see ctor.
+	ctorp unsafe.Pointer
+
 	// Payload is where an INSTANCE of a Python subclass of a builtin container
 	// keeps its data.
 	//
@@ -140,6 +145,11 @@ type Type struct {
 	// instance and ObjectType points at the class, so Payload is the one thing
 	// that says "a builtin's data lives here".
 	Payload Object
+
+	// attrs is where an instance of a dict subclass keeps its attributes:
+	// its Dict is the mapping itself, so "d.z = 5" must not land there.
+	// See AttrDict.
+	attrs StringDict
 
 	/*
 	   Py_ssize_t tp_basicsize, tp_itemsize; // For allocation
@@ -271,6 +281,32 @@ func (t *Type) Error() string {
 // Get the Dict
 func (t *Type) GetDict() StringDict {
 	return t.Dict
+}
+
+var attrsMu sync.Mutex
+
+func (t *Type) derivesFromDict() bool {
+	for _, c := range t.Mro {
+		if c == Object(gStringDictType) {
+			return true
+		}
+	}
+	return false
+}
+
+// AttrDict is the namespace an instance keeps its attributes in.  That is its
+// Dict, except for an instance of a dict subclass, whose Dict holds the
+// mapping and whose attributes live in a dict of their own.
+func (t *Type) AttrDict() StringDict {
+	if t.Name != "" || t.ObjectType == nil || !t.ObjectType.derivesFromDict() {
+		return t.Dict
+	}
+	attrsMu.Lock()
+	defer attrsMu.Unlock()
+	if t.attrs.IsNil() {
+		t.attrs = NewStringDict()
+	}
+	return t.attrs
 }
 
 // SetDict replaces an instance's namespace, which is what assigning to
@@ -432,7 +468,7 @@ func init() {
 		if t.Name == "" && t.ObjectType != nil && t.ObjectType.NoDict {
 			return nil // an instance of a slotted class: no __dict__
 		}
-		return t.Dict
+		return t.AttrDict()
 	})
 
 	// __class__ is a descriptor registered on both metatypes for the same
@@ -922,9 +958,76 @@ func (t *Type) LookupPython(name string) Object {
 	return nil
 }
 
+// ctorInfo caches how a class is constructed.  init is non-nil when the class
+// is a plain Python class (object's __new__, a Python __init__), which Call
+// can then build without the generic lookups.  It is valid while epoch equals
+// typeEpoch; every class namespace on the MRO is watched, so replacing an
+// __init__ or __new__ advances the epoch.
+type ctorInfo struct {
+	epoch uint64
+	init  *Function
+	// nativeExc marks a builtin exception class: no Python __new__, no
+	// scalar-argument unwrapping, so construction is just New then Init.
+	nativeExc bool
+}
+
+func (t *Type) ctor() *ctorInfo {
+	if p := atomic.LoadPointer(&t.ctorp); p != nil {
+		if ci := (*ctorInfo)(p); ci.epoch == typeEpoch.Load() {
+			return ci
+		}
+	}
+	for _, m := range t.Mro {
+		if mt, ok := m.(*Type); ok && !mt.Dict.IsNil() {
+			mt.Dict.watch()
+		}
+	}
+	ci := &ctorInfo{epoch: typeEpoch.Load()}
+	ok := t.Name != "" && t.Flags&TPFLAGS_HEAPTYPE != 0 && t.ObjectType == TypeType && t.Payload == nil && len(t.Mro) > 0
+	for _, m := range t.Mro {
+		if mt, isT := m.(*Type); !isT || (mt != ObjectType && mt.Flags&TPFLAGS_HEAPTYPE == 0) {
+			ok = false
+		}
+	}
+	if ok && t.LookupPython("__new__") == nil && t.Lookup("__abstractmethods__") == nil {
+		ci.init, _ = t.Lookup("__init__").(*Function)
+	}
+	ci.nativeExc = !ok && t.Name != "" && t.Flags&TPFLAGS_HEAPTYPE == 0 && t.Payload == nil && t.IsSubtype(BaseException) && t.LookupPython("__new__") == nil
+	atomic.StorePointer(&t.ctorp, unsafe.Pointer(ci))
+	return ci
+}
+
 func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
 	if t.New == nil {
 		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
+	}
+
+	ci := t.ctor()
+	if ci.nativeExc {
+		obj, err := t.New(t, args, kwargs)
+		if err != nil {
+			return nil, err
+		}
+		if ot := obj.Type(); ot.IsSubtype(t) && ot.Init != nil {
+			if err := ot.Init(obj, args, kwargs); err != nil {
+				return nil, err
+			}
+		}
+		return obj, nil
+	}
+	if init := ci.init; init != nil {
+		obj := t.Alloc()
+		newArgs := make(Tuple, len(args)+1)
+		newArgs[0] = obj
+		copy(newArgs[1:], args)
+		res, err := init.M__call__(newArgs, kwargs)
+		if err != nil {
+			return nil, err
+		}
+		if res != None {
+			return nil, ExceptionNewf(TypeError, "__init__() should return None, not '%s'", res.Type().Name)
+		}
+		return obj, nil
 	}
 
 	// A __new__ DEFINED IN PYTHON governs construction.  Without this the
@@ -1518,6 +1621,7 @@ func (t *Type) mro_internal() (err error) {
 		}
 	}
 	t.Mro = tuple
+	typeEpoch.Add(1)
 
 	// FIXME t.type_mro_modified(t.Mro)
 	// corner case: the super class might have been hidden
@@ -2538,8 +2642,12 @@ func ObjectInit(self Object, args Tuple, kwargs StringDict) error {
 		newArgs := make(Tuple, len(args)+1)
 		newArgs[0] = self
 		copy(newArgs[1:], args)
-		if _, err := Call(init, newArgs, kwargs); err != nil {
+		res, err := Call(init, newArgs, kwargs)
+		if err != nil {
 			return err
+		}
+		if _, isFn := init.(*Function); isFn && res != None {
+			return ExceptionNewf(TypeError, "__init__() should return None, not '%s'", res.Type().Name)
 		}
 	}
 	return nil

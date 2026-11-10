@@ -1,0 +1,51 @@
+{'x': 1, 'y': 2, 'z': 3} {'x': 1, 'y': 5, 'z': 9}
+8 4
+42
+{'x': 7, 'y': 2, 'z': 3}
+TypeError __init__() should return None, not 'int'
+NoInit
+1 2 False
+TypeError
+5
+new
+new
+base2
+derived
+KeyError(2) ValueError(1) ValueError(1) True
+ValueError(1) False None
+1 True None
+625
+(1,) 2
+('x',) ValueError('x') None
+True True
+['<module>', 'deep', 'deep', 'deep', 'deep']
+got a
+1 2
+caught 'k'
+99
+fin
+stop done
+closed
+1
+cleanup
+cleanup
+can't send non-None value to a just-started generator
+1 S ret
+[1, None, 'ret']
+15126
+generator already executing
+[1, 2, 3, 11, 12, 13]
+1
+2
+3
+[]
+[1, 2] []
+[]
+[1, 3] list_iterator
+[10, 7, 4, 1] [] [] [] []
+[-3, -1, 1]
+18446744073709551622 [9223372036854775805, 9223372036854775806]
+3 1 -1 -3 
+[0, 1, 4, 9, 16] [(0, 0), (0, 1), (1, 0), (1, 1)]
+range() arg 3 must not be zero
+[3, 2, 1] [2, 3] [1, 3, 5]

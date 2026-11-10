@@ -467,7 +467,7 @@ func (l *List) M__bool__() (Object, error) {
 }
 
 func (l *List) M__iter__() (Object, error) {
-	return NewIterator(Tuple(l.Items)), nil
+	return &ListIterator{List: l}, nil
 }
 
 // appendIterable appends every item of an arbitrary iterable to a list.

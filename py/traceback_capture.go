@@ -31,19 +31,29 @@ import (
 // walk is therefore reversed into the chain: each frame is prepended to the
 // one built so far, so the last frame walked ends up first.
 func CaptureTraceback() *Traceback {
-	var frames []*Frame
+	n := 0
 	for f := currentFrame(); f != nil; f = f.Back {
-		frames = append(frames, f)
+		n++
 	}
-	var tb *Traceback
-	for _, f := range frames {
+	if n == 0 {
+		return nil
+	}
+	// One allocation for the whole chain; nodes[0] is the innermost frame and
+	// the head (outermost) is nodes[n-1].
+	nodes := make([]Traceback, n)
+	i := 0
+	for f := currentFrame(); f != nil && i < n; f = f.Back {
 		lineno := int32(0)
 		if f.Code != nil {
 			lineno = f.CurrentLine()
 		}
-		tb = &Traceback{Next: tb, Frame: f, Lasti: f.Lasti, Lineno: lineno}
+		nodes[i] = Traceback{Frame: f, Lasti: f.Lasti, Lineno: lineno}
+		if i > 0 {
+			nodes[i].Next = &nodes[i-1]
+		}
+		i++
 	}
-	return tb
+	return &nodes[n-1]
 }
 
 // TrimTraceback makes e.__traceback__ start at the frame that caught it, as in
