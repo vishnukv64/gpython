@@ -8,6 +8,7 @@ package time
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -32,35 +33,6 @@ Return the current time in nanoseconds since the Epoch.
 
 func time_time_ns(self py.Object) (py.Object, error) {
 	return py.Int(time.Now().UnixNano()), nil
-}
-
-// func floatclock(_Py_clock_info_t *info) (py.Object, error) {
-// 	value := clock()
-// 	if value == (clock_t)-1 {
-// 		PyErr_SetString(PyExc_RuntimeError, "the processor time used is not available or its value cannot be represented")
-// 		return nil
-// 	}
-// 	if info {
-// 		info.implementation = "clock()"
-// 		info.resolution = 1.0 / float64(CLOCKS_PER_SEC)
-// 		info.monotonic = 1
-// 		info.adjustable = 0
-// 	}
-// 	return py.Float(float64(value) / CLOCKS_PER_SEC)
-// }
-
-// func pyclock(info *_Py_clock_info_t) (py.Object, error) {
-// 	return floatclock(info)
-// }
-
-const clock_doc = `clock() -> floating point number
-
-Return the CPU time or real time since the start of the process or since
-the first call to clock().  This has as much precision as the system
-records.`
-
-func time_clock(self py.Object) (py.Object, error) {
-	return time_time(self)
 }
 
 const clock_gettime_doc = `clock_gettime(clk_id) -> floating point number
@@ -266,11 +238,28 @@ func parseTimeArg(args py.Tuple, name string, def py.Float) (int64, error) {
 	if when == py.None {
 		return int64(def), nil
 	}
-	f, err := py.FloatAsFloat64(when)
-	if err != nil {
-		return 0, py.ExceptionNewf(py.TypeError, "%s() argument must be a number, not '%s'", name, when.Type().Name)
+	// As CPython's _PyTime_ObjectToTime_t with _PyTime_ROUND_FLOOR.
+	overflow := py.ExceptionNewf(py.OverflowError, "timestamp out of range for platform time_t")
+	switch v := when.(type) {
+	case py.Float:
+		f := float64(v)
+		if math.IsNaN(f) {
+			return 0, py.ExceptionNewf(py.ValueError, "Invalid value NaN (not a number)")
+		}
+		f = math.Floor(f)
+		if f < -9223372036854775808.0 || f >= 9223372036854775808.0 {
+			return 0, overflow
+		}
+		return int64(f), nil
 	}
-	return int64(f), nil
+	i, err := py.Index(when)
+	if err != nil {
+		if _, isBig := when.(*py.BigInt); isBig {
+			return 0, overflow
+		}
+		return 0, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", when.Type().Name)
+	}
+	return int64(i), nil
 }
 
 // func pylocaltime(timep *time_t, result *tm) int {
@@ -443,7 +432,7 @@ func time_strftime(self py.Object, args py.Tuple) (py.Object, error) {
 		gmtoff = st.Gmtoff
 		hasZone = true
 	} else {
-		tt, err = getTimeTuple(tup)
+		tt, err = getTimeTuple(tup, "strftime")
 		if err != nil {
 			return nil, err
 		}
@@ -537,7 +526,7 @@ func time_asctime(self py.Object, args py.Tuple) (py.Object, error) {
 		tt = &timeTuple{year: st.Year, mon: st.Mon, mday: st.Mday, hour: st.Hour, min: st.Min, sec: st.Sec, wday: st.Wday, yday: st.Yday, isdst: st.Isdst}
 	} else {
 		var err error
-		tt, err = getTimeTuple(tup)
+		tt, err = getTimeTuple(tup, "asctime")
 		if err != nil {
 			return nil, err
 		}
@@ -582,7 +571,7 @@ func time_mktime(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "mktime() takes exactly one argument")
 	}
-	tt, err := getTimeTuple(args[0])
+	tt, err := getTimeTuple(args[0], "mktime")
 	if err != nil {
 		return nil, err
 	}
@@ -932,7 +921,6 @@ func init() {
 	methods := []*py.Method{
 		py.MustNewMethod("time", time_time, 0, time_doc),
 		py.MustNewMethod("time_ns", time_time_ns, 0, time_ns_doc),
-		py.MustNewMethod("clock", time_clock, 0, clock_doc),
 		py.MustNewMethod("clock_gettime", time_clock_gettime, 0, clock_gettime_doc),
 		py.MustNewMethod("clock_settime", time_clock_settime, 0, clock_settime_doc),
 		py.MustNewMethod("clock_getres", time_clock_getres, 0, clock_getres_doc),
@@ -1059,7 +1047,6 @@ Functions:
 
 time() -- return current time in seconds since the Epoch as a float
 time_ns() -- return current time in nanoseconds since the Epoch
-clock() -- return CPU time since process start as a float
 sleep() -- delay for a number of seconds given as a float
 gmtime() -- convert seconds since Epoch to UTC tuple
 localtime() -- convert seconds since Epoch to local time tuple

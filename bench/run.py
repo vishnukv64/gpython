@@ -33,9 +33,8 @@ def wall(cmd, n=5):
         best = dt if best is None else min(best, dt)
     return best
 
-# pystone needs time.clock, which CPython removed; give both the same clock.
-PYSTONE = ("import sys, time; time.clock = time.perf_counter; "
-           "sys.path.insert(0, %r); import pystone; pystone.main(100000)" % os.path.join(REPO, "examples"))
+PYSTONE = ("import sys; sys.path.insert(0, %r); import pystone; pystone.main(100000)"
+           % os.path.join(REPO, "examples"))
 
 c, g = inproc(CPY), inproc(GPY)
 rows = [(n, c[n][1], g.get(n, (None, None))[1], g.get(n, (None,))[0] == c[n][0]) for n in c]

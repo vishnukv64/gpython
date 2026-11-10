@@ -1,15 +1,12 @@
-"""time: clocks and sleeping.
+"""time: clocks, conversions and formatting.
 
-Run with:  /tmp/gpy examples/stdlib/time_demo.py
+Run with:  gpython examples/stdlib/time_demo.py
+The output matches CPython 3.14 line for line (run with TZ=UTC for the
+local-time lines to be stable).
 
-Covers time.time(), time_ns(), sleep() and the module's clock list.
-
-Interpreter notes (all verified below):
-  * gmtime(), localtime(), mktime(), ctime(), asctime(), strftime(),
-    strptime(), monotonic(), perf_counter(), process_time() and
-    get_clock_info() all raise NotImplementedError -- only the wall-clock
-    seconds and sleep() are implemented.
-  * Use the datetime module for calendar arithmetic and formatting.
+Covers the wall clock (time, time_ns, sleep), the monotonic and CPU clocks,
+struct_time conversions (gmtime, localtime, mktime), and text formatting and
+parsing (ctime, asctime, strftime, strptime).
 """
 
 import datetime
@@ -17,128 +14,77 @@ import time
 
 print("--- the wall clock ---")
 now = time.time()
-print("time.time():     ", now)
-print("it is a float:   ", isinstance(now, float))
-print("seconds since the epoch:", int(now))
-print("roughly", round(now / 86400.0 / 365.25, 1), "years since 1970")
-
-print()
-print("--- time_ns() is the same instant in nanoseconds ---")
+print("time.time() is a float:", isinstance(now, float))
 nanos = time.time_ns()
-print("time.time_ns():  ", nanos)
-print("it is an int:    ", isinstance(nanos, int))
-print("nanos / 1e9 agrees with time.time() to within a second:",
-      abs(nanos / 1e9 - time.time()) < 1.0)
+print("time.time_ns() is an int:", isinstance(nanos, int))
+print("they agree to within a second:", abs(nanos / 1e9 - time.time()) < 1.0)
 
-print()
-print("--- time advances ---")
 before = time.time()
 time.sleep(0.05)
-after = time.time()
-elapsed = after - before
-print("slept for 0.05 s; measured:", round(elapsed, 4), "s")
-print("at least the requested duration:", elapsed >= 0.05)
+print("sleep(0.05) took at least 0.05 s:", time.time() - before >= 0.05)
 print("time.sleep returns None:", time.sleep(0) is None)
 
 print()
-print("--- what this module actually provides ---")
-names = ["time", "time_ns", "sleep", "clock", "clock_gettime", "clock_settime",
-         "clock_getres", "gmtime", "localtime", "mktime", "ctime", "asctime",
-         "strftime", "strptime", "monotonic", "perf_counter", "process_time",
-         "get_clock_info", "tzset"]
-for name in names:
-    print("  time.%-16s %s" % (name, hasattr(time, name)))
+print("--- clocks for measuring ---")
+for name in ["time", "monotonic", "perf_counter", "process_time"]:
+    info = time.get_clock_info(name)
+    print("  %-13s monotonic=%-5s adjustable=%s" % (name, info.monotonic, info.adjustable))
+start = time.perf_counter()
+sum(range(100000))
+print("perf_counter measures elapsed time:", time.perf_counter() - start >= 0)
+print("time.clock was removed in Python 3.8:", not hasattr(time, "clock"))
 
 print()
-print("--- the ones that raise NotImplementedError ---")
-# mktime/ctime/asctime need exactly one argument, so pass a 9-tuple.
-EPOCH_TUPLE = (2020, 1, 1, 0, 0, 0, 0, 0, 0)
-for name in ["gmtime", "localtime", "mktime", "ctime", "asctime",
-             "monotonic", "perf_counter", "process_time", "tzset"]:
-    function = getattr(time, name)
+print("--- struct_time conversions ---")
+epoch = time.gmtime(0)
+print("gmtime(0):", epoch)
+print("fields by name:", epoch.tm_year, epoch.tm_mon, epoch.tm_mday, epoch.tm_wday)
+t = time.gmtime(1_700_000_000)
+print("gmtime(1_700_000_000)[:6]:", t[:6])
+print("strftime:", time.strftime("%Y-%m-%d %H:%M:%S %a %j", t))
+print("asctime:", time.asctime(t))
+print("ctime(0) is asctime(localtime(0)):", time.ctime(0) == time.asctime(time.localtime(0)))
+print("mktime(localtime(x)) round-trips:", time.mktime(time.localtime(1_700_000_000)) == 1_700_000_000.0)
+
+print()
+print("--- parsing text ---")
+parsed = time.strptime("2024-02-29 13:45", "%Y-%m-%d %H:%M")
+print("strptime:", parsed[:6], "day of year", parsed.tm_yday)
+
+print()
+print("--- what the arguments must be ---")
+for call, args in [(time.ctime, ("not a number",)),
+                   (time.ctime, ((2020, 1, 1, 0, 0, 0, 0, 0, 0),)),
+                   (time.gmtime, (float("nan"),)),
+                   (time.asctime, ((2020, 1),)),
+                   (time.sleep, (-1,))]:
     try:
-        if name in ["mktime", "ctime", "asctime"]:
-            function(EPOCH_TUPLE)
-        else:
-            function()
-        print("  time.%-16s returned a value" % (name,))
-    except NotImplementedError:
-        print("  time.%-16s raises NotImplementedError" % (name,))
-try:
-    time.get_clock_info("time")
-except NotImplementedError:
-    print("  time.%-16s raises NotImplementedError" % ("get_clock_info",))
-try:
-    time.strftime("%Y", EPOCH_TUPLE)
-except NotImplementedError:
-    print("  time.%-16s raises NotImplementedError" % ("strftime",))
-try:
-    time.strptime("2020", "%Y")
-except NotImplementedError:
-    print("  time.%-16s raises NotImplementedError" % ("strptime",))
-print("time.clock() does work and returns wall-clock seconds:", time.clock() > 0)
+        call(*args)
+    except (TypeError, ValueError, OverflowError) as e:
+        print("  %s%r -> %s: %s" % (call.__name__, args, type(e).__name__, e))
 
 print()
-print("--- calendar work belongs to datetime ---")
-stamp = time.time()
-moment = datetime.datetime.fromtimestamp(stamp)
-print("fromtimestamp of time.time():", moment)
-print("strftime through datetime:   ", moment.strftime("%Y-%m-%d %H:%M:%S"))
-print("(time.strftime is NotImplementedError; datetime.strftime works)")
-
-print()
-print("--- a worked example: timing a block of work ---")
+print("--- datetime does calendar arithmetic ---")
+moment = datetime.datetime.fromtimestamp(1_700_000_000, datetime.timezone.utc)
+print("fromtimestamp:", moment)
+print("plus a week:", moment + datetime.timedelta(days=7))
+print("difference:", datetime.datetime(2024, 3, 1) - datetime.datetime(2024, 2, 1))
 
 
 class Stopwatch:
-    """Measures elapsed wall-clock time using time.time()."""
-
-    def __init__(self, label):
-        self.label = label
-        self.started = None
-        self.elapsed = None
+    """Measures elapsed time with the monotonic perf_counter clock."""
 
     def __enter__(self):
-        self.started = time.time()
+        self.started = time.perf_counter()
         return self
 
     def __exit__(self, *details):
-        self.elapsed = time.time() - self.started
+        self.elapsed = time.perf_counter() - self.started
         return False
 
-    def report(self):
-        return "%-22s %8.4f s" % (self.label, self.elapsed)
-
-
-with Stopwatch("sleep 10 ms") as watch:
-    time.sleep(0.01)
-print(watch.report())
-
-with Stopwatch("sleep 30 ms") as watch:
-    time.sleep(0.03)
-print(watch.report())
-
-with Stopwatch("a busy loop") as watch:
-    total = 0
-    for value in range(200000):
-        total = total + value
-print(watch.report())
-print("the loop summed to", total)
 
 print()
-print("--- a crude rate measurement ---")
-with Stopwatch("1000 sleeps of 0") as watch:
-    for _ in range(1000):
-        time.sleep(0)
-print(watch.report())
-print("that is roughly %.0f calls per second" % (1000 / watch.elapsed,))
-
-print()
-print("--- the same measurement with datetime instead ---")
-before = datetime.datetime.now()
-time.sleep(0.02)
-after = datetime.datetime.now()
-# datetime subtraction is not implemented, so compare timestamps.
-delta = after.timestamp() - before.timestamp()
-print("elapsed via timestamps:", round(delta, 4), "s")
-print("(datetime - datetime raises TypeError here; timestamps work)")
+print("--- a worked example: timing a block ---")
+with Stopwatch() as watch:
+    time.sleep(0.02)
+print("slept 20 ms, measured at least that:", watch.elapsed >= 0.02)

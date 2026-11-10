@@ -530,6 +530,33 @@ func init() {
 	// "super().__new__(mcls, name, bases, ns)" - ABCMeta's, so every ABC -
 	// failed with "'super' object has no attribute '__new__'".
 	TypeType.Dict.Set("__new__", &nativeNew{})
+	// type.__call__, where a metaclass's super().__call__(*a, **k) finds it:
+	// it constructs without consulting the metaclass again.
+	TypeType.Dict.Set("__call__", MustNewMethod("__call__", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		t, ok := self.(*Type)
+		if !ok || t.Name == "" {
+			return nil, ExceptionNewf(TypeError, "descriptor '__call__' requires a 'type' object")
+		}
+		return t.construct(args, kwargs)
+	}, 0, "Call self as a function."))
+	// type.mro(): the method resolution order as a list (traitlets calls it).
+	TypeType.Dict.Set("mro", MustNewMethod("mro", func(self Object, args Tuple) (Object, error) {
+		t, ok := self.(*Type)
+		if !ok || t.Name == "" {
+			return nil, ExceptionNewf(TypeError, "descriptor 'mro' requires a 'type' object")
+		}
+		// Computed, not read from __mro__: CPython's type.mro() is what builds
+		// __mro__ in the first place.
+		res, err := t.mro_implementation()
+		if err != nil {
+			return nil, err
+		}
+		items, err := SequenceTuple(res)
+		if err != nil {
+			return nil, err
+		}
+		return NewListFromItems(append([]Object(nil), items...)), nil
+	}, 0, "Return a type's method resolution order."))
 	// __subclasses__ is how ABCMeta finds the classes it must check, so every
 	// register() and isinstance against an ABC needed it.
 	TypeType.Dict.Set("__subclasses__", MustNewMethod("__subclasses__", func(self Object, args Tuple) (Object, error) {
@@ -998,6 +1025,20 @@ func (t *Type) ctor() *ctorInfo {
 }
 
 func (t *Type) M__call__(args Tuple, kwargs StringDict) (Object, error) {
+	// Calling a class runs its METACLASS's __call__, as in CPython: a
+	// metaclass defining __call__ in Python governs instance creation
+	// (singletons, registries, traitlets).  Its super().__call__ reaches
+	// type.__call__, which is construct and does not dispatch again.
+	if mt := t.ObjectType; mt != nil && mt != TypeType && t.Name != "" {
+		if c := mt.LookupPython("__call__"); c != nil {
+			return Call(c, append(Tuple{t}, args...), kwargs)
+		}
+	}
+	return t.construct(args, kwargs)
+}
+
+// construct is type.__call__ proper: __new__ then __init__.
+func (t *Type) construct(args Tuple, kwargs StringDict) (Object, error) {
 	if t.New == nil {
 		return nil, ExceptionNewf(TypeError, "cannot create '%s' instances", t.Name)
 	}
@@ -1209,12 +1250,18 @@ func (t *Type) GetAttrOrNil(name string) Object {
 	if res, ok := t.Dict.Get(name); ok {
 		return res
 	}
-	// Then look in type Dict
+	// Then the class's MRO, and only then its metaclass: an inherited
+	// method beats a metaclass method of the same name, as in CPython's
+	// type_getattro.  Checking the metaclass first made Sub.__init__ (for
+	// an instance of a subclass of a class with a metaclass defining
+	// __init__) resolve to the metaclass's __init__.
+	if res := t.Lookup(name); res != nil {
+		return res
+	}
 	if res, ok := t.Type().Dict.Get(name); ok {
 		return res
 	}
-	// Now look through base classes etc
-	return t.Lookup(name)
+	return nil
 }
 
 // Calls method on name
@@ -1307,43 +1354,6 @@ func TypeCall1(self Object, name string, arg Object) (Object, bool, error) {
 func TypeCall2(self Object, name string, arg1, arg2 Object) (Object, bool, error) {
 	return TypeCall(self, name, Tuple{self, arg1, arg2}, NewStringDict())
 }
-
-// Internal routines to do a method lookup in the type
-// without looking in the instance dictionary
-// (so we can't use PyObject_GetAttr) but still binding
-// it to the instance.  The arguments are the object,
-// the method name as a C string, and the address of a
-// static variable used to cache the interned Python string.
-//
-// Two variants:
-//
-// - lookup_maybe() returns nil without raising an exception
-//
-//	when the _PyType_Lookup() call fails;
-//
-// - lookup_method() always raises an exception upon errors.
-func lookup_maybe(self Object, attr string) Object {
-	res := self.Type().Lookup(attr)
-	// FIXME descriptor lookup
-	// if (res != nil) {
-	// 	descrgetfunc f;
-	// 	if ((f = Py_TYPE(res)->tp_descr_get) == nil) {
-	// 		Py_INCREF(res);
-	// 	}else{
-	// 		res = f(res, self, (PyObject *)(Py_TYPE(self)));
-	// 	}
-	// }
-	return res
-}
-
-// func lookup_method(self Object, attr string) Object {
-// 	res := lookup_maybe(self, attr)
-// 	if res == nil {
-// 		// FIXME PyErr_SetObject(PyExc_AttributeError, attrid->object);
-// 		return ExceptionNewf(AttributeError, "'%s' object has no attribute '%s'", self.Type().Name, attr)
-// 	}
-// 	return res
-// }
 
 // Method resolution order algorithm C3 described in
 // "A Monotonic Superclass Linearization for Dylan",
@@ -1581,10 +1591,14 @@ func (t *Type) mro_internal() (err error) {
 		}
 	} else {
 		checkit = true
-		// FIXME this is what it was originally
-		// but we haven't put mro in slots or anything
-		// mro := lookup_method(t, "mro")
-		mro := lookup_maybe(t, "mro")
+		// Only a metaclass's PYTHON mro() override is consulted; type's own
+		// mro() is mro_implementation, called directly below.
+		var mro Object
+		if mt := t.ObjectType; mt != nil && mt != TypeType {
+			if f := mt.LookupPython("mro"); f != nil {
+				mro = &BoundMethod{Self: t, Method: f}
+			}
+		}
 		if mro == nil {
 			// Default to internal implementation
 			result, err = t.mro_implementation()
@@ -2542,6 +2556,17 @@ func runSetName(cls *Type, body StringDict) {
 }
 
 func TypeInit(cls Object, args Tuple, kwargs StringDict) error {
+	// A metaclass's Python __init__ gets the class statement's arguments
+	// (name, bases, namespace, **keywords), as CPython's slot_tp_init does.
+	// This used to call ObjectInit(cls, nil), whose dispatch found that same
+	// __init__ and called it with no arguments, so every metaclass defining
+	// __init__ failed at class creation (traitlets, hence IPython).
+	// super().__init__ from inside it reaches object's no-op, not here.
+	if _, isClass := cls.(*Type); isClass {
+		if init := cls.Type().GetAttrOrNil("__init__"); init != nil && !isObjectInit(init) {
+			return ObjectInit(cls, args, kwargs)
+		}
+	}
 	if kwargs.Len() != 0 {
 		return ExceptionNewf(TypeError, "type.__init__() takes no keyword arguments")
 	}

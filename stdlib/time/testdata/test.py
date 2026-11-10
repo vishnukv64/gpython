@@ -6,7 +6,7 @@ import time
 
 now = time.time()
 now = time.time_ns()
-now = time.clock()
+print("clock removed, as in CPython 3.8+:", not hasattr(time, "clock"))
 
 def notimplemented(fn, *args, **kwargs):
     try:

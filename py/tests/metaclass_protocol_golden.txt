@@ -1,0 +1,10 @@
+('H', 0, ['meth'], {'flavour': 'x'})
+M.__call__ H (5,) {}
+H 5 5
+M.__call__ Sub (7,) {}
+('Sub', 1, [], {}) 7
+True 1
+P Plain
+[<class '__main__.B'>, <class '__main__.A'>, <class 'object'>] [<class '__main__.B'>, <class '__main__.A'>, <class 'object'>] [<class 'int'>, <class 'object'>]
+(<class '__main__.D'>, <class 'object'>) False
+re.Pattern[str] re.Match[bytes]

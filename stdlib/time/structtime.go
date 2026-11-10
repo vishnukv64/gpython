@@ -278,20 +278,31 @@ type timeTuple struct {
 	year, mon, mday, hour, min, sec, wday, yday, isdst int
 }
 
-func getTimeTuple(v py.Object) (*timeTuple, error) {
-	seq, err := py.SequenceTuple(v)
-	if err != nil {
+// getTimeTuple parses the time-tuple argument of the function called name,
+// as CPython's gettmarg: a tuple (or struct_time) of exactly nine integers.
+func getTimeTuple(v py.Object, name string) (*timeTuple, error) {
+	var seq py.Tuple
+	switch x := v.(type) {
+	case py.Tuple:
+		seq = x
+	case *StructTime:
+		s, err := py.SequenceTuple(x)
+		if err != nil {
+			return nil, err
+		}
+		seq = s
+	default:
 		return nil, py.ExceptionNewf(py.TypeError, "Tuple or struct_time argument required")
 	}
-	if len(seq) < 9 {
-		return nil, py.ExceptionNewf(py.TypeError, "Tuple or struct_time argument required")
+	if _, isST := v.(*StructTime); !isST && len(seq) != 9 {
+		return nil, py.ExceptionNewf(py.TypeError, "%s(): illegal time tuple argument", name)
 	}
 	tt := &timeTuple{}
 	dst := []*int{&tt.year, &tt.mon, &tt.mday, &tt.hour, &tt.min, &tt.sec, &tt.wday, &tt.yday, &tt.isdst}
 	for i, p := range dst {
 		n, err := py.IndexInt(seq[i])
 		if err != nil {
-			return nil, py.ExceptionNewf(py.TypeError, "an integer is required (got type %s)", seq[i].Type().Name)
+			return nil, py.ExceptionNewf(py.TypeError, "'%s' object cannot be interpreted as an integer", seq[i].Type().Name)
 		}
 		*p = n
 	}

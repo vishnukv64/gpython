@@ -1,3 +1,4 @@
+clock removed, as in CPython 3.8+: True
 # sleep
 caught error: sleep length must be non-negative
 caught error: sleep() argument 1 must be float, not str

@@ -34,7 +34,7 @@ Version History:
 
 LOOPS = 50000
 
-from time import clock
+from time import perf_counter as clock
 
 __version__ = "1.1"
 

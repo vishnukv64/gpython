@@ -163,6 +163,9 @@ var MatchType = py.NewTypeX("re.Match", "The result of a successful match.", nil
 func (m *Match) Type() *py.Type { return MatchType }
 
 func init() {
+	// re.Pattern[str] / re.Match[str] are generic aliases, as in CPython.
+	PatternType.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
+	MatchType.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "error", Value: ErrorType},
 		py.DictEntry{Key: "PatternError", Value: ErrorType},
