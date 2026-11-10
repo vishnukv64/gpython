@@ -1,0 +1,9 @@
+{'k': {1}}
+{2}
+[1]
+1
+{2, 3}
+{3}
+[7]
+frozenset({1}) frozenset({1, 2}) <class 'frozenset'>
+{1, 5}

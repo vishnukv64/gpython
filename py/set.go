@@ -460,7 +460,19 @@ func (s *Set) M__iter__() (Object, error) {
 	}
 	slots := make([]slot, 0, len(objs))
 	for _, o := range objs {
-		h, ok := HashValue(o)
+		// An instance of a Python class that keeps object's identity hash is
+		// ordered by its address in CPython, which is not reproducible, so
+		// computing that hash on every iteration buys nothing - and pip's
+		// resolver iterates sets of such candidates constantly.  Such members
+		// keep arrival order.  A class with its own __hash__ is deterministic
+		// in CPython and still hashed here.
+		var h int64
+		ok := true
+		if t, isInst := o.(*Type); isInst && t.Name == "" && o.Type().LookupPython("__hash__") == nil {
+			ok = false
+		} else {
+			h, ok = HashValue(o)
+		}
 		if !ok {
 			// An object with no usable hash keeps its relative position rather
 			// than being dropped from the iteration.
