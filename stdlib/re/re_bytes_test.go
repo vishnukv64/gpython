@@ -9,3 +9,7 @@ import (
 func TestBytes(t *testing.T) {
 	pytest.RunScript(t, "./testdata/bytes.py")
 }
+
+func TestOffsets(t *testing.T) {
+	pytest.RunScript(t, "./testdata/offsets.py")
+}

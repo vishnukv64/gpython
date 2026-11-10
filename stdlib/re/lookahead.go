@@ -769,10 +769,18 @@ func (p *Pattern) assertionsHold(l lifted, text string, idx []int, start, end in
 // compileTranslated compiles an already-translated body with this pattern's
 // flags folded in.
 func (p *Pattern) compileTranslated(body string) (*regexp.Regexp, error) {
-	if prefix := goFlags(p.flags); prefix != "" {
-		body = "(?" + prefix + ":" + body + ")"
+	if v, ok := p.translated.Load(body); ok {
+		return v.(*regexp.Regexp), nil
 	}
-	return regexp.Compile(body)
+	src := body
+	if prefix := goFlags(p.flags); prefix != "" {
+		src = "(?" + prefix + ":" + body + ")"
+	}
+	re, err := regexp.Compile(src)
+	if err == nil {
+		p.translated.Store(body, re)
+	}
+	return re, err
 }
 
 // matchWithAssertionsOffset is matchWithAssertions when the slice being

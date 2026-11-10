@@ -25,8 +25,11 @@ package re
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"unicode/utf8"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -76,6 +79,12 @@ type Pattern struct {
 	lifted *lifted
 	// bt, when set, runs the pattern instead of re (positive lookahead).
 	bt *backtrack
+	// anchoredRe caches the start-anchored form used by match/fullmatch.
+	anchoredRe *regexp.Regexp
+	// translated memoises compileTranslated by body.
+	translated sync.Map
+	progOnce   sync.Once
+	progInfo   *progInfo
 }
 
 var PatternType = py.NewTypeX("re.Pattern", "A compiled regular expression.", nil, nil)
@@ -87,6 +96,66 @@ type Match struct {
 	pattern *Pattern
 	text    string
 	locs    []int // character offsets, two per group, -1 for a non-participating group
+	offs    *offsets
+}
+
+// offsets maps character indices to byte offsets of one text. ascii means
+// the two coincide; otherwise boff holds each character's byte offset plus
+// a final len(text).
+type offsets struct {
+	ascii bool
+	boff  []int
+}
+
+func newOffsets(text string) *offsets {
+	for i := 0; i < len(text); i++ {
+		if text[i] >= utf8.RuneSelf {
+			boff := make([]int, 0, len(text)+1)
+			for j := range text {
+				boff = append(boff, j)
+			}
+			return &offsets{boff: append(boff, len(text))}
+		}
+	}
+	return &offsets{ascii: true}
+}
+
+// byteOf converts a character index to a byte offset.
+func (o *offsets) byteOf(c int) int {
+	if o.ascii || c <= 0 {
+		return max(c, 0)
+	}
+	if c >= len(o.boff) {
+		return o.boff[len(o.boff)-1]
+	}
+	return o.boff[c]
+}
+
+// charOf converts a byte offset (on a character boundary) to a character index.
+func (o *offsets) charOf(b int) int {
+	if o.ascii || b <= 0 {
+		return b
+	}
+	return sort.SearchInts(o.boff, b)
+}
+
+func (o *offsets) length(text string) int {
+	if o.ascii {
+		return len(text)
+	}
+	return len(o.boff) - 1
+}
+
+// slice returns text between two character indices.
+func (o *offsets) slice(text string, a, b int) string {
+	return text[o.byteOf(a):o.byteOf(b)]
+}
+
+func (m *Match) offsets() *offsets {
+	if m.offs == nil {
+		m.offs = newOffsets(m.text)
+	}
+	return m.offs
 }
 
 var MatchType = py.NewTypeX("re.Match", "The result of a successful match.", nil, nil)
@@ -614,14 +683,6 @@ func cleanErr(err error) string {
 	return text
 }
 
-// charOffset converts a byte offset in text to a character offset.
-func charOffset(text string, byteOffset int) int {
-	if byteOffset <= 0 {
-		return byteOffset
-	}
-	return len([]rune(text[:byteOffset]))
-}
-
 // byteOffset converts a character offset back to a byte offset.
 func byteOffset(text string, charIndex int) int {
 	if charIndex <= 0 {
@@ -639,17 +700,18 @@ func byteOffset(text string, charIndex int) int {
 
 // buildMatch turns Go's index array into a Match, in character offsets.
 func (p *Pattern) buildMatch(text string, idx []int) *Match {
+	offs := newOffsets(text)
 	locs := make([]int, 2*(p.ngroups+1))
 	for g := 0; g <= p.ngroups; g++ {
 		start, end := -1, -1
 		if 2*g+1 < len(idx) && idx[2*g] >= 0 {
-			start = charOffset(text, idx[2*g])
-			end = charOffset(text, idx[2*g+1])
+			start = offs.charOf(idx[2*g])
+			end = offs.charOf(idx[2*g+1])
 		}
 		locs[2*g] = start
 		locs[2*g+1] = end
 	}
-	return &Match{pattern: p, text: text, locs: locs}
+	return &Match{pattern: p, text: text, locs: locs, offs: offs}
 }
 
 // groupIndex resolves a group reference: a number or a name.
@@ -680,11 +742,11 @@ func (m *Match) groupText(i int) py.Object {
 	if start < 0 || end < 0 {
 		return py.None
 	}
-	runes := []rune(m.text)
+	g := m.offsets().slice(m.text, start, end)
 	if m.pattern.binary {
-		return unlatin1(string(runes[start:end]))
+		return unlatin1(g)
 	}
-	return py.String(string(runes[start:end]))
+	return py.String(g)
 }
 
 // latinGroup is a group's engine text ("" when it did not participate).
@@ -693,7 +755,7 @@ func (m *Match) latinGroup(i int) string {
 	if start < 0 || end < 0 {
 		return ""
 	}
-	return string([]rune(m.text)[start:end])
+	return m.offsets().slice(m.text, start, end)
 }
 
 func init() {
@@ -890,7 +952,7 @@ func init() {
 		return py.Int(0), nil
 	}})
 	MatchType.Dict.Set("endpos", &py.Property{Fget: func(self py.Object) (py.Object, error) {
-		return py.Int(len([]rune(self.(*Match).text))), nil
+		return py.Int(utf8.RuneCountInString(self.(*Match).text)), nil
 	}})
 	MatchType.Dict.Set("lastindex", &py.Property{Fget: func(self py.Object) (py.Object, error) {
 		m := self.(*Match)
@@ -1006,27 +1068,28 @@ func (p *Pattern) anchoredMatch(text string, whole bool) []int {
 	if p.bt != nil {
 		return p.bt.find(text, true, whole)
 	}
-	body := p.re.String()
-	translated, _, _, _, terr := translate(p.source, p.flags)
-	if terr == nil {
-		if prefix := goFlags(p.flags); prefix != "" {
-			body = "(?" + prefix + ":" + translated + ")"
-		} else {
-			body = translated
+	anchored := p.anchoredRe
+	if anchored == nil {
+		if p.lifted != nil {
+			// Anchored, with assertions: only the first candidate can ever be
+			// considered, and it is accepted only if its assertions hold.
+			return p.matchWithAssertionsAnchored(*p.lifted, text, whole)
 		}
-	}
-	if p.lifted != nil {
-		// Anchored, with assertions: only the first candidate can ever be
-		// considered, and it is accepted only if its assertions hold.
-		idx := p.matchWithAssertionsAnchored(*p.lifted, text, whole)
-		if idx == nil {
+		body := p.re.String()
+		translated, _, _, _, terr := translate(p.source, p.flags)
+		if terr == nil {
+			if prefix := goFlags(p.flags); prefix != "" {
+				body = "(?" + prefix + ":" + translated + ")"
+			} else {
+				body = translated
+			}
+		}
+		var err error
+		anchored, err = regexp.Compile("(?-m)^(?:" + body + ")")
+		if err != nil {
 			return nil
 		}
-		return idx
-	}
-	anchored, err := regexp.Compile("(?-m)^(?:" + body + ")")
-	if err != nil {
-		return nil
+		p.anchoredRe = anchored
 	}
 	idx := anchored.FindStringSubmatchIndex(text)
 	if idx == nil {
@@ -1042,71 +1105,61 @@ func (p *Pattern) anchoredMatch(text string, whole bool) []int {
 
 // nextMatch finds the match after a given character position, applying
 // Python's rule that an empty match must advance by one.
-func (p *Pattern) nextMatch(text string, from int, lastEnd int, lastWasEmpty bool) (*Match, int, bool) {
-	runes := []rune(text)
-	for start := from; start <= len(runes); start++ {
+func (p *Pattern) nextMatch(text string, offs *offsets, sc *scanner, from int, lastEnd int, lastWasEmpty bool) (*Match, int, bool) {
+	n := offs.length(text)
+	for start := from; start <= n; start++ {
 		// The search runs against the whole remaining text, NOT a slice
-		// beginning at start: a lifted lookbehind examines the text BEFORE the
-		// match, and slicing it away made the assertion see the string start
-		// instead of the real preceding character.
-		sub := string(runes[start:])
+		// beginning at start, for a lifted lookbehind (see matchWithAssertionsIn).
+		bstart := offs.byteOf(start)
 		var idx []int
 		if p.lifted != nil {
-			// The whole remaining text goes in with the offset, so a lifted
-			// lookbehind can read the characters BEFORE the match.
-			abs := p.matchWithAssertionsIn(*p.lifted, string(runes[:]), start)
-			if abs == nil {
+			idx = p.matchWithAssertionsIn(*p.lifted, text, bstart)
+			if idx == nil {
 				return nil, 0, false
 			}
-			idx = make([]int, len(abs))
-			for i, v := range abs {
-				if v < 0 {
-					idx[i] = -1
-				} else {
-					idx[i] = charOffset(string(runes[:]), v) - start
+		} else {
+			if sc != nil {
+				idx = sc.find(bstart)
+			} else if idx = p.findIndex(text[bstart:]); idx != nil {
+				for i, v := range idx {
+					if v >= 0 {
+						idx[i] = v + bstart
+					}
 				}
 			}
-		} else {
-			idx = p.findIndex(sub)
-		}
-		if idx == nil {
-			return nil, 0, false
-		}
-		absolute := make([]int, len(idx))
-		for i, v := range idx {
-			if v < 0 {
-				absolute[i] = -1
-			} else {
-				absolute[i] = charOffset(sub, v) + start
+			if idx == nil {
+				return nil, 0, false
 			}
 		}
-		empty := absolute[0] == absolute[1]
-		if empty && absolute[0] == lastEnd && lastWasEmpty {
+		locs := make([]int, 2*(p.ngroups+1))
+		for i := range locs {
+			locs[i] = -1
+			if i < len(idx) && idx[i] >= 0 {
+				locs[i] = offs.charOf(idx[i])
+			}
+		}
+		empty := locs[0] == locs[1]
+		if empty && locs[0] == lastEnd && lastWasEmpty {
 			// An empty match at the previous match's end is skipped, which
 			// is the rule Go's FindAll does not apply.
 			continue
 		}
-		// absolute is already in characters; buildMatch would convert again.
-		locs := make([]int, 2*(p.ngroups+1))
-		for i := range locs {
-			locs[i] = -1
-			if i < len(absolute) {
-				locs[i] = absolute[i]
-			}
-		}
-		return &Match{pattern: p, text: text, locs: locs}, absolute[1], empty
+		return &Match{pattern: p, text: text, locs: locs, offs: offs}, locs[1], empty
 	}
 	return nil, 0, false
 }
 
 // matchList returns every match, in order.
 func (p *Pattern) matchList(text string) (py.Tuple, error) {
+	offs := newOffsets(text)
+	n := offs.length(text)
+	sc := p.newScanner(text)
 	items := []py.Object{}
 	from := 0
 	lastEnd := -1
 	lastWasEmpty := false
 	for {
-		m, end, empty := p.nextMatch(text, from, lastEnd, lastWasEmpty)
+		m, end, empty := p.nextMatch(text, offs, sc, from, lastEnd, lastWasEmpty)
 		if m == nil {
 			break
 		}
@@ -1118,7 +1171,7 @@ func (p *Pattern) matchList(text string) (py.Tuple, error) {
 		} else {
 			from = end
 		}
-		if from > len([]rune(text)) {
+		if from > n {
 			break
 		}
 	}
@@ -1159,7 +1212,7 @@ func (p *Pattern) split(text string, maxsplit int) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	runes := []rune(text)
+	offs := newOffsets(text)
 	out := []py.Object{}
 	last := 0
 	count := 0
@@ -1168,14 +1221,14 @@ func (p *Pattern) split(text string, maxsplit int) (py.Object, error) {
 		if maxsplit > 0 && count >= maxsplit {
 			break
 		}
-		out = append(out, p.out(string(runes[last:m.locs[0]])))
+		out = append(out, p.out(offs.slice(text, last, m.locs[0])))
 		for g := 1; g <= p.ngroups; g++ {
 			out = append(out, m.groupText(g))
 		}
 		last = m.locs[1]
 		count++
 	}
-	out = append(out, p.out(string(runes[last:])))
+	out = append(out, p.out(text[offs.byteOf(last):]))
 	return py.NewListFromItems(out), nil
 }
 
@@ -1251,7 +1304,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 	if err != nil {
 		return nil, err
 	}
-	runes := []rune(text)
+	offs := newOffsets(text)
 	var b strings.Builder
 	last := 0
 	done := 0
@@ -1260,7 +1313,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 		if count > 0 && done >= count {
 			break
 		}
-		b.WriteString(string(runes[last:m.locs[0]]))
+		b.WriteString(offs.slice(text, last, m.locs[0]))
 		switch r := repl.(type) {
 		case py.String, py.Bytes:
 			t, err := p.textArg(r)
@@ -1291,7 +1344,7 @@ func subWith(p *Pattern, args py.Tuple, kwargs py.StringDict, withCount bool) (p
 		last = m.locs[1]
 		done++
 	}
-	b.WriteString(string(runes[last:]))
+	b.WriteString(text[offs.byteOf(last):])
 	if withCount {
 		return py.Tuple{p.out(b.String()), py.Int(done)}, nil
 	}
@@ -1307,7 +1360,7 @@ func patternArgs(p *Pattern, name string, args py.Tuple, kwargs py.StringDict) (
 	if err != nil {
 		return "", 0, 0, err
 	}
-	pos, endpos := 0, len([]rune(text))
+	pos, endpos := 0, utf8.RuneCountInString(text)
 	if len(args) >= 2 {
 		n, err := py.IndexInt(args[1])
 		if err != nil {
@@ -1400,11 +1453,42 @@ func compileKind(source string, flags int, binary bool) (*Pattern, error) {
 	if binary {
 		flags |= FlagASCII
 	}
-	p, err := compile(source, flags)
+	return cachedCompile(source, flags, binary)
+}
+
+type cacheKey struct {
+	source string
+	flags  int
+	binary bool
+}
+
+var (
+	cacheMu sync.Mutex
+	cache   = map[cacheKey]*Pattern{}
+)
+
+// cachedCompile memoises compile like CPython's re._cache. Patterns are
+// immutable once built.
+func cachedCompile(source string, flags int, binary bool) (*Pattern, error) {
+	k := cacheKey{source, flags, binary}
+	cacheMu.Lock()
+	p := cache[k]
+	cacheMu.Unlock()
 	if p != nil {
-		p.binary = binary
+		return p, nil
 	}
-	return p, err
+	p, err := compile(source, flags)
+	if err != nil {
+		return nil, err
+	}
+	p.binary = binary
+	cacheMu.Lock()
+	if len(cache) >= 512 {
+		clear(cache)
+	}
+	cache[k] = p
+	cacheMu.Unlock()
+	return p, nil
 }
 
 // asPattern accepts either a compiled pattern or a string.
@@ -1419,7 +1503,7 @@ func asPattern(v py.Object, flags int) (*Pattern, error) {
 	if err != nil {
 		return nil, py.ExceptionNewf(py.TypeError, "first argument must be string or compiled pattern")
 	}
-	return compile(source, flags)
+	return cachedCompile(source, flags, false)
 }
 
 func commonArgs(name string, args py.Tuple, kwargs py.StringDict) (*Pattern, py.Tuple, error) {
