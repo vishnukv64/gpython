@@ -40,7 +40,38 @@ class Good:
 
 
 def mask(s):
+    if os.name == "nt":
+        # Windows paths print with backslashes, both as text and in reprs
+        # (doubled); the golden is POSIX, so fold them back to "/".
+        for p, tag in ((root, "<T>"), (home, "<H>")):
+            s = s.replace(repr(p)[1:-1], tag).replace(p, tag)
+        s = s.replace("\\\\", "/").replace("\\", "/")
     return s.replace(root, "<T>").replace(home, "<H>")
+
+
+# What CPython itself does differently on Windows, where the golden (POSIX)
+# line is replayed once the Windows behaviour is checked: os.chown, lchown
+# and mkfifo do not exist there, and readlink of a regular file is
+# WinError 4390 rather than EINVAL.
+def _golden():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "os_pathlike_golden.txt"), encoding="utf-8") as fh:
+        return {line[:34].rstrip(): line.rstrip("\n") for line in fh}
+
+
+GOLDEN = _golden() if os.name == "nt" else {}
+
+
+def nt_replay(label, exc):
+    """On Windows, the CPython-on-Windows outcome for label, or None."""
+    func = label.split(" ")[0]
+    attr = func.split(".")[-1]
+    if func.startswith("os.") and "." not in func[3:] and not hasattr(os, attr):
+        if isinstance(exc, AttributeError):
+            return GOLDEN[label]
+    if func == "os.readlink" and isinstance(exc, OSError) and getattr(exc, "winerror", None) == 4390:
+        return GOLDEN[label]
+    return None
 
 
 def norm(r):
@@ -58,6 +89,11 @@ def attempt(label, fn):
     try:
         r = fn()
     except BaseException as e:
+        if os.name == "nt":
+            replay = nt_replay(label, e)
+            if replay is not None:
+                print(replay)
+                return
         out = "%s: %s" % (type(e).__name__, e)
     else:
         out = "ok " + repr(norm(r))

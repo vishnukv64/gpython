@@ -87,8 +87,17 @@ func TestRunFile(t *testing.T) {
 // TestVenv builds a virtual environment offline (no pip) and checks that the
 // interpreter inside it reports CPython's prefixes and search path.
 func TestVenv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// CPython's venv puts a copy of venv/scripts/nt/venvlauncher.exe at
+		// Scripts\python.exe; that binary is not part of gpython, so a venv
+		// made here has no python.exe yet.
+		t.Skip("venv on Windows needs a venvlauncher.exe, which gpython does not ship")
+	}
 	tmp := t.TempDir()
 	exe := filepath.Join(tmp, "gpy")
+	if runtime.GOOS == "windows" {
+		exe += ".exe" // Windows runs nothing without it
+	}
 	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -116,7 +125,7 @@ func TestVenv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	got := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(out), "\r\n", "\n")), "\n")
 	want := []string{real(env), real(tmp), real(env), real(site), real(site)}
 	if len(got) != len(want) {
 		t.Fatalf("got %q", got)

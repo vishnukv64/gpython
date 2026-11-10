@@ -10,5 +10,11 @@ with tempfile.TemporaryDirectory() as d:
             k, _, val = line.partition("=")
             cfg[k.strip()] = val.strip()
     print(sorted(cfg)[:3], cfg["include-system-site-packages"])
-    print(os.path.isdir(os.path.join(env, "lib", "python%d.%d" % sys.version_info[:2], "site-packages")))
-    print(sorted(os.listdir(os.path.join(env, "bin")))[:1])
+    # A Windows venv is Lib\site-packages and Scripts (CPython's nt_venv).
+    if os.name == "nt":
+        site, scripts = os.path.join(env, "Lib", "site-packages"), os.path.join(env, "Scripts")
+    else:
+        site = os.path.join(env, "lib", "python%d.%d" % sys.version_info[:2], "site-packages")
+        scripts = os.path.join(env, "bin")
+    print(os.path.isdir(site))
+    print(sorted(os.listdir(scripts))[:1])

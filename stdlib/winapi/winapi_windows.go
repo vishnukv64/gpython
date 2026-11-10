@@ -176,8 +176,40 @@ func errCode(err error) int {
 	return -1
 }
 
+// pathFunc is _winapi.GetLongPathName / GetShortPathName: a str path in, the
+// converted str path out, an OSError (with winerror) when Windows refuses.
+func pathFunc(name string, conv func(*uint16, *uint16, uint32) (uint32, error)) py.DictEntry {
+	return fn(name, func(a py.Tuple) (py.Object, error) {
+		if len(a) != 1 {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() takes exactly one argument (%d given)", name, len(a))
+		}
+		s, ok := a[0].(py.String)
+		if !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "%s() argument 'path' must be str, not %s", name, a[0].Type().Name)
+		}
+		in, err := windows.UTF16PtrFromString(string(s))
+		if err != nil {
+			return nil, py.ExceptionNewf(py.ValueError, "embedded null character")
+		}
+		buf := make([]uint16, windows.MAX_PATH)
+		for {
+			n, err := conv(in, &buf[0], uint32(len(buf)))
+			if err != nil {
+				return nil, winErr(err)
+			}
+			if int(n) <= len(buf) {
+				return py.String(windows.UTF16ToString(buf[:n])), nil
+			}
+			buf = make([]uint16, n) // too small: n is the size needed
+		}
+	})
+}
+
 func platformFuncs() []py.DictEntry {
 	return []py.DictEntry{
+		// venv compares the interpreter's paths through these (gh-90329).
+		pathFunc("GetLongPathName", windows.GetLongPathName),
+		pathFunc("GetShortPathName", windows.GetShortPathName),
 		fn("CloseHandle", func(a py.Tuple) (py.Object, error) {
 			h, err := handleArg(a, 0)
 			if err != nil {

@@ -38,8 +38,12 @@ t(lambda: m5.z)
 import tempfile
 d = os.path.realpath(tempfile.mkdtemp())
 D.append(d)
-open(d+"/circ_a.py","w").write("import circ_b\n")
-open(d+"/circ_b.py","w").write("import circ_a\nprint(circ_a.nothing)\n")
+# Closed explicitly: gpython has no refcounting, and Windows will not remove
+# a file that is still open.
+with open(d+"/circ_a.py","w") as fh:
+    fh.write("import circ_b\n")
+with open(d+"/circ_b.py","w") as fh:
+    fh.write("import circ_a\nprint(circ_a.nothing)\n")
 sys.path.insert(0, d)
 t(lambda: __import__("circ_a"))
 t(lambda: getattr(sys, "zz"))

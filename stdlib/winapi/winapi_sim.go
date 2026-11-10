@@ -16,7 +16,7 @@ func platformFuncs() []py.DictEntry {
 		"CreatePipe", "CreateNamedPipe", "ConnectNamedPipe", "CreateFile", "SetNamedPipeHandleState",
 		"WaitNamedPipe", "PeekNamedPipe", "ReadFile", "WriteFile", "WaitForSingleObject",
 		"WaitForMultipleObjects", "BatchedWaitForMultipleObjects", "GetExitCodeProcess",
-		"TerminateProcess", "CreateProcess",
+		"TerminateProcess", "CreateProcess", "GetLongPathName", "GetShortPathName",
 	} {
 		n := n
 		out = append(out, fn(n, func(py.Tuple) (py.Object, error) {
