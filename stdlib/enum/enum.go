@@ -30,6 +30,9 @@ type EnumMember struct {
 	name  string
 	enum  *py.Type
 	index int
+	// attrs holds the instance attributes a user-defined __new__ set on the
+	// object it built (inspect._ParameterKind.description).
+	attrs *py.StringDict
 }
 
 var EnumMemberType = py.NewTypeX("enum.member", "A single enum member.", nil, nil)
@@ -310,7 +313,16 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 	// A class body that defines __new__ and gives tuple values (pstats.SortKey)
 	// means "(value, *aliases)": __new__ builds the member in CPython; here the
 	// first item is the value and the others are extra names it answers to.
-	_, hasNew := ns.GetOrNil("__new__").(*py.Function)
+	newFn, hasNew := ns.GetOrNil("__new__").(*py.Function)
+	// An int-based enum with its own __new__ runs it, as CPython does: the
+	// function builds the member (int.__new__(cls, v)), sets _value_ and any
+	// extra attributes.  Other enums keep the "(value, *aliases)" reading.
+	callNew := hasNew && asInt
+	live := py.NewStringDict()
+	if callNew {
+		cls.Dict.Set("__members__", live)
+		cls.New = py.IntType.New // so int.__new__(cls, v) inside __new__ works
+	}
 	members := []*EnumMember{}
 	memberNames := []string{}
 	byValue := map[string]*EnumMember{}
@@ -326,7 +338,29 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 			continue
 		}
 		var aliasValues py.Tuple
-		if t, ok := value.(py.Tuple); ok && hasNew && len(t) > 0 {
+		var attrs *py.StringDict
+		if callNew {
+			args := py.Tuple{value}
+			if t, ok := value.(py.Tuple); ok {
+				args = t
+			}
+			obj, err := py.Call(newFn, append(py.Tuple{cls}, args...), py.NewStringDict())
+			if err != nil {
+				return nil, err
+			}
+			value = args[0]
+			if inst, ok := obj.(*py.Type); ok {
+				a := py.NewStringDict()
+				attrs = &a
+				for _, k := range inst.Dict.Keys() {
+					if k == "_value_" {
+						value = inst.Dict.GetOrNil(k)
+					} else {
+						a.Set(k, inst.Dict.GetOrNil(k))
+					}
+				}
+			}
+		} else if t, ok := value.(py.Tuple); ok && hasNew && len(t) > 0 {
 			value, aliasValues = t[0], t[1:]
 		}
 		if isAuto(value) {
@@ -362,7 +396,7 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 			// name cannot collide but the lookup below still works.
 			encoded = "\x00name\x00" + name + "." + key
 		}
-		member := &EnumMember{value: value, name: key, enum: cls, index: len(members)}
+		member := &EnumMember{value: value, name: key, enum: cls, index: len(members), attrs: attrs}
 		byValue[encoded] = member
 		for _, a := range aliasValues {
 			if k, err := py.DictKey(a); err == nil {
@@ -372,6 +406,9 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 		members = append(members, member)
 		memberNames = append(memberNames, key)
 		cls.Dict.Set(key, member)
+		if callNew {
+			live.Set(key, member)
+		}
 	}
 
 	// __members__: the name-to-member mapping, aliases included.
@@ -506,6 +543,11 @@ func installClassMethods(cls *py.Type) {
 // M__getattr__ reaches what the class body defined (methods, properties,
 // classmethods, staticmethods, plain attributes) through the member.
 func (m *EnumMember) M__getattr__(name string) (py.Object, error) {
+	if m.attrs != nil {
+		if v, ok := m.attrs.Get(name); ok {
+			return v, nil
+		}
+	}
 	if m.enum.Base == py.StringType && m.enum.Dict.GetOrNil(name) == nil && StrEnumType.Dict.GetOrNil(name) == nil {
 		// str methods are the value's: Color.RED.upper(), .startswith(...)
 		if v, err := py.GetAttrString(m.value, name); err == nil {

@@ -58,24 +58,7 @@ func init() {
 		py.MustNewMethod("getcwdb", getCwdb, 0, "Get the current working directory in a byte slice"),
 		py.MustNewMethod("chdir", chdir, 0, "Change the current working directory"),
 		py.MustNewMethod("getenv", getenv, 0, "Return the value of the environment variable key if it exists, or default if it doesn’t. key, default and the result are str."),
-		py.MustNewMethod("chmod", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-			var path, mode py.Object
-			if err := py.UnpackTuple(args, kwargs, "chmod", 2, 2, &path, &mode); err != nil {
-				return nil, err
-			}
-			name, _, err := fsRaw(path) // str, bytes or os.PathLike
-			if err != nil {
-				return nil, err
-			}
-			m, err := py.IndexInt(mode)
-			if err != nil {
-				return nil, err
-			}
-			if err := os.Chmod(name, os.FileMode(m).Perm()|setBits(m)); err != nil {
-				return nil, py.OSErrorFrom(err, name)
-			}
-			return py.None, nil
-		}, 0, "chmod(path, mode) -> Change the access permissions of a file."),
+		py.MustNewMethod("chmod", chmod, 0, "chmod(path, mode) -> Change the access permissions of a file."),
 		py.MustNewMethod("fsencode", func(self py.Object, args py.Tuple) (py.Object, error) {
 			r, err := fspath(self, args)
 			if s, ok := r.(py.String); ok {
@@ -133,7 +116,7 @@ func init() {
 		// unlink is the same operation under CPython's other name for it, and
 		// code uses both.  Registered as its own method rather than an alias so
 		// its docstring says which is which.
-		py.MustNewMethod("unlink", remove, 0, "Remove a file (same as remove())."),
+		py.MustNewMethod("unlink", unlink, 0, "Remove a file (same as remove())."),
 		py.MustNewMethod("removedirs", removedirs, 0, removedirs_doc),
 		py.MustNewMethod("rmdir", rmdir, 0, rmdir_doc),
 		py.MustNewMethod("system", system, 0, "Run shell commands, prints stdout directly to default"),
@@ -141,6 +124,7 @@ func init() {
 	}
 	methods = append(methods, procMethods()...)
 	methods = append(methods, statvfsMethods()...)
+	methods = append(methods, pathMethods()...)
 	globals := py.NewStringDictFrom(
 		py.DictEntry{Key: "error", Value: py.OSError},
 		py.DictEntry{Key: "environ", Value: Environ},
@@ -355,18 +339,50 @@ func getCwdb(self py.Object, args py.Tuple) (py.Object, error) {
 	return py.Bytes(dir), nil
 }
 
-// chdir changes the current working directory to the provided path.
-func chdir(self py.Object, args py.Tuple) (py.Object, error) {
-	if len(args) == 0 {
-		return nil, py.ExceptionNewf(py.TypeError, "Missing required argument 'path' (pos 1)")
+// chmod is os.chmod(path, mode, *, dir_fd=None, follow_symlinks=True).
+func chmod(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var path, mode py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|$OO:chmod", []string{"path", "mode", "dir_fd", "follow_symlinks"},
+		&path, &mode, new(py.Object), new(py.Object)); err != nil {
+		return nil, err
 	}
-	dir, ok := args[0].(py.String)
-	if !ok {
-		return nil, py.ExceptionNewf(py.TypeError, "%s", "str expected, not "+args[0].Type().Name)
-	}
-	err := os.Chdir(string(dir))
+	p, err := getPath("chmod", path, pathOrFdKinds)
 	if err != nil {
-		return nil, py.OSErrorFrom(err, string(dir))
+		return nil, err
+	}
+	m, err := py.IndexInt(mode)
+	if err != nil {
+		return nil, err
+	}
+	fm := os.FileMode(m).Perm() | setBits(m)
+	if p.isFd {
+		err = withFD(p.fd, func(f *os.File) error { return f.Chmod(fm) })
+	} else {
+		err = os.Chmod(p.s, fm)
+	}
+	if err != nil {
+		return nil, p.fail(err)
+	}
+	return py.None, nil
+}
+
+// chdir changes the current working directory to the provided path.
+func chdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	var path py.Object
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O:chdir", []string{"path"}, &path); err != nil {
+		return nil, err
+	}
+	p, err := getPath("chdir", path, pathOrFdKinds)
+	if err != nil {
+		return nil, err
+	}
+	if p.isFd {
+		err = withFD(p.fd, (*os.File).Chdir)
+	} else {
+		err = os.Chdir(p.s)
+	}
+	if err != nil {
+		return nil, p.fail(err)
 	}
 	return py.None, nil
 }
@@ -423,17 +439,17 @@ func kill(self py.Object, args py.Tuple) (py.Object, error) {
 // getpid returns the current process id.
 func fspath(self py.Object, args py.Tuple) (py.Object, error) {
 	if len(args) != 1 {
-		return nil, py.ExceptionNewf(py.TypeError, "fspath() takes exactly one argument")
+		return nil, py.ExceptionNewf(py.TypeError, "fspath() missing required argument 'path' (pos 1)")
 	}
 	switch args[0].(type) {
 	case py.String, py.Bytes:
 		return args[0], nil
 	}
-	hook, err := py.GetAttrString(args[0], "__fspath__")
+	str, isB, err := fsPathArg("", "path", args[0], "")
 	if err != nil {
-		return nil, py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", args[0].Type().Name)
+		return nil, err
 	}
-	return py.Call(hook, py.Tuple{}, py.NewStringDict())
+	return pathObj(str, isB), nil
 }
 
 func isatty(self py.Object, args py.Tuple) (py.Object, error) {
@@ -467,44 +483,38 @@ entries '.' and '..' even if they are present in the directory.
 `
 
 func listDir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	var (
-		path py.Object = py.None
-	)
-	err := py.ParseTupleAndKeywords(args, kwargs, "|z*:listdir", []string{"path"}, &path)
+	var path py.Object = py.None
+	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:listdir", []string{"path"}, &path); err != nil {
+		return nil, err
+	}
+	p, err := getPath("listdir", path, pathFdOrNoneKs)
 	if err != nil {
 		return nil, err
 	}
-
-	if path == py.None {
-		cwd, err := os.Getwd()
+	var names []string
+	if p.isFd {
+		err = withFD(p.fd, func(f *os.File) (err error) {
+			names, err = f.Readdirnames(-1)
+			return
+		})
 		if err != nil {
-			return nil, py.OSErrorFrom(err, "")
+			return nil, py.OSErrorFromObj(err, nil)
 		}
-		path = py.String(cwd)
+	} else {
+		ents, err := py.ReadDirPath(p.s)
+		if err != nil {
+			return nil, p.fail(err)
+		}
+		for _, e := range ents {
+			names = append(names, e.Name())
+		}
 	}
-
-	dirName := ""
-	returnsBytes := false
-	switch v := path.(type) {
-	case py.String:
-		dirName = string(v)
-	case py.Bytes:
-		dirName = string(v)
-		returnsBytes = true
-	default:
-		return nil, py.ExceptionNewf(py.TypeError, "str or bytes expected, not %T", path)
-	}
-
-	dirEntries, err := os.ReadDir(dirName)
-	if err != nil {
-		return nil, py.OSErrorFrom(err, dirName)
-	}
-	result := py.NewListSized(len(dirEntries))
-	for i, dirEntry := range dirEntries {
-		if returnsBytes {
-			result.Items[i] = py.Bytes(dirEntry.Name())
+	result := py.NewListSized(len(names))
+	for i, n := range names {
+		if p.isBytes {
+			result.Items[i] = py.Bytes(n)
 		} else {
-			result.Items[i] = py.String(dirEntry.Name())
+			result.Items[i] = py.String(n)
 		}
 	}
 	return result, nil
@@ -662,8 +672,8 @@ func (w *walkIterator) M__next__() (py.Object, error) {
 func (w *walkIterator) pushChildren(dir py.Object, dirnames *py.List) {
 	dirPath, isBytes := pathString(dir)
 	for i := len(dirnames.Items) - 1; i >= 0; i-- {
-		name, err := py.StrAsString(dirnames.Items[i])
-		if err != nil {
+		name, _ := pathString(dirnames.Items[i])
+		if name == "" {
 			continue
 		}
 		newPath := joinOne(dirPath, name)
@@ -705,6 +715,14 @@ func joinOne(dir, name string) string {
 // os.ReadDir sorts, and sorting the names would not match CPython's scandir
 // order, so Readdirnames is used directly.
 func readDirNames(dir string) ([]string, error) {
+	if py.IsEmbeddedPath(dir) {
+		ents, err := py.ReadDirPath(dir)
+		names := make([]string, len(ents))
+		for i, e := range ents {
+			names[i] = e.Name()
+		}
+		return names, err
+	}
 	f, err := os.Open(dir)
 	if err != nil {
 		return nil, err
@@ -716,12 +734,12 @@ func readDirNames(dir string) ([]string, error) {
 // entryIsDir follows symlinks, so a link to a directory lands in dirnames the
 // way entry.is_dir() does.
 func entryIsDir(p string) bool {
-	info, err := os.Stat(p)
+	info, err := py.StatPath(p)
 	return err == nil && info.IsDir()
 }
 
 func isSymlink(p string) bool {
-	info, err := os.Lstat(p)
+	info, err := py.LstatPath(p)
 	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
@@ -746,10 +764,13 @@ func walk(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := top.(py.String); !ok {
-		if _, ok := top.(py.Bytes); !ok {
-			return nil, py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", top.Type().Name)
-		}
+	ts, isB, err := fsPathArg("", "top", top, "")
+	if err != nil {
+		return nil, err
+	}
+	top = py.String(ts)
+	if isB {
+		top = py.Bytes(ts)
 	}
 	td, err := py.ObjectIsTrue(topdown)
 	if err != nil {
@@ -782,7 +803,7 @@ func makedirs(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	)
 	err := py.ParseTupleAndKeywords(
 		args, kwargs,
-		"s#|ip:makedirs", []string{"path", "mode", "exist_ok"},
+		"O|ip:makedirs", []string{"path", "mode", "exist_ok"},
 		&pypath, &pymode, &pyok,
 	)
 	if err != nil {
@@ -793,16 +814,14 @@ func makedirs(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 		path = ""
 		mode = os.FileMode(pymode.(py.Int))
 	)
-	switch v := pypath.(type) {
-	case py.String:
-		path = string(v)
-	case py.Bytes:
-		path = string(v)
+	path, err = fsPath("", pypath, pathKinds)
+	if err != nil {
+		return nil, err
 	}
 
 	if pyok.(py.Bool) == py.False {
 		// check if leaf exists.
-		_, err := os.Stat(path)
+		_, err := py.StatPath(path)
 		if err == nil {
 			return nil, py.OSErrorFrom(syscall.EEXIST, path)
 		}
@@ -833,7 +852,7 @@ func mkdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 	)
 	err := py.ParseTupleAndKeywords(
 		args, kwargs,
-		"s#|ii:mkdir", []string{"path", "mode", "dir_fd"},
+		"O|ii:mkdir", []string{"path", "mode", "dir_fd"},
 		&pypath, &pymode, &pydirfd,
 	)
 	if err != nil {
@@ -844,11 +863,9 @@ func mkdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		path = ""
 		mode = os.FileMode(pymode.(py.Int))
 	)
-	switch v := pypath.(type) {
-	case py.String:
-		path = string(v)
-	case py.Bytes:
-		path = string(v)
+	path, err = fsPath("mkdir", pypath, pathKinds)
+	if err != nil {
+		return nil, err
 	}
 
 	if pydirfd != py.None {
@@ -950,22 +967,36 @@ func symlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, er
 		src, dst py.Object
 		isdir    py.Object = py.False
 	)
-	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|O:symlink",
-		[]string{"src", "dst", "target_is_directory"}, &src, &dst, &isdir); err != nil {
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|O$O:symlink",
+		[]string{"src", "dst", "target_is_directory", "dir_fd"}, &src, &dst, &isdir, new(py.Object)); err != nil {
 		return nil, err
 	}
-	s, err := py.StrAsString(src)
+	return twoPaths("symlink", src, dst, os.Symlink)
+}
+
+// twoPaths runs op on src and dst, which are str, bytes or os.PathLike, and
+// words its errors the way CPython does for a two-path call.
+func twoPaths(fn string, src, dst py.Object, op func(s, d string) error) (py.Object, error) {
+	s, sb, err := fsPathArg(fn, "src", src, pathKinds)
 	if err != nil {
 		return nil, err
 	}
-	d, err := py.StrAsString(dst)
+	d, db, err := fsPathArg(fn, "dst", dst, pathKinds)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Symlink(s, d); err != nil {
-		return nil, py.OSErrorFrom(err, s, d)
+	if err := op(s, d); err != nil {
+		return nil, failTwo(err, pathObj(s, sb), pathObj(d, db))
 	}
 	return py.None, nil
+}
+
+// pathObj is a path as the str or bytes CPython shows in an error.
+func pathObj(s string, isB bool) py.Object {
+	if isB {
+		return py.Bytes(s)
+	}
+	return py.String(s)
 }
 
 // The mode flags os.access takes.  They are part of the module's interface -
@@ -991,7 +1022,7 @@ func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "utime() missing required argument: 'path'")
 	}
-	path, err := py.StrAsString(args[0])
+	pa, err := getPath("utime", args[0], pathOrFdKinds)
 	if err != nil {
 		return nil, err
 	}
@@ -1015,11 +1046,7 @@ func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		if err != nil {
 			return nil, err
 		}
-		if err := os.Chtimes(path,
-			time.Unix(0, int64(atime)), time.Unix(0, int64(mtime))); err != nil {
-			return nil, py.OSErrorFrom(err, path)
-		}
-		return py.None, nil
+		return utimeSet(pa, time.Unix(0, int64(atime)), time.Unix(0, int64(mtime)))
 	}
 	atime, mtime := now, now
 	if times != py.None {
@@ -1037,8 +1064,25 @@ func utime(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		}
 		atime, mtime = secondsToTime(a), secondsToTime(m)
 	}
-	if err := os.Chtimes(path, atime, mtime); err != nil {
-		return nil, py.OSErrorFrom(err, path)
+	return utimeSet(pa, atime, mtime)
+}
+
+// utimeSet sets the times of a path.  Go cannot set them through a descriptor,
+// so a live descriptor is NotImplementedError and a dead one EBADF.
+func utimeSet(p pathArg, atime, mtime time.Time) (py.Object, error) {
+	var err error
+	if p.isFd {
+		err = withFD(p.fd, func(*os.File) error {
+			return py.ExceptionNewf(py.NotImplementedError, "utime(fd) is not supported")
+		})
+		if _, ok := err.(*py.Exception); ok {
+			return nil, err
+		}
+	} else {
+		err = os.Chtimes(p.s, atime, mtime)
+	}
+	if err != nil {
+		return nil, p.fail(err)
 	}
 	return py.None, nil
 }
@@ -1062,10 +1106,11 @@ func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if len(args) < 2 {
 		return nil, py.ExceptionNewf(py.TypeError, "open() missing required arguments")
 	}
-	path, err := py.StrAsString(args[0])
+	pa, err := getPath("open", args[0], pathKinds)
 	if err != nil {
 		return nil, err
 	}
+	path := pa.s
 	flags, err := py.IndexInt(args[1])
 	if err != nil {
 		return nil, err
@@ -1080,7 +1125,7 @@ func osOpen(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	}
 	fd, err := os.OpenFile(path, flagsFor(flags), os.FileMode(mode))
 	if err != nil {
-		return nil, py.OSErrorFrom(err, path)
+		return nil, pa.fail(err)
 	}
 	return py.Int(py.OwnFD(fd)), nil
 }
@@ -1102,7 +1147,7 @@ func access(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if err := py.UnpackTuple(args, kwargs, "access", 2, 2, &path, &mode); err != nil {
 		return nil, err
 	}
-	p, err := py.StrAsString(path)
+	p, err := fsPath("access", path, pathKinds)
 	if err != nil {
 		return nil, err
 	}
@@ -1136,37 +1181,27 @@ func access(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 // path is not one - the same as CPython.
 func readlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var path py.Object
-	if err := py.UnpackTuple(args, kwargs, "readlink", 1, 1, &path); err != nil {
+	if err := py.ParseTupleAndKeywords(args, kwargs, "O|$O:readlink", []string{"path", "dir_fd"}, &path, new(py.Object)); err != nil {
 		return nil, err
 	}
-	p, err := py.StrAsString(path)
+	p, err := getPath("readlink", path, pathKinds)
 	if err != nil {
 		return nil, err
 	}
-	target, err := os.Readlink(p)
+	target, err := os.Readlink(p.s)
 	if err != nil {
-		return nil, py.OSErrorFrom(err, p)
+		return nil, p.fail(err)
 	}
-	return py.String(target), nil
+	return pathObj(target, p.isBytes), nil
 }
 
 func link(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var src, dst py.Object
-	if err := py.UnpackTuple(args, kwargs, "link", 2, 2, &src, &dst); err != nil {
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|$OOO:link", []string{"src", "dst", "src_dir_fd", "dst_dir_fd", "follow_symlinks"},
+		&src, &dst, new(py.Object), new(py.Object), new(py.Object)); err != nil {
 		return nil, err
 	}
-	s, err := py.StrAsString(src)
-	if err != nil {
-		return nil, err
-	}
-	d, err := py.StrAsString(dst)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Link(s, d); err != nil {
-		return nil, py.OSErrorFrom(err, s, d)
-	}
-	return py.None, nil
+	return twoPaths("link", src, dst, os.Link)
 }
 
 const rename_doc = `rename(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
@@ -1175,22 +1210,16 @@ Rename a file or directory.  On POSIX, if dst names an existing file it is
 replaced silently; os.replace does the same everywhere, which is why it exists.`
 
 func rename(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return renameAs("rename", args, kwargs)
+}
+
+func renameAs(fn string, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var src, dst py.Object
-	if err := py.UnpackTuple(args, kwargs, "rename", 2, 2, &src, &dst); err != nil {
+	if err := py.ParseTupleAndKeywords(args, kwargs, "OO|$OO:"+fn, []string{"src", "dst", "src_dir_fd", "dst_dir_fd"},
+		&src, &dst, new(py.Object), new(py.Object)); err != nil {
 		return nil, err
 	}
-	s, err := py.StrAsString(src)
-	if err != nil {
-		return nil, err
-	}
-	d, err := py.StrAsString(dst)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Rename(s, d); err != nil {
-		return nil, py.OSErrorFrom(err, s, d)
-	}
-	return py.None, nil
+	return twoPaths(fn, src, dst, os.Rename)
 }
 
 const replace_doc = `replace(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
@@ -1203,15 +1232,23 @@ this is the one to use when the replacement is intended.`
 // every platform this interpreter runs on, which is exactly what os.replace
 // promises.  Registered separately because names are the API.
 func replace(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
-	return rename(self, args, kwargs)
+	return renameAs("replace", args, kwargs)
 }
 
 func remove(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return removeAs("remove", args, kwargs)
+}
+
+func unlink(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	return removeAs("unlink", args, kwargs)
+}
+
+func removeAs(fn string, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var (
 		pypath py.Object
 		pydir  py.Object = py.None
 	)
-	err := py.ParseTupleAndKeywords(args, kwargs, "s#|i:remove", []string{"path", "dir_fd"}, &pypath, &pydir)
+	err := py.ParseTupleAndKeywords(args, kwargs, "O|i:"+fn, []string{"path", "dir_fd"}, &pypath, &pydir)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,17 +1258,14 @@ func remove(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 		return nil, py.ExceptionNewf(py.NotImplementedError, "remove(dir_fd=XXX) not implemented")
 	}
 
-	var name string
-	switch v := pypath.(type) {
-	case py.String:
-		name = string(v)
-	case py.Bytes:
-		name = string(v)
+	var name pathArg
+	name, err = getPath(fn, pypath, pathKinds)
+	if err != nil {
+		return nil, err
 	}
 
-	err = os.Remove(name)
-	if err != nil {
-		return nil, py.OSErrorFrom(err, name)
+	if err = os.Remove(name.s); err != nil {
+		return nil, name.fail(err)
 	}
 
 	return py.None, nil
@@ -1248,24 +1282,28 @@ ignored -- they generally mean that a directory was not empty.`
 
 func removedirs(self py.Object, args py.Tuple) (py.Object, error) {
 	var pypath py.Object
-	err := py.ParseTuple(args, "s#:rmdir", &pypath)
+	err := py.ParseTuple(args, "O:removedirs", &pypath)
 	if err != nil {
 		return nil, err
 	}
-
-	var name string
-	switch v := pypath.(type) {
-	case py.String:
-		name = string(v)
-	case py.Bytes:
-		name = string(v)
-	}
-
-	err = os.RemoveAll(name)
+	// CPython's removedirs calls rmdir first, so its errors are rmdir's.
+	name, err := getPath("rmdir", pypath, pathKinds)
 	if err != nil {
-		return nil, py.OSErrorFrom(err, name)
+		return nil, err
 	}
-
+	if err := syscall.Rmdir(name.s); err != nil {
+		return nil, name.fail(err)
+	}
+	head, tail := hostSplit(name.s)
+	if tail == "" {
+		head, tail = hostSplit(head)
+	}
+	for head != "" && tail != "" {
+		if syscall.Rmdir(head) != nil {
+			break
+		}
+		head, tail = hostSplit(head)
+	}
 	return py.None, nil
 }
 
@@ -1281,7 +1319,7 @@ func rmdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		pypath py.Object
 		pydir  py.Object = py.None
 	)
-	err := py.ParseTupleAndKeywords(args, kwargs, "s#|i:rmdir", []string{"path", "dir_fd"}, &pypath, &pydir)
+	err := py.ParseTupleAndKeywords(args, kwargs, "O|i:rmdir", []string{"path", "dir_fd"}, &pypath, &pydir)
 	if err != nil {
 		return nil, err
 	}
@@ -1291,17 +1329,13 @@ func rmdir(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 		return nil, py.ExceptionNewf(py.NotImplementedError, "rmdir(dir_fd=XXX) not implemented")
 	}
 
-	var name string
-	switch v := pypath.(type) {
-	case py.String:
-		name = string(v)
-	case py.Bytes:
-		name = string(v)
+	name, err := getPath("rmdir", pypath, pathKinds)
+	if err != nil {
+		return nil, err
 	}
 
-	err = os.Remove(name)
-	if err != nil {
-		return nil, py.OSErrorFrom(err, name)
+	if err = syscall.Rmdir(name.s); err != nil {
+		return nil, name.fail(err)
 	}
 
 	return py.None, nil

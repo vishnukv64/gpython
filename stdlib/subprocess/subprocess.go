@@ -115,6 +115,8 @@ type options struct {
 	stderr  py.Object
 	timeout float64
 	check   bool
+	// executable replaces argv[0] as the program to run (not under a shell).
+	executable string
 }
 
 // parseOptions reads the keywords, rejecting the ones that would silently
@@ -171,6 +173,14 @@ func parseOptions(kwargs py.StringDict) (*options, error) {
 			}
 		case "check":
 			o.check = v == py.True
+		case "executable":
+			if v != py.None {
+				s, err := py.StrAsString(v)
+				if err != nil {
+					return nil, err
+				}
+				o.executable = s
+			}
 		case "input":
 			// Handled by run(); nothing to do here.
 		case "bufsize", "close_fds", "restore_signals", "start_new_session",
@@ -282,6 +292,9 @@ func popenNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object
 	}
 	var closeAfterStart []*os.File
 	cmd := exec.Command(argv[0], argv[1:]...)
+	if o.executable != "" && !o.shell {
+		cmd.Path, cmd.Err = o.executable, nil
+	}
 	if o.cwd != "" {
 		cmd.Dir = o.cwd
 	}
@@ -805,6 +818,9 @@ func runOnce(args py.Tuple, kwargs py.StringDict, capture bool) (int, string, st
 	}
 	if o.text {
 		kw.Set("text", py.True)
+	}
+	if o.executable != "" {
+		kw.Set("executable", py.String(o.executable))
 	}
 	kw.Set("stdout", o.stdout)
 	kw.Set("stderr", o.stderr)

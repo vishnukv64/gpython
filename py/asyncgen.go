@@ -122,6 +122,13 @@ func init() {
 		return ag(self).newAwaitable(agClose, None)
 	}, 0, "aclose() -> raise GeneratorExit inside generator."))
 
+	// Declared on the type, as CPython's slots are, so that
+	// isinstance(x, collections.abc.Awaitable) sees __await__.
+	AsyncGenAwaitableType.Dict.Set("__await__", MustNewMethod("__await__", func(self Object) (Object, error) { return self, nil }, 0, ""))
+	AsyncGenAwaitableType.Dict.Set("__iter__", MustNewMethod("__iter__", func(self Object) (Object, error) { return self, nil }, 0, ""))
+	AsyncGenAwaitableType.Dict.Set("__next__", MustNewMethod("__next__", func(self Object) (Object, error) {
+		return self.(*asyncGenAwaitable).Send(None)
+	}, 0, ""))
 	AsyncGenAwaitableType.Dict.Set("send", MustNewMethod("send", func(self, v Object) (Object, error) {
 		return self.(*asyncGenAwaitable).Send(v)
 	}, 0, ""))

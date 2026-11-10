@@ -10,6 +10,42 @@ package os
 // first use and caches the result, which is the same observable behaviour.
 const scandirSrc = `
 import stat as _stat
+import operator as _operator
+
+
+def _structseq(name, fields):
+    n = len(fields)
+
+    def __new__(cls, seq):
+        seq = tuple(seq)
+        if len(seq) != n:
+            raise TypeError("os.%s() takes a %d-sequence (%d-sequence given)" % (name, n, len(seq)))
+        return tuple.__new__(cls, seq)
+
+    def __repr__(self):
+        return "os.%s(%s)" % (name, ", ".join("%s=%r" % (f, v) for f, v in zip(fields, self)))
+
+    def __reduce__(self):
+        return (type(self), (tuple(self),))
+
+    d = {"__new__": __new__, "__repr__": __repr__, "__reduce__": __reduce__, "__slots__": (),
+         "__module__": "os", "__match_args__": tuple(fields),
+         "n_fields": n, "n_sequence_fields": n, "n_unnamed_fields": 0}
+    for i, f in enumerate(fields):
+        d[f] = property(_operator.itemgetter(i))
+    return type(name, (tuple,), d)
+
+
+terminal_size = _structseq("terminal_size", ("columns", "lines"))
+terminal_size.__doc__ = "A tuple of (columns, lines) for holding terminal window size"
+
+
+def get_terminal_size(fd=1, /):
+    """Return the size of the terminal window as (columns, lines)."""
+    return terminal_size(_terminal_size(fd))
+
+
+del _operator
 
 
 class DirEntry:
@@ -79,6 +115,8 @@ class _ScandirIterator:
 
     def __next__(self):
         name = next(self._it)
+        if isinstance(self._path, int):
+            return DirEntry(name, name)
         return DirEntry(name, path.join(self._path, name))
 
     def close(self):
@@ -92,8 +130,26 @@ class _ScandirIterator:
 
 
 def scandir(path=None):
+    try:
+        names = listdir(path)
+    except TypeError as e:
+        raise TypeError(str(e).replace("listdir:", "scandir:", 1)) from None
     if path is None:
         path = "."
-    path = fspath(path)
-    return _ScandirIterator(listdir(path), path)
+    elif not isinstance(path, int):
+        path = fspath(path)
+    return _ScandirIterator(names, path)
+
+
+def renames(old, new):
+    head, tail = path.split(new)
+    if head and tail and not path.exists(head):
+        makedirs(head)
+    rename(old, new)
+    head, tail = path.split(old)
+    if head and tail:
+        try:
+            removedirs(head)
+        except OSError:
+            pass
 `

@@ -1,0 +1,3 @@
+['command', 'executable', 'home'] false
+True
+['Activate.ps1']

@@ -126,6 +126,14 @@ func (s *Super) lookup(name string) (Object, bool, error) {
 					}
 					return res, true, nil
 				}
+				// A descriptor whose class is written in Python.
+				inst, owner := s.obj, Object(entryType)
+				if onClass {
+					inst, owner = None, s.obj
+				}
+				if r, ok, err := userGet(fn, inst, owner); ok {
+					return r, true, err
+				}
 				return fn, true, nil
 			}
 			continue

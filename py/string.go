@@ -1092,7 +1092,9 @@ func (a String) M__mod__(other Object) (Object, error) {
 		out.WriteString(text)
 	}
 
-	if !usedMapping && valueIdx < len(values) {
+	// A mapping argument is never "unconverted", whatever keys were used.
+	_, argIsMapping := other.(StringDict)
+	if !usedMapping && !argIsMapping && valueIdx < len(values) {
 		return nil, ExceptionNewf(TypeError, "not all arguments converted during string formatting")
 	}
 	return String(out.String()), nil

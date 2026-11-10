@@ -33,7 +33,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -145,60 +144,18 @@ func userSite(ctx py.Context) string {
 	return filepath.Join(base, "lib", "python"+versionShort(ctx), "site-packages")
 }
 
-// sysPath returns the interpreter's search path.
-func sysPath(ctx py.Context) []string {
-	if ctx == nil {
-		return nil
-	}
-	mod, err := ctx.GetModule("sys")
-	if err != nil {
-		return nil
-	}
-	p, err := py.GetAttrString(mod, "path")
-	if err != nil {
-		return nil
-	}
-	l, ok := p.(*py.List)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(l.Items))
-	for _, it := range l.Items {
-		if s, ok := it.(py.String); ok {
-			out = append(out, string(s))
-		}
-	}
-	return out
-}
-
-// isSiteDir reports whether a path is a directory packages are installed into.
-func isSiteDir(p string) bool {
-	base := filepath.Base(p)
-	return base == "site-packages" || base == "dist-packages"
-}
-
-// siteDirs returns the site-packages directories this interpreter searches.
-//
-// Read from sys.path, so the answer is what an import would find.  A relative
-// entry - "lib" as this interpreter adds it - is resolved against the working
-// directory, which is where the interpreter will look for it too.
+// siteDirs returns site.getsitepackages(): the prefix's site-packages, and
+// the base interpreter's when a venv asks for the system site-packages.
 func siteDirs(ctx py.Context) []string {
-	seen := map[string]bool{}
+	pf := py.GetPrefixes()
+	prefixes := []string{pf.Prefix}
+	if pf.Venv && pf.SystemSite {
+		prefixes = append(prefixes, pf.BasePrefix)
+	}
 	var out []string
-	for _, p := range sysPath(ctx) {
-		if !isSiteDir(p) {
-			continue
-		}
-		abs := p
-		if !filepath.IsAbs(abs) {
-			if wd, err := os.Getwd(); err == nil {
-				abs = filepath.Join(wd, p)
-			}
-		}
-		abs = filepath.Clean(abs)
-		if !seen[abs] {
-			seen[abs] = true
-			out = append(out, abs)
+	for _, p := range prefixes {
+		if p != "" {
+			out = append(out, py.SitePackages(p))
 		}
 	}
 	return out
@@ -214,7 +171,7 @@ func init() {
 	// version-dependent parts are recomputed lazily by the functions below and
 	// these attributes are refreshed on first access by getusersitepackages -
 	// see the property, which is the value code actually reads.
-	globals.Set("ENABLE_USER_SITE", py.NewBool(true))
+	globals.Set("ENABLE_USER_SITE", py.NewBool(!py.GetPrefixes().Venv))
 
 	// USER_BASE, USER_SITE and PREFIXES are module ATTRIBUTES in CPython, read
 	// directly as often as through the functions - pip reads site.USER_SITE when
@@ -224,9 +181,9 @@ func init() {
 	globals.Set("USER_BASE", py.String(base))
 	globals.Set("USER_SITE", py.String(userSite(nil)))
 	prefixes := py.NewList()
-	if base != "" {
-		prefixes.Append(py.String(base))
-	}
+	pfx := py.GetPrefixes().Prefix
+	prefixes.Append(py.String(pfx))
+	prefixes.Append(py.String(pfx))
 	globals.Set("PREFIXES", prefixes)
 
 	py.RegisterModule(&py.ModuleImpl{
@@ -294,29 +251,14 @@ func addSiteDir(ctx py.Context, dir string) error {
 		}
 	}
 	add(dir)
-	names, _ := filepath.Glob(filepath.Join(dir, "*.pth"))
-	sort.Strings(names)
-	for _, n := range names {
-		data, err := os.ReadFile(n)
-		if err != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || line[0] == '#' || strings.HasPrefix(line, "import ") || strings.HasPrefix(line, "import\t") {
-				continue
-			}
-			if p := filepath.Join(dir, line); fileOrDirExists(p) {
-				add(p)
-			}
-		}
+	paths, imports := py.ParsePth(dir)
+	for _, p := range paths {
+		add(p)
+	}
+	for _, line := range imports {
+		py.ExecPthLine(ctx, line)
 	}
 	return nil
-}
-
-func fileOrDirExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
 }
 
 // currentContext returns the Context a module method was called on.

@@ -962,7 +962,10 @@ var (
 // ---------------------------------------------------------------------------
 // groupby
 
-func groupby(self py.Object, args py.Tuple) (py.Object, error) {
+func groupby(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if k, ok := kwargs.Get("key"); ok && len(args) == 1 {
+		args = append(py.Tuple{}, args[0], k)
+	}
 	if len(args) < 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "groupby() needs an iterable")
 	}

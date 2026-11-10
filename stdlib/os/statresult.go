@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -179,27 +180,101 @@ func (s *StatResult) M__repr__() (py.Object, error) {
 	return py.String(b.String()), nil
 }
 
-// fsPath is the path an os function was given: a str, or anything with
-// __fspath__ (pathlib.Path), as os.fspath accepts.
-func fsPath(o py.Object) (string, error) {
-	if s, ok := o.(py.String); ok {
-		return string(s), nil
-	}
-	if b, ok := o.(py.Bytes); ok {
-		return string(b), nil
-	}
-	if fn, err := py.GetAttrString(o, "__fspath__"); err == nil {
-		r, err := py.Call(fn, nil, py.NewStringDict())
-		if err != nil {
-			return "", err
-		}
-		if s, ok := r.(py.String); ok {
-			return string(s), nil
-		}
-	}
-	return "", py.ExceptionNewf(py.TypeError,
-		"stat: path should be string, bytes, os.PathLike or integer, not %s", o.Type().Name)
+// Kinds of path an os function accepts, for its TypeError, as CPython's
+// path_converter words them.
+const (
+	pathKinds      = "string, bytes or os.PathLike"
+	pathOrFdKinds  = "string, bytes, os.PathLike or integer"
+	pathFdOrNoneKs = "string, bytes, os.PathLike, integer or None"
+)
+
+// fsPath is the path the os function fn was given: a str or bytes, or
+// anything with __fspath__ (pathlib.Path) returning one, as CPython's
+// path_converter accepts.  kinds names what fn accepts, for the error.
+func fsPath(fn string, o py.Object, kinds string) (string, error) {
+	s, _, err := fsPathArg(fn, "path", o, kinds)
+	return s, err
 }
+
+// fsPathArg is fsPath for an argument called arg (src, dst) that also says
+// whether the path was bytes.
+func fsPathArg(fn, arg string, o py.Object, kinds string) (string, bool, error) {
+	switch v := o.(type) {
+	case py.String:
+		return string(v), false, nil
+	case py.Bytes:
+		return string(v), true, nil
+	}
+	if hook, err := py.GetAttrString(o, "__fspath__"); err == nil {
+		r, err := py.Call(hook, nil, py.NewStringDict())
+		if err != nil {
+			return "", false, err
+		}
+		switch v := r.(type) {
+		case py.String:
+			return string(v), false, nil
+		case py.Bytes:
+			return string(v), true, nil
+		}
+		return "", false, py.ExceptionNewf(py.TypeError, "expected %s.__fspath__() to return str or bytes, not %s",
+			o.Type().Name, r.Type().Name)
+	}
+	if fn == "" {
+		// A function CPython writes in Python (makedirs, removedirs) fails
+		// in os.fspath, with its message.
+		return "", false, py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", o.Type().Name)
+	}
+	return "", false, py.ExceptionNewf(py.TypeError, "%s: %s should be %s, not %s", fn, arg, kinds, o.Type().Name)
+}
+
+// pathArg is a path-or-descriptor argument: what the function acts on, and
+// the object CPython shows as the filename of an error.
+type pathArg struct {
+	s       string
+	fd      int
+	isFd    bool
+	isBytes bool
+	obj     py.Object // nil when the call had no path (None)
+}
+
+// getPath reads the argument of a function that accepts a descriptor (kinds
+// has "integer") and/or None (kinds ends "or None", meaning the current
+// directory).
+func getPath(fn string, o py.Object, kinds string) (pathArg, error) {
+	if fd, ok := o.(py.Int); ok && strings.Contains(kinds, "integer") {
+		return pathArg{fd: int(fd), isFd: true, obj: o}, nil
+	}
+	if o == py.None && strings.HasSuffix(kinds, "None") {
+		return pathArg{s: "."}, nil
+	}
+	s, isB, err := fsPathArg(fn, "path", o, kinds)
+	if err != nil {
+		return pathArg{}, err
+	}
+	p := pathArg{s: s, isBytes: isB, obj: py.String(s)}
+	if isB {
+		p.obj = py.Bytes(s)
+	}
+	return p, nil
+}
+
+// fail is the OSError for err on this path.
+func (p pathArg) fail(err error) error { return py.OSErrorFromObj(err, p.obj) }
+
+// withFD runs f on the open descriptor fd.  A descriptor that is not open is
+// EBADF, found before wrapping it: a File made around a dead descriptor would
+// close whatever reuses the number when it is collected.
+func withFD(fd int, f func(*os.File) error) error {
+	if _, err := fstatResult(fd); err != nil {
+		return syscall.EBADF
+	}
+	file := py.TakeFD(uintptr(fd), "")
+	defer py.OwnFD(file)
+	return f(file)
+}
+
+// failTwo is the OSError for a two-path call (rename, link, symlink).
+func failTwo(err error, src, dst py.Object) error { return py.OSErrorFromObj(err, src, dst) }
 
 func statCall(name string, follow bool, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var path py.Object
@@ -216,21 +291,26 @@ func statCall(name string, follow bool, args py.Tuple, kwargs py.StringDict) (py
 		follow = false
 	}
 	// An integer is a file descriptor: os.stat(fd) is os.fstat(fd).
-	if fd, ok := path.(py.Int); ok {
-		return fstatResult(int(fd))
+	// (lstat takes no descriptor.)
+	if fd, ok := path.(py.Int); ok && name != "lstat" {
+		r, err := fstatResult(int(fd))
+		if err != nil {
+			return nil, py.OSErrorFromObj(syscall.EBADF, path)
+		}
+		return r, nil
 	}
-	p, err := fsPath(path)
+	p, isB, err := fsPathArg(name, "path", path, map[bool]string{true: pathOrFdKinds, false: pathKinds}[name != "lstat"])
 	if err != nil {
 		return nil, err
 	}
 	var fi os.FileInfo
 	if follow {
-		fi, err = os.Stat(p)
+		fi, err = py.StatPath(p)
 	} else {
-		fi, err = os.Lstat(p)
+		fi, err = py.LstatPath(p)
 	}
 	if err != nil {
-		return nil, py.OSErrorFrom(err, p)
+		return nil, py.OSErrorFromObj(err, pathObj(p, isB))
 	}
 	return NewStatResult(fi), nil
 }

@@ -292,7 +292,7 @@ func (store *ModuleStore) NewModule(ctx Context, impl *ModuleImpl) (*Module, err
 		m.Globals.Set("modules", NewModulesView(store))
 		// The originals, which code.py compares with "is" to see whether
 		// anyone replaced the hook.
-		for _, hook := range []string{"excepthook", "displayhook"} {
+		for _, hook := range []string{"excepthook", "displayhook", "breakpointhook"} {
 			if h := m.Globals.GetOrNil(hook); h != nil {
 				m.Globals.Set("__"+hook+"__", h)
 			}

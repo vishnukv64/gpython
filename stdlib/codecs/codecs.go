@@ -96,8 +96,8 @@ func init() {
 		py.DictEntry{Key: "BufferedIncrementalEncoder", Value: incrementalEncoderType},
 		py.DictEntry{Key: "getencoder", Value: py.MustNewMethod("getencoder", getEncoder, 0, "Look up the encoder for an encoding.")},
 		py.DictEntry{Key: "getdecoder", Value: py.MustNewMethod("getdecoder", getDecoder, 0, "Look up the decoder for an encoding.")},
-		py.DictEntry{Key: "getincrementalencoder", Value: py.MustNewMethod("getincrementalencoder", getEncoder, 0, "Look up the incremental encoder.")},
-		py.DictEntry{Key: "getincrementaldecoder", Value: py.MustNewMethod("getincrementaldecoder", getDecoder, 0, "Look up the incremental decoder.")},
+		py.DictEntry{Key: "getincrementalencoder", Value: py.MustNewMethod("getincrementalencoder", getIncrementalEncoder, 0, "Look up the incremental encoder.")},
+		py.DictEntry{Key: "getincrementaldecoder", Value: py.MustNewMethod("getincrementaldecoder", getIncrementalDecoder, 0, "Look up the incremental decoder.")},
 		py.DictEntry{Key: "BOM", Value: py.Bytes{0xef, 0xbb, 0xbf}},
 		py.DictEntry{Key: "BOM_UTF8", Value: py.Bytes{0xef, 0xbb, 0xbf}},
 		py.DictEntry{Key: "BOM_UTF16", Value: py.Bytes{0xff, 0xfe}},
@@ -519,3 +519,37 @@ var (
 	_ py.I__iter__    = (*CodecInfo)(nil)
 	_ py.I__len__     = (*CodecInfo)(nil)
 )
+
+// getIncrementalDecoder is codecs.getincrementaldecoder: the class (here, the
+// constructor) of the incremental decoder for an encoding.
+func getIncrementalDecoder(self py.Object, args py.Tuple) (py.Object, error) {
+	name, err := incrementalName(args, "getincrementaldecoder")
+	if err != nil {
+		return nil, err
+	}
+	return LookupIncrementalDecoder(name), nil
+}
+
+func getIncrementalEncoder(self py.Object, args py.Tuple) (py.Object, error) {
+	name, err := incrementalName(args, "getincrementalencoder")
+	if err != nil {
+		return nil, err
+	}
+	return LookupIncrementalEncoder(name), nil
+}
+
+func incrementalName(args py.Tuple, fn string) (string, error) {
+	var enc py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, fn, 1, 1, &enc); err != nil {
+		return "", err
+	}
+	text, err := py.StrAsString(enc)
+	if err != nil {
+		return "", err
+	}
+	canonical := normalise(text)
+	if !known(canonical) {
+		return "", py.ExceptionNewf(py.LookupError, "unknown encoding: %s", text)
+	}
+	return canonical, nil
+}

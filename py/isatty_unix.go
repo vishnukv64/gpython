@@ -23,3 +23,15 @@ func IsTerminal(fd uintptr) bool {
 		uintptr(unsafe.Pointer(&t)), 0, 0, 0)
 	return errno == 0
 }
+
+// TerminalSize is the window size of the terminal on fd (TIOCGWINSZ).  The
+// error is the raw errno, ENOTTY or EBADF, for the caller to wrap.
+func TerminalSize(fd uintptr) (columns, lines int, err error) {
+	var ws [4]uint16 // row, col, xpixel, ypixel
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TIOCGWINSZ,
+		uintptr(unsafe.Pointer(&ws)))
+	if errno != 0 {
+		return 0, 0, errno
+	}
+	return int(ws[1]), int(ws[0]), nil
+}

@@ -70,5 +70,20 @@ func (b *backtrack) find(text string, anchored, whole bool) []int {
 func needsBacktrack(translated string) bool {
 	// An atomic group "(?>...)" (Python 3.11) is the other construct only a
 	// backtracking engine has; CPython's own fnmatch.translate emits one.
-	return strings.Contains(translated, "(?=") || strings.Contains(translated, "(?>")
+	return strings.Contains(translated, "(?=") || strings.Contains(translated, "(?>") || hasBackref(translated)
+}
+
+// hasBackref reports a numbered backreference,  to \9, outside an escaped
+// backslash.
+func hasBackref(p string) bool {
+	for i := 0; i+1 < len(p); i++ {
+		if p[i] != '\\' {
+			continue
+		}
+		if p[i+1] >= '1' && p[i+1] <= '9' {
+			return true
+		}
+		i++
+	}
+	return false
 }

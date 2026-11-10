@@ -128,17 +128,38 @@ type Repr struct {
 	// Indent is None, an int number of spaces, or a string.  It is stored as
 	// the Python object so that all three forms survive.
 	Indent py.Object
+	// cls and dict make a Python subclass of Repr work (pydoc.HTMLRepr): its
+	// own methods and instance attributes.  The Go methods still render with
+	// the built-in repr1, so a subclass's repr_<type> overrides are not called.
+	cls  *py.Type
+	dict py.StringDict
+}
+
+// GetDict is the instance namespace.
+func (r *Repr) GetDict() py.StringDict {
+	if r.dict.IsNil() {
+		r.dict = py.NewStringDict()
+	}
+	return r.dict
 }
 
 var reprType = py.NewTypeX("reprlib.Repr", reprClass_doc, reprNew, nil)
 
-func (r *Repr) Type() *py.Type { return reprType }
+func (r *Repr) Type() *py.Type {
+	if r.cls != nil {
+		return r.cls
+	}
+	return reprType
+}
 
 func reprNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	r := &Repr{
 		MaxLevel: 6, MaxTuple: 6, MaxList: 6, MaxArray: 5, MaxDict: 4,
 		MaxSet: 6, MaxFrozenSet: 6, MaxDeque: 6, MaxString: 30, MaxLong: 40,
 		MaxOther: 30, FillValue: "...", Indent: py.None,
+	}
+	if metatype.Name != "reprlib.Repr" {
+		r.cls = metatype
 	}
 	if len(args) != 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "Repr() takes no positional arguments")

@@ -13,8 +13,8 @@ import (
 	"log"
 	"runtime"
 
-	"github.com/vishnukv64/gpython/repl"
 	"github.com/gopherjs/gopherwasm/js" // gopherjs to wasm converter shim
+	"github.com/vishnukv64/gpython/repl"
 
 	// import required modules
 	_ "github.com/vishnukv64/gpython/stdlib"

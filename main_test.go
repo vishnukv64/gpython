@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -80,4 +82,48 @@ func TestGPython(t *testing.T) {
 
 func TestRunFile(t *testing.T) {
 	xmain([]string{"./testdata/hello.py"})
+}
+
+// TestVenv builds a virtual environment offline (no pip) and checks that the
+// interpreter inside it reports CPython's prefixes and search path.
+func TestVenv(t *testing.T) {
+	tmp := t.TempDir()
+	exe := filepath.Join(tmp, "gpy")
+	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	env := filepath.Join(tmp, "env")
+	if out, err := exec.Command(exe, "-m", "venv", "--without-pip", env).CombinedOutput(); err != nil {
+		t.Fatalf("venv: %v\n%s", err, out)
+	}
+	bin, py := "bin", "python"
+	site := filepath.Join(env, "lib", "python3.14", "site-packages")
+	if runtime.GOOS == "windows" {
+		bin, py = "Scripts", "python.exe"
+		site = filepath.Join(env, "Lib", "site-packages")
+	}
+	cfg, err := os.ReadFile(filepath.Join(env, "pyvenv.cfg"))
+	if err != nil || !strings.Contains(string(cfg), "include-system-site-packages = false") {
+		t.Fatalf("pyvenv.cfg: %v %q", err, cfg)
+	}
+	if _, err := os.Stat(site); err != nil {
+		t.Fatal(err)
+	}
+	// The build dir may be a symlink (macOS /var -> /private/var).
+	real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
+	out, err := exec.Command(filepath.Join(env, bin, py), "-c",
+		"import sys, site; print(sys.prefix); print(sys.base_prefix); print(sys.exec_prefix); print(site.getsitepackages()[0]); print(sys.path[-1] if sys.path[-1].endswith('site-packages') else [p for p in sys.path if p.endswith('site-packages')][0])").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	want := []string{real(env), real(tmp), real(env), real(site), real(site)}
+	if len(got) != len(want) {
+		t.Fatalf("got %q", got)
+	}
+	for i := range want {
+		if real(got[i]) != want[i] {
+			t.Errorf("line %d: got %q want %q", i, got[i], want[i])
+		}
+	}
 }

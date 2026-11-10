@@ -138,7 +138,7 @@ func Index(a Object) (Int, error) {
 		return 0, ExceptionNewf(TypeError, "__index__ returned non-int: (type %s)", A.Type().Name)
 	}
 
-	return 0, ExceptionNewf(TypeError, "unsupported operand type(s) for index: '%s'", a.Type().Name)
+	return 0, ExceptionNewf(TypeError, "'%s' object cannot be interpreted as an integer", a.Type().Name)
 }
 
 // Index the python Object returning an int
@@ -210,10 +210,39 @@ func attributeOwner(self Object) string {
 			return "type object '" + t.Name + "'"
 		}
 	}
-	if _, ok := self.(*Module); ok {
-		return "module '" + name + "'"
-	}
 	return "'" + name + "' object"
+}
+
+// attributeError is the AttributeError for key missing from self.  A module
+// is worded the way CPython's module_getattro does: by its __name__, and
+// "partially initialized" while its spec says it is still importing.
+func attributeError(self Object, key string) error {
+	m, ok := self.(*Module)
+	if !ok {
+		return ExceptionNewf(AttributeError, "%s has no attribute '%s'", attributeOwner(self), key)
+	}
+	name, ok := m.Globals.GetOrNil("__name__").(String)
+	if !ok {
+		return ExceptionNewf(AttributeError, "module has no attribute '%s'", key)
+	}
+	if spec := m.Globals.GetOrNil("__spec__"); spec != nil && spec != None {
+		if v, err := GetAttrString(spec, "_initializing"); err == nil {
+			if b, err := MakeBool(v); err == nil && b == True {
+				from := ""
+				if loc, err := GetAttrString(spec, "has_location"); err == nil {
+					if b, err := MakeBool(loc); err == nil && b == True {
+						if o, err := GetAttrString(spec, "origin"); err == nil {
+							if os, ok := o.(String); ok {
+								from = " from '" + string(os) + "'"
+							}
+						}
+					}
+				}
+				return ExceptionNewf(AttributeError, "partially initialized module '%s'%s has no attribute '%s' (most likely due to a circular import)", name, from, key)
+			}
+		}
+	}
+	return ExceptionNewf(AttributeError, "module '%s' has no attribute '%s'", name, key)
 }
 
 // Returns the number of items of a sequence or mapping
@@ -340,6 +369,14 @@ func GetItem(self Object, key Object) (Object, error) {
 	if I, ok := self.(I__getitem__); ok {
 		return I.M__getitem__(key)
 	} else if res, ok, err := TypeCall1(self, "__getitem__", key); ok {
+		// dict.__getitem__ falls back to the subclass's __missing__.
+		if err != nil && IsException(KeyError, err) {
+			if t, isInst := self.(*Type); isInst && t.Name == "" && t.ObjectType != nil && t.ObjectType.derivesFromDict() {
+				if fn, isFn := t.ObjectType.Lookup("__missing__").(*Function); isFn {
+					return Call(NewBoundMethod(self, fn), Tuple{key}, NewStringDict())
+				}
+			}
+		}
 		return res, err
 	}
 	return nil, ExceptionNewf(TypeError, "'%s' object is not subscriptable", self.Type().Name)
@@ -433,7 +470,30 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 	// the class's INSTANCES (BaseException defines one).  Without this,
 	// "ValueError.__dict__" answered that property, not the namespace.
 	if t, ok := self.(*Type); ok && key == "__dict__" && t.Name != "" {
+		if builtinDunderHook != nil {
+			if view, ok := builtinDictViewHook(t); ok {
+				return view, nil
+			}
+		}
 		return t.Dict, nil
+	}
+	// A class whose INSTANCES have a property of this name (builtin methods
+	// have __name__) must still answer cls.__name__ with its own name.
+	if t, ok := self.(*Type); ok && t.Name != "" && (key == "__name__" || key == "__qualname__" || key == "__module__") {
+		if _, isProp := t.Dict.GetOrNil(key).(*Property); isProp {
+			if g, ok := TypeType.Dict.GetOrNil(key).(*typeMetaGetter); ok {
+				return g.get(t), nil
+			}
+		}
+	}
+	if self == Object(TypeType) && key == "__call__" {
+		// type.__call__ is the slot wrapper that calls a class (a metaclass's
+		// __call__ delegates to it), not the call of type itself.
+		if m, ok := TypeType.Dict.Get("__call__"); ok {
+			if g, ok := m.(I__get__); ok {
+				return g.M__get__(None, self)
+			}
+		}
 	}
 	if self == Object(ObjectType) {
 		switch key {
@@ -443,7 +503,17 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 			return objectRepr, nil
 		}
 	}
-	if _, isInstance := self.(*Type); !isInstance || self.(*Type).Name != "" {
+	// A typeMetaGetter spells __get__ through its class (it takes an optional
+	// owner), not through the two-argument Go M__get__.
+	_, isMetaGetter := self.(*typeMetaGetter)
+	// A class that defines the dunder itself ("def __call__(self, ...)") has
+	// C.__call__ be that function, not the metatype's type.__call__.
+	if ty, isCls := self.(*Type); isCls && ty.Name != "" {
+		if _, isFn := ty.Lookup(key).(*Function); isFn {
+			isMetaGetter = true
+		}
+	}
+	if _, isInstance := self.(*Type); (!isInstance || self.(*Type).Name != "") && !isMetaGetter {
 		if len(key) >= 5 && strings.HasPrefix(key, "__") && strings.HasSuffix(key, "__") {
 			objectValue := reflect.ValueOf(self)
 			methodValue := objectValue.MethodByName("M" + key)
@@ -459,6 +529,13 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 		if own := ty.ObjectType.Lookup(key); own != nil && isDataDescriptor(own) {
 			skipDict = true
 		}
+	}
+
+	// A plain dict's items are not its attributes: d.get is the method even
+	// when d has the key "get".  (Other keys still read as attributes, which
+	// the namespaces built as bare dicts - sys.hash_info - depend on.)
+	if _, isDict := self.(StringDict); isDict && gStringDictType.Lookup(key) != nil {
+		skipDict = true
 	}
 
 	// Look in the instance dictionary if it exists
@@ -551,15 +628,25 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 		return res, err
 	}
 
+	if t, isCls := self.(*Type); isCls {
+		if builtinDunderHook != nil {
+			if m := builtinDunderHook(t, key); m != nil {
+				return m, nil
+			}
+		}
+	}
 	if !hooks {
-		return nil, ExceptionNewf(AttributeError, "%s has no attribute '%s'", attributeOwner(self), key)
+		return nil, attributeError(self, key)
 	}
 
 	// And now only if not found call __getattr__
 	if I, ok := self.(I__getattr__); ok {
 		return I.M__getattr__(key)
-	} else if res, ok, err = TypeCall1(self, "__getattr__", Object(String(key))); ok {
-		return res, err
+	} else if !IsClassObject(self) || metaHasGetattr(self) {
+		// A class's own __getattr__ serves its instances, not the class.
+		if res, ok, err = TypeCall1(self, "__getattr__", Object(String(key))); ok {
+			return res, err
+		}
 	}
 
 	// PEP 562: a module may define __getattr__ to supply missing names
@@ -574,7 +661,7 @@ func getAttrString(self Object, key string, hooks bool) (res Object, err error) 
 	// The name of the CLASS, not the metatype: for a class this prints
 	// "type object 'V' has no attribute 'x'", which is CPython's wording and
 	// says WHICH class - "type has no attribute 'x'" names nothing useful.
-	return nil, ExceptionNewf(AttributeError, "%s has no attribute '%s'", attributeOwner(self), key)
+	return nil, attributeError(self, key)
 }
 
 // GetAttrErr - returns the result or an err to be raised if not found
@@ -621,8 +708,26 @@ func setViaDescriptor(self Object, key string, value Object) (Object, bool, erro
 			res, err := I.M__set__(self, value)
 			return res, true, err
 		}
+		if res, ok, err := userDescr(setter, "__set__", self, value); ok {
+			return res, true, err
+		}
 	}
 	return nil, false, nil
+}
+
+// userDescr runs __set__ (with a value) or __delete__ (without) of a data
+// descriptor whose class is written in Python; see userGet.
+func userDescr(d Object, name string, instance Object, value ...Object) (Object, bool, error) {
+	ty, isType := d.(*Type)
+	if !isType || ty.Name != "" || ty.ObjectType == nil {
+		return nil, false, nil
+	}
+	fn := ty.ObjectType.LookupPython(name)
+	if fn == nil {
+		return nil, false, nil
+	}
+	r, err := Call(fn, append(Tuple{d, instance}, value...), NewStringDict())
+	return r, true, err
 }
 
 // setAttrDict is the default store into the instance namespace.
@@ -696,6 +801,9 @@ func delViaDescriptor(self Object, key string) (bool, error) {
 	if d := self.Type().NativeGetAttrOrNil(key); d != nil {
 		if I, ok := d.(I__delete__); ok {
 			_, err := I.M__delete__(self)
+			return true, err
+		}
+		if _, ok, err := userDescr(d, "__delete__", self); ok {
 			return true, err
 		}
 	}
@@ -923,3 +1031,19 @@ func userGet(res, instance, owner Object) (Object, bool, error) {
 	r, err := Call(get, Tuple{res, instance, owner}, NewStringDict())
 	return r, true, err
 }
+
+// metaHasGetattr reports whether the metaclass of the class self defines
+// __getattr__ itself.
+func metaHasGetattr(self Object) bool {
+	t, ok := self.(*Type)
+	if !ok || t.Name == "" {
+		return false
+	}
+	meta := t.Type()
+	return meta != nil && meta != TypeType && meta.Lookup("__getattr__") != nil
+}
+
+// builtinDunderHook is builtinDunder, installed by init: a direct reference
+// would make the type objects' initializers cyclic.
+var builtinDunderHook func(*Type, string) Object
+var builtinDictViewHook func(*Type) (StringDict, bool)

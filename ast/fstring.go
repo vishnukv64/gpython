@@ -156,7 +156,7 @@ func scanField(r []rune, i int) (fieldScan, error) {
 
 // ParseFString splits the raw text of an f-string or t-string literal into
 // literal parts and replacement fields.
-func ParseFString(text string) ([]FStringPart, error) {
+func ParseFString(text string, raw bool) ([]FStringPart, error) {
 	var parts []FStringPart
 	var lit strings.Builder
 
@@ -164,6 +164,17 @@ func ParseFString(text string) ([]FStringPart, error) {
 	for i := 0; i < len(r); {
 		c := r[i]
 		switch {
+		case !raw && c == '\\' && i+1 < len(r):
+			// An escape: a named character, backslash-N-brace, must not be read
+			// as the start of a replacement field.
+			n := 2
+			if r[i+1] == 'N' && i+2 < len(r) && r[i+2] == '{' {
+				if end := indexRune(r, '}', i+3); end >= 0 {
+					n = end + 1 - i
+				}
+			}
+			lit.WriteString(string(r[i : i+n]))
+			i += n
 		case c == '{' && i+1 < len(r) && r[i+1] == '{', c == '}' && i+1 < len(r) && r[i+1] == '}':
 			lit.WriteRune(c)
 			i += 2
@@ -268,13 +279,21 @@ func stripComments(s string) string {
 // FStringOpen reports whether text, the start of an f-string body, ends
 // inside a replacement field.  The lexer uses it to decide whether a quote
 // or a newline belongs to the field (PEP 701) or ends the string.
-func FStringOpen(text string) bool {
+func FStringOpen(text string, raw bool) bool {
 	if !strings.Contains(text, "{") {
 		return false
 	}
 	r := []rune(text)
 	for i := 0; i < len(r); i++ {
 		switch {
+		case !raw && r[i] == '\\' && i+1 < len(r):
+			if r[i+1] == 'N' && i+2 < len(r) && r[i+2] == '{' {
+				if end := indexRune(r, '}', i+3); end >= 0 {
+					i = end
+					continue
+				}
+			}
+			i++
 		case r[i] == '{' && i+1 < len(r) && r[i+1] == '{':
 			i++
 		case r[i] == '{':
@@ -292,4 +311,14 @@ func FStringOpen(text string) bool {
 // multi-line expression, or one that ends in a comment, parses (PEP 701).
 func (p FStringPart) ParseExpr() (Expr, error) {
 	return ParseExpr("(" + p.Expr + "\n)")
+}
+
+// indexRune is the index of c in r at or after from, or -1.
+func indexRune(r []rune, c rune, from int) int {
+	for i := from; i < len(r); i++ {
+		if r[i] == c {
+			return i
+		}
+	}
+	return -1
 }

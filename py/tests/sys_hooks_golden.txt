@@ -1,0 +1,26 @@
+displayhook same: True
+excepthook same: True
+breakpointhook same: True
+breakpointhook
+True breakpoint
+'0' -> None [] [] []
+'hookmod.hook' -> 'ret' [] [] [((1, 2), {'x': 3})]
+'hookpkg.sub.fn' -> 7 [] [] [('sub', ('a',), {})]
+'my_builtin_hook' -> 'b' [] [] [('builtin', ('b',), {'k': 1})]
+'nosuchmod.thing' -> None ['Ignoring unimportable $PYTHONBREAKPOINT: "nosuchmod.thing"'] ['RuntimeWarning'] []
+'hookmod.nothing' -> None ['Ignoring unimportable $PYTHONBREAKPOINT: "hookmod.nothing"'] ['RuntimeWarning'] []
+'hookmod.' -> None ['Ignoring unimportable $PYTHONBREAKPOINT: "hookmod."'] ['RuntimeWarning'] []
+'.hook' -> None ['Ignoring unimportable $PYTHONBREAKPOINT: ".hook"'] ['RuntimeWarning'] []
+'print_nothing_here' -> None ['Ignoring unimportable $PYTHONBREAKPOINT: "print_nothing_here"'] ['RuntimeWarning'] []
+ret [((9,), {'y': 1})]
+('replaced', (1,), {'z': 2})
+RuntimeError: lost sys.breakpointhook
+"[1, 'a']\n0\n" keep [1, 'a'] 0
+ZeroDivisionError: division by zero
+TypeError: excepthook expected 3 arguments, got 1
+os.terminal_size(columns=80, lines=24) (80, 24) 80 24 2 os terminal_size
+True True 24
+TypeError: os.terminal_size() takes a 2-sequence (1-sequence given)
+OSError True 
+OSError True True
+TypeError: 'str' object cannot be interpreted as an integer

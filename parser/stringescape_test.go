@@ -65,7 +65,8 @@ func TestDecodeEscape(t *testing.T) {
 		{`{\U00001234}`, "{\U00001234}", "", false},
 		{`\U00000001\U0000018a\U000012ff`, "\U00000001\U0000018a\U000012ff", "", false},
 		{`\U00000001\U0000018A\U000012FF`, "\U00000001\U0000018a\U000012ff", "", false},
-		{`\N{potato}`, `\N{potato}`, "", false},
+		{`\N{potato}`, "🥔", "", false},
+		{`a\N{LATIN SMALL LETTER B}c`, "abc", "", false},
 
 		// Bytemode tests
 		{``, ``, "", true},

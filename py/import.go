@@ -333,6 +333,9 @@ func moduleFromSpecAttrs(ctx Context, name string, spec Object, codeDesc string)
 	if origin := attrOrNil(spec, "origin"); origin != nil && origin != None {
 		mod.Globals.Set("__file__", origin)
 	}
+	if parent := attrOrNil(spec, "parent"); parent != nil && parent != None {
+		mod.Globals.Set("__package__", parent)
+	}
 	// submodule_search_locations makes the module a PACKAGE; without it a
 	// loader that imports its own submodules cannot.
 	if locs := attrOrNil(spec, "submodule_search_locations"); locs != nil && locs != None {
@@ -706,4 +709,12 @@ func BuiltinImport(ctx Context, self Object, args Tuple, kwargs StringDict, curr
 	}
 
 	return ImportModuleLevelObject(ctx, string(name.(String)), globalsDict, localsDict, fromlistTuple, levelInt)
+}
+
+// ModuleFromSpec is importlib.util.module_from_spec for a spec: a module with
+// the spec's __name__, __spec__, __file__ and __path__.  It is recorded in
+// sys.modules, which CPython's does not do; a loader that runs it normally
+// registers it next anyway.
+func ModuleFromSpec(ctx Context, name string, spec Object) (*Module, error) {
+	return moduleFromSpecAttrs(ctx, name, spec, "")
 }

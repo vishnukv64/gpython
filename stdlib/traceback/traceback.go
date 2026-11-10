@@ -12,12 +12,16 @@
 package traceback
 
 import (
+	_ "embed"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 )
+
+//go:embed extra.py
+var extraSrc string
 
 const module_doc = `Extract, format and print information about Python stack traces.`
 
@@ -652,5 +656,6 @@ func init() {
 		},
 		Methods: nil,
 		Globals: globals,
+		CodeSrc: extraSrc,
 	})
 }

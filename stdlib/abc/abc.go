@@ -136,6 +136,14 @@ func has(obj py.Object, name string) bool {
 	return false
 }
 
+// hasAttr reports whether the object has the attribute, wherever its type
+// keeps it (the native awaitables and async generators answer these as Go
+// methods, not Dict entries).
+func hasAttr(obj py.Object, name string) bool {
+	_, err := py.GetAttrString(obj, name)
+	return err == nil
+}
+
 // hasIter and hasNext cover the protocol types.
 func hasIter(obj py.Object) bool { return has(obj, "__iter__") }
 
@@ -288,10 +296,20 @@ func init() {
 			return has(obj, "__len__")
 		case CallableType:
 			return has(obj, "__call__")
-		case IterableType, AsyncIterableType:
+		case IterableType:
 			return hasIter(obj)
-		case IteratorType, AsyncIteratorType, GeneratorType, AsyncGeneratorType:
+		case IteratorType, GeneratorType:
 			return hasIter(obj) && hasNext(obj)
+		case AwaitableType:
+			return hasAttr(obj, "__await__")
+		case CoroutineType:
+			return hasAttr(obj, "__await__") && hasAttr(obj, "send") && hasAttr(obj, "throw") && hasAttr(obj, "close")
+		case AsyncIterableType:
+			return hasAttr(obj, "__aiter__")
+		case AsyncIteratorType:
+			return hasAttr(obj, "__aiter__") && hasAttr(obj, "__anext__")
+		case AsyncGeneratorType:
+			return hasAttr(obj, "__aiter__") && hasAttr(obj, "__anext__") && hasAttr(obj, "asend") && hasAttr(obj, "athrow") && hasAttr(obj, "aclose")
 		case ReversibleType:
 			return has(obj, "__reversed__") || has(obj, "__getitem__")
 		case CollectionType:

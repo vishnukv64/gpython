@@ -26,7 +26,7 @@ func (c *compiler) compileFString(node *ast.FString) {
 		c.compileTString(node)
 		return
 	}
-	parts, err := ast.ParseFString(node.Text)
+	parts, err := ast.ParseFString(node.Text, node.Raw)
 	if err != nil {
 		c.panicSyntaxErrorf(node, "%s", fstringMsg(err))
 		return
@@ -94,7 +94,7 @@ func (c *compiler) fstringParts(node *ast.FString, parts []ast.FStringPart, node
 
 			if strings.Contains(part.FormatSpec, "{") {
 				// A nested spec, f"{x:{w}d}", is itself an f-string.
-				specParts, err := ast.ParseFString(part.FormatSpec)
+				specParts, err := ast.ParseFString(part.FormatSpec, node.Raw)
 				if err != nil {
 					c.panicSyntaxErrorf(node, "%s", fstringMsg(err))
 					return
@@ -194,7 +194,7 @@ func containsComprehension(expr ast.Expr) bool {
 // string._gpy_template((literals...), (_gpy_interp(value, expr, conv, spec)...)).
 // A debug field "{x=}" folds its source text into the literal before it.
 func (c *compiler) compileTString(node *ast.FString) {
-	parts, err := ast.ParseFString(node.Text)
+	parts, err := ast.ParseFString(node.Text, node.Raw)
 	if err != nil {
 		c.panicSyntaxErrorf(node, "%s", strings.Replace(fstringMsg(err), "f-string", "t-string", 1))
 		return

@@ -326,7 +326,7 @@ func (st *SymTable) Parse(Ast ast.Ast) {
 			// An invalid f-string is reported by the compiler, not here.
 			var visit func(text string)
 			visit = func(text string) {
-				parts, err := ast.ParseFString(text)
+				parts, err := ast.ParseFString(text, node.Raw)
 				if err != nil {
 					return
 				}

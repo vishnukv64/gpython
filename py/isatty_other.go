@@ -6,6 +6,13 @@
 
 package py
 
+import "errors"
+
 // IsTerminal answers False where no termios ioctl is wired up, which is the
 // safe answer: a caller that sees False does not prompt.
 func IsTerminal(fd uintptr) bool { return false }
+
+// TerminalSize is not available here.
+func TerminalSize(fd uintptr) (columns, lines int, err error) {
+	return 0, 0, errors.ErrUnsupported
+}

@@ -302,7 +302,7 @@ func finishArglist(items []argItem) *ast.Call {
 %type <stmts> simple_stmt stmt nl_or_stmt small_stmts stmts suite optional_else
 %type <stmt> compound_stmt small_stmt expr_stmt del_stmt pass_stmt flow_stmt import_stmt global_stmt nonlocal_stmt assert_stmt break_stmt continue_stmt return_stmt raise_stmt yield_stmt import_name import_from while_stmt if_stmt for_stmt try_stmt with_stmt funcdef classdef classdef_or_funcdef decorated async_stmt async_funcdef
 %type <op> augassign
-%type <posonly> posonly_prefix
+%type <posonly> posonly_prefix vposonly_prefix
 %type <dictexpr> dictentries
 %type <stmt> match_stmt match_case
 %type <stmts> match_cases
@@ -399,6 +399,7 @@ func finishArglist(items []argItem) *ast.Call {
 %token TRY // try
 %token WHILE // while
 %token WITH // with
+%token WITHPAREN // the '(' opening a parenthesized with-item list
 %token YIELD // yield
 %token ASYNC // async
 %token AWAIT // await
@@ -786,14 +787,14 @@ typedargslist:
 		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6}
 	}
-|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
+|	posonly_prefix tfpdeftests1 ',' '*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef optional_comma
 	{
 		po := $1
 		args := append(append([]*ast.Arg{}, po.args...), $2...)
 		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6, Kwarg: $9}
 	}
-|	posonly_prefix tfpdeftests1 ',' STARSTAR tfpdef
+|	posonly_prefix tfpdeftests1 ',' STARSTAR tfpdef optional_comma
 	{
 		po := $1
 		args := append(append([]*ast.Arg{}, po.args...), $2...)
@@ -818,7 +819,7 @@ typedargslist:
 		po := $1
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
 	}
-|	posonly_prefix STARSTAR tfpdef
+|	posonly_prefix STARSTAR tfpdef optional_comma
 	{
 		po := $1
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Kwarg: $3}
@@ -863,11 +864,11 @@ typedargslist:
 		// "**kwargs,", which is how a formatted signature is written.
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
 	}
-|	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef
+|	'*' optional_tfpdef tfpdeftests ',' STARSTAR tfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
 	}
-|	STARSTAR tfpdef
+|	STARSTAR tfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwarg: $2}
 	}
@@ -935,9 +936,63 @@ optional_vfpdef:
 		$$ = $1
 	}
 
+// vposonly_prefix is posonly_prefix for lambda parameter lists.
+vposonly_prefix:
+	vfpdeftests1 ',' '/' optional_comma
+	{
+		$$ = posonlyArgs{args: $1, defaults: $<exprs>1}
+	}
+
 // FIXME this isn't checking all the python rules for args before kwargs etc
 varargslist:
-	vfpdeftests1 optional_comma
+	vposonly_prefix
+	{
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1.args, Defaults: $1.defaults, Posonlyargs: $1.args}
+	}
+|	vposonly_prefix vfpdeftests1 optional_comma
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args}
+	}
+|	vposonly_prefix vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6}
+	}
+|	vposonly_prefix vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef optional_comma
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Vararg: $5, Kwonlyargs: $6, KwDefaults: $<exprs>6, Kwarg: $9}
+	}
+|	vposonly_prefix vfpdeftests1 ',' STARSTAR vfpdef optional_comma
+	{
+		po := $1
+		args := append(append([]*ast.Arg{}, po.args...), $2...)
+		defaults := append(append([]ast.Expr{}, po.defaults...), $<exprs>2...)
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: args, Defaults: defaults, Posonlyargs: po.args, Kwarg: $5}
+	}
+|	vposonly_prefix '*' optional_vfpdef vfpdeftests
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4}
+	}
+|	vposonly_prefix '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef optional_comma
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Vararg: $3, Kwonlyargs: $4, KwDefaults: $<exprs>4, Kwarg: $7}
+	}
+|	vposonly_prefix STARSTAR vfpdef optional_comma
+	{
+		po := $1
+		$$ = &ast.Arguments{Pos: $<pos>$, Args: po.args, Defaults: po.defaults, Posonlyargs: po.args, Kwarg: $3}
+	}
+|	vfpdeftests1 optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1}
 	}
@@ -945,11 +1000,11 @@ varargslist:
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Vararg: $4, Kwonlyargs: $5, KwDefaults: $<exprs>5}
 	}
-|	vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef
+|	vfpdeftests1 ',' '*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Vararg: $4, Kwonlyargs: $5, KwDefaults: $<exprs>5, Kwarg: $8}
 	}
-|	vfpdeftests1 ',' STARSTAR vfpdef
+|	vfpdeftests1 ',' STARSTAR vfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Args: $1, Defaults: $<exprs>1, Kwarg: $4}
 	}
@@ -957,11 +1012,11 @@ varargslist:
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3}
 	}
-|	'*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef
+|	'*' optional_vfpdef vfpdeftests ',' STARSTAR vfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Vararg: $2, Kwonlyargs: $3, KwDefaults: $<exprs>3, Kwarg: $6}
 	}
-|	STARSTAR vfpdef
+|	STARSTAR vfpdef optional_comma
 	{
 		$$ = &ast.Arguments{Pos: $<pos>$, Kwarg: $2}
 	}
@@ -1968,6 +2023,12 @@ with_stmt:
 	WITH with_items ':' suite
 	{
 		$$ = &ast.With{StmtBase: ast.StmtBase{Pos: $<pos>$}, Items: $2, Body: $4}
+		setEnd(yylex, yyrcvr.char, $$)
+	}
+
+|	WITH WITHPAREN with_items optional_comma ')' ':' suite
+	{
+		$$ = &ast.With{StmtBase: ast.StmtBase{Pos: $<pos>$}, Items: $3, Body: $7}
 		setEnd(yylex, yyrcvr.char, $$)
 	}
 

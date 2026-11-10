@@ -1,0 +1,68 @@
+kinds (q, /, r, s=1, *args, t, u=2, **kw)
+plain (a, b=2)
+annotated (a: int, b: 'str' = 'x', *, c: float = 1.5) -> bool
+coro (x)
+gen (x)
+lam (q, /, r)
+lam2 (a, b=2, /, c=3, *d, e, **k)
+class C (x=0, y=1)
+class D (x=0, y=1)
+class E ()
+C.meth (self, a, /, b)
+C().meth (a, /, b)
+C.cm (a)
+C.sm (a, b)
+C() (z)
+partial (b=2)
+partial kw (a, *, b=5)
+decorated (a, b=3)
+decorated nofollow (*a, **k)
+sigattr (only, /)
+not callable TypeError 3 is not a callable object
+q POSITIONAL_ONLY positional-only True True
+r POSITIONAL_OR_KEYWORD positional or keyword True True
+s POSITIONAL_OR_KEYWORD positional or keyword False True
+args VAR_POSITIONAL variadic positional True True
+t KEYWORD_ONLY keyword-only True True
+u KEYWORD_ONLY keyword-only False True
+kw VAR_KEYWORD variadic keyword True True
+True
+<class 'bool'> <class 'int'>
+(q, /, r, s=1, *args, t, u=2, **kw) -> int
+s=9
+True 4 KEYWORD_ONLY
+<BoundArguments (q=1, r=2, s=3, args=(4,), t=5, kw={'z': 6})>
+{'q': 1, 'r': 2, 't': 5}
+(1, 2, 1) {'t': 5, 'u': 2} {'q': 1, 'r': 2, 's': 1, 'args': (), 't': 5, 'u': 2, 'kw': {}}
+bind missing TypeError missing a required argument: 'r'
+bind missing t TypeError missing a required argument: 't'
+bind posonly kw TypeError missing a required positional-only argument: 'q'
+bind too many TypeError too many positional arguments
+bind extra kw TypeError got an unexpected keyword argument 'c'
+bind multiple TypeError multiple values for argument 'a'
+bind_partial <BoundArguments (q=1)>
+bad order ValueError wrong parameter order: keyword-only parameter before positional-only parameter
+dup ValueError duplicate parameter name: 'a'
+bad name ValueError '1x' is not a valid parameter name
+(a, b=2) True True
+FullArgSpec(args=['q', 'r', 's'], varargs='args', varkw='kw', defaults=(1,), kwonlyargs=['t', 'u'], kwonlydefaults={'u': 2}, annotations={})
+FullArgSpec(args=['a', 'b'], varargs=None, varkw=None, defaults=('x',), kwonlyargs=['c'], kwonlydefaults={'c': 1.5}, annotations={'return': <class 'bool'>, 'a': <class 'int'>, 'b': 'str', 'c': <class 'float'>})
+FullArgSpec(args=['self', 'a', 'b'], varargs=None, varkw=None, defaults=None, kwonlyargs=[], kwonlydefaults=None, annotations={})
+FullArgSpec(args=['a', 'b', 'c'], varargs='d', varkw='k', defaults=(2, 3), kwonlyargs=['e'], kwonlydefaults=None, annotations={})
+True False False
+True False True False
+True False
+True False
+True False True True True
+True True
+True decorated
+unwrap loop True
+staticmethod meth
+static missing AttributeError nope
+42
+['cm', 'meth', 'sm']
+__call__
+True
+True a
+ b
+c

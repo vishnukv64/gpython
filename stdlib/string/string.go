@@ -6,13 +6,25 @@
 package string
 
 import (
+	_ "embed"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
 )
 
+//go:embed formatter.py
+var formatterSrc string
+
+//go:embed _string.py
+var underscoreStringSrc string
+
 func init() {
 	py.RegisterModule(&py.ModuleImpl{
+		Info:    py.ModuleInfo{Name: "_string", Doc: "string helper module"},
+		CodeSrc: underscoreStringSrc,
+	})
+	py.RegisterModule(&py.ModuleImpl{
+		CodeSrc: formatterSrc,
 		Info: py.ModuleInfo{
 			Name: "string",
 			Doc:  module_doc,

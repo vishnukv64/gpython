@@ -28,6 +28,7 @@ package shutil
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -137,9 +138,9 @@ func ostat(path string, followSymlinks py.Object) (os.FileInfo, error) {
 	}
 	var fi os.FileInfo
 	if follow {
-		fi, err = os.Stat(path)
+		fi, err = py.StatPath(path)
 	} else {
-		fi, err = os.Lstat(path)
+		fi, err = py.LstatPath(path)
 	}
 	if err != nil {
 		return nil, oserr(err)
@@ -173,11 +174,11 @@ func sysMsg(pathErr *os.PathError, err error) string {
 // sameFile reports whether two paths name the same file, which is what
 // copyfile has to refuse before it truncates its source.
 func sameFile(a, b string) bool {
-	fa, err := os.Stat(a)
+	fa, err := py.StatPath(a)
 	if err != nil {
 		return false
 	}
-	fb, err := os.Stat(b)
+	fb, err := py.StatPath(b)
 	if err != nil {
 		return false
 	}
@@ -292,7 +293,7 @@ func which(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 // treated as executable here.  The F_OK bit alone is checked against
 // existence.
 func modeCheck(path string, mode int) bool {
-	fi, err := os.Stat(path)
+	fi, err := py.StatPath(path)
 	if err != nil {
 		return false
 	}
@@ -378,7 +379,13 @@ func copyfileobj(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object
 
 // openBinary opens a file for the copy helpers, mapping the error.
 func openBinary(path string, flags int, perm os.FileMode) (*os.File, error) {
-	f, err := os.OpenFile(path, flags, perm)
+	var f *os.File
+	var err error
+	if flags == os.O_RDONLY {
+		f, err = py.OpenReadonly(path, flags)
+	} else {
+		f, err = os.OpenFile(path, flags, perm)
+	}
 	if err != nil {
 		return nil, oserr(err)
 	}
@@ -412,7 +419,7 @@ func copyfile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 	}
 	// Refuse to copy a named pipe or a device: reading one can block forever,
 	// and CPython raises SpecialFileError for it.
-	if fi, err := os.Stat(src); err == nil {
+	if fi, err := py.StatPath(src); err == nil {
 		if fi.Mode()&(os.ModeNamedPipe|os.ModeDevice|os.ModeSocket) != 0 {
 			return nil, py.ExceptionNewf(Error, "%s is a named pipe, socket or device file", src)
 		}
@@ -506,7 +513,7 @@ func copy(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	if err != nil {
 		return nil, err
 	}
-	if fi, err := os.Stat(src); err == nil && fi.IsDir() {
+	if fi, err := py.StatPath(src); err == nil && fi.IsDir() {
 		return nil, py.ExceptionNewf(py.IsADirectoryError,
 			"`%s` is a directory (or a symlink to a directory)", src)
 	}
@@ -531,7 +538,7 @@ func copy2(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, erro
 	if err != nil {
 		return nil, err
 	}
-	if fi, err := os.Stat(src); err == nil && fi.IsDir() {
+	if fi, err := py.StatPath(src); err == nil && fi.IsDir() {
 		return nil, py.ExceptionNewf(py.IsADirectoryError,
 			"`%s` is a directory (or a symlink to a directory)", src)
 	}
@@ -570,7 +577,7 @@ func copyArgs(args py.Tuple, kwargs py.StringDict, name string) (string, string,
 // adjustDst turns "copy a file into this directory" into the full
 // destination name.
 func adjustDst(src, dst string) (string, error) {
-	fi, err := os.Stat(dst)
+	fi, err := py.StatPath(dst)
 	if err != nil || !fi.IsDir() {
 		return dst, nil
 	}
@@ -613,11 +620,11 @@ func copytree(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, e
 		return nil, err
 	}
 	if !dirsOK {
-		if _, err := os.Lstat(dst); err == nil {
+		if _, err := py.LstatPath(dst); err == nil {
 			return nil, py.ExceptionNewf(py.FileExistsError, "destination path '%s' already exists", dst)
 		}
 	}
-	if _, err := os.Stat(src); err != nil {
+	if _, err := py.StatPath(src); err != nil {
 		return nil, oserr(err)
 	}
 	if err := os.MkdirAll(dst, 0o777); err != nil {
@@ -670,7 +677,7 @@ func (c *treeCopier) add(src, dst string, why error) {
 
 // names returns the entries of a directory, honouring an ignore callable.
 func (c *treeCopier) names(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
+	entries, err := py.ReadDirPath(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -720,7 +727,7 @@ func (c *treeCopier) copyTree(src, dst string) error {
 	for _, name := range names {
 		s := filepath.Join(src, name)
 		d := filepath.Join(dst, name)
-		fi, err := os.Lstat(s)
+		fi, err := py.LstatPath(s)
 		if err != nil {
 			c.add(s, d, err)
 			continue
@@ -766,7 +773,7 @@ func (c *treeCopier) copyOne(src, dst string) error {
 
 // copyStat applies the source's mode and times to a copied directory.
 func (c *treeCopier) copyStat(src, dst string) {
-	fi, err := os.Stat(src)
+	fi, err := py.StatPath(src)
 	if err != nil {
 		return
 	}
@@ -792,7 +799,7 @@ func move(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	if err != nil {
 		return nil, err
 	}
-	if fi, err := os.Stat(dst); err == nil && fi.IsDir() {
+	if fi, err := py.StatPath(dst); err == nil && fi.IsDir() {
 		dst = filepath.Join(dst, filepath.Base(src))
 	}
 	if err := os.Rename(src, dst); err == nil {
@@ -803,7 +810,7 @@ func move(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error
 	// falls back, so a rename refused for another reason (a permission, say)
 	// is attempted as a copy instead; that copy then fails with its own
 	// error, which is what reaches the caller.
-	fi, err := os.Lstat(src)
+	fi, err := py.LstatPath(src)
 	if err != nil {
 		return nil, oserr(err)
 	}
@@ -855,7 +862,7 @@ func rmtree(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 	if err != nil {
 		return nil, err
 	}
-	fi, err := os.Lstat(path)
+	fi, err := py.LstatPath(path)
 	if err != nil {
 		if ignore {
 			return py.None, nil
@@ -875,12 +882,12 @@ func rmtree(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 // given (function, path, exc_info) for every failure, as CPython does; when
 // it is nil and ignoreErrors is false the first failure is returned.
 func rmtreePath(path string, ignoreErrors bool, onerror py.Object) error {
-	fi, err := os.Lstat(path)
+	fi, err := py.LstatPath(path)
 	if err != nil {
 		return handleRmError(err, path, "os.lstat", ignoreErrors, onerror)
 	}
 	if fi.IsDir() {
-		entries, err := os.ReadDir(path)
+		entries, err := py.ReadDirPath(path)
 		if err != nil {
 			return handleRmError(err, path, "os.listdir", ignoreErrors, onerror)
 		}
@@ -968,10 +975,7 @@ func (t *terminalSize) Type() *py.Type { return terminalSizeType }
 // where they are set, and with fallback otherwise.
 //
 // CPython queries the terminal attached to sys.__stdout__ before falling
-// back.  It cannot do that here: this interpreter's sys.stdout has no
-// fileno(), so there is no descriptor to ask.  A program running under a
-// terminal therefore gets the environment or the fallback, not the real
-// window size.
+// back; so does this, through fd 1.
 func getTerminalSize(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	var fallback py.Object = py.Tuple{py.Int(80), py.Int(24)}
 	if err := py.ParseTupleAndKeywords(args, kwargs, "|O:get_terminal_size",
@@ -995,11 +999,24 @@ func getTerminalSize(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	}
 	columns := envInt("COLUMNS")
 	lines := envInt("LINES")
-	if columns <= 0 {
-		columns = fbCols
-	}
-	if lines <= 0 {
-		lines = fbLines
+	if columns <= 0 || lines <= 0 {
+		// The terminal on stdout, as os.get_terminal_size(sys.__stdout__.fileno()).
+		tc, tl, err := py.TerminalSize(1)
+		if err != nil {
+			tc, tl = fbCols, fbLines
+		}
+		if columns <= 0 {
+			columns = tc
+			if columns == 0 {
+				columns = fbCols
+			}
+		}
+		if lines <= 0 {
+			lines = tl
+			if lines == 0 {
+				lines = fbLines
+			}
+		}
 	}
 	return &terminalSize{columns: columns, lines: lines, Dict: py.NewStringDict()}, nil
 }
@@ -1083,7 +1100,7 @@ func diskUsage(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, 
 // reprTerminalSize formats a terminal_size the way its named-tuple repr
 // does, so that printing one looks like CPython's.
 func reprTerminalSize(t *terminalSize) string {
-	return "os.terminal_size(" + tupleBody(py.Tuple{py.Int(t.columns), py.Int(t.lines)}) + ")"
+	return fmt.Sprintf("os.terminal_size(columns=%d, lines=%d)", t.columns, t.lines)
 }
 
 // reprUsage formats a usage the way its named-tuple repr does.

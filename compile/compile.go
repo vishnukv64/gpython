@@ -145,6 +145,12 @@ func Compile(src, srcDesc string, mode py.CompileMode, futureFlags int, dont_inh
 	if err != nil {
 		return nil, err
 	}
+	return CompileAst(Ast, src, srcDesc, futureFlags, dont_inherit)
+}
+
+// CompileAst compiles an already parsed tree.  src is the text it came from,
+// or "" for a tree built in memory.
+func CompileAst(Ast ast.Ast, src, srcDesc string, futureFlags int, dont_inherit bool) (*py.Code, error) {
 	// Make symbol table
 	lazyAnnotations(Ast, srcDesc)
 	if err := ast.DesugarTypeParams(Ast); err != nil {

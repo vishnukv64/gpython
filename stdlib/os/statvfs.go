@@ -69,17 +69,17 @@ func osStatvfs(self py.Object, args py.Tuple) (py.Object, error) {
 	if fd, ok := args[0].(py.Int); ok {
 		f, fsid, err := fstatvfsFields(int(fd))
 		if err != nil {
-			return nil, py.OSErrorFrom(err, "")
+			return nil, py.OSErrorFromObj(err, args[0])
 		}
 		return newStatvfsResult(f, fsid), nil
 	}
-	p, err := fsPath(args[0])
+	p, err := getPath("statvfs", args[0], pathOrFdKinds)
 	if err != nil {
 		return nil, err
 	}
-	f, fsid, err := statvfsFields(p)
+	f, fsid, err := statvfsFields(p.s)
 	if err != nil {
-		return nil, py.OSErrorFrom(err, p)
+		return nil, p.fail(err)
 	}
 	return newStatvfsResult(f, fsid), nil
 }

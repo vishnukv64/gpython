@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/vishnukv64/gpython/py"
+	"github.com/vishnukv64/gpython/stdlib/unicodedata"
 )
 
 // DecodeEscape unescapes a backslash-escaped buffer
@@ -131,8 +132,22 @@ func DecodeEscape(in *bytes.Buffer, byteMode bool) (out *bytes.Buffer, err error
 				ignoreEscape = true
 				break
 			}
-			// FIXME go can't do this as builtin so ignore for the moment
-			ignoreEscape = true
+			named := false
+			if i+1 < len(runes) && runes[i+1] == '{' {
+				for end := i + 2; end < len(runes); end++ {
+					if runes[end] == '}' {
+						if r, ok := unicodedata.LookupName(string(runes[i+2 : end])); ok {
+							out.WriteRune(r)
+							i = end
+							named = true
+						}
+						break
+					}
+				}
+			}
+			if !named {
+				return nil, py.ExceptionNewf(py.SyntaxError, "(unicode error) 'unicodeescape' codec can't decode bytes: unknown Unicode character name")
+			}
 		default:
 			ignoreEscape = true
 		}

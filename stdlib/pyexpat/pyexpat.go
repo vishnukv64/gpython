@@ -79,6 +79,12 @@ func parserCreate(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	}
 	p.Dict.Set("CurrentLineNumber", py.Int(1))
 	p.Dict.Set("CurrentColumnNumber", py.Int(0))
+	// parser.intern is the dict the caller passed, or a fresh one; the C
+	// parser uses it to share equal names (xml.dom.expatbuilder reads it).
+	if intern == py.None {
+		intern = py.NewStringDict()
+	}
+	p.Dict.Set("intern", intern)
 	p.Dict.Set("buffer_text", py.False)
 	p.Dict.Set("ordered_attributes", py.False)
 	p.Dict.Set("specified_attributes", py.False)

@@ -60,6 +60,11 @@ type yyLex struct {
 	// statement could begin.
 	lastToken int
 
+	// withParen is set after a WITH keyword that opens a parenthesized list
+	// of context managers (PEP 617's "with (a as b, c):"), so the '(' that
+	// follows is returned as WITHPAREN.
+	withParen bool
+
 	// curEnd and prevEnd are where the last token and the one before it
 	// ended; setEnd uses them to find the last token a reduction consumed.
 	realEnd, prevRealEnd ast.Pos // ends of the last two tokens that are not layout
@@ -542,6 +547,9 @@ func (x *yyLex) Lex(yylval *yySymType) (ret int) {
 			token, str := x.readIdentifierOrKeyword()
 			if token != eof {
 				yylval.str = str
+				if token == WITH {
+					x.withParen = x.parenWithAhead()
+				}
 				return token
 			}
 
@@ -556,6 +564,10 @@ func (x *yyLex) Lex(yylval *yySymType) (ret int) {
 					x.bracket--
 				case '(':
 					x.parenthesis++
+					if x.withParen {
+						x.withParen = false
+						token = WITHPAREN
+					}
 				case ')':
 					x.parenthesis--
 				case '{':
@@ -687,6 +699,70 @@ func (x *yyLex) readIdentifierOrKeyword() (int, string) {
 		return soft, identifier
 	}
 	return NAME, identifier
+}
+
+// parenWithAhead reports whether the text after a WITH keyword is the
+// parenthesized form of a with statement: a '(' whose matching ')' is
+// followed by ':' and which holds a top-level comma or "as".  Any other
+// parenthesis - "with (a):", "with (a, b) as c:" - is an ordinary expression.
+func (x *yyLex) parenWithAhead() bool {
+	rest := strings.TrimLeft(x.line, " 	")
+	if rest == "" || rest[0] != '(' {
+		return false
+	}
+	text := x.line
+	if !strings.Contains(text, ")") || strings.Count(text, "(") > strings.Count(text, ")") {
+		// The header runs on to later lines: look at what is buffered.
+		if x.reader.Buffered() == 0 && !x.interactive {
+			x.reader.Peek(1)
+		}
+		if n := x.reader.Buffered(); n > 0 {
+			ahead, _ := x.reader.Peek(n)
+			text += string(ahead)
+		}
+	}
+	text = strings.TrimLeft(text, " 	")
+	depth, sep := 0, false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		switch c {
+		case '#':
+			for i < len(text) && text[i] != '\n' {
+				i++
+			}
+		case '\'', '"':
+			q := text[i : i+1]
+			if strings.HasPrefix(text[i:], strings.Repeat(q, 3)) {
+				q = strings.Repeat(q, 3)
+			}
+			i += len(q)
+			for i < len(text) && !strings.HasPrefix(text[i:], q) {
+				if text[i] == '\\' {
+					i++
+				}
+				i++
+			}
+			i += len(q) - 1
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+			if depth == 0 {
+				after := strings.TrimLeft(text[i+1:], " 	")
+				return sep && strings.HasPrefix(after, ":")
+			}
+		case ',':
+			if depth == 1 {
+				sep = true
+			}
+		default:
+			if depth == 1 && c == 'a' && strings.HasPrefix(text[i:], "as") && (i == 0 || !isIdentifierChar(rune(text[i-1]))) &&
+				i+2 < len(text) && !isIdentifierChar(rune(text[i+2])) {
+				sep = true
+			}
+		}
+	}
+	return false
 }
 
 // canBeginMatchSubject reports whether the characters left on the line can
@@ -992,26 +1068,26 @@ found:
 				_, _ = buf.WriteRune(c)
 				escape = false
 			} else {
-				if strings.HasPrefix(x.line[i:], stringEnd) && !(fString && ast.FStringOpen(buf.String())) {
+				if strings.HasPrefix(x.line[i:], stringEnd) && !(fString && ast.FStringOpen(buf.String(), rawString)) {
 					x.cut(i + len(stringEnd))
 					goto foundEndOfString
 				}
 				if c == '\\' {
 					escape = true
 				}
-				if !multiLineString && c == '\n' && !(fString && ast.FStringOpen(buf.String())) {
+				if !multiLineString && c == '\n' && !(fString && ast.FStringOpen(buf.String(), rawString)) {
 					break
 				}
 				_, _ = buf.WriteRune(c)
 			}
 		}
-		if !multiLineString && !(fString && ast.FStringOpen(buf.String())) {
+		if !multiLineString && !(fString && ast.FStringOpen(buf.String(), rawString)) {
 			x.SyntaxErrorf("EOL while scanning string literal")
 			return eofError, nil
 		}
 	readMore:
 		if x.eof {
-			if fString && ast.FStringOpen(buf.String()) {
+			if fString && ast.FStringOpen(buf.String(), rawString) {
 				x.SyntaxErrorf("f-string: expecting '}'")
 			} else if multiLineString {
 				x.SyntaxErrorf("EOF while scanning triple-quoted string literal")

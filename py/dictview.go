@@ -295,3 +295,18 @@ func init() {
 		return nil, ExceptionNewf(TypeError, "unhashable type: 'dict_keys'")
 	}, 0, "A keys view is unhashable."))
 }
+
+func init() {
+	dis := MustNewMethod("isdisjoint", func(self Object, args Tuple) (Object, error) {
+		if len(args) != 1 {
+			return nil, ExceptionNewf(TypeError, "isdisjoint() takes exactly one argument (%d given)", len(args))
+		}
+		mine, err := self.(*dictView).asSet()
+		if err != nil {
+			return nil, err
+		}
+		return anyMember(mine, args[0], true)
+	}, 0, "Return True if the view and the given iterable have a null intersection.")
+	dictKeysType.Dict.Set("isdisjoint", dis)
+	dictItemsType.Dict.Set("isdisjoint", dis)
+}

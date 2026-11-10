@@ -20,7 +20,6 @@ package sys
 import (
 	"math"
 	"os"
-	"path/filepath"
 	"runtime"
 	"unsafe"
 
@@ -100,17 +99,9 @@ const displayhook_doc = `displayhook(object) -> None
 
 Print an object to sys.stdout and also save it in builtins._`
 
-func sys_displayhook(self, o py.Object) (py.Object, error) {
-	return nil, py.NotImplementedError
-}
-
 const excepthook_doc = `excepthook(exctype, value, traceback) -> None
 
 Handle an exception by displaying it with a traceback on sys.stderr.`
-
-func sys_excepthook(self py.Object, args py.Tuple) (py.Object, error) {
-	return nil, py.NotImplementedError
-}
 
 const exc_info_doc = `exc_info() -> (type, value, traceback)
 
@@ -617,6 +608,7 @@ func init() {
 		py.MustNewMethod("callstats", sys_callstats, 0, callstats_doc),
 		py.MustNewMethod("_clear_type_cache", sys_clear_type_cache, 0, sys_clear_type_cache__doc__),
 		py.MustNewMethod("_current_frames", sys_current_frames, 0, current_frames_doc),
+		py.MustNewMethod("breakpointhook", sys_breakpointhook, 0, breakpointhook_doc),
 		py.MustNewMethod("displayhook", sys_displayhook, 0, displayhook_doc),
 		py.MustNewMethod("exc_info", sys_exc_info, 0, exc_info_doc),
 		py.MustNewMethod("exception", sys_exception, 0, exception_doc),
@@ -649,17 +641,16 @@ func init() {
 	stdout := &py.File{File: os.Stdout, FileMode: py.FileWrite}
 	stderr := &py.File{File: os.Stderr, FileMode: py.FileWrite}
 
-	var err error
-	executable, err = os.Executable()
-	if err != nil {
-		switch runtime.GOOS {
-		case "js", "wasip1":
-			// These platforms don't implement os.Executable (at least as of Go
-			// 1.21), see https://github.com/tailscale/tailscale/pull/8325
-			executable = "gpython"
-		default:
-			panic(err)
+	// Located from argv[0] so that a venv's bin/python link is seen as itself.
+	pf := py.GetPrefixes()
+	executable = pf.Executable
+	if executable == "" {
+		if runtime.GOOS != "js" && runtime.GOOS != "wasip1" {
+			panic("sys: cannot locate the interpreter executable")
 		}
+		// os.Executable is not implemented there, see
+		// https://github.com/tailscale/tailscale/pull/8325
+		executable = "gpython"
 	}
 
 	globals := py.NewStringDictFrom(
@@ -690,16 +681,16 @@ func init() {
 		py.DictEntry{Key: "__stdout__", Value: stdout},
 		py.DictEntry{Key: "__stderr__", Value: stderr},
 		py.DictEntry{Key: "executable", Value: py.String(executable)},
-		py.DictEntry{Key: "_base_executable", Value: py.String(executable)},
+		py.DictEntry{Key: "_base_executable", Value: py.String(pf.BaseExecutable)},
 		// The platform and version attributes, which code branches on.
 		py.DictEntry{Key: "platform", Value: py.String(platform)},
 		py.DictEntry{Key: "byteorder", Value: py.String(byteOrder())},
 		py.DictEntry{Key: "version", Value: py.String("3.14.7 (gpython)")},
 		py.DictEntry{Key: "version_info", Value: currentVersionInfo()},
-		py.DictEntry{Key: "prefix", Value: py.String(prefix())},
-		py.DictEntry{Key: "exec_prefix", Value: py.String(prefix())},
-		py.DictEntry{Key: "base_prefix", Value: py.String(prefix())},
-		py.DictEntry{Key: "base_exec_prefix", Value: py.String(prefix())},
+		py.DictEntry{Key: "prefix", Value: py.String(pf.Prefix)},
+		py.DictEntry{Key: "exec_prefix", Value: py.String(pf.Prefix)},
+		py.DictEntry{Key: "base_prefix", Value: py.String(pf.BasePrefix)},
+		py.DictEntry{Key: "base_exec_prefix", Value: py.String(pf.BasePrefix)},
 		py.DictEntry{Key: "implementation", Value: implementationInfo()},
 		py.DictEntry{Key: "builtin_module_names", Value: py.NewListFromStrings(builtinModuleNames())},
 		py.DictEntry{Key: "stdlib_module_names", Value: stdlibModuleNamesSet()},
@@ -891,18 +882,10 @@ func byteOrder() string {
 	return "little"
 }
 
-// prefix is the directory the interpreter is installed in.
-func prefix() string {
-	if executable != "" {
-		return filepath.Dir(executable)
-	}
-	return ""
-}
-
 // implementationInfo describes the interpreter, as sys.implementation does.
 func implementationInfo() py.Object {
 	d := py.NewStringDict()
-	d.Set("name", py.String("gpython"))
+	d.Set("name", py.String(implementationName()))
 	// A version_info, not a bare tuple: packaging reads
 	// "sys.implementation.version.major" in _format_full_version, which every
 	// marker evaluation goes through.  As a plain tuple that raised
@@ -912,6 +895,17 @@ func implementationInfo() py.Object {
 	d.Set("hexversion", py.Int(0x030E07F0))
 	d.Set("cache_tag", py.String("gpython-314"))
 	return d
+}
+
+// implementationName is sys.implementation.name.  It is "gpython" unless
+// GPYTHON_IMPLEMENTATION says otherwise: tools such as uv accept only the
+// names of interpreters they know (cpython, pypy, graalpy) and reject any
+// other, so they can be told to see this one as "cpython".
+func implementationName() string {
+	if n := os.Getenv("GPYTHON_IMPLEMENTATION"); n != "" {
+		return n
+	}
+	return "gpython"
 }
 
 // builtinModuleNames lists the modules the interpreter has built in.

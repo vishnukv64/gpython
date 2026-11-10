@@ -1,0 +1,635 @@
+os.listdir str                     ok ['sub']
+os.listdir Path                    ok ['sub']
+os.listdir bytes                   ok [b'sub']
+os.listdir Good                    ok ['sub']
+os.listdir int                     OSError: [Errno 9] Bad file descriptor
+os.listdir float                   TypeError: listdir: path should be string, bytes, os.PathLike, integer or None, not float
+os.listdir list                    TypeError: listdir: path should be string, bytes, os.PathLike, integer or None, not list
+os.listdir badret                  TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.listdir badraise                RuntimeError: boom
+os.scandir str                     ok ['sub']
+os.scandir Path                    ok ['sub']
+os.scandir bytes                   ok [b'sub']
+os.scandir Good                    ok ['sub']
+os.scandir int                     OSError: [Errno 9] Bad file descriptor
+os.scandir float                   TypeError: scandir: path should be string, bytes, os.PathLike, integer or None, not float
+os.scandir list                    TypeError: scandir: path should be string, bytes, os.PathLike, integer or None, not list
+os.scandir badret                  TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.scandir badraise                RuntimeError: boom
+os.chdir str                       ok None
+os.chdir Path                      ok None
+os.chdir bytes                     ok None
+os.chdir Good                      ok None
+os.chdir int                       OSError: [Errno 9] Bad file descriptor: 12345
+os.chdir float                     TypeError: chdir: path should be string, bytes, os.PathLike or integer, not float
+os.chdir None                      TypeError: chdir: path should be string, bytes, os.PathLike or integer, not NoneType
+os.chdir list                      TypeError: chdir: path should be string, bytes, os.PathLike or integer, not list
+os.chdir badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.chdir badraise                  RuntimeError: boom
+os.chmod str                       ok None
+os.chmod Path                      ok None
+os.chmod bytes                     ok None
+os.chmod Good                      ok None
+os.chmod int                       OSError: [Errno 9] Bad file descriptor: 12345
+os.chmod float                     TypeError: chmod: path should be string, bytes, os.PathLike or integer, not float
+os.chmod None                      TypeError: chmod: path should be string, bytes, os.PathLike or integer, not NoneType
+os.chmod list                      TypeError: chmod: path should be string, bytes, os.PathLike or integer, not list
+os.chmod badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.chmod badraise                  RuntimeError: boom
+os.chown str                       ok None
+os.chown Path                      ok None
+os.chown bytes                     ok None
+os.chown Good                      ok None
+os.chown int                       OSError: [Errno 9] Bad file descriptor: 12345
+os.chown float                     TypeError: chown: path should be string, bytes, os.PathLike or integer, not float
+os.chown None                      TypeError: chown: path should be string, bytes, os.PathLike or integer, not NoneType
+os.chown list                      TypeError: chown: path should be string, bytes, os.PathLike or integer, not list
+os.chown badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.chown badraise                  RuntimeError: boom
+os.utime str                       ok None
+os.utime Path                      ok None
+os.utime bytes                     ok None
+os.utime Good                      ok None
+os.utime int                       OSError: [Errno 9] Bad file descriptor: 12345
+os.utime float                     TypeError: utime: path should be string, bytes, os.PathLike or integer, not float
+os.utime None                      TypeError: utime: path should be string, bytes, os.PathLike or integer, not NoneType
+os.utime list                      TypeError: utime: path should be string, bytes, os.PathLike or integer, not list
+os.utime badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.utime badraise                  RuntimeError: boom
+os.access str                      ok True
+os.access Path                     ok True
+os.access bytes                    ok True
+os.access Good                     ok True
+os.access int                      TypeError: access: path should be string, bytes or os.PathLike, not int
+os.access float                    TypeError: access: path should be string, bytes or os.PathLike, not float
+os.access None                     TypeError: access: path should be string, bytes or os.PathLike, not NoneType
+os.access list                     TypeError: access: path should be string, bytes or os.PathLike, not list
+os.access badret                   TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.access badraise                 RuntimeError: boom
+os.readlink str                    OSError: [Errno 22] Invalid argument: '<T>/f'
+os.readlink Path                   OSError: [Errno 22] Invalid argument: '<T>/f'
+os.readlink bytes                  OSError: [Errno 22] Invalid argument: b'<T>/f'
+os.readlink Good                   OSError: [Errno 22] Invalid argument: '<T>/f'
+os.readlink int                    TypeError: readlink: path should be string, bytes or os.PathLike, not int
+os.readlink float                  TypeError: readlink: path should be string, bytes or os.PathLike, not float
+os.readlink None                   TypeError: readlink: path should be string, bytes or os.PathLike, not NoneType
+os.readlink list                   TypeError: readlink: path should be string, bytes or os.PathLike, not list
+os.readlink badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.readlink badraise               RuntimeError: boom
+os.truncate str                    ok None
+os.truncate Path                   ok None
+os.truncate bytes                  ok None
+os.truncate Good                   ok None
+os.truncate int                    OSError: [Errno 9] Bad file descriptor
+os.truncate float                  TypeError: truncate: path should be string, bytes, os.PathLike or integer, not float
+os.truncate None                   TypeError: truncate: path should be string, bytes, os.PathLike or integer, not NoneType
+os.truncate list                   TypeError: truncate: path should be string, bytes, os.PathLike or integer, not list
+os.truncate badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.truncate badraise               RuntimeError: boom
+os.stat str                        ok 'stat_result size=5'
+os.stat Path                       ok 'stat_result size=5'
+os.stat bytes                      ok 'stat_result size=5'
+os.stat Good                       ok 'stat_result size=5'
+os.stat int                        OSError: [Errno 9] Bad file descriptor: 12345
+os.stat float                      TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.stat None                       TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.stat list                       TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.stat badret                     TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.stat badraise                   RuntimeError: boom
+os.lstat str                       ok 'stat_result size=5'
+os.lstat Path                      ok 'stat_result size=5'
+os.lstat bytes                     ok 'stat_result size=5'
+os.lstat Good                      ok 'stat_result size=5'
+os.lstat int                       TypeError: lstat: path should be string, bytes or os.PathLike, not int
+os.lstat float                     TypeError: lstat: path should be string, bytes or os.PathLike, not float
+os.lstat None                      TypeError: lstat: path should be string, bytes or os.PathLike, not NoneType
+os.lstat list                      TypeError: lstat: path should be string, bytes or os.PathLike, not list
+os.lstat badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.lstat badraise                  RuntimeError: boom
+os.walk str                        ok [('<T>/d', ['sub'], []), ('<T>/d/sub', [], [])]
+os.walk Path                       ok [('<T>/d', ['sub'], []), ('<T>/d/sub', [], [])]
+os.walk bytes                      ok [(b'<T>/d', [b'sub'], []), (b'<T>/d/sub', [], [])]
+os.walk Good                       ok [('<T>/d', ['sub'], []), ('<T>/d/sub', [], [])]
+os.walk int                        TypeError: expected str, bytes or os.PathLike object, not int
+os.walk float                      TypeError: expected str, bytes or os.PathLike object, not float
+os.walk None                       TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.walk list                       TypeError: expected str, bytes or os.PathLike object, not list
+os.walk badret                     TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.walk badraise                   RuntimeError: boom
+os.statvfs str                     ok 'statvfs_result'
+os.statvfs Path                    ok 'statvfs_result'
+os.statvfs bytes                   ok 'statvfs_result'
+os.statvfs Good                    ok 'statvfs_result'
+os.statvfs int                     OSError: [Errno 9] Bad file descriptor: 12345
+os.statvfs float                   TypeError: statvfs: path should be string, bytes, os.PathLike or integer, not float
+os.statvfs None                    TypeError: statvfs: path should be string, bytes, os.PathLike or integer, not NoneType
+os.statvfs list                    TypeError: statvfs: path should be string, bytes, os.PathLike or integer, not list
+os.statvfs badret                  TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.statvfs badraise                RuntimeError: boom
+os.remove str                      ok None
+os.remove Path                     ok None
+os.remove bytes                    ok None
+os.remove Good                     ok None
+os.remove int                      TypeError: remove: path should be string, bytes or os.PathLike, not int
+os.remove float                    TypeError: remove: path should be string, bytes or os.PathLike, not float
+os.remove None                     TypeError: remove: path should be string, bytes or os.PathLike, not NoneType
+os.remove list                     TypeError: remove: path should be string, bytes or os.PathLike, not list
+os.remove badret                   TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.remove badraise                 RuntimeError: boom
+os.unlink str                      ok None
+os.unlink Path                     ok None
+os.unlink bytes                    ok None
+os.unlink Good                     ok None
+os.unlink int                      TypeError: unlink: path should be string, bytes or os.PathLike, not int
+os.unlink float                    TypeError: unlink: path should be string, bytes or os.PathLike, not float
+os.unlink None                     TypeError: unlink: path should be string, bytes or os.PathLike, not NoneType
+os.unlink list                     TypeError: unlink: path should be string, bytes or os.PathLike, not list
+os.unlink badret                   TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.unlink badraise                 RuntimeError: boom
+os.rmdir str                       ok None
+os.rmdir Path                      ok None
+os.rmdir bytes                     ok None
+os.rmdir Good                      ok None
+os.rmdir int                       TypeError: rmdir: path should be string, bytes or os.PathLike, not int
+os.rmdir float                     TypeError: rmdir: path should be string, bytes or os.PathLike, not float
+os.rmdir None                      TypeError: rmdir: path should be string, bytes or os.PathLike, not NoneType
+os.rmdir list                      TypeError: rmdir: path should be string, bytes or os.PathLike, not list
+os.rmdir badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.rmdir badraise                  RuntimeError: boom
+os.removedirs str                  ok None
+os.removedirs Path                 ok None
+os.removedirs bytes                ok None
+os.removedirs Good                 ok None
+os.removedirs int                  TypeError: rmdir: path should be string, bytes or os.PathLike, not int
+os.removedirs float                TypeError: rmdir: path should be string, bytes or os.PathLike, not float
+os.removedirs None                 TypeError: rmdir: path should be string, bytes or os.PathLike, not NoneType
+os.removedirs list                 TypeError: rmdir: path should be string, bytes or os.PathLike, not list
+os.removedirs badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.removedirs badraise             RuntimeError: boom
+os.mkdir str                       ok None
+os.mkdir Path                      ok None
+os.mkdir bytes                     ok None
+os.mkdir Good                      ok None
+os.mkdir int                       TypeError: mkdir: path should be string, bytes or os.PathLike, not int
+os.mkdir float                     TypeError: mkdir: path should be string, bytes or os.PathLike, not float
+os.mkdir None                      TypeError: mkdir: path should be string, bytes or os.PathLike, not NoneType
+os.mkdir list                      TypeError: mkdir: path should be string, bytes or os.PathLike, not list
+os.mkdir badret                    TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.mkdir badraise                  RuntimeError: boom
+os.makedirs str                    ok None
+os.makedirs Path                   ok None
+os.makedirs bytes                  ok None
+os.makedirs Good                   ok None
+os.makedirs int                    TypeError: expected str, bytes or os.PathLike object, not int
+os.makedirs float                  TypeError: expected str, bytes or os.PathLike object, not float
+os.makedirs None                   TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.makedirs list                   TypeError: expected str, bytes or os.PathLike object, not list
+os.makedirs badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.makedirs badraise               RuntimeError: boom
+os.mkfifo str                      ok None
+os.mkfifo Path                     ok None
+os.mkfifo bytes                    ok None
+os.mkfifo Good                     ok None
+os.mkfifo int                      TypeError: mkfifo: path should be string, bytes or os.PathLike, not int
+os.mkfifo float                    TypeError: mkfifo: path should be string, bytes or os.PathLike, not float
+os.mkfifo None                     TypeError: mkfifo: path should be string, bytes or os.PathLike, not NoneType
+os.mkfifo list                     TypeError: mkfifo: path should be string, bytes or os.PathLike, not list
+os.mkfifo badret                   TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.mkfifo badraise                 RuntimeError: boom
+os.fspath str                      ok '<T>/f'
+os.fspath Path                     ok '<T>/f'
+os.fspath bytes                    ok b'<T>/f'
+os.fspath Good                     ok '<T>/f'
+os.fspath int                      TypeError: expected str, bytes or os.PathLike object, not int
+os.fspath float                    TypeError: expected str, bytes or os.PathLike object, not float
+os.fspath None                     TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.fspath list                     TypeError: expected str, bytes or os.PathLike object, not list
+os.fspath badret                   TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.fspath badraise                 RuntimeError: boom
+os.fsencode str                    ok b'<T>/f'
+os.fsencode Path                   ok b'<T>/f'
+os.fsencode bytes                  ok b'<T>/f'
+os.fsencode Good                   ok b'<T>/f'
+os.fsencode int                    TypeError: expected str, bytes or os.PathLike object, not int
+os.fsencode float                  TypeError: expected str, bytes or os.PathLike object, not float
+os.fsencode None                   TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.fsencode list                   TypeError: expected str, bytes or os.PathLike object, not list
+os.fsencode badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.fsencode badraise               RuntimeError: boom
+os.fsdecode str                    ok '<T>/f'
+os.fsdecode Path                   ok '<T>/f'
+os.fsdecode bytes                  ok '<T>/f'
+os.fsdecode Good                   ok '<T>/f'
+os.fsdecode int                    TypeError: expected str, bytes or os.PathLike object, not int
+os.fsdecode float                  TypeError: expected str, bytes or os.PathLike object, not float
+os.fsdecode None                   TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.fsdecode list                   TypeError: expected str, bytes or os.PathLike object, not list
+os.fsdecode badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.fsdecode badraise               RuntimeError: boom
+os.open str                        ok None
+os.open Path                       ok None
+os.open bytes                      ok None
+os.open Good                       ok None
+os.open int                        TypeError: open: path should be string, bytes or os.PathLike, not int
+os.open float                      TypeError: open: path should be string, bytes or os.PathLike, not float
+os.open None                       TypeError: open: path should be string, bytes or os.PathLike, not NoneType
+os.open list                       TypeError: open: path should be string, bytes or os.PathLike, not list
+os.open badret                     TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.open badraise                   RuntimeError: boom
+os.path.exists str                 ok True
+os.path.exists Path                ok True
+os.path.exists bytes               ok True
+os.path.exists Good                ok True
+os.path.exists int                 ok False
+os.path.exists float               TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.exists None                TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.exists list                TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.exists badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.exists badraise            RuntimeError: boom
+os.path.lexists str                ok True
+os.path.lexists Path               ok True
+os.path.lexists bytes              ok True
+os.path.lexists Good               ok True
+os.path.lexists int                TypeError: lstat: path should be string, bytes or os.PathLike, not int
+os.path.lexists float              TypeError: lstat: path should be string, bytes or os.PathLike, not float
+os.path.lexists None               TypeError: lstat: path should be string, bytes or os.PathLike, not NoneType
+os.path.lexists list               TypeError: lstat: path should be string, bytes or os.PathLike, not list
+os.path.lexists badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.lexists badraise           RuntimeError: boom
+os.path.isfile str                 ok True
+os.path.isfile Path                ok True
+os.path.isfile bytes               ok True
+os.path.isfile Good                ok True
+os.path.isfile int                 ok False
+os.path.isfile float               TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.isfile None                TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.isfile list                TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.isfile badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.isfile badraise            RuntimeError: boom
+os.path.isdir str                  ok False
+os.path.isdir Path                 ok False
+os.path.isdir bytes                ok False
+os.path.isdir Good                 ok False
+os.path.isdir int                  ok False
+os.path.isdir float                TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.isdir None                 TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.isdir list                 TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.isdir badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.isdir badraise             RuntimeError: boom
+os.path.islink str                 ok False
+os.path.islink Path                ok False
+os.path.islink bytes               ok False
+os.path.islink Good                ok False
+os.path.islink int                 TypeError: lstat: path should be string, bytes or os.PathLike, not int
+os.path.islink float               TypeError: lstat: path should be string, bytes or os.PathLike, not float
+os.path.islink None                TypeError: lstat: path should be string, bytes or os.PathLike, not NoneType
+os.path.islink list                TypeError: lstat: path should be string, bytes or os.PathLike, not list
+os.path.islink badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.islink badraise            RuntimeError: boom
+os.path.isabs str                  ok True
+os.path.isabs Path                 ok True
+os.path.isabs bytes                ok True
+os.path.isabs Good                 ok True
+os.path.isabs int                  TypeError: expected str, bytes or os.PathLike object, not int
+os.path.isabs float                TypeError: expected str, bytes or os.PathLike object, not float
+os.path.isabs None                 TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.isabs list                 TypeError: expected str, bytes or os.PathLike object, not list
+os.path.isabs badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.isabs badraise             RuntimeError: boom
+os.path.ismount str                ok False
+os.path.ismount Path               ok False
+os.path.ismount bytes              ok False
+os.path.ismount Good               ok False
+os.path.ismount int                TypeError: lstat: path should be string, bytes or os.PathLike, not int
+os.path.ismount float              TypeError: lstat: path should be string, bytes or os.PathLike, not float
+os.path.ismount None               TypeError: lstat: path should be string, bytes or os.PathLike, not NoneType
+os.path.ismount list               TypeError: lstat: path should be string, bytes or os.PathLike, not list
+os.path.ismount badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.ismount badraise           RuntimeError: boom
+os.path.abspath str                ok '<T>/f'
+os.path.abspath Path               ok '<T>/f'
+os.path.abspath bytes              ok b'<T>/f'
+os.path.abspath Good               ok '<T>/f'
+os.path.abspath int                TypeError: expected str, bytes or os.PathLike object, not int
+os.path.abspath float              TypeError: expected str, bytes or os.PathLike object, not float
+os.path.abspath None               TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.abspath list               TypeError: expected str, bytes or os.PathLike object, not list
+os.path.abspath badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.abspath badraise           RuntimeError: boom
+os.path.basename str               ok 'f'
+os.path.basename Path              ok 'f'
+os.path.basename bytes             ok b'f'
+os.path.basename Good              ok 'f'
+os.path.basename int               TypeError: expected str, bytes or os.PathLike object, not int
+os.path.basename float             TypeError: expected str, bytes or os.PathLike object, not float
+os.path.basename None              TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.basename list              TypeError: expected str, bytes or os.PathLike object, not list
+os.path.basename badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.basename badraise          RuntimeError: boom
+os.path.dirname str                ok '<T>'
+os.path.dirname Path               ok '<T>'
+os.path.dirname bytes              ok b'<T>'
+os.path.dirname Good               ok '<T>'
+os.path.dirname int                TypeError: expected str, bytes or os.PathLike object, not int
+os.path.dirname float              TypeError: expected str, bytes or os.PathLike object, not float
+os.path.dirname None               TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.dirname list               TypeError: expected str, bytes or os.PathLike object, not list
+os.path.dirname badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.dirname badraise           RuntimeError: boom
+os.path.expanduser str             ok '<T>/f'
+os.path.expanduser Path            ok '<T>/f'
+os.path.expanduser bytes           ok b'<T>/f'
+os.path.expanduser Good            ok '<T>/f'
+os.path.expanduser int             TypeError: expected str, bytes or os.PathLike object, not int
+os.path.expanduser float           TypeError: expected str, bytes or os.PathLike object, not float
+os.path.expanduser None            TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.expanduser list            TypeError: expected str, bytes or os.PathLike object, not list
+os.path.expanduser badret          TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.expanduser badraise        RuntimeError: boom
+os.path.expandvars str             ok '<T>/f'
+os.path.expandvars Path            ok '<T>/f'
+os.path.expandvars bytes           ok b'<T>/f'
+os.path.expandvars Good            ok '<T>/f'
+os.path.expandvars int             TypeError: expected str, bytes or os.PathLike object, not int
+os.path.expandvars float           TypeError: expected str, bytes or os.PathLike object, not float
+os.path.expandvars None            TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.expandvars list            TypeError: expected str, bytes or os.PathLike object, not list
+os.path.expandvars badret          TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.expandvars badraise        RuntimeError: boom
+os.path.normpath str               ok '<T>/f'
+os.path.normpath Path              ok '<T>/f'
+os.path.normpath bytes             ok b'<T>/f'
+os.path.normpath Good              ok '<T>/f'
+os.path.normpath int               TypeError: _path_normpath: path should be string, bytes or os.PathLike, not int
+os.path.normpath float             TypeError: _path_normpath: path should be string, bytes or os.PathLike, not float
+os.path.normpath None              TypeError: _path_normpath: path should be string, bytes or os.PathLike, not NoneType
+os.path.normpath list              TypeError: _path_normpath: path should be string, bytes or os.PathLike, not list
+os.path.normpath badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.normpath badraise          RuntimeError: boom
+os.path.normcase str               ok '<T>/f'
+os.path.normcase Path              ok '<T>/f'
+os.path.normcase bytes             ok b'<T>/f'
+os.path.normcase Good              ok '<T>/f'
+os.path.normcase int               TypeError: expected str, bytes or os.PathLike object, not int
+os.path.normcase float             TypeError: expected str, bytes or os.PathLike object, not float
+os.path.normcase None              TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.normcase list              TypeError: expected str, bytes or os.PathLike object, not list
+os.path.normcase badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.normcase badraise          RuntimeError: boom
+os.path.realpath str               ok '<T>/f'
+os.path.realpath Path              ok '<T>/f'
+os.path.realpath bytes             ok b'<T>/f'
+os.path.realpath Good              ok '<T>/f'
+os.path.realpath int               TypeError: expected str, bytes or os.PathLike object, not int
+os.path.realpath float             TypeError: expected str, bytes or os.PathLike object, not float
+os.path.realpath None              TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.realpath list              TypeError: expected str, bytes or os.PathLike object, not list
+os.path.realpath badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.realpath badraise          RuntimeError: boom
+os.path.relpath str                ok 'f'
+os.path.relpath Path               ok 'f'
+os.path.relpath bytes              TypeError: Can't mix strings and bytes in path components
+os.path.relpath Good               ok 'f'
+os.path.relpath int                TypeError: expected str, bytes or os.PathLike object, not int
+os.path.relpath float              TypeError: expected str, bytes or os.PathLike object, not float
+os.path.relpath None               TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.relpath list               TypeError: expected str, bytes or os.PathLike object, not list
+os.path.relpath badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.relpath badraise           RuntimeError: boom
+os.path.split str                  ok ('<T>', 'f')
+os.path.split Path                 ok ('<T>', 'f')
+os.path.split bytes                ok (b'<T>', b'f')
+os.path.split Good                 ok ('<T>', 'f')
+os.path.split int                  TypeError: expected str, bytes or os.PathLike object, not int
+os.path.split float                TypeError: expected str, bytes or os.PathLike object, not float
+os.path.split None                 TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.split list                 TypeError: expected str, bytes or os.PathLike object, not list
+os.path.split badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.split badraise             RuntimeError: boom
+os.path.splitext str               ok ('<T>/f', '')
+os.path.splitext Path              ok ('<T>/f', '')
+os.path.splitext bytes             ok (b'<T>/f', b'')
+os.path.splitext Good              ok ('<T>/f', '')
+os.path.splitext int               TypeError: expected str, bytes or os.PathLike object, not int
+os.path.splitext float             TypeError: expected str, bytes or os.PathLike object, not float
+os.path.splitext None              TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.splitext list              TypeError: expected str, bytes or os.PathLike object, not list
+os.path.splitext badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.splitext badraise          RuntimeError: boom
+os.path.splitdrive str             ok ('', '<T>/f')
+os.path.splitdrive Path            ok ('', '<T>/f')
+os.path.splitdrive bytes           ok (b'', b'<T>/f')
+os.path.splitdrive Good            ok ('', '<T>/f')
+os.path.splitdrive int             TypeError: expected str, bytes or os.PathLike object, not int
+os.path.splitdrive float           TypeError: expected str, bytes or os.PathLike object, not float
+os.path.splitdrive None            TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.splitdrive list            TypeError: expected str, bytes or os.PathLike object, not list
+os.path.splitdrive badret          TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.splitdrive badraise        RuntimeError: boom
+os.path.getsize str                ok 5
+os.path.getsize Path               ok 5
+os.path.getsize bytes              ok 5
+os.path.getsize Good               ok 5
+os.path.getsize int                OSError: [Errno 9] Bad file descriptor: 12345
+os.path.getsize float              TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.getsize None               TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.getsize list               TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.getsize badret             TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.getsize badraise           RuntimeError: boom
+os.path.getmtime str               ok 'float'
+os.path.getmtime Path              ok 'float'
+os.path.getmtime bytes             ok 'float'
+os.path.getmtime Good              ok 'float'
+os.path.getmtime int               OSError: [Errno 9] Bad file descriptor: 12345
+os.path.getmtime float             TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.getmtime None              TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.getmtime list              TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.getmtime badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.getmtime badraise          RuntimeError: boom
+os.path.getatime str               ok 'float'
+os.path.getatime Path              ok 'float'
+os.path.getatime bytes             ok 'float'
+os.path.getatime Good              ok 'float'
+os.path.getatime int               OSError: [Errno 9] Bad file descriptor: 12345
+os.path.getatime float             TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.getatime None              TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.getatime list              TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.getatime badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.getatime badraise          RuntimeError: boom
+os.path.getctime str               ok 'float'
+os.path.getctime Path              ok 'float'
+os.path.getctime bytes             ok 'float'
+os.path.getctime Good              ok 'float'
+os.path.getctime int               OSError: [Errno 9] Bad file descriptor: 12345
+os.path.getctime float             TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.getctime None              TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.getctime list              TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.getctime badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.getctime badraise          RuntimeError: boom
+os.path.join str                   ok '<T>/f/x'
+os.path.join Path                  ok '<T>/f/x'
+os.path.join bytes                 TypeError: Can't mix strings and bytes in path components
+os.path.join Good                  ok '<T>/f/x'
+os.path.join int                   TypeError: expected str, bytes or os.PathLike object, not int
+os.path.join float                 TypeError: expected str, bytes or os.PathLike object, not float
+os.path.join None                  TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.join list                  TypeError: expected str, bytes or os.PathLike object, not list
+os.path.join badret                TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.join badraise              RuntimeError: boom
+os.path.commonpath str             ok '<T>/f'
+os.path.commonpath Path            ok '<T>/f'
+os.path.commonpath bytes           ok b'<T>/f'
+os.path.commonpath Good            ok '<T>/f'
+os.path.commonpath int             TypeError: expected str, bytes or os.PathLike object, not int
+os.path.commonpath float           TypeError: expected str, bytes or os.PathLike object, not float
+os.path.commonpath None            TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.commonpath list            TypeError: expected str, bytes or os.PathLike object, not list
+os.path.commonpath badret          TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.commonpath badraise        RuntimeError: boom
+os.path.commonprefix str           ok '<T>/f'
+os.path.commonprefix Path          ok '<T>/f'
+os.path.commonprefix bytes         ok b'<T>/f'
+os.path.commonprefix Good          ok '<T>/f'
+os.path.commonprefix int           TypeError: expected str, bytes or os.PathLike object, not int
+os.path.commonprefix float         TypeError: expected str, bytes or os.PathLike object, not float
+os.path.commonprefix None          TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.path.commonprefix badret        TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.commonprefix badraise      RuntimeError: boom
+os.path.samefile str               ok True
+os.path.samefile Path              ok True
+os.path.samefile bytes             ok True
+os.path.samefile Good              ok True
+os.path.samefile int               OSError: [Errno 9] Bad file descriptor: 12345
+os.path.samefile float             TypeError: stat: path should be string, bytes, os.PathLike or integer, not float
+os.path.samefile None              TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.samefile list              TypeError: stat: path should be string, bytes, os.PathLike or integer, not list
+os.path.samefile badret            TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.path.samefile badraise          RuntimeError: boom
+os.rename Path,Path                ok None
+os.rename bytes,bytes              ok None
+os.rename str,Path                 ok None
+os.rename src int                  TypeError: rename: src should be string, bytes or os.PathLike, not int
+os.rename dst int                  TypeError: rename: dst should be string, bytes or os.PathLike, not int
+os.rename src float                TypeError: rename: src should be string, bytes or os.PathLike, not float
+os.rename dst float                TypeError: rename: dst should be string, bytes or os.PathLike, not float
+os.rename src None                 TypeError: rename: src should be string, bytes or os.PathLike, not NoneType
+os.rename dst None                 TypeError: rename: dst should be string, bytes or os.PathLike, not NoneType
+os.rename src list                 TypeError: rename: src should be string, bytes or os.PathLike, not list
+os.rename dst list                 TypeError: rename: dst should be string, bytes or os.PathLike, not list
+os.rename src badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.rename dst badret               TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.rename src badraise             RuntimeError: boom
+os.rename dst badraise             RuntimeError: boom
+os.replace Path,Path               ok None
+os.replace bytes,bytes             ok None
+os.replace str,Path                ok None
+os.replace src int                 TypeError: replace: src should be string, bytes or os.PathLike, not int
+os.replace dst int                 TypeError: replace: dst should be string, bytes or os.PathLike, not int
+os.replace src float               TypeError: replace: src should be string, bytes or os.PathLike, not float
+os.replace dst float               TypeError: replace: dst should be string, bytes or os.PathLike, not float
+os.replace src None                TypeError: replace: src should be string, bytes or os.PathLike, not NoneType
+os.replace dst None                TypeError: replace: dst should be string, bytes or os.PathLike, not NoneType
+os.replace src list                TypeError: replace: src should be string, bytes or os.PathLike, not list
+os.replace dst list                TypeError: replace: dst should be string, bytes or os.PathLike, not list
+os.replace src badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.replace dst badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.replace src badraise            RuntimeError: boom
+os.replace dst badraise            RuntimeError: boom
+os.link Path,Path                  ok None
+os.link bytes,bytes                ok None
+os.link str,Path                   ok None
+os.link src int                    TypeError: link: src should be string, bytes or os.PathLike, not int
+os.link dst int                    TypeError: link: dst should be string, bytes or os.PathLike, not int
+os.link src float                  TypeError: link: src should be string, bytes or os.PathLike, not float
+os.link dst float                  TypeError: link: dst should be string, bytes or os.PathLike, not float
+os.link src None                   TypeError: link: src should be string, bytes or os.PathLike, not NoneType
+os.link dst None                   TypeError: link: dst should be string, bytes or os.PathLike, not NoneType
+os.link src list                   TypeError: link: src should be string, bytes or os.PathLike, not list
+os.link dst list                   TypeError: link: dst should be string, bytes or os.PathLike, not list
+os.link src badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.link dst badret                 TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.link src badraise               RuntimeError: boom
+os.link dst badraise               RuntimeError: boom
+os.symlink Path,Path               ok None
+os.symlink bytes,bytes             ok None
+os.symlink str,Path                ok None
+os.symlink src int                 TypeError: symlink: src should be string, bytes or os.PathLike, not int
+os.symlink dst int                 TypeError: symlink: dst should be string, bytes or os.PathLike, not int
+os.symlink src float               TypeError: symlink: src should be string, bytes or os.PathLike, not float
+os.symlink dst float               TypeError: symlink: dst should be string, bytes or os.PathLike, not float
+os.symlink src None                TypeError: symlink: src should be string, bytes or os.PathLike, not NoneType
+os.symlink dst None                TypeError: symlink: dst should be string, bytes or os.PathLike, not NoneType
+os.symlink src list                TypeError: symlink: src should be string, bytes or os.PathLike, not list
+os.symlink dst list                TypeError: symlink: dst should be string, bytes or os.PathLike, not list
+os.symlink src badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.symlink dst badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.symlink src badraise            RuntimeError: boom
+os.symlink dst badraise            RuntimeError: boom
+os.renames Path,Path               ok None
+os.renames bytes,bytes             ok None
+os.renames str,Path                ok None
+os.renames src int                 TypeError: rename: src should be string, bytes or os.PathLike, not int
+os.renames dst int                 TypeError: expected str, bytes or os.PathLike object, not int
+os.renames src float               TypeError: rename: src should be string, bytes or os.PathLike, not float
+os.renames dst float               TypeError: expected str, bytes or os.PathLike object, not float
+os.renames src None                TypeError: rename: src should be string, bytes or os.PathLike, not NoneType
+os.renames dst None                TypeError: expected str, bytes or os.PathLike object, not NoneType
+os.renames src list                TypeError: rename: src should be string, bytes or os.PathLike, not list
+os.renames dst list                TypeError: expected str, bytes or os.PathLike object, not list
+os.renames src badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.renames dst badret              TypeError: expected BadReturn.__fspath__() to return str or bytes, not int
+os.renames src badraise            RuntimeError: boom
+os.renames dst badraise            RuntimeError: boom
+os.listdir missing Path            FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.listdir missing bytes           FileNotFoundError: [Errno 2] No such file or directory: b'<T>/nope'
+os.listdir bytes result            ok [b'sub']
+os.listdir Path result             ok ['sub']
+os.listdir default                 ok True
+os.listdir None                    ok True
+os.scandir None                    ok True
+os.chdir missing                   FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.chdir Path                      ok '<T>/d'
+os.rename missing                  FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope' -> '<T>/x'
+os.rename Path moved               ok True
+os.replace Path moved              ok True
+os.link Path                       ok 2
+os.symlink Path                    ok True
+os.readlink bytes                  ok True
+os.readlink Path                   ok True
+os.readlink not link               OSError: [Errno 22] Invalid argument: '<T>/f'
+os.chmod Path                      ok '0o600'
+os.chmod missing                   FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.utime Path                      ok 6.0
+os.truncate Path                   ok 2
+os.truncate missing                FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.mkfifo Path                     ok True
+os.open Path write                 ok True
+os.open missing                    FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.access Path                     ok [True, True]
+os.access missing                  ok False
+os.stat fd bad                     OSError: [Errno 9] Bad file descriptor: 999
+os.statvfs fd bad                  OSError: [Errno 9] Bad file descriptor: 999
+os.stat missing Path               FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.lstat missing bytes             FileNotFoundError: [Errno 2] No such file or directory: b'<T>/nope'
+os.walk Path                       ok [('<T>/d', ['sub'], []), ('<T>/d/sub', [], [])]
+os.walk bytes                      ok [(b'<T>/d', [b'sub'], []), (b'<T>/d/sub', [], [])]
+os.removedirs Path                 ok False
+os.removedirs missing              FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.rmdir missing                   FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.unlink missing                  FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.remove missing                  FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.mkdir exists                    FileExistsError: [Errno 17] File exists: '<T>/d'
+os.makedirs Path                   ok True
+os.path.join Path                  ok 'a/b'
+os.path.join mixed                 TypeError: Can't mix strings and bytes in path components
+os.path.split Path                 ok ('/a', 'b')
+os.path.basename bytes             ok b'b'
+os.path.exists int fd              ok False
+os.path.isdir None                 TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.path.getsize missing            FileNotFoundError: [Errno 2] No such file or directory: '<T>/nope'
+os.path.samefile bad               TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+os.fspath Path                     ok '/a/b'
+os.fspath Good bytes               ok b'x'
+os.fsdecode bytes                  ok 'x'
+os.fsencode str                    ok b'x'
+os.fspath noarg                    TypeError: fspath() missing required argument 'path' (pos 1)

@@ -15,6 +15,9 @@
 package atexit
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/vishnukv64/gpython/py"
 )
 
@@ -145,6 +148,10 @@ func runHandlers() {
 			continue
 		}
 		if _, err := py.Call(h.fn, h.args, h.kwargs); err != nil {
+			// CPython's atexit_callfuncs: report and carry on to the next.
+			if r, rerr := py.ReprAsString(h.fn); rerr == nil {
+				fmt.Fprintf(os.Stderr, "Exception ignored in atexit callback %s:\n", r)
+			}
 			py.TracebackDump(err)
 		}
 	}

@@ -13,8 +13,13 @@
 package contextlib
 
 import (
+	_ "embed"
+
 	"github.com/vishnukv64/gpython/py"
 )
+
+//go:embed extra.py
+var extraSrc string
 
 const module_doc = `Utilities for with-statement contexts.`
 
@@ -23,6 +28,21 @@ const module_doc = `Utilities for with-statement contexts.`
 // the body's exception back into it.
 type GeneratorContextManager struct {
 	gen *py.Generator
+	// recreate makes a fresh context manager from the same call, which is what
+	// using the manager as a decorator needs (ContextDecorator._recreate_cm).
+	recreate func() (py.Object, error)
+}
+
+// decorate is contextlib._gcm_decorate, registered by extra.py.
+var decorate py.Object
+
+// M__call__ lets the manager decorate a function: each call of the result runs
+// inside a new manager made from the same arguments.
+func (g *GeneratorContextManager) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	if decorate == nil || g.recreate == nil || len(args) != 1 {
+		return nil, py.ExceptionNewf(py.TypeError, "'_GeneratorContextManager' object is not callable")
+	}
+	return py.Call(decorate, py.Tuple{py.MustNewMethod("_recreate_cm", func(py.Object, py.Tuple) (py.Object, error) { return g.recreate() }, 0, ""), args[0]}, py.NewStringDict())
 }
 
 var GeneratorContextManagerType = py.NewType("contextlib._GeneratorContextManager", "Helper for @contextmanager decorator.")
@@ -97,6 +117,10 @@ func init() {
 
 	globals := py.NewStringDict()
 
+	globals.Set("_register_decorate", py.MustNewMethod("_register_decorate", func(self py.Object, args py.Tuple) (py.Object, error) {
+		decorate = args[0]
+		return py.None, nil
+	}, 0, ""))
 	globals.Set("contextmanager", py.MustNewMethod("contextmanager", contextmanager, 0, contextmanager_doc))
 	globals.Set("AbstractContextManager", AbstractContextManagerType)
 	globals.Set("AbstractAsyncContextManager", AbstractContextManagerType)
@@ -114,6 +138,7 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: extraSrc,
 	})
 }
 
@@ -133,14 +158,25 @@ func contextmanager(self py.Object, args py.Tuple) (py.Object, error) {
 	if _, ok := fn.(*py.Function); !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "contextmanager() argument must be a generator function")
 	}
-	return &contextmanagerFactory{fn: fn}, nil
+	c := &contextmanagerFactory{fn: fn, dict: py.NewStringDict()}
+	// functools.wraps(func): the factory looks like the function it wraps.
+	for _, name := range []string{"__module__", "__name__", "__qualname__", "__doc__"} {
+		if v, err := py.GetAttrString(fn, name); err == nil {
+			c.dict.Set(name, v)
+		}
+	}
+	c.dict.Set("__wrapped__", fn)
+	return c, nil
 }
 
 // contextmanagerFactory is the decorated function: calling it produces the
 // context manager.
 type contextmanagerFactory struct {
-	fn py.Object
+	fn   py.Object
+	dict py.StringDict
 }
+
+func (c *contextmanagerFactory) GetDict() py.StringDict { return c.dict }
 
 var contextmanagerFactoryType = py.NewType("contextlib.contextmanager", "A context manager factory.")
 
@@ -155,7 +191,9 @@ func (c *contextmanagerFactory) M__call__(args py.Tuple, kwargs py.StringDict) (
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "contextmanager() decorated function must be a generator function")
 	}
-	return &GeneratorContextManager{gen: gen}, nil
+	// The VM may reuse the argument slice once the call returns.
+	saved, savedKw := append(py.Tuple{}, args...), kwargs.Copy()
+	return &GeneratorContextManager{gen: gen, recreate: func() (py.Object, error) { return c.M__call__(saved, savedKw) }}, nil
 }
 
 // M__get__ makes a decorated function work as a method, binding self.

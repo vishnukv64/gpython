@@ -15,6 +15,8 @@
 // executed so far.
 package py
 
+import "fmt"
+
 // A python Function object
 type Function struct {
 	Code        *Code      // A code object, the __code__ attribute
@@ -103,6 +105,13 @@ func (f *Function) M__get__(instance, owner Object) (Object, error) {
 
 // Properties
 func init() {
+	FunctionType.Dict.Set("__get__", MustNewMethod("__get__", func(self Object, args Tuple) (Object, error) {
+		var inst, owner Object = nil, None
+		if err := UnpackTuple(args, StringDict{}, "__get__", 1, 2, &inst, &owner); err != nil {
+			return nil, err
+		}
+		return self.(*Function).M__get__(inst, owner)
+	}, 0, "Return an attribute of instance, which is of type owner."))
 	FunctionType.Dict.Set("__globals__", &Property{
 		Fget: func(self Object) (Object, error) { return self.(*Function).Globals, nil },
 	})
@@ -275,6 +284,14 @@ func init() {
 			return nil
 		},
 	})
+	// repr(f) is "<function qualname at 0x...>", as CPython's func_repr.
+	FunctionType.Dict.Set("__repr__", MustNewMethod("__repr__", func(self Object) (Object, error) {
+		f, ok := self.(*Function)
+		if !ok {
+			return nil, ExceptionNewf(TypeError, "descriptor '__repr__' requires a 'function' object")
+		}
+		return String(fmt.Sprintf("<function %s at %p>", f.Qualname, f)), nil
+	}, 0, "Return repr(self)."))
 	FunctionType.Dict.Set("__qualname__", &Property{
 		Fget: func(self Object) (Object, error) {
 			return String(self.(*Function).Qualname), nil

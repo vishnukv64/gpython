@@ -437,7 +437,7 @@ func init() {
 		"SupportsInt", "SupportsFloat", "SupportsComplex", "SupportsBytes",
 		"SupportsAbs", "SupportsRound", "SupportsIndex", "SupportsRichComparison",
 		"Buffer", "LiteralString", "Self", "Never", "NoReturn", "AnyStr",
-		"Generic", "Protocol",
+		"Generic", "Protocol", "Annotated", "TypeIs",
 	} {
 		globals.Set(name, form(name))
 	}
@@ -587,6 +587,10 @@ func init() {
 		return py.None, nil
 	}, 0, "Consume the TypedDict class keywords."))
 	typedDictType.New = func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+		if metatype != typedDictType {
+			// Instantiating a TypedDict class makes a plain dict, as CPython does.
+			return py.DictNew(py.StringDictType, args, kwargs)
+		}
 		if len(args) >= 2 {
 			// The factory form: TypedDict('Name', {...}) returns a class.
 			nameObj, _ := py.StrAsString(args[0])
@@ -642,6 +646,27 @@ func init() {
 	globals.Set("Protocol", ProtocolType)
 
 	globals.Set("get_type_hints", py.MustNewMethod("get_type_hints", getTypeHints, 0, "Return the annotations of an object."))
+	globals.Set("is_typeddict", py.MustNewMethod("is_typeddict", func(self py.Object, args py.Tuple) (py.Object, error) {
+		var tp py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "is_typeddict", 1, 1, &tp); err != nil {
+			return nil, err
+		}
+		// A class made by a TypedDict statement: it derives from TypedDict.
+		if t, ok := tp.(*py.Type); ok {
+			for _, b := range t.Mro {
+				if bt, ok := b.(*py.Type); ok && bt == typedDictType {
+					return py.NewBool(t != typedDictType), nil
+				}
+			}
+		}
+		return py.False, nil
+	}, 0, "Check if an annotation is a TypedDict class."))
+	globals.Set("no_type_check_decorator", py.MustNewMethod("no_type_check_decorator", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return args[0], nil
+	}, 0, "Decorator to give another decorator the no_type_check effect."))
+	globals.Set("clear_overloads", py.MustNewMethod("clear_overloads", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return py.None, nil
+	}, 0, "Clear all overloads in the registry."))
 	globals.Set("get_args", py.MustNewMethod("get_args", getArgs, 0, "Return the arguments of a subscripted type, as far as they are kept."))
 	globals.Set("get_origin", py.MustNewMethod("get_origin", getArgs, 0, "Return the unsubscripted type."))
 
@@ -738,10 +763,6 @@ func buildNamedTupleClass(name string, bases []py.Object, ns py.StringDict) (py.
 				fields = append(fields, ent.Key)
 			}
 		}
-	}
-	if len(fields) == 0 {
-		return nil, py.ExceptionNewf(py.TypeError,
-			"named tuple %s has no fields", name)
 	}
 	clsObj, err := py.Call(fn, py.Tuple{py.String(name), py.NewListFromStrings(fields)}, py.NewStringDict())
 	if err != nil {

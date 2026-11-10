@@ -7,6 +7,7 @@ package py
 import (
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // ModuleSpec is the module.__spec__ object: a description of how a module was
@@ -25,6 +26,8 @@ type ModuleSpec struct {
 	parent  string
 	origin  Object
 	submods Object
+	// initializing is _initializing: the module's body is still running.
+	initializing atomic.Bool
 }
 
 // ModuleSpecType is the type of a module spec.
@@ -47,6 +50,17 @@ func NewModuleSpec(name string, origin Object, isPkg bool) *ModuleSpec {
 }
 
 func init() {
+	ModuleSpecType.Dict.Set("_initializing", &Property{
+		Fget: func(self Object) (Object, error) { return NewBool(self.(*ModuleSpec).initializing.Load()), nil },
+		Fset: func(self, value Object) error {
+			b, err := MakeBool(value)
+			self.(*ModuleSpec).initializing.Store(err == nil && b == True)
+			return nil
+		},
+	})
+	ModuleSpecType.Dict.Set("has_location", &Property{
+		Fget: func(self Object) (Object, error) { return NewBool(self.(*ModuleSpec).origin != nil), nil },
+	})
 	ModuleSpecType.Dict.Set("name", &Property{
 		Fget: func(self Object) (Object, error) { return String(self.(*ModuleSpec).name), nil },
 	})

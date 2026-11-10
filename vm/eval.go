@@ -2416,6 +2416,10 @@ func builtinGetFrame(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 // builtinDir implements dir().  It lives here rather than in the builtin
 // package because the no-argument form needs the interpreter frame.
+func init() {
+	py.DirHook = func(obj py.Object) (py.Object, error) { return builtinDir(nil, py.Tuple{obj}) }
+}
+
 func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 	if len(args) > 1 {
 		return nil, py.ExceptionNewf(py.TypeError, "dir expected at most 1 argument, got %d", len(args))
@@ -2442,6 +2446,9 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 
 	// Attributes supplied by the type and everything it inherits.
 	for t := obj.Type(); t != nil; t = t.Base {
+		if isClass {
+			break // dir(cls) lists the class and its bases, never the metatype
+		}
 		for _, name := range t.Dict.Keys() {
 			// Type-only metadata lives on object's dict (see py/type.go); an
 			// instance does not have it, and getattr on it raises.
@@ -2457,6 +2464,16 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 		for _, b := range t0.Mro {
 			if bt, ok := b.(*py.Type); ok {
 				for _, name := range bt.Dict.Keys() {
+					// Metatype metadata kept on object's dict (py/type.go)
+					// is not an attribute of the class's instances.
+					if bt == py.ObjectType && typeOnlyNames[name] {
+						continue
+					}
+					// A builtin class (no __module__ of its own) has instances
+					// without a __dict__.
+					if name == "__dict__" && !t0.Dict.Has("__module__") && !hasModuleBase(t0) {
+						continue
+					}
 					seen[name] = true
 				}
 			}
@@ -2480,6 +2497,23 @@ func builtinDir(f *py.Frame, args py.Tuple) (py.Object, error) {
 	}
 	sort.Strings(names)
 	return dirList(names), nil
+}
+
+// typeOnlyNames are type attributes that py/type.go keeps on object's dict.
+// hasModuleBase reports whether any class in t's MRO was written in Python.
+func hasModuleBase(t *py.Type) bool {
+	for _, b := range t.Mro {
+		if bt, ok := b.(*py.Type); ok && bt != py.ObjectType && bt.Dict.Has("__module__") {
+			return true
+		}
+	}
+	return false
+}
+
+var typeOnlyNames = map[string]bool{
+	"__bases__": true, "__mro__": true, "__qualname__": true, "__name__": true,
+	"__dict__": false, "mro": true, "__subclasses__": true, "__or__": true,
+	"__class_getitem__": true, "__annotations__": true, "__text_signature__": true,
 }
 
 func dirList(names []string) *py.List {

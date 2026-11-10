@@ -47,6 +47,7 @@ except Exception as e:
 try:
     top = tempfile.mkdtemp(prefix="prefix-", suffix="-suffix")
     tmp = tempfile.mkdtemp(prefix="prefix-", suffix="-suffix", dir=top)
+    os.rmdir(tmp)  # removedirs, like CPython's, removes only empty directories
     os.removedirs(top)
     print("mkdtemp(prefix='prefix-', suffix='-suffix', dir=top) [OK]")
 except Exception as e:
@@ -93,6 +94,7 @@ try:
     top = tempfile.mkdtemp(prefix="prefix-", suffix="-suffix")
     fd, tmp = tempfile.mkstemp(prefix="prefix-", suffix="-suffix", dir=top)
     os.fdopen(fd).close() ## needed on Windows.
+    os.remove(tmp)
     os.removedirs(top)
     print("mkstemp(prefix='prefix-', suffix='-suffix', dir=top) [OK]")
 except Exception as e:

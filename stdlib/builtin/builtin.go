@@ -17,6 +17,7 @@ import (
 
 	"github.com/vishnukv64/gpython/compile"
 	"github.com/vishnukv64/gpython/py"
+	pyastlib "github.com/vishnukv64/gpython/stdlib/ast"
 )
 
 const builtin_doc = `Built-in functions, exceptions, and other objects.
@@ -33,6 +34,7 @@ func init() {
 		py.MustNewMethod("any", builtin_any, 0, any_doc),
 		py.MustNewMethod("ascii", builtin_ascii, 0, ascii_doc),
 		py.MustNewMethod("bin", builtin_bin, 0, bin_doc),
+		py.MustNewMethod("breakpoint", builtin_breakpoint, 0, breakpoint_doc),
 		py.MustNewMethod("callable", builtin_callable, 0, callable_doc),
 		py.MustNewMethod("chr", builtin_chr, 0, chr_doc),
 		py.MustNewMethod("compile", builtin_compile, 0, compile_doc),
@@ -197,7 +199,7 @@ func init() {
 	})
 }
 
-// exceptionGroupSrc defines BaseExceptionGroup/ExceptionGroup (PEP 654) in
+// exceptionGroupSrc defines BaseExceptionGroup/ExceptionGroup (PEP 654) and aiter/anext in
 // Python; they run in the builtins namespace when the module is initialised.
 //
 //go:embed exceptiongroup.py
@@ -1039,6 +1041,9 @@ the effects of any future statements in effect in the code calling
 compile; if absent or zero these statements do influence the compilation,
 in addition to any features explicitly specified.`
 
+// pyCFOnlyAST is compile()'s PyCF_ONLY_AST flag.
+const pyCFOnlyAST = 0x400
+
 func builtin_compile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	// FIXME lots of unsupported stuff here!
 	var filename py.Object
@@ -1051,6 +1056,17 @@ func builtin_compile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	// var cf PyCompilerFlags
 	var cmd py.Object
 	kwlist := []string{"source", "filename", "mode", "flags", "dont_inherit", "optimize"}
+	// filename may be any os.PathLike (IPython passes a pathlib.Path).
+	if len(args) > 1 {
+		if _, isStr := args[1].(py.String); !isStr {
+			if fs, err := py.GetAttrString(args[1], "__fspath__"); err == nil {
+				if r, err := py.Call(fs, nil, py.NewStringDict()); err == nil {
+					args = append(py.Tuple{}, args...)
+					args[1] = r
+				}
+			}
+		}
+	}
 	// start := []int{Py_file_input, Py_eval_input, Py_single_input}
 	var result py.Object
 
@@ -1105,9 +1121,22 @@ func builtin_compile(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Ob
 	// 		PyArena_Free(arena)
 	// 	}
 	// } else {
+	if pyastlib.IsNode(cmd) {
+		if int(supplied_flags.(py.Int))&pyCFOnlyAST != 0 {
+			return cmd, nil
+		}
+		tree, err := pyastlib.ToCompiler(cmd, py.CompileMode(startstr.(py.String)))
+		if err != nil {
+			return nil, err
+		}
+		return compile.CompileAst(tree, "", string(filename.(py.String)), int(supplied_flags.(py.Int)), dont_inherit.(py.Int) != 0)
+	}
 	str, err := source_as_string(cmd, "compile", "string, bytes or AST" /*, &cf*/)
 	if err != nil {
 		return nil, err
+	}
+	if int(supplied_flags.(py.Int))&pyCFOnlyAST != 0 {
+		return pyastlib.ParseTree(str, py.CompileMode(startstr.(py.String)))
 	}
 	// "single" wants its statement newline-terminated; CPython supplies it.
 	if py.CompileMode(startstr.(py.String)) == "single" && !strings.HasSuffix(str, "\n") {
@@ -1264,6 +1293,17 @@ func isinstance(obj py.Object, classOrTuple py.Object) (py.Bool, error) {
 		}
 		if t := obj.Type(); t != nil && t.IsSubtype(class) {
 			return true, nil
+		}
+
+		// An IntEnum or StrEnum member is an int or a str as well as an enum
+		// member; the Go enum members are one type, and say what they stand
+		// for through the dict-key proxy.
+		if p, ok := obj.(py.IDictKeyProxy); ok {
+			if stand := p.DictKeyObject(); stand != obj {
+				if t := stand.Type(); t != nil && t.IsSubtype(class) {
+					return true, nil
+				}
+			}
 		}
 
 		// Structural checks registered by the modules that define the
@@ -1706,3 +1746,22 @@ func builtin_sorted(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Obj
 	}
 	return l, nil
 }
+
+func builtin_breakpoint(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	sysModule, err := self.(*py.Module).Context.GetModule("sys")
+	if err != nil {
+		return nil, err
+	}
+	hook := sysModule.Globals.GetOrNil("breakpointhook")
+	if hook == nil {
+		return nil, py.ExceptionNewf(py.RuntimeError, "lost sys.breakpointhook")
+	}
+	return py.Call(hook, args, kwargs)
+}
+
+const breakpoint_doc = `breakpoint(*args, **kws)
+
+Call sys.breakpointhook(*args, **kws).  sys.breakpointhook() must accept
+whatever arguments are passed.
+
+By default, this drops you into the pdb debugger.`

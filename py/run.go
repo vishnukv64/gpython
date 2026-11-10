@@ -103,6 +103,14 @@ var (
 		opts := ContextOpts{
 			SysPaths: DefaultCoreSysPaths,
 		}
+		// The prefix's site-packages follows the standard library, as site.py
+		// orders it; a venv's own comes first, then (when the environment
+		// asks for them) its base interpreter's.
+		for _, s := range sitePackagesDirs() {
+			opts.SysPaths = append(opts.SysPaths, s)
+			paths, _ := ParsePth(s)
+			opts.SysPaths = append(opts.SysPaths, paths...)
+		}
 		opts.SysPaths = append(opts.SysPaths, DefaultAuxSysPaths...)
 		// A PYTHONPATH is searched before the built-in defaults, as in CPython.
 		if pythonPath := os.Getenv("PYTHONPATH"); pythonPath != "" {
@@ -245,6 +253,10 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 		} else {
 			pkg = ""
 		}
+		var spec *ModuleSpec
+		if specName != "" {
+			spec = NewModuleSpec(specName, String(codeDesc), false)
+		}
 		moduleImpl := ModuleImpl{
 			Info: ModuleInfo{
 				Name:     moduleName,
@@ -260,12 +272,16 @@ func RunCode(ctx Context, code *Code, codeDesc string, inModule interface{}) (*M
 				if specName == "" {
 					g.Set("__spec__", None)
 				} else {
-					g.Set("__spec__", NewModuleSpec(specName, String(codeDesc), false))
+					spec.initializing.Store(true)
+					g.Set("__spec__", spec)
 				}
 				g.Set("__package__", String(pkg))
 			},
 		}
 		module, err = ctx.ModuleInit(&moduleImpl)
+		if spec != nil {
+			spec.initializing.Store(false)
+		}
 	}
 
 	if err != nil {

@@ -11,6 +11,7 @@ package py
 
 import (
 	"fmt"
+	"sync"
 )
 
 // Types for methods
@@ -344,11 +345,19 @@ func (m *Method) M__get__(instance, owner Object) (Object, error) {
 	}
 	// Otherwise CPython hands back an unbound method descriptor, and the caller
 	// supplies the instance as the first argument - str.upper(s) is s.upper().
-	// Copying the Method keeps the shared one unmarked.
+	// Copying the Method keeps the shared one unmarked.  The copy is cached so
+	// that "object.__init__ is object.__init__", which inspect relies on.
+	if u, ok := unboundMethods.Load(m); ok {
+		return u.(*Method), nil
+	}
 	unbound := *m
 	unbound.Unbound = true
-	return &unbound, nil
+	u, _ := unboundMethods.LoadOrStore(m, &unbound)
+	return u.(*Method), nil
 }
+
+// unboundMethods maps a Method to its unbound view.
+var unboundMethods sync.Map
 
 // FIXME this should be the default?
 func (m *Method) M__eq__(other Object) (Object, error) {
@@ -387,6 +396,25 @@ func init() {
 	}
 	prop("__name__", func(m *Method) Object { return String(m.Name) })
 	prop("__qualname__", func(m *Method) Object { return String(m.Name) })
+	// inspect.signature reads this for a builtin.  Only the core builtins are
+	// listed: the others have no recorded signature, and None is what
+	// CPython answers for those too.
+	// A module-level builtin is bound to its module (len.__self__ is
+	// builtins); inspect uses it to drop the "$module" parameter.
+	prop("__self__", func(m *Method) Object {
+		if m.Module != nil {
+			return m.Module
+		}
+		return None
+	})
+	prop("__text_signature__", func(m *Method) Object {
+		if m.Module == nil || m.Module.ModuleImpl.Info.Name == "builtins" {
+			if sig, ok := builtinTextSignatures[m.Name]; ok {
+				return String(sig)
+			}
+		}
+		return None
+	})
 	prop("__module__", func(m *Method) Object {
 		if m.Module == nil {
 			return String("builtins")
@@ -399,4 +427,42 @@ func init() {
 	MethodType.Dict.Set("__reduce_ex__", MustNewMethod("__reduce_ex__", func(self Object, args Tuple) (Object, error) {
 		return String(self.(*Method).Name), nil
 	}, 0, "Pickle a builtin function by name."))
+}
+
+// builtinTextSignatures are CPython 3.14's __text_signature__ values for the
+// builtin functions.
+var builtinTextSignatures = map[string]string{
+	"len":        `($module, obj, /)`,
+	"abs":        `($module, x, /)`,
+	"isinstance": `($module, obj, class_or_tuple, /)`,
+	"issubclass": `($module, cls, class_or_tuple, /)`,
+	"callable":   `($module, obj, /)`,
+	"id":         `($module, obj, /)`,
+	"hash":       `($module, obj, /)`,
+	"repr":       `($module, obj, /)`,
+	"ord":        `($module, character, /)`,
+	"chr":        `($module, i, /)`,
+	"bin":        `($module, number, /)`,
+	"hex":        `($module, number, /)`,
+	"oct":        `($module, number, /)`,
+	"ascii":      `($module, obj, /)`,
+	"hasattr":    `($module, obj, name, /)`,
+	"setattr":    `($module, obj, name, value, /)`,
+	"delattr":    `($module, obj, name, /)`,
+	"print":      `($module, /, *args, sep=' ', end='\n', file=None, flush=False)`,
+	"sorted":     `($module, iterable, /, *, key=None, reverse=False)`,
+	"sum":        `($module, iterable, /, start=0)`,
+	"round":      `($module, /, number, ndigits=None)`,
+	"divmod":     `($module, x, y, /)`,
+	"format":     `($module, value, format_spec='', /)`,
+	"globals":    `($module, /)`,
+	"locals":     `($module, /)`,
+	"pow":        `($module, /, base, exp, mod=None)`,
+	"input":      `($module, prompt='', /)`,
+	"exec":       `($module, source, /, globals=None, locals=None, *, closure=None)`,
+	"eval":       `($module, source, /, globals=None, locals=None)`,
+	"compile": `($module, /, source, filename, mode, flags=0,
+        dont_inherit=False, optimize=-1, *, _feature_version=-1)`,
+	"open": `($module, /, file, mode='r', buffering=-1, encoding=None,
+     errors=None, newline=None, closefd=True, opener=None)`,
 }

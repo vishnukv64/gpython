@@ -268,6 +268,11 @@ func (ctx *context) ResolveAndCompile(pathname string, opts py.CompileOpts) (py.
 			return false, err
 		}
 
+		// Any file that is not bytecode is source, as CPython treats a script
+		// without a .py extension (installed console scripts have none).
+		if ext != ".pyc" {
+			ext = ".py"
+		}
 		switch ext {
 		case ".py":
 			var pySrc []byte

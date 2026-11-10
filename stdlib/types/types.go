@@ -81,6 +81,16 @@ func init() {
 		py.DictEntry{Key: "FrameType", Value: py.FrameType},
 		py.DictEntry{Key: "TracebackType", Value: py.TracebackType},
 		py.DictEntry{Key: "ModuleType", Value: py.ModuleType},
+		// Builtin method kinds are all one *py.Method here, so the descriptor
+		// types alias it.
+		py.DictEntry{Key: "WrapperDescriptorType", Value: py.MethodType},
+		py.DictEntry{Key: "MethodWrapperType", Value: py.MethodType},
+		py.DictEntry{Key: "MethodDescriptorType", Value: py.MethodType},
+		py.DictEntry{Key: "ClassMethodDescriptorType", Value: py.MethodType},
+		py.DictEntry{Key: "GetSetDescriptorType", Value: py.GetSetDescriptorType},
+		py.DictEntry{Key: "MemberDescriptorType", Value: py.PropertyType},
+		py.DictEntry{Key: "DynamicClassAttribute", Value: py.PropertyType},
+		py.DictEntry{Key: "EllipsisType", Value: py.Ellipsis.Type()},
 		py.DictEntry{Key: "CellType", Value: py.CellType},
 		py.DictEntry{Key: "MappingProxyType", Value: py.StringDictType},
 		py.DictEntry{Key: "NoneType", Value: py.NoneType.Type(py.None)},

@@ -610,7 +610,11 @@ func (a *List) M__iadd__(other Object) (Object, error) {
 		a.Extend(b.Items)
 		return a, nil
 	}
-	return NotImplemented, nil
+	// list += any iterable is list.extend.
+	if err := a.ExtendSequence(other); err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
 func (l *List) M__mul__(other Object) (Object, error) {

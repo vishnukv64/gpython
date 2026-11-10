@@ -1,0 +1,30 @@
+posix_prefix
+  data /P
+  include /B/include/python3.14
+  platinclude /B/include/python3.14
+  platlib /P/lib/python3.14/site-packages
+  platstdlib /P/lib/python3.14
+  purelib /P/lib/python3.14/site-packages
+  scripts /P/bin
+  stdlib /B/lib/python3.14
+posix_venv
+  data /P
+  include /B/include/python3.14
+  platinclude /B/include/python3.14
+  platlib /P/lib/python3.14/site-packages
+  platstdlib /P/lib/python3.14
+  purelib /P/lib/python3.14/site-packages
+  scripts /P/bin
+  stdlib /B/lib/python3.14
+posix_home
+  data /P
+  include /B/include/python
+  platinclude /B/include/python
+  platlib /P/lib/python
+  platstdlib /P/lib/python
+  purelib /P/lib/python
+  scripts /P/bin
+  stdlib /B/lib/python
+/P/lib/python3.14/site-packages
+['data', 'include', 'platlib', 'platstdlib', 'purelib', 'scripts', 'stdlib']
+True True

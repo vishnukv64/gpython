@@ -245,9 +245,7 @@ func init() {
 		c.set(v, t.old)
 		return py.None, nil
 	}, 0, "Reset to the value before the matching set()."))
-	VarType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, py.METH_CLASS, ""))
+	VarType.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 
 	TokenType.Dict.Set("var", &py.Property{Fget: func(s py.Object) (py.Object, error) { return s.(*Token).v, nil }})
 	TokenType.Dict.Set("old_value", &py.Property{Fget: func(s py.Object) (py.Object, error) {
@@ -257,9 +255,7 @@ func init() {
 		return Missing, nil
 	}})
 	TokenType.Dict.Set("MISSING", Missing)
-	TokenType.Dict.Set("__class_getitem__", py.MustNewMethod("__class_getitem__", func(self py.Object, args py.Tuple) (py.Object, error) {
-		return self, nil
-	}, py.METH_CLASS, ""))
+	TokenType.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 
 	ContextType.Dict.Set("run", py.MustNewMethod("run", func(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 		c := self.(*Context)

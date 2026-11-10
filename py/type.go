@@ -406,9 +406,8 @@ func init() {
 	// therefore checks that it was handed a type and raises AttributeError
 	// otherwise, which is exactly what CPython reports for "x.__name__".
 	typeMeta := func(name string, doc string, get func(t *Type) Object) {
-		d := &typeMetaGetter{name: name, get: get}
-		TypeType.Dict.Set(name, d)
-		ObjectType.Dict.Set(name, d)
+		TypeType.Dict.Set(name, &typeMetaGetter{name: name, get: get, owner: TypeType})
+		ObjectType.Dict.Set(name, &typeMetaGetter{name: name, get: get, owner: ObjectType})
 	}
 	// A natively declared type carries its module in Name ("collections.abc.Mapping");
 	// __name__ is the part after the last dot, as in CPython.
@@ -419,6 +418,28 @@ func init() {
 		return String(t.Name)
 	}
 	typeMeta("__name__", "The name of the type.", shortName)
+	// inspect.signature(object) reads it; other builtin types would need the
+	// signature parsed from their docstring, so they answer None.
+	typeMeta("__text_signature__", "The call signature of the type, or None.", func(t *Type) Object {
+		if t == ObjectType {
+			return String("()")
+		}
+		return None
+	})
+	// Only the flags code reads: HEAPTYPE for a class written in Python and
+	// IS_ABSTRACT for one with abstract methods left (inspect.isabstract).
+	typeMeta("__flags__", "Flags of the type.", func(t *Type) Object {
+		flags := 0
+		if t.Dict.Has("__module__") && t != ObjectType {
+			flags |= 1 << 9 // Py_TPFLAGS_HEAPTYPE
+		}
+		if abs, ok := t.Dict.Get("__abstractmethods__"); ok {
+			if n, err := Len(abs); err == nil && n != Int(0) {
+				flags |= 1 << 20 // Py_TPFLAGS_IS_ABSTRACT
+			}
+		}
+		return Int(flags)
+	})
 	typeMeta("__qualname__", "The qualified name of the type.", func(t *Type) Object {
 		if t.Qualname != "" {
 			return String(t.Qualname)
@@ -468,6 +489,11 @@ func init() {
 		if t.Name == "" && t.ObjectType != nil && t.ObjectType.NoDict {
 			return nil // an instance of a slotted class: no __dict__
 		}
+		if t.Name != "" && builtinDunderHook != nil {
+			if view, ok := builtinDictViewHook(t); ok {
+				return view
+			}
+		}
 		return t.AttrDict()
 	})
 
@@ -475,6 +501,7 @@ func init() {
 	// reason as the metadata above: an instance of a builtin must be able to
 	// ask for its class, and "(5).__class__" was an AttributeError.
 	ObjectType.Dict.Set("__class__", &classGetter{})
+	BoolType.Dict.Set("__class__", &classGetter{}) // bool is not derived from object here
 	TypeType.Dict.Set("__class__", &classGetter{})
 
 	// object.__init__ exists and takes no arguments, which is what makes
@@ -627,11 +654,35 @@ func init() {
 // as (int, type) - and otherwise the owner, which is how "object.__name__"
 // arrives, since object's attribute is found on object itself.
 type typeMetaGetter struct {
-	name string
-	get  func(t *Type) Object
+	name  string
+	get   func(t *Type) Object
+	owner *Type // __objclass__: the class whose dict holds the descriptor
 }
 
-func (d *typeMetaGetter) Type() *Type { return ObjectType }
+func (d *typeMetaGetter) Type() *Type { return GetSetDescriptorType }
+
+// GetSetDescriptorType is the class of those descriptors, spelled as CPython's
+// type.__dict__['__mro__'] is: it has __get__ (inspect.getattr_static calls
+// type.__dict__['__mro__'].__get__(klass)), __name__ and __objclass__.
+var GetSetDescriptorType = NewType("getset_descriptor", "getset_descriptor")
+
+func init() {
+	GetSetDescriptorType.Dict.Set("__get__", MustNewMethod("__get__", func(self Object, args Tuple) (Object, error) {
+		var inst, owner Object = nil, None
+		if err := UnpackTuple(args, StringDict{}, "__get__", 1, 2, &inst, &owner); err != nil {
+			return nil, err
+		}
+		d := self.(*typeMetaGetter)
+		if _, isType := inst.(*Type); !isType && inst != None {
+			return nil, ExceptionNewf(TypeError, "descriptor '%s' for 'type' objects doesn't apply to a '%s' object", d.name, inst.Type().Name)
+		}
+		return d.M__get__(inst, owner)
+	}, 0, "Return an attribute of instance, which is of type owner."))
+	GetSetDescriptorType.Dict.Set("__name__", &Property{Fget: func(self Object) (Object, error) {
+		return String(self.(*typeMetaGetter).name), nil
+	}})
+	GetSetDescriptorType.Dict.Set("__objclass__", &Property{Fget: func(self Object) (Object, error) { return self.(*typeMetaGetter).owner, nil }})
+}
 
 func (d *typeMetaGetter) M__get__(instance, owner Object) (Object, error) {
 	if t, ok := instance.(*Type); ok {
@@ -882,7 +933,9 @@ func (a *Type) IsSubtype(b *Type) bool {
 // builds a T rather than a tuple.
 type nativeNew struct{}
 
-func (n *nativeNew) Type() *Type { return TypeType }
+// A builtin function in CPython (object.__new__), which inspect relies on to
+// tell it from a user-defined __new__.
+func (n *nativeNew) Type() *Type { return MethodType }
 
 func (n *nativeNew) M__get__(instance, owner Object) (Object, error) { return n, nil }
 

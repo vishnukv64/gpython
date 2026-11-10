@@ -633,13 +633,14 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 		return nil, py.ExceptionNewf(py.TypeError, "dataclass() should be called on a class")
 	}
 
-	fields, err := annotationFields(cls, decoFrame)
+	own, err := annotationFields(cls, decoFrame)
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range fields {
+	for _, f := range own {
 		f.normalize()
 	}
+	fields := mergeBaseFields(cls, own)
 
 	initOn, err := py.ObjectIsTrue(opts.init)
 	if err != nil {
@@ -748,6 +749,51 @@ func applyDataclass(clsObj py.Object, opts *decoOpts, decoFrame *py.Frame) (py.O
 	cls.Dict.Set("__dataclass_field_order__", fieldOrder(fields))
 	cls.Dict.Set("__dataclass_params__", py.NewStringDict())
 	return cls, nil
+}
+
+// mergeBaseFields puts the fields of the dataclass bases ahead of the class's
+// own, base-most first.  A field the class redeclares keeps its inherited
+// position and takes the new definition.  The inherited ones are copied, as
+// the decorator rewrites fields (kw_only) and the base must keep its own.
+func mergeBaseFields(cls *py.Type, own []*fieldType) []*fieldType {
+	var merged []*fieldType
+	index := map[string]int{}
+	put := func(f *fieldType) {
+		if i, ok := index[f.name]; ok {
+			merged[i] = f
+			return
+		}
+		index[f.name] = len(merged)
+		merged = append(merged, f)
+	}
+	for i := len(cls.Mro) - 1; i >= 1; i-- {
+		base, ok := cls.Mro[i].(*py.Type)
+		if !ok {
+			continue
+		}
+		table, ok := base.Dict.GetOrNil("__dataclass_fields__").(py.StringDict)
+		if !ok {
+			continue
+		}
+		order, ok := base.Dict.GetOrNil("__dataclass_field_order__").(*py.List)
+		if !ok {
+			continue
+		}
+		for _, nameObj := range order.Items {
+			name, err := py.StrAsString(nameObj)
+			if err != nil {
+				continue
+			}
+			if f, ok := table.GetOrNil(name).(*fieldType); ok {
+				cp := *f
+				put(&cp)
+			}
+		}
+	}
+	for _, f := range own {
+		put(f)
+	}
+	return merged
 }
 
 // fieldsDict exposes the fields as a dict keyed by name, which is the shape
@@ -1190,6 +1236,15 @@ func fields(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, err
 // itself a *py.Type whose Dict holds its attributes.
 func setFieldValue(self py.Object, name string, value py.Object) error {
 	if inst, ok := self.(*py.Type); ok {
+		// A __slots__ entry keeps its value in the slot, not the dict.
+		if cls := inst.ObjectType; cls != nil {
+			if d, err := py.GetAttrString(cls, name); err == nil && d.Type() == py.MemberDescriptorType {
+				if set, ok := d.(py.I__set__); ok {
+					_, err := set.M__set__(self, value)
+					return err
+				}
+			}
+		}
 		if inst.Dict.IsNil() {
 			inst.Dict = py.NewStringDict()
 		}

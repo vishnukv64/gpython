@@ -248,10 +248,10 @@ func translate(pattern string, flags int) (string, map[int]string, map[string]in
 			break
 		}
 		next := pattern[i+1]
-		if next >= '1' && next <= '9' {
-			return "", nil, nil, 0, py.ExceptionNewf(ErrorType, "backreferences are not supported: Go's regexp engine has no equivalent")
-		}
+		// A numbered backreference runs on the backtracking engine; see
+		// needsBacktrack.
 		i++
+		_ = next
 	}
 	// Conditionals and named backreferences still have no equivalent in Go's
 	// engine and are refused by name.  Lookaround is handled now - see
@@ -646,10 +646,21 @@ func compile(pattern string, flags int) (*Pattern, error) {
 	} else if hasLookahead(translated) {
 		l, lerr := lift(translated)
 		if lerr != nil {
-			return nil, lerr
+			// A shape lift cannot check exactly (a lookahead inside a repeat of
+			// a multi-character group, IPython's help-end regex) goes to the
+			// backtracking engine, which answers it.
+			var berr error
+			if !strings.Contains(lerr.Error(), "inside a repeat") {
+				return nil, lerr
+			}
+			if bt, berr = newBacktrack(translated, flags); berr != nil {
+				return nil, lerr
+			}
+			translated = ""
+		} else {
+			translated = l.pattern
+			liftedForm = &l
 		}
-		translated = l.pattern
-		liftedForm = &l
 	}
 	if prefix := goFlags(flags); prefix != "" {
 		translated = "(?" + prefix + ")" + translated

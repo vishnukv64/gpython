@@ -1,0 +1,16 @@
+AttributeError module 'sys' has no attribute 'nope'
+AttributeError module 'os' has no attribute 'nope'
+AttributeError module 'posixpath' has no attribute 'nope'
+AttributeError module 'json' has no attribute 'nope'
+AttributeError module 'mm' has no attribute 'x'
+AttributeError module has no attribute 'x'
+AttributeError module has no attribute 'x'
+1
+AttributeError custom bad
+ZeroDivisionError division by zero
+AttributeError partially initialized module 'm5' has no attribute 'z' (most likely due to a circular import)
+AttributeError partially initialized module 'circ_a' from '<T>/circ_a.py' has no attribute 'nothing' (most likely due to a circular import)
+AttributeError module 'sys' has no attribute 'zz'
+dflt False
+AttributeError 'module' object has no attribute 'zz'
+AttributeError 'module' object has no attribute 'nothere'

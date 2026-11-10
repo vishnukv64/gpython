@@ -190,10 +190,31 @@ func init() {
 			if f.Can(FileBinary) {
 				return nil, ExceptionNewf(AttributeError, "'file' object has no attribute 'buffer'")
 			}
-			return &File{f.File, f.FileMode&^FileText | FileBinary}, nil
+			return &File{File: f.File, FileMode: f.FileMode&^FileText | FileBinary}, nil
 		},
 		Doc: "The underlying binary buffer of a text stream.",
 	})
+
+	// The text-layer attributes callers read off sys.stdin/stdout
+	// (prompt_toolkit reads stdin.encoding).  A binary stream has none.
+	textAttr := func(name string, value Object, doc string) {
+		FileType.Dict.Set(name, &Property{
+			Fget: func(self Object) (Object, error) {
+				if self.(*File).Can(FileBinary) {
+					return nil, ExceptionNewf(AttributeError, "'file' object has no attribute '%s'", name)
+				}
+				return value, nil
+			},
+			Doc: doc,
+		})
+	}
+	textAttr("encoding", String("utf-8"), "Encoding of the text stream.")
+	textAttr("errors", String("strict"), "Error setting of the decoder or encoder.")
+	textAttr("line_buffering", False, "Whether writes are flushed on a newline.")
+	textAttr("newlines", None, "The newline translations seen so far.")
+	FileType.Dict.Set("reconfigure", MustNewMethod("reconfigure", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
+		return None, nil
+	}, 0, "Reconfigure the text stream; the settings are fixed here, so this accepts and ignores them."))
 
 	FileType.Dict.Set("readlines", MustNewMethod("readlines", func(self Object, args Tuple, kwargs StringDict) (Object, error) {
 		f := self.(*File)
@@ -229,6 +250,17 @@ const (
 type File struct {
 	*os.File
 	FileMode
+	// dict holds attributes assigned to the file ("sys.stdout.write = f"),
+	// as an io object's __dict__ does.
+	dict StringDict
+}
+
+// GetDict is the file's attribute namespace, made on first use.
+func (o *File) GetDict() StringDict {
+	if o.dict.IsNil() {
+		o.dict = NewStringDict()
+	}
+	return o.dict
 }
 
 // FileFromFD wraps an open descriptor.  With closefd false the descriptor is
@@ -239,13 +271,13 @@ func FileFromFD(fd int, mode string, closefd bool) (Object, error) {
 		return nil, err
 	}
 	if closefd {
-		return &File{TakeFD(uintptr(fd), strconv.Itoa(fd)), perm}, nil
+		return &File{File: TakeFD(uintptr(fd), strconv.Itoa(fd)), FileMode: perm}, nil
 	}
 	nfd, err := dupFD(fd)
 	if err != nil {
 		return nil, OSErrorFrom(err, "")
 	}
-	return &File{os.NewFile(uintptr(nfd), strconv.Itoa(fd)), perm}, nil
+	return &File{File: os.NewFile(uintptr(nfd), strconv.Itoa(fd)), FileMode: perm}, nil
 }
 
 // Type of this object
@@ -432,7 +464,12 @@ func OpenFile(filename, mode string, buffering int) (Object, error) {
 		fmode |= os.O_APPEND
 	}
 
-	f, err := os.OpenFile(filename, fmode, 0666)
+	var f *os.File
+	if fileMode&FileReadWrite == FileRead {
+		f, err = OpenReadonly(filename, fmode)
+	} else {
+		f, err = os.OpenFile(filename, fmode, 0666)
+	}
 	if err != nil {
 		return nil, OSErrorFrom(err, filename)
 	}
@@ -444,7 +481,7 @@ func OpenFile(filename, mode string, buffering int) (Object, error) {
 		}
 	}
 
-	return &File{f, fileMode}, nil
+	return &File{File: f, FileMode: fileMode}, nil
 }
 
 // Check interface is satisfied

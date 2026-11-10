@@ -21,6 +21,20 @@ import (
 // with Go's wording - "stat /x: no such file or directory" - which no
 // "except FileNotFoundError" clause catches.
 func OSErrorFrom(err error, filename string, filename2 ...string) error {
+	if filename == "" {
+		return OSErrorFromObj(err, nil)
+	}
+	var f2 []Object
+	for _, s := range filename2 {
+		f2 = append(f2, String(s))
+	}
+	return OSErrorFromObj(err, String(filename), f2...)
+}
+
+// OSErrorFromObj is OSErrorFrom for filenames that are not str: bytes paths
+// and file descriptors show as b'..' and a bare number.  A nil filename means
+// none.
+func OSErrorFromObj(err error, filename Object, filename2 ...Object) error {
 	var en syscall.Errno
 	if !errors.As(err, &en) {
 		return ExceptionNewf(OSError, "%s", err.Error())
@@ -39,24 +53,24 @@ func OSErrorFrom(err error, filename string, filename2 ...string) error {
 		strerror = string(strerror[0]-'a'+'A') + strerror[1:]
 	}
 	var e *Exception
-	if filename == "" {
+	if filename == nil {
 		e = ExceptionNewf(osErrorClass(err, errno), "[%s %d] %s", tag, code, strerror)
 	} else {
-		quoted, rerr := ReprAsString(String(filename))
+		quoted, rerr := ReprAsString(filename)
 		if rerr != nil {
 			return rerr
 		}
 		if len(filename2) > 0 {
-			quoted2, rerr := ReprAsString(String(filename2[0]))
+			quoted2, rerr := ReprAsString(filename2[0])
 			if rerr != nil {
 				return rerr
 			}
 			quoted += " -> " + quoted2
 		}
 		e = ExceptionNewf(osErrorClass(err, errno), "[%s %d] %s: %s", tag, code, strerror, quoted)
-		e.Dict.Set("filename", String(filename))
+		e.Dict.Set("filename", filename)
 		if len(filename2) > 0 {
-			e.Dict.Set("filename2", String(filename2[0]))
+			e.Dict.Set("filename2", filename2[0])
 		}
 	}
 	SetErrno(e, errno, strerror)

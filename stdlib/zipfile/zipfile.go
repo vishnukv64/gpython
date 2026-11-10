@@ -860,6 +860,9 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		// CPython's zipfile imports importlib.util, so after "import zipfile"
+		// "importlib.util" is an attribute of importlib (jedi relies on it).
+		CodeSrc: `import importlib.util`,
 	})
 }
 

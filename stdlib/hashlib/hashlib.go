@@ -183,7 +183,8 @@ func namedCtor(name string) func(self py.Object, args py.Tuple, kwargs py.String
 			return newHashObject(algo, size, data)
 		}
 		var data2 py.Object = py.None
-		if err := py.ParseTupleAndKeywords(args, kwargs, "|O:"+name, []string{"data"}, &data2); err != nil {
+		var secure py.Object = py.True // accepted, with no effect: nothing here is FIPS-restricted
+		if err := py.ParseTupleAndKeywords(args, kwargs, "|O$OO:"+name, []string{"data", "usedforsecurity", "string"}, &data2, &secure, &data2); err != nil {
 			return nil, err
 		}
 		return newHashObject(algo, algo.digestLen, data2)

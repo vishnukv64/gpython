@@ -25,6 +25,9 @@ func init() {
 		py.DictEntry{Key: "wraps", Value: py.MustNewMethod("wraps", wraps, 0, "Decorator factory to apply update_wrapper to a wrapped function.")},
 		py.DictEntry{Key: "partial", Value: PartialType},
 		py.DictEntry{Key: "partialmethod", Value: PartialType},
+		py.DictEntry{Key: "Placeholder", Value: placeholder},
+		py.DictEntry{Key: "_unwrap_partial", Value: py.MustNewMethod("_unwrap_partial", unwrapPartial, 0, "Follow partial.func to the underlying callable.")},
+		py.DictEntry{Key: "_unwrap_partialmethod", Value: py.MustNewMethod("_unwrap_partialmethod", unwrapPartial, 0, "Follow partial/partialmethod .func to the underlying callable.")},
 		py.DictEntry{Key: "reduce", Value: py.MustNewMethod("reduce", reduce, 0, "Apply a function of two arguments cumulatively to the items of a sequence.")},
 		py.DictEntry{Key: "lru_cache", Value: py.MustNewMethod("lru_cache", lruCache, 0, "Least-recently-used cache decorator.")},
 		py.DictEntry{Key: "cache", Value: py.MustNewMethod("cache", lruCache, 0, "Simple lightweight unbounded function cache.")},
@@ -928,3 +931,23 @@ var (
 	_ py.I__gt__ = (*cmpKey)(nil)
 	_ py.I__eq__ = (*cmpKey)(nil)
 )
+
+// placeholder is functools.Placeholder.  partial does not give it its
+// positional-slot meaning; it exists so code that names it (inspect) imports.
+var placeholder = py.NewTypeX("functools._PlaceholderType", "The type of functools.Placeholder.", nil, nil)
+
+// _unwrap_partial and _unwrap_partialmethod are the same here: partialmethod
+// is partial.
+func unwrapPartial(self py.Object, args py.Tuple) (py.Object, error) {
+	var fn py.Object
+	if err := py.UnpackTuple(args, py.StringDict{}, "_unwrap_partial", 1, 1, &fn); err != nil {
+		return nil, err
+	}
+	for {
+		p, ok := fn.(*Partial)
+		if !ok {
+			return fn, nil
+		}
+		fn = p.fn
+	}
+}

@@ -96,3 +96,29 @@ class BaseExceptionGroup(BaseException):
 
 class ExceptionGroup(BaseExceptionGroup, Exception):
     pass
+
+
+def aiter(async_iterable, /):
+    """Return an AsyncIterator for an AsyncIterable object."""
+    return async_iterable.__aiter__()
+
+
+_anext_missing = object()
+
+
+def anext(aiterator, default=_anext_missing, /):
+    """Return the next item from the async iterator.
+
+    If default is given and the iterator is exhausted, it is returned instead
+    of raising StopAsyncIteration.
+    """
+    awaitable = aiterator.__anext__()
+    if default is _anext_missing:
+        return awaitable
+
+    async def _anext_default():
+        try:
+            return await awaitable
+        except StopAsyncIteration:
+            return default
+    return _anext_default()

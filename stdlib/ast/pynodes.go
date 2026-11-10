@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	pyast "github.com/vishnukv64/gpython/ast"
+	"github.com/vishnukv64/gpython/parser"
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/tokenizemod"
 )
@@ -26,7 +27,7 @@ var (
 	classMu sync.Mutex
 	classes = map[string]*py.Type{}
 	// bases of the abstract node classes, by CPython name
-	abstract = map[string]string{"mod": "AST", "stmt": "AST", "expr": "AST", "expr_context": "AST",
+	abstract = map[string]string{"pattern": "AST", "type_param": "AST", "type_ignore": "AST", "mod": "AST", "stmt": "AST", "expr": "AST", "expr_context": "AST",
 		"boolop": "AST", "operator": "AST", "unaryop": "AST", "cmpop": "AST", "excepthandler": "AST"}
 	ctxNames = map[string]string{"Load": "expr_context", "Store": "expr_context", "Del": "expr_context",
 		"And": "boolop", "Or": "boolop", "Invert": "unaryop", "Not": "unaryop", "UAdd": "unaryop", "USub": "unaryop",
@@ -69,6 +70,13 @@ func newClass(name, kind string, fields []string) *py.Type {
 	}
 	c := base.NewType(name, name+" node", nil, nil)
 	c.Dict.Set("_fields", py.Tuple{})
+	attrs := py.Tuple{}
+	switch {
+	case kind == "stmt" || kind == "expr" || kind == "excepthandler" || kind == "pattern" || kind == "type_param",
+		name == "arg" || name == "keyword" || name == "alias":
+		attrs = py.Tuple{py.String("lineno"), py.String("col_offset"), py.String("end_lineno"), py.String("end_col_offset")}
+	}
+	c.Dict.Set("_attributes", attrs)
 	classes[name] = c
 	setFields(c, fields)
 	return c
@@ -97,12 +105,67 @@ func exportedClasses() py.StringDict {
 		}
 	}
 	classFor("ExceptHandler", "excepthandler", nil)
+	// Node kinds the parser never produces here, present so that code naming
+	// them (executing, ast.unparse users) imports.
+	for _, n := range strings.Fields("FormattedValue Interpolation TemplateStr Index ExtSlice Suite") {
+		classFor(n, "expr", nil)
+	}
+	for _, n := range strings.Fields("MatchValue MatchSingleton MatchSequence MatchMapping MatchClass MatchStar MatchAs MatchOr") {
+		classFor(n, "pattern", nil)
+	}
+	for _, n := range strings.Fields("TypeVar ParamSpec TypeVarTuple") {
+		classFor(n, "type_param", nil)
+	}
+	classFor("TypeIgnore", "type_ignore", nil)
+	classFor("match_case", "", nil)
+	// The module wrappers are built by hand (ast.Module([node], [])).
+	classFor("Module", "mod", []string{"body", "type_ignores"})
+	classFor("Interactive", "mod", []string{"body"})
+	classFor("Expression", "mod", []string{"body"})
+	classMu.Lock()
+	classes["AST"].Dict.Set("__init__", py.MustNewMethod("__init__", astInit, 0, "Set the fields from positional and keyword arguments."))
+	classMu.Unlock()
 	classMu.Lock()
 	defer classMu.Unlock()
 	for n, c := range classes {
 		d.Set(n, c)
 	}
+	// compile() flag values, as in CPython 3.14.
+	d.Set("PyCF_ONLY_AST", py.Int(0x400))
+	d.Set("PyCF_TYPE_COMMENTS", py.Int(0x1000))
+	d.Set("PyCF_ALLOW_TOP_LEVEL_AWAIT", py.Int(0x2000))
+	d.Set("PyCF_OPTIMIZED_AST", py.Int(0x8400))
 	return d
+}
+
+// astInit is ast.AST.__init__: positional arguments fill _fields in order,
+// keywords set attributes.
+func astInit(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
+	d, ok := self.(py.IGetDict)
+	if !ok {
+		return py.None, nil
+	}
+	fields, _ := self.Type().Lookup("_fields").(py.Tuple)
+	if len(args) > len(fields) {
+		return nil, py.ExceptionNewf(py.TypeError, "%s constructor takes at most %d positional arguments", self.Type().Name, len(fields))
+	}
+	dict := d.GetDict()
+	for i, a := range args {
+		name, _ := py.StrAsString(fields[i])
+		dict.Set(name, a)
+	}
+	for _, k := range kwargs.Keys() {
+		dict.Set(k, kwargs.GetOrNil(k))
+	}
+	return py.None, nil
+}
+
+// IsNode reports whether obj is an instance of ast.AST.
+func IsNode(obj py.Object) bool {
+	classMu.Lock()
+	base := classes["AST"]
+	classMu.Unlock()
+	return base != nil && obj.Type().IsSubtype(base)
 }
 
 // abstractOnce creates the abstract classes before any concrete one: package
@@ -110,7 +173,7 @@ func exportedClasses() py.StringDict {
 var abstractOnce sync.Once
 
 func makeAbstract() {
-	for _, n := range []string{"AST", "mod", "stmt", "expr", "expr_context", "boolop", "operator", "unaryop", "cmpop", "excepthandler"} {
+	for _, n := range []string{"AST", "pattern", "type_param", "type_ignore", "mod", "stmt", "expr", "expr_context", "boolop", "operator", "unaryop", "cmpop", "excepthandler"} {
 		newClass(n, "", nil)
 	}
 }
@@ -265,13 +328,23 @@ func nodeFor(n pyast.Ast, ends map[int]int) py.Object {
 	} else {
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			if f.Anonymous || !f.IsExported() || f.Name == "IsAsync" {
+			if f.Anonymous || !f.IsExported() || f.Name == "IsAsync" || f.Name == "StoreName" {
 				continue
 			}
 			py_ := snake(f.Name)
 			fields = append(fields, py_)
-			node.Dict.Set(py_, toPy(v.Field(i), ends))
+			fv := v.Field(i)
+			if a, ok := n.(*pyast.Arguments); ok && f.Name == "Args" {
+				// pyast keeps the positional-only parameters at the head of
+				// Args too; CPython's arguments.args does not.
+				fv = fv.Slice(len(a.Posonlyargs), fv.Len())
+			}
+			node.Dict.Set(py_, toPy(fv, ends))
 		}
+	}
+	if name == "Module" {
+		fields = append(fields, "type_ignores")
+		node.Dict.Set("type_ignores", py.NewList())
 	}
 	node.cls = classFor(name, kind, fields)
 	node.Dict.Set("lineno", py.Int(n.GetLineno()))
@@ -292,4 +365,13 @@ func nodeFor(n pyast.Ast, ends map[int]int) py.Object {
 // parsedTree converts a parsed tree, taking def/class end lines from src.
 func parsedTree(n pyast.Ast, src string) py.Object {
 	return nodeFor(n, tokenizemod.BlockEnds(src))
+}
+
+// ParseTree is ast.parse for compile(..., PyCF_ONLY_AST).
+func ParseTree(src string, mode py.CompileMode) (py.Object, error) {
+	node, err := parser.ParseString(src, mode)
+	if err != nil {
+		return nil, err
+	}
+	return parsedTree(node, src), nil
 }

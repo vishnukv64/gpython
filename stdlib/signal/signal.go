@@ -231,6 +231,16 @@ func init() {
 		g.Set(c.name, py.Int(c.num))
 	}
 	methods = append(methods, platformMethods()...)
+	// The Go runtime owns signal masks and restarts interrupted system calls,
+	// so these take their arguments, change nothing and report an empty mask.
+	g.Set("SIG_BLOCK", py.Int(1))
+	g.Set("SIG_UNBLOCK", py.Int(2))
+	g.Set("SIG_SETMASK", py.Int(3))
+	methods = append(methods,
+		py.MustNewMethod("siginterrupt", func(self py.Object, args py.Tuple) (py.Object, error) { return py.None, nil }, 0, "siginterrupt(sig, flag) -> None; change system call restart behaviour (a no-op here: Go restarts them)."),
+		py.MustNewMethod("pthread_sigmask", func(self py.Object, args py.Tuple) (py.Object, error) { return py.NewSet(), nil }, 0, "Fetch and/or change the signal mask of the calling thread (a no-op here)."),
+		py.MustNewMethod("sigpending", func(self py.Object, args py.Tuple) (py.Object, error) { return py.NewSet(), nil }, 0, "Examine pending signals (always none here)."),
+	)
 	methods = append(methods, py.MustNewMethod("valid_signals", validSignals, 0, "Return a set of valid signal numbers on this platform."))
 	py.RegisterModule(&py.ModuleImpl{
 		Info:          py.ModuleInfo{Name: "_signal", Doc: "This module provides mechanisms to use signal handlers in Python."},

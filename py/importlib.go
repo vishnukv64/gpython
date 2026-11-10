@@ -244,7 +244,10 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 	// imported module and code reads it: pip's __main__.py tests
 	// "__spec__.parent == ''" on its first statement, and without the
 	// attribute "python -m pip" died with "name '__spec__' is not defined".
-	mod.Globals.Set("__spec__", NewModuleSpec(name, String(path), isPkg))
+	spec := NewModuleSpec(name, String(path), isPkg)
+	spec.initializing.Store(true)
+	defer spec.initializing.Store(false)
+	mod.Globals.Set("__spec__", spec)
 	if isPkg {
 		mod.Globals.Set("__path__", NewListFromItems([]Object{String(filepath.Dir(path))}))
 	}

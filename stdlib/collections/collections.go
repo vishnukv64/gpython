@@ -13,6 +13,7 @@
 package collections
 
 import (
+	_ "embed"
 	"slices"
 	"sort"
 	"strconv"
@@ -866,6 +867,9 @@ const ordereddict_doc = `Dictionary that remembers insertion order`
 type OrderedDict struct {
 	keys   []string
 	values py.StringDict
+	// objs holds the key objects whose encoding cannot be decoded back (a
+	// class, an instance): order() would otherwise yield the encoded text.
+	objs map[string]py.Object
 }
 
 var OrderedDictType = py.NewTypeX("collections.OrderedDict", ordereddict_doc, orderedDictNew, nil)
@@ -910,6 +914,10 @@ func (o *OrderedDict) set(key, value py.Object) error {
 	}
 	if _, ok := o.values.Get(encoded); !ok {
 		o.keys = append(o.keys, encoded)
+		if o.objs == nil {
+			o.objs = map[string]py.Object{}
+		}
+		o.objs[encoded] = key
 	}
 	o.values.Set(encoded, value)
 	return nil
@@ -917,6 +925,7 @@ func (o *OrderedDict) set(key, value py.Object) error {
 
 func (o *OrderedDict) remove(encoded string) {
 	o.values.Del(encoded)
+	delete(o.objs, encoded)
 	for i, k := range o.keys {
 		if k == encoded {
 			o.keys = append(o.keys[:i], o.keys[i+1:]...)
@@ -967,9 +976,21 @@ func mustAttr(o py.Object, name string) py.Object {
 	return v
 }
 
+// keyObj is the key object behind an encoded key.
+func (o *OrderedDict) keyObj(encoded string) (py.Object, error) {
+	if key, ok := o.objs[encoded]; ok {
+		return key, nil
+	}
+	return py.DictKeyDecode(encoded)
+}
+
 func (o *OrderedDict) order() []py.Object {
 	out := make([]py.Object, 0, len(o.keys))
 	for _, encoded := range o.keys {
+		if key, ok := o.objs[encoded]; ok {
+			out = append(out, key)
+			continue
+		}
 		key, err := py.DictKeyDecode(encoded)
 		if err != nil {
 			continue
@@ -997,7 +1018,7 @@ func init() {
 		o := self.(*OrderedDict)
 		out := make([]py.Object, 0, len(o.keys))
 		for _, encoded := range o.keys {
-			key, err := py.DictKeyDecode(encoded)
+			key, err := o.keyObj(encoded)
 			if err != nil {
 				return nil, err
 			}
@@ -1111,7 +1132,7 @@ func init() {
 			i = len(o.keys) - 1
 		}
 		encoded := o.keys[i]
-		key, err := py.DictKeyDecode(encoded)
+		key, err := o.keyObj(encoded)
 		if err != nil {
 			return nil, err
 		}
@@ -1186,6 +1207,12 @@ func init() {
 		for _, k := range o.keys {
 			c.keys = append(c.keys, k)
 			c.values.Set(k, o.values.GetOrNil(k))
+			if obj, ok := o.objs[k]; ok {
+				if c.objs == nil {
+					c.objs = map[string]py.Object{}
+				}
+				c.objs[k] = obj
+			}
 		}
 		return c, nil
 	}, 0, "Return a shallow copy."))
@@ -1259,7 +1286,7 @@ func init() {
 		o := self.(*OrderedDict)
 		parts := make([]string, 0, len(o.keys))
 		for _, encoded := range o.keys {
-			key, err := py.DictKeyDecode(encoded)
+			key, err := o.keyObj(encoded)
 			if err != nil {
 				return nil, err
 			}
@@ -1774,6 +1801,9 @@ func init() {
 		if err := py.UnpackTuple(args, py.StringDict{}, "__getitem__", 1, 1, &key); err != nil {
 			return nil, err
 		}
+		if sl, ok := key.(*py.Slice); ok {
+			return py.GetItem(py.Tuple(n.values), sl)
+		}
 		if s, ok := key.(py.String); ok {
 			for i, f := range n.fields {
 				if f == string(s) {
@@ -1875,7 +1905,7 @@ func init() {
 			for i, f := range n.fields {
 				items[i] = py.String(f)
 			}
-			return py.NewListFromItems(items), nil
+			return py.Tuple(items), nil
 		},
 	})
 
@@ -2144,7 +2174,7 @@ func namedtupleNew(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.O
 	for i, f := range fields {
 		fieldItems[i] = py.String(f)
 	}
-	cls.Dict.Set("_fields", py.NewListFromItems(fieldItems))
+	cls.Dict.Set("_fields", py.Tuple(fieldItems))
 	// Class-level field accessors, so "Cls.field.__doc__ = ..." works as in CPython.
 	for i, f := range fields {
 		if _, taken := cls.Dict.Get(f); !taken && !strings.HasPrefix(f, "_") {
@@ -2228,8 +2258,12 @@ func init() {
 			Doc:  module_doc,
 		},
 		Globals: globals,
+		CodeSrc: userClassesSrc,
 	})
 }
+
+//go:embed userclasses.py
+var userClassesSrc string
 
 // ---------------------------------------------------------------------------
 // Go interface bridges
@@ -2454,6 +2488,9 @@ func (n *NamedTuple) M__len__() (py.Object, error) { return py.Int(len(n.values)
 func (n *NamedTuple) M__iter__() (py.Object, error) { return newIteratorFromItems(n.values), nil }
 
 func (n *NamedTuple) M__getitem__(key py.Object) (py.Object, error) {
+	if sl, ok := key.(*py.Slice); ok {
+		return py.GetItem(py.Tuple(n.values), sl)
+	}
 	if s, ok := key.(py.String); ok {
 		for i, f := range n.fields {
 			if f == string(s) {
@@ -2953,4 +2990,119 @@ func init() {
 	for _, t := range []*py.Type{DequeType, CounterType, OrderedDictType, DefaultDictType, ChainMapType, UserDictType, UserListType} {
 		t.Dict.Set("__class_getitem__", py.ClassGetItemAlias)
 	}
+}
+
+// The dict methods Counter inherits in CPython and this implementation
+// lacked: copy, clear, pop, popitem, setdefault, subtract and fromkeys.
+func init() {
+	def := func(name, doc string, fn func(c *Counter, args py.Tuple) (py.Object, error)) {
+		CounterType.Dict.Set(name, py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+			return fn(self.(*Counter), args)
+		}, 0, doc))
+	}
+	def("copy", "Return a shallow copy.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		n := newCounter()
+		for _, k := range c.order() {
+			v, _, _ := c.get(k)
+			if err := n.set(k, v); err != nil {
+				return nil, err
+			}
+		}
+		return n, nil
+	})
+	def("clear", "Remove all items.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		*c = *newCounter()
+		return py.None, nil
+	})
+	remove := func(c *Counter, key py.Object) (py.Object, bool, error) {
+		v, ok, err := c.get(key)
+		if err != nil || !ok {
+			return nil, false, err
+		}
+		keep := newCounter()
+		enc, _ := py.DictKey(key)
+		for i, k := range c.order() {
+			if c.keys[i] == enc {
+				continue
+			}
+			kv, _, _ := c.get(k)
+			if err := keep.set(k, kv); err != nil {
+				return nil, false, err
+			}
+		}
+		*c = *keep
+		return v, true, nil
+	}
+	def("pop", "Remove key and return its count, or the default.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		var key py.Object
+		var dflt py.Object
+		if err := py.UnpackTuple(args, py.StringDict{}, "pop", 1, 2, &key, &dflt); err != nil {
+			return nil, err
+		}
+		v, ok, err := remove(c, key)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return v, nil
+		}
+		if dflt != nil {
+			return dflt, nil
+		}
+		return nil, py.ExceptionNewf(py.KeyError, "%s", mustRepr(key))
+	})
+	def("popitem", "Remove and return the last (key, count) pair.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		order := c.order()
+		if len(order) == 0 {
+			return nil, py.ExceptionNewf(py.KeyError, "popitem(): dictionary is empty")
+		}
+		k := order[len(order)-1]
+		v, _, err := remove(c, k)
+		if err != nil {
+			return nil, err
+		}
+		return py.Tuple{k, v}, nil
+	})
+	def("setdefault", "Return the count of key, setting it to default first if absent.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		var key py.Object
+		var dflt py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "setdefault", 1, 2, &key, &dflt); err != nil {
+			return nil, err
+		}
+		if v, ok, err := c.get(key); err != nil || ok {
+			return v, err
+		}
+		return dflt, c.set(key, dflt)
+	})
+	def("subtract", "Like dict.update() but subtracts counts instead of replacing them.", func(c *Counter, args py.Tuple) (py.Object, error) {
+		var arg py.Object = py.None
+		if err := py.UnpackTuple(args, py.StringDict{}, "subtract", 0, 1, &arg); err != nil {
+			return nil, err
+		}
+		if arg == py.None {
+			return py.None, nil
+		}
+		other := newCounter()
+		if err := counterUpdate(other, arg); err != nil {
+			return nil, err
+		}
+		for _, k := range other.order() {
+			n, _, _ := other.get(k)
+			cur, _, _ := c.get(k)
+			if cur == nil {
+				cur = py.Int(0)
+			}
+			d, err := py.Sub(cur, n)
+			if err != nil {
+				return nil, err
+			}
+			if err := c.set(k, d); err != nil {
+				return nil, err
+			}
+		}
+		return py.None, nil
+	})
+	CounterType.Dict.Set("fromkeys", py.MustNewMethod("fromkeys", func(self py.Object, args py.Tuple) (py.Object, error) {
+		return nil, py.ExceptionNewf(py.NotImplementedError, "Counter.fromkeys() is undefined.  Use Counter(iterable) instead.")
+	}, py.METH_CLASS, "Not defined for Counter."))
 }

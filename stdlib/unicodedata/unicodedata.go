@@ -809,6 +809,16 @@ func nameMethod(self py.Object, args py.Tuple) (py.Object, error) {
 	return nil, py.ExceptionNewf(py.ValueError, "no such name")
 }
 
+// LookupName is the character called name in the Unicode database, as the
+// named-character string escape and unicodedata.lookup find it.
+func LookupName(name string) (rune, bool) {
+	t, err := ucd()
+	if err != nil {
+		return 0, false
+	}
+	return t.lookupName(name)
+}
+
 func lookupMethod(self py.Object, args py.Tuple) (py.Object, error) {
 	t, err := ucd()
 	if err != nil {

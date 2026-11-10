@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/vishnukv64/gpython/py"
@@ -48,9 +49,12 @@ func init() {
 			py.MustNewMethod("is_python_build", func(self py.Object, args py.Tuple) (py.Object, error) {
 				return py.False, nil
 			}, 0, "Return whether running from a CPython source build; never."),
+			py.MustNewMethod("get_path_names", func(self py.Object, args py.Tuple) (py.Object, error) {
+				return py.Tuple{py.String("stdlib"), py.String("platstdlib"), py.String("purelib"), py.String("platlib"), py.String("include"), py.String("scripts"), py.String("data")}, nil
+			}, 0, "Return a tuple containing the paths names."),
 			py.MustNewMethod("get_scheme_names", getSchemeNames, 0, "Return a tuple containing the schemes names."),
 			py.MustNewMethod("get_default_scheme", func(self py.Object, args py.Tuple) (py.Object, error) {
-				return py.String("posix_prefix"), nil
+				return py.String(defaultScheme()), nil
 			}, 0, "Return the default scheme name."),
 			py.MustNewMethod("get_preferred_scheme", getPreferredScheme, 0, "Return the scheme name for key 'prefix', 'home' or 'user'."),
 		},
@@ -106,6 +110,7 @@ func configVar(name string) py.Object {
 
 // allConfigVars is every variable this interpreter can honestly report.
 func allConfigVars() []py.DictEntry {
+	pf := py.GetPrefixes()
 	soabi := soabiTag()
 	return []py.DictEntry{
 		{Key: "EXT_SUFFIX", Value: py.String("." + soabi + ".so")},
@@ -115,13 +120,21 @@ func allConfigVars() []py.DictEntry {
 		{Key: "py_version", Value: py.String("3.14.7")},
 		{Key: "py_version_short", Value: py.String("3.14")},
 		{Key: "py_version_nodot", Value: py.String("314")},
-		{Key: "prefix", Value: py.String(prefix())},
-		{Key: "exec_prefix", Value: py.String(prefix())},
-		{Key: "projectbase", Value: py.String(prefix())},
-		{Key: "base", Value: py.String(prefix())},
-		{Key: "platbase", Value: py.String(prefix())},
-		{Key: "installed_base", Value: py.String(prefix())},
-		{Key: "installed_platbase", Value: py.String(prefix())},
+		{Key: "prefix", Value: py.String(pf.Prefix)},
+		{Key: "exec_prefix", Value: py.String(pf.Prefix)},
+		{Key: "projectbase", Value: py.String(filepath.Dir(pf.BaseExecutable))},
+		{Key: "base", Value: py.String(pf.Prefix)},
+		{Key: "platbase", Value: py.String(pf.Prefix)},
+		{Key: "installed_base", Value: py.String(pf.BasePrefix)},
+		{Key: "installed_platbase", Value: py.String(pf.BasePrefix)},
+		{Key: "platlibdir", Value: py.String("lib")},
+		{Key: "implementation", Value: py.String("Python")},
+		{Key: "implementation_lower", Value: py.String("python")},
+		{Key: "abi_thread", Value: py.String("")},
+		{Key: "userbase", Value: py.String(userBase())},
+		{Key: "VERSION", Value: py.String("3.14")},
+		{Key: "SIZEOF_VOID_P", Value: py.Int(strconv.IntSize / 8)},
+		{Key: "Py_GIL_DISABLED", Value: py.Int(0)},
 		{Key: "machine", Value: py.String(runtime.GOARCH)},
 		{Key: "platform", Value: py.String(platformTag())},
 		{Key: "Py_ENABLE_SHARED", Value: py.Int(0)},
@@ -230,6 +243,7 @@ type pathTemplate struct{ key, tmpl string }
 // prefixScheme is the layout this interpreter has: a single prefix with the
 // platform's own directories.  homeScheme is CPython's posix_home, the layout
 // for "pip install --target/--home": libraries directly under lib/python.
+// venvScheme is posix_venv / nt_venv, which a virtual environment uses.
 var (
 	prefixScheme = []pathTemplate{
 		{"stdlib", "{installed_base}/lib/python{py_version_short}"},
@@ -239,6 +253,27 @@ var (
 		{"include", "{installed_base}/include/python{py_version_short}"},
 		{"platinclude", "{installed_platbase}/include/python{py_version_short}"},
 		{"scripts", "{base}/bin"},
+		{"data", "{base}"},
+	}
+	// venvScheme differs from prefixScheme in stdlib, which lives in the base.
+	posixVenv = []pathTemplate{
+		{"stdlib", "{installed_base}/lib/python{py_version_short}"},
+		{"platstdlib", "{base}/lib/python{py_version_short}"},
+		{"purelib", "{base}/lib/python{py_version_short}/site-packages"},
+		{"platlib", "{platbase}/lib/python{py_version_short}/site-packages"},
+		{"include", "{installed_base}/include/python{py_version_short}"},
+		{"platinclude", "{installed_platbase}/include/python{py_version_short}"},
+		{"scripts", "{base}/bin"},
+		{"data", "{base}"},
+	}
+	ntScheme = []pathTemplate{
+		{"stdlib", "{installed_base}/Lib"},
+		{"platstdlib", "{base}/Lib"},
+		{"purelib", "{base}/Lib/site-packages"},
+		{"platlib", "{base}/Lib/site-packages"},
+		{"include", "{installed_base}/Include"},
+		{"platinclude", "{installed_base}/Include"},
+		{"scripts", "{base}/Scripts"},
 		{"data", "{base}"},
 	}
 	homeScheme = []pathTemplate{
@@ -258,9 +293,26 @@ var (
 		"gpython_posix_prefix": prefixScheme,
 		"posix_prefix":         prefixScheme,
 		"posix_home":           homeScheme,
+		"posix_venv":           posixVenv,
+		"nt":                   ntScheme,
+		"nt_venv":              ntScheme,
 	}
-	schemeNames = []string{"gpython_posix_prefix", "posix_prefix", "posix_home"}
+	schemeNames = []string{"gpython_posix_prefix", "nt", "nt_venv", "posix_home", "posix_prefix", "posix_venv", "venv"}
 )
+
+// defaultScheme is the layout sysconfig uses unless told otherwise: the venv
+// layout inside a virtual environment, else the platform's prefix layout.
+func defaultScheme() string {
+	switch {
+	case py.GetPrefixes().Venv && runtime.GOOS == "windows":
+		return "nt_venv"
+	case py.GetPrefixes().Venv:
+		return "venv"
+	case runtime.GOOS == "windows":
+		return "nt"
+	}
+	return "posix_prefix"
+}
 
 // pathVars is the variable table for expanding a scheme: the interpreter's own
 // variables, overridden by the caller's vars mapping (pip passes base, platbase
@@ -305,12 +357,18 @@ func pathVars(varsObj py.Object) (map[string]string, error) {
 
 // schemeFor is the layout named by scheme, or the default when it is unset.
 func schemeFor(scheme py.Object) ([]pathTemplate, error) {
-	if scheme == nil || scheme == py.None {
-		return prefixScheme, nil
+	name := defaultScheme()
+	if scheme != nil && scheme != py.None {
+		var err error
+		if name, err = py.StrAsString(scheme); err != nil {
+			return nil, err
+		}
 	}
-	name, err := py.StrAsString(scheme)
-	if err != nil {
-		return nil, err
+	if name == "venv" {
+		name = "posix_venv"
+		if runtime.GOOS == "windows" {
+			name = "nt_venv"
+		}
 	}
 	if t, ok := schemes[name]; ok {
 		return t, nil
@@ -384,7 +442,11 @@ func installSchemes() py.Object {
 	out := py.NewStringDict()
 	for _, n := range schemeNames {
 		scheme := py.NewStringDict()
-		for _, e := range schemes[n] {
+		tmpls := schemes[n]
+		if n == "venv" {
+			tmpls = schemes[venvName()]
+		}
+		for _, e := range tmpls {
 			(&scheme).Set(e.key, py.String(e.tmpl))
 		}
 		(&out).Set(n, scheme)
@@ -405,7 +467,7 @@ func getPreferredScheme(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	switch key {
 	case "prefix", "user":
-		return py.String("posix_prefix"), nil
+		return py.String(defaultScheme()), nil
 	case "home":
 		return py.String("posix_home"), nil
 	}
@@ -423,14 +485,26 @@ func getSchemeNames(self py.Object, args py.Tuple) (py.Object, error) {
 	return t, nil
 }
 
-// prefix is the installation prefix: the directory holding the running
-// executable, which is where this interpreter's installed tree would be.
-func prefix() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "/"
+func venvName() string {
+	if runtime.GOOS == "windows" {
+		return "nt_venv"
 	}
-	return filepath.Dir(exe)
+	return "posix_venv"
+}
+
+// userBase is site.USER_BASE: where --user installs go.
+func userBase() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Python", "3.14")
+	case "windows":
+		return filepath.Join(home, "AppData", "Roaming", "Python", "Python314")
+	}
+	return filepath.Join(home, ".local")
 }
 
 // darwinVersion is the macOS product version, e.g. "14.5".  It comes from the

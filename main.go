@@ -9,6 +9,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -60,34 +61,7 @@ func main() {
 	// "gpython -m pip --help" printed gpython's own help.  pip has both flags,
 	// so it could never be invoked at all.  Parse only the leading flags -
 	// everything from the first non-flag word onward belongs to the program.
-	args := os.Args[1:]
-	split := len(args)
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "--" || len(a) == 0 || a[0] != '-' {
-			// "-" means stdin, which is a positional argument too.
-			split = i
-			break
-		}
-		// "-c" and "-m" take the PROGRAM as their value, so their flag
-		// ends gpython's own option region: everything after it - the
-		// program's arguments, including its own "--version" - belongs to
-		// the program.
-		if a == "-c" || a == "-m" {
-			split = i
-			if split+2 <= len(args) && !strings.Contains(a, "=") {
-				split += 2
-			} else {
-				split++
-			}
-			break
-		}
-		// A flag that takes a separate value must not have that value
-		// mistaken for the first positional argument.
-		if a == "-cpuprofile" && !strings.Contains(a, "=") {
-			i++
-		}
-	}
+	args, split := stripCPythonOptions(os.Args[1:])
 	if err := flag.CommandLine.Parse(args[:split]); err != nil {
 		return
 	}
@@ -100,6 +74,48 @@ func main() {
 	xmain(append(flag.Args(), args[split:]...))
 }
 
+// stripCPythonOptions drops the leading CPython options gpython has no use
+// for (-I -E -s -S -B -u -O -q -b -d -R -v -P, -W arg, -X arg), which pip,
+// venv and ensurepip pass to the interpreter, and returns the arguments with
+// the index where gpython's own option region ends.  The region stops at the
+// first positional word, as CPython's does, and after -c/-m's program.
+func stripCPythonOptions(args []string) ([]string, int) {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" || len(a) == 0 || a[0] != '-' {
+			// "-" means stdin, which is a positional argument too.
+			return append(out, args[i:]...), len(out)
+		}
+		// "-c" and "-m" take the PROGRAM as their value, so their flag
+		// ends gpython's own option region: everything after it - the
+		// program's arguments, including its own "--version" - belongs to
+		// the program.
+		if a == "-c" || a == "-m" {
+			out = append(out, args[i:]...)
+			if i+2 <= len(args) {
+				return out, len(out) - len(args) + i + 2
+			}
+			return out, len(out) - len(args) + i + 1
+		}
+		if a == "-W" || a == "-X" {
+			i++
+			continue
+		}
+		if strings.HasPrefix(a, "-W") || strings.HasPrefix(a, "-X") || strings.Trim(a[1:], "IEsSBuOqbdRvP") == "" && len(a) > 1 && a[1] != '-' {
+			continue
+		}
+		// A flag that takes a separate value must not have that value
+		// mistaken for the first positional argument.
+		out = append(out, a)
+		if a == "-cpuprofile" && i+1 < len(args) {
+			i++
+			out = append(out, args[i])
+		}
+	}
+	return out, len(out)
+}
+
 func xmain(args []string) {
 	var err error
 
@@ -107,7 +123,7 @@ func xmain(args []string) {
 	case *runM != "":
 		err = runModule(append([]string{*runM}, args...))
 	case *runC != "":
-		err = runCode(*runC, args)
+		err = runCode(*runC, args, "-c")
 	case len(args) == 0:
 		err = runREPL(args)
 	default:
@@ -115,27 +131,45 @@ func xmain(args []string) {
 	}
 
 	if err != nil {
-		// The atexit handlers run on every exit path, including this one: a
-		// program that ends with an uncaught exception still runs them, as
-		// CPython does.
-		atexit.RunExitFuncs()
+		// The error was already reported and atexit has run (finish); a
+		// SystemExit only picks the status.
 		if py.IsException(py.SystemExit, err) {
 			handleSystemExit(err.(py.ExceptionInfo).Value.(*py.Exception))
 		}
-		py.TracebackDump(err)
+		// An uncaught KeyboardInterrupt ends the process as if by SIGINT, as
+		// CPython does on POSIX: the shell sees status 130.
+		if py.IsException(py.KeyboardInterrupt, err) && runtime.GOOS != "windows" {
+			os.Exit(130)
+		}
 		os.Exit(1)
 	}
+}
+
+// finish ends a run in CPython's order, while the interpreter can still
+// import and execute: an uncaught exception's traceback (or a SystemExit's
+// message) is printed, then the atexit handlers run, then the context closes.
+// Running the handlers after Close made any import in one fail with "Context
+// closed" (IPython's exit-time "import gc").
+func finish(ctx py.Context, err error) {
+	if err != nil {
+		if py.IsException(py.SystemExit, err) {
+			printSystemExit(err.(py.ExceptionInfo).Value.(*py.Exception))
+		} else {
+			py.TracebackDump(err)
+		}
+	}
 	atexit.RunExitFuncs()
+	ctx.Close()
 }
 
 // runREPL starts the interactive interpreter.
-func runREPL(args []string) error {
+func runREPL(args []string) (err error) {
 	opts := py.DefaultContextOpts()
 	// CPython's sys.argv[0] is "" in the interactive interpreter, and never
 	// absent - a program may index it unconditionally.
 	opts.SysArgs = append([]string{""}, args...)
 	ctx := py.NewContext(opts)
-	defer ctx.Close()
+	defer func() { finish(ctx, err) }()
 
 	fmt.Printf("Python 3.14.7 (%s, %s)\n", commit, date)
 	fmt.Printf("[Gpython %s]\n", version)
@@ -147,12 +181,19 @@ func runREPL(args []string) error {
 
 // runScript executes a file, with the file's directory as the first search
 // path so that it can import modules sitting next to it.
-func runScript(args []string) error {
+func runScript(args []string) (err error) {
+	if args[0] == "-" { // the program is read from standard input
+		src, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		return runCode(string(src), args[1:], "-")
+	}
 	opts := py.DefaultContextOpts()
 	opts.SysPaths = append([]string{filepath.Dir(args[0])}, opts.SysPaths...)
 	opts.SysArgs = args
 	ctx := py.NewContext(opts)
-	defer ctx.Close()
+	defer func() { finish(ctx, err) }()
 	importSiteCustomize(ctx)
 
 	if err := startCPUProfile(); err != nil {
@@ -160,30 +201,34 @@ func runScript(args []string) error {
 	}
 	defer pprof.StopCPUProfile()
 
-	_, err := py.RunFile(ctx, args[0], py.CompileOpts{}, nil)
+	_, err = py.RunFile(ctx, args[0], py.CompileOpts{}, nil)
 	return err
 }
 
 // runCode executes a program given on the command line with -c.
-func runCode(src string, args []string) error {
+func runCode(src string, args []string, argv0 string) (err error) {
 	opts := py.DefaultContextOpts()
 	opts.SysPaths = append([]string{"."}, opts.SysPaths...)
 	// sys.argv[0] is "-c" under -c, exactly as CPython has it.  Passing only
 	// the program's own arguments left argv EMPTY, and pip reads argv[0] to
 	// name the program in its usage line: "pip --help" died with
 	// "IndexError: list index out of range" inside optparse's get_prog_name.
-	opts.SysArgs = append([]string{"-c"}, args...)
+	opts.SysArgs = append([]string{argv0}, args...)
 	ctx := py.NewContext(opts)
-	defer ctx.Close()
+	defer func() { finish(ctx, err) }()
 	importSiteCustomize(ctx)
 
-	_, err := py.RunSrc(ctx, src, "<string>", "__main__")
+	name := "<string>"
+	if argv0 == "-" {
+		name = "<stdin>"
+	}
+	_, err = py.RunSrc(ctx, src, name, "__main__")
 	return err
 }
 
 // runModule executes a module or package with -m, the way CPython runs
 // "python -m pkg" or "python -m pkg.mod".
-func runModule(args []string) error {
+func runModule(args []string) (err error) {
 	name := args[0]
 	opts := py.DefaultContextOpts()
 	opts.SysPaths = append([]string{"."}, opts.SysPaths...)
@@ -194,7 +239,7 @@ func runModule(args []string) error {
 	// its own invocation - pip names itself from argv[0] in its usage line.
 	opts.SysArgs = args
 	ctx := py.NewContext(opts)
-	defer ctx.Close()
+	defer func() { finish(ctx, err) }()
 	importSiteCustomize(ctx)
 
 	path, isPkg, err := py.ResolveModulePath(ctx, name)
@@ -256,41 +301,57 @@ func startCPUProfile() error {
 	return pprof.StartCPUProfile(f)
 }
 
-func handleSystemExit(exc *py.Exception) {
-	args := exc.Args.(py.Tuple)
-	if len(args) == 0 {
-		os.Exit(0)
-	} else if len(args) == 1 {
-		if code, ok := args[0].(py.Int); ok {
-			c, err := code.GoInt()
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			os.Exit(c)
-		}
-		msg, err := py.ReprAsString(args[0])
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		} else {
-			fmt.Fprintln(os.Stderr, msg)
-		}
-		os.Exit(1)
-	} else {
-		msg, err := py.ReprAsString(args)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		} else {
-			fmt.Fprintln(os.Stderr, msg)
-		}
-		os.Exit(1)
+// systemExitCode is the exit status a SystemExit asks for, as CPython's
+// handle_system_exit: none or None is 0, an int is itself, anything else is
+// printed to stderr (by printSystemExit) and gives 1.
+func systemExitCode(exc *py.Exception) int {
+	args, _ := exc.Args.(py.Tuple)
+	if len(args) == 0 || (len(args) == 1 && args[0] == py.None) {
+		return 0
 	}
+	if len(args) == 1 {
+		if code, ok := args[0].(py.Int); ok {
+			if c, err := code.GoInt(); err == nil {
+				return c
+			}
+		}
+	}
+	return 1
+}
+
+// printSystemExit writes a SystemExit's non-integer argument to stderr, as
+// CPython does before running atexit handlers.
+func printSystemExit(exc *py.Exception) {
+	args, _ := exc.Args.(py.Tuple)
+	var msg py.Object = args
+	if len(args) == 1 {
+		if _, isInt := args[0].(py.Int); isInt || args[0] == py.None {
+			return
+		}
+		msg = args[0]
+	} else if len(args) == 0 {
+		return
+	}
+	if s, ok := msg.(py.String); ok {
+		fmt.Fprintln(os.Stderr, string(s))
+		return
+	}
+	if r, err := py.ReprAsString(msg); err == nil {
+		fmt.Fprintln(os.Stderr, r)
+	} else {
+		fmt.Fprintln(os.Stderr, err)
+	}
+}
+
+func handleSystemExit(exc *py.Exception) {
+	os.Exit(systemExitCode(exc))
 }
 
 // importSiteCustomize runs a sitecustomize module if one is on sys.path, as
 // CPython's startup does; pip's build isolation relies on it to set up
 // sys.path in the child.  A missing module is normal and ignored.
 func importSiteCustomize(ctx py.Context) {
+	py.RunPthImports(ctx)
 	if err := py.Import(ctx, "sitecustomize"); err != nil && !py.IsException(py.ImportError, err) {
 		py.TracebackDump(err)
 	}

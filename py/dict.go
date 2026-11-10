@@ -689,13 +689,48 @@ func (d StringDict) keyCode(key Object) (string, bool, error) {
 		return encoded, d.Has(encoded), nil
 	}
 	if d.shared == nil {
-		return "", false, nil
+		return d.equalStrKey(encoded, key)
 	}
 	code, ok, err := d.shared.find(encoded, key)
-	if err != nil || !ok {
+	if err != nil {
 		return "", false, err
 	}
+	if !ok {
+		return d.equalStrKey(encoded, key)
+	}
 	return code, d.Has(code), nil
+}
+
+// equalStrKey finds a plain str key that key equals and hashes like: parso's
+// Operator('(') is a dict key equal to '(' and with its hash, and the two must
+// meet.  The hash buckets cannot hold it - a str is stored verbatim - so a
+// miss on a __hash__ key falls back to the str keys with the same hash, tried
+// with ==.
+func (d StringDict) equalStrKey(encoded string, key Object) (string, bool, error) {
+	i := strings.IndexByte(encoded, ':')
+	if i < 0 {
+		return "", false, nil
+	}
+	want := encoded[i+1:]
+	if j := strings.Index(want, hashSep); j >= 0 {
+		want = want[:j]
+	}
+	for _, k := range d.Keys() {
+		if isHashKey(k) || strings.HasPrefix(k, keyTag) {
+			continue
+		}
+		if h, ok := HashValue(String(k)); !ok || strconv.FormatInt(h, 10) != want {
+			continue
+		}
+		eq, err := Eq(key, String(k))
+		if err != nil {
+			return "", false, err
+		}
+		if eq == True {
+			return k, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 // setItem stores value under key.  It is dict.__setitem__'s whole body and the
@@ -1215,7 +1250,7 @@ func appendKey(b *[]byte, key Object) error {
 		*b = append(*b, keyTag...)
 		*b = append(*b, 'm')
 		*b = strconv.AppendUint(*b, uint64(k.Globals.Ptr()), 16)
-	case *Function, *Method, *Frame, *Code, *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
+	case *Function, *Method, *Property, *nativeNew, *typeMetaGetter, *Frame, *Code, *Generator, *Coroutine, *AsyncGenerator, *asyncGenAwaitable:
 		// A function and a method encode as their identity, for the same
 		// reason: two distinct functions are two distinct keys.
 		*b = append(*b, keyTag...)
@@ -1402,7 +1437,7 @@ func HashValue(o Object) (int64, bool) {
 			h = (h ^ ih) * 1000003
 		}
 		return h ^ int64(len(v)), true
-	case *Function, *Method, *Frame, *Code:
+	case *Function, *Method, *Property, *nativeNew, *typeMetaGetter, *Frame, *Code:
 		// A function and a method hash by IDENTITY, which makes them usable as
 		// dict keys and set members.
 		//
@@ -1660,6 +1695,17 @@ func readPrefixInt(s string) (int, string, error) {
 // loop, which accepted only tuples with str keys and silently dropped the
 // rest, so dict([(1, 2)]) was {} and dict(defaultdict) raised.
 func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
+	// CPython's dict.__new__ ignores its arguments; dict.__init__ fills the
+	// dict.  A subclass with its own __init__ takes arguments of its own
+	// (prompt_toolkit's FastDictCache(get_value, size=...)), so they are not
+	// contents - its __init__ reaches dict.__init__ through super() if it wants
+	// them to be.
+	origArgs, origKwargs := args, kwargs
+	if metatype != nil && metatype != gStringDictType {
+		if _, own := metatype.Lookup("__init__").(*Function); own {
+			args, kwargs = nil, NewStringDict()
+		}
+	}
 	if len(args) > 1 {
 		return nil, ExceptionNewf(TypeError, "dict expects at most one argument")
 	}
@@ -1696,7 +1742,7 @@ func DictNew(metatype *Type, args Tuple, kwargs StringDict) (Object, error) {
 	// directly, which would be an initialisation cycle: this function is one
 	// of the values StringDictType is built from.
 	if metatype != nil && metatype != gStringDictType {
-		inst, err := ObjectNew(metatype, args, kwargs)
+		inst, err := ObjectNew(metatype, origArgs, origKwargs)
 		if err != nil {
 			return nil, err
 		}

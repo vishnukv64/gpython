@@ -530,7 +530,26 @@ func utilSpecFromFileLocation(self py.Object, args py.Tuple, kwargs py.StringDic
 		base := filepath.Base(location)
 		name = strings.TrimSuffix(base, filepath.Ext(base))
 	}
-	return &ModuleSpec{Name: name, Loader: py.None, Origin: location, Location: filepath.Dir(location)}, nil
+	spec := &ModuleSpec{Name: name, Loader: py.None, Origin: location, Location: filepath.Dir(location)}
+	if loadObj != nil && loadObj != py.None {
+		spec.Loader = loadObj
+	} else if strings.HasSuffix(location, ".py") {
+		spec.Loader = &SourceLoader{Name: name, Path: location}
+		// An __init__.py is a package, searched in its own directory.
+		spec.IsPkg = filepath.Base(location) == "__init__.py"
+	}
+	// submodule_search_locations makes the module a package, searched there.
+	if subObj != nil && subObj != py.None {
+		spec.IsPkg = true
+		if it, err := py.Iter(subObj); err == nil {
+			if first, err := py.Next(it); err == nil {
+				if spec.Location, err = py.StrAsString(first); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	return spec, nil
 }
 
 // utilSpecFromLoader is spec_from_loader for a loader that is not a file
@@ -597,6 +616,9 @@ func utilModuleFromSpec(self py.Object, args py.Tuple, kwargs py.StringDict) (py
 		if m, err := ctx.Store().GetModule(spec.Name); err == nil {
 			return m, nil
 		}
+	}
+	if _, ok := spec.Loader.(*SourceLoader); ok && ctx != nil {
+		return py.ModuleFromSpec(ctx, spec.Name, spec)
 	}
 	return nil, py.ExceptionNewf(py.ImportError, "cannot create module %q: its loader is not available", spec.Name)
 }
@@ -696,6 +718,9 @@ func init() {
 	} {
 		traversableType.Dict.Set(m.name, py.MustNewMethod(m.name, m.fn, 0, m.doc))
 	}
+	traversableType.Dict.Set("name", &py.Property{Fget: func(self py.Object) (py.Object, error) {
+		return py.String(filepath.Base(self.(*traversable).path)), nil
+	}})
 	// The as_file() context manager.
 	asFileContextType.Dict.Set("__enter__", py.MustNewMethod("__enter__", asFileEnter, 0, "Enter the context, yielding the path."))
 	asFileContextType.Dict.Set("__exit__", py.MustNewMethod("__exit__", asFileExit, 0, "Exit the context."))
@@ -807,6 +832,11 @@ var traversableType = py.NewTypeX("importlib.abc.Traversable",
 func (t *traversable) Type() *py.Type         { return traversableType }
 func (t *traversable) GetDict() py.StringDict { return t.Dict }
 
+// M__truediv__ is "traversable / name", CPython's spelling of joinpath.
+func (t *traversable) M__truediv__(other py.Object) (py.Object, error) {
+	return traversableJoinpath(t, py.Tuple{other})
+}
+
 func (t *traversable) M__str__() (py.Object, error) { return py.String(t.path), nil }
 func (t *traversable) M__fspath__() (py.Object, error) {
 	return py.String(t.path), nil
@@ -898,6 +928,8 @@ func traversableIsDir(self py.Object, args py.Tuple) (py.Object, error) {
 // zip.
 type asFileContext struct {
 	path string
+	tmp  string // temporary directory holding a copy of an embedded resource
+	ctx  py.Context
 	Dict py.StringDict
 }
 
@@ -915,14 +947,46 @@ func resourceAsFile(self py.Object, args py.Tuple) (py.Object, error) {
 	if !ok {
 		return nil, py.ExceptionNewf(py.TypeError, "as_file() takes a Traversable")
 	}
-	return &asFileContext{path: t.path, Dict: py.NewStringDict()}, nil
+	c := &asFileContext{path: t.path, ctx: t.ctx, Dict: py.NewStringDict()}
+	if py.IsEmbeddedPath(t.path) {
+		// Not on disk: write a copy out so a subprocess or zipimport can use it.
+		data, err := py.ReadPath(t.path)
+		if err != nil {
+			return nil, py.ExceptionNewf(py.FileNotFoundError, "[Errno 2] No such file or directory: '%s'", t.path)
+		}
+		if c.tmp, err = os.MkdirTemp("", "gpython-res-"); err != nil {
+			return nil, py.ExceptionNewf(py.OSError, "%s", err)
+		}
+		c.path = filepath.Join(c.tmp, filepath.Base(t.path))
+		if err := os.WriteFile(c.path, data, 0o644); err != nil {
+			return nil, py.ExceptionNewf(py.OSError, "%s", err)
+		}
+	}
+	return c, nil
 }
 
+// asFileEnter yields a pathlib.Path, as CPython's as_file does.
 func asFileEnter(self py.Object, args py.Tuple) (py.Object, error) {
-	return py.String(self.(*asFileContext).path), nil
+	c := self.(*asFileContext)
+	if c.ctx == nil || py.Import(c.ctx, "pathlib") != nil {
+		return py.String(c.path), nil
+	}
+	m, err := c.ctx.GetModule("pathlib")
+	if err != nil {
+		return nil, err
+	}
+	cls, err := py.GetAttrString(m, "Path")
+	if err != nil {
+		return nil, err
+	}
+	return py.Call(cls, py.Tuple{py.String(c.path)}, py.NewStringDict())
 }
 
 func asFileExit(self py.Object, args py.Tuple) (py.Object, error) {
+	if c := self.(*asFileContext); c.tmp != "" {
+		os.RemoveAll(c.tmp)
+		c.tmp = ""
+	}
 	return py.None, nil
 }
 
@@ -1040,7 +1104,7 @@ func resourcePath(self py.Object, args py.Tuple, kwargs py.StringDict) (py.Objec
 	if err != nil {
 		return nil, err
 	}
-	return &asFileContext{path: filepath.Join(dir, name), Dict: py.NewStringDict()}, nil
+	return &asFileContext{path: filepath.Join(dir, name), ctx: currentContext(self), Dict: py.NewStringDict()}, nil
 }
 
 // metaFinderSrc puts a finder on sys.meta_path that serves

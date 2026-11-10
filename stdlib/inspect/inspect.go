@@ -73,7 +73,7 @@ func init() {
 
 	py.RegisterModule(&py.ModuleImpl{
 		Info: py.ModuleInfo{
-			Name: "inspect",
+			Name: "_inspect_go",
 			Doc:  module_doc,
 		},
 		Globals: globals,

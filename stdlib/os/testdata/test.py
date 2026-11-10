@@ -58,7 +58,8 @@ os.chdir(orig)
 try:
     os.chdir(1)
     print("expected an error with os.chdir(1)")
-except TypeError:
+except OSError:
+    # 1 is a file descriptor (stdout), and not a directory.
     print("os.chdir(1) failed [OK]")
 
 try:
@@ -160,7 +161,7 @@ try:
     os.chdir(top)
     print(os.listdir())
     os.chdir(orig)
-    os.removedirs(dir1)
+    os.removedirs(dir11)
     try:
         os.mkdir(dir11)
         print("creating nested dirs with os.mkdir should have failed")
@@ -196,7 +197,8 @@ try:
 except Exception as e:
     print("could not create/remove directories: %s" % e)
 finally:
-    os.removedirs(top)
+    import shutil
+    shutil.rmtree(top)  # removedirs only removes empty directories
     print("os.{mkdir,rmdir,remove,removedirs} worked as expected")
 
 print("OK")

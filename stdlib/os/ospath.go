@@ -137,29 +137,9 @@ func newPathImpl(f *flavor) *py.ModuleImpl {
 
 // ---------------------------------------------------------------- arguments
 
-func badPath(o py.Object) error {
-	return py.ExceptionNewf(py.TypeError, "expected str, bytes or os.PathLike object, not %s", o.Type().Name)
-}
-
 // fsRaw is os.fspath: the path as a Go string, and whether it was bytes.
 func fsRaw(o py.Object) (string, bool, error) {
-	switch v := o.(type) {
-	case py.String:
-		return string(v), false, nil
-	case py.Bytes:
-		return string(v), true, nil
-	}
-	r, err := fspath(nil, py.Tuple{o})
-	if err != nil {
-		return "", false, badPath(o)
-	}
-	switch v := r.(type) {
-	case py.String:
-		return string(v), false, nil
-	case py.Bytes:
-		return string(v), true, nil
-	}
-	return "", false, badPath(o)
+	return fsPathArg("", "path", o, "")
 }
 
 // fsArg is fsRaw for the pure string logic.  Bytes are widened to one rune
@@ -199,22 +179,6 @@ func outRaw(s string, isB bool) py.Object {
 		return py.Bytes(s)
 	}
 	return py.String(s)
-}
-
-// argsToStrings is for the functions that go to the OS: raw paths, no types.
-func argsToStrings(name string, args py.Tuple, min, max int) ([]string, error) {
-	if len(args) < min || (max >= 0 && len(args) > max) {
-		return nil, py.ExceptionNewf(py.TypeError, "%s: expected %d to %d arguments, got %d", name, min, max, len(args))
-	}
-	out := make([]string, len(args))
-	for i, a := range args {
-		s, _, err := fsRaw(a)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = s
-	}
-	return out, nil
 }
 
 func oneArg(name string, args py.Tuple) error {
@@ -266,6 +230,62 @@ func pair(name string, f func(string) (string, string)) *py.Method {
 		a, b := f(s)
 		return py.Tuple{out(a, isB), out(b, isB)}, nil
 	}, 0, name+"(path)")
+}
+
+const (
+	sIFMT  = 0o170000
+	sIFDIR = 0o040000
+	sIFREG = 0o100000
+	sIFLNK = 0o120000
+)
+
+func isOSOrValue(err error) bool {
+	return py.IsException(py.OSError, err) || py.IsException(py.ValueError, err)
+}
+
+// statMode is os.stat/os.lstat(o).st_mode, with their errors.
+func statMode(name string, o py.Object) (int64, error) {
+	r, err := statCall(name, name == "stat", py.Tuple{o}, py.StringDict{})
+	if err != nil {
+		return 0, err
+	}
+	m, err := py.GetAttrString(r, "st_mode")
+	if err != nil {
+		return 0, err
+	}
+	return int64(m.(py.Int)), nil
+}
+
+// statTest is genericpath.exists and friends: stat the path and ask pred of
+// its mode; an OSError or ValueError is False and a TypeError is not.
+func statTest(name, call string, pred func(mode int64) bool) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
+		}
+		m, err := statMode(call, args[0])
+		if err != nil {
+			if isOSOrValue(err) {
+				return py.False, nil
+			}
+			return nil, err
+		}
+		return py.NewBool(pred(m)), nil
+	}, 0, name+"(path)")
+}
+
+// statField is getsize and the getXtime functions: os.stat(path).field.
+func statField(name, field string) *py.Method {
+	return py.MustNewMethod(name, func(self py.Object, args py.Tuple) (py.Object, error) {
+		if err := oneArg(name, args); err != nil {
+			return nil, err
+		}
+		r, err := statCall("stat", true, py.Tuple{args[0]}, py.StringDict{})
+		if err != nil {
+			return nil, err
+		}
+		return py.GetAttrString(r, field)
+	}, 0, name+"(filename)")
 }
 
 // test registers a path -> bool function that asks the OS.
@@ -322,6 +342,10 @@ func cwdFor(isB bool) (string, error) {
 func (f *flavor) host() bool { return f.nt == (runtime.GOOS == "windows") }
 
 func (f *flavor) abspath(s string, isB bool) (string, error) {
+	// The embedded library is rooted at its own name, not the working directory.
+	if py.IsEmbeddedPath(s) {
+		return f.normpath(s), nil
+	}
 	if f.nt && f.host() && !isB { // GetFullPathName, as CPython does on Windows
 		if a, err := filepath.Abs(f.normpath(s)); err == nil {
 			return a, nil
@@ -367,7 +391,19 @@ func (f *flavor) methods() []*py.Method {
 		pair("splitext", f.splitext),
 		pure("basename", func(p string) string { _, t := f.split(p); return t }),
 		pure("dirname", func(p string) string { h, _ := f.split(p); return h }),
-		pure("normpath", f.normpath),
+		py.MustNewMethod("normpath", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("normpath", args); err != nil {
+				return nil, err
+			}
+			if _, _, err := fsPathArg("_path_normpath", "path", args[0], pathKinds); err != nil {
+				return nil, err
+			}
+			s, isB, err := fsArg(args[0])
+			if err != nil {
+				return nil, err
+			}
+			return out(f.normpath(s), isB), nil
+		}, 0, "normpath(path)"),
 		raw("normcase", f.normcase),
 		py.MustNewMethod("isabs", func(self py.Object, args py.Tuple) (py.Object, error) {
 			if err := oneArg("isabs", args); err != nil {
@@ -462,41 +498,46 @@ func (f *flavor) methods() []*py.Method {
 			return f.realpath(s, isB, strict)
 		}, 0, "realpath(filename, *, strict=False) -> Return the canonical path."),
 		py.MustNewMethod("commonprefix", pathCommonprefix, 0, "commonprefix(m) -> Return the longest common leading component of a list of pathnames."),
-		test("exists", fileExists),
-		test("lexists", func(p string) bool { _, err := os.Lstat(p); return err == nil }),
-		test("isdir", fileIsDir),
-		test("isfile", fileIsFile),
-		test("islink", fileIsLink),
+		statTest("exists", "stat", func(int64) bool { return true }),
+		statTest("lexists", "lstat", func(int64) bool { return true }),
+		statTest("isdir", "stat", func(m int64) bool { return m&sIFMT == sIFDIR }),
+		statTest("isfile", "stat", func(m int64) bool { return m&sIFMT == sIFREG }),
+		statTest("islink", "lstat", func(m int64) bool { return m&sIFMT == sIFLNK }),
 		test("isjunction", func(string) bool { return false }), // ponytail: junctions are Windows-only; always False
-		test("ismount", f.ismount),
-		py.MustNewMethod("getsize", func(self py.Object, args py.Tuple) (py.Object, error) {
-			ps, err := argsToStrings("getsize", args, 1, 1)
+		py.MustNewMethod("ismount", func(self py.Object, args py.Tuple) (py.Object, error) {
+			if err := oneArg("ismount", args); err != nil {
+				return nil, err
+			}
+			if _, err := statMode("lstat", args[0]); err != nil && !isOSOrValue(err) {
+				return nil, err
+			}
+			s, _, err := fsRaw(args[0])
 			if err != nil {
 				return nil, err
 			}
-			size, err := fileSize(ps[0])
-			if err != nil {
-				return nil, py.OSErrorFrom(err, ps[0])
-			}
-			return py.Int(size), nil
-		}, 0, "getsize(filename) -> Return the size of a file."),
-		py.MustNewMethod("getmtime", func(self py.Object, args py.Tuple) (py.Object, error) {
-			ps, err := argsToStrings("getmtime", args, 1, 1)
-			if err != nil {
-				return nil, err
-			}
-			secs, err := fileModTime(ps[0])
-			if err != nil {
-				return nil, py.OSErrorFrom(err, ps[0])
-			}
-			return py.Float(secs), nil
-		}, 0, "getmtime(filename) -> Return the last modification time of a file."),
+			return py.NewBool(f.ismount(s)), nil
+		}, 0, "ismount(path)"),
+		statField("getsize", "st_size"),
+		statField("getmtime", "st_mtime"),
+		statField("getatime", "st_atime"),
+		statField("getctime", "st_ctime"),
 		py.MustNewMethod("samefile", func(self py.Object, args py.Tuple) (py.Object, error) {
-			ps, err := argsToStrings("samefile", args, 2, 2)
-			if err != nil {
-				return nil, err
+			if len(args) != 2 {
+				return nil, py.ExceptionNewf(py.TypeError, "samefile expected 2 arguments, got %d", len(args))
 			}
-			return py.NewBool(sameFile(ps[0], ps[1])), nil
+			var ids [2][2]py.Object
+			for i, a := range args {
+				r, err := statCall("stat", true, py.Tuple{a}, py.StringDict{})
+				if err != nil {
+					return nil, err
+				}
+				for j, n := range []string{"st_ino", "st_dev"} {
+					if ids[i][j], err = py.GetAttrString(r, n); err != nil {
+						return nil, err
+					}
+				}
+			}
+			return py.NewBool(ids[0] == ids[1]), nil
 		}, 0, "samefile(f1, f2) -> Test whether two pathnames reference the same file."),
 	}
 	if f.nt {
@@ -517,7 +558,7 @@ func (f *flavor) realpath(s string, isB bool, strict py.Object) (py.Object, erro
 		return out(a, isB), nil
 	}
 	if strict == py.Object(py.True) {
-		if _, err := os.Lstat(s); err != nil {
+		if _, err := py.LstatPath(s); err != nil {
 			return nil, py.OSErrorFrom(err, s)
 		}
 	}
@@ -551,11 +592,11 @@ func (f *flavor) ismount(p string) bool {
 		}
 		return r != "" && rest == ""
 	}
-	s1, err := os.Lstat(p)
+	s1, err := py.LstatPath(p)
 	if err != nil || s1.Mode()&os.ModeSymlink != 0 {
 		return false
 	}
-	s2, err := os.Lstat(posixJoin([]string{p, ".."}))
+	s2, err := py.LstatPath(posixJoin([]string{p, ".."}))
 	if err != nil {
 		return false
 	}
@@ -565,51 +606,6 @@ func (f *flavor) ismount(p string) bool {
 		return true
 	}
 	return os.SameFile(s1, s2)
-}
-
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
-func fileIsDir(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.IsDir()
-}
-
-func fileIsFile(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func fileIsLink(p string) bool {
-	info, err := os.Lstat(p)
-	return err == nil && info.Mode()&os.ModeSymlink != 0
-}
-
-func fileSize(p string) (int64, error) {
-	info, err := os.Stat(p)
-	if err != nil {
-		return 0, err
-	}
-	return info.Size(), nil
-}
-
-func fileModTime(p string) (float64, error) {
-	info, err := os.Stat(p)
-	if err != nil {
-		return 0, err
-	}
-	return float64(info.ModTime().UnixNano()) / 1e9, nil
-}
-
-func sameFile(a, b string) bool {
-	ai, aerr := os.Stat(a)
-	bi, berr := os.Stat(b)
-	if aerr != nil || berr != nil {
-		return false
-	}
-	return os.SameFile(ai, bi)
 }
 
 // pathCommonprefix is the character-wise prefix of a sequence of strings, as
@@ -623,14 +619,19 @@ func pathCommonprefix(self py.Object, args py.Tuple) (py.Object, error) {
 	}
 	var items []string
 	var isB bool
+	var ferr error
 	err := py.Iterate(args[0], func(o py.Object) bool {
 		s, b, err := fsRaw(o)
 		if err != nil {
+			ferr = err
 			return true
 		}
 		items, isB = append(items, s), b
 		return false
 	})
+	if err == nil {
+		err = ferr
+	}
 	if err != nil {
 		return nil, err
 	}

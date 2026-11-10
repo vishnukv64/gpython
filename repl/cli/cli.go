@@ -12,9 +12,9 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"github.com/peterh/liner"
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/repl"
-	"github.com/peterh/liner"
 )
 
 const HistoryFileName = ".gpyhistory"

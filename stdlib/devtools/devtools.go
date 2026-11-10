@@ -12,6 +12,9 @@ import (
 //go:embed pyrepl_utils.py
 var pyreplUtilsSrc string
 
+//go:embed pyrepl_pager.py
+var pyreplPagerSrc string
+
 //go:embed tracemalloc.py
 var tracemallocSrc string
 
@@ -22,10 +25,14 @@ func init() {
 		CodeSrc: tracemallocSrc,
 	})
 	py.RegisterModule(&py.ModuleImpl{
-		Info: py.ModuleInfo{Name: "_pyrepl", Doc: "Stand-in package: only utils exists."},
+		Info: py.ModuleInfo{Name: "_pyrepl", Doc: "Stand-in package: only utils and pager exist."},
 	})
 	py.RegisterModule(&py.ModuleImpl{
 		Info:    py.ModuleInfo{Name: "_pyrepl.utils", FileDesc: "_pyrepl/utils.py", Doc: "Stand-in for CPython's _pyrepl.utils."},
 		CodeSrc: pyreplUtilsSrc,
+	})
+	py.RegisterModule(&py.ModuleImpl{
+		Info:    py.ModuleInfo{Name: "_pyrepl.pager", FileDesc: "_pyrepl/pager.py", Doc: "CPython's _pyrepl.pager, unchanged (pydoc imports it)."},
+		CodeSrc: pyreplPagerSrc,
 	})
 }
