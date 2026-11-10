@@ -61,6 +61,10 @@ func builtin_id(self, obj py.Object) (py.Object, error) {
 	if obj == nil {
 		return py.Int(0), nil
 	}
+	// A dict is a struct around its map: its identity is the map's address.
+	if d, ok := obj.(interface{ Ptr() uintptr }); ok {
+		return py.Int(int64(d.Ptr())), nil
+	}
 	v := reflect.ValueOf(obj)
 	switch v.Kind() {
 	case reflect.Ptr, reflect.UnsafePointer, reflect.Chan, reflect.Map, reflect.Func, reflect.Slice:

@@ -1,0 +1,35 @@
+inst (False, True, False, False, 'P')
+listcycle (False, True)
+dictcycle (False, True)
+instcycle (False, True)
+shared (True, True, False)
+slots ([1], False, False)
+slotsub (1, [2], False)
+__deepcopy__ ['custom', 1]
+__copy__ shallow-hook
+listsub ('LS', [1, [2]], [3], False, False)
+dictsub ('DS', {'a': [1]}, False)
+setstate ([1], True, False)
+reduce ('Red', [1])
+listitems ('ListRed2', [[1], [2]])
+dictitems ('DictRed2', {'k': [1]})
+tuple-atomic True
+tuple-mut (False, False, ([1], 2))
+frozenset (frozenset({1, 2}), True)
+set (True, False)
+bytearray (bytearray(b'ab'), False)
+atomic True
+atomic True
+atomic True
+atomic True
+atomic True
+atomic True
+atomic True
+atomic True
+atomic True
+memo (True, True)
+copy-inst (False, True)
+copy-list ([1, [2]], 'LS')
+copy-slots True
+copy-dict {'a': 1}
+replace TypeError

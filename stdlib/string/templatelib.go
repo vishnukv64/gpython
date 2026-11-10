@@ -21,6 +21,17 @@ var (
 
 func init() {
 	InterpolationType.Dict.Set("__match_args__", py.Tuple{py.String("value"), py.String("expression"), py.String("conversion"), py.String("format_spec")})
+	// __reduce__ as CPython's templateobject.c: the state lives in Go fields,
+	// so object's generic reduce (and copy/pickle through it) would lose it.
+	InterpolationType.Dict.Set("__reduce__", py.MustNewMethod("__reduce__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		i := self.(*Interpolation)
+		return py.Tuple{InterpolationType, py.Tuple{i.value, i.expression, i.conversion, i.formatSpec}}, nil
+	}, 0, ""))
+	unpickle := py.MustNewMethod("_template_unpickle", gpyTemplate, 0, "")
+	TemplateObjType.Dict.Set("__reduce__", py.MustNewMethod("__reduce__", func(self py.Object, args py.Tuple) (py.Object, error) {
+		t := self.(*TemplateObj)
+		return py.Tuple{unpickle, py.Tuple{t.strings, t.interpolations}}, nil
+	}, 0, ""))
 }
 
 // Interpolation is the result of one {field} of a t-string.

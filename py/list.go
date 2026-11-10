@@ -708,8 +708,6 @@ func (a *List) M__ne__(other Object) (Object, error) {
 	return False, nil
 }
 
-type sortItem struct{ k, v Object }
-
 type sortKV[K any] struct {
 	k K
 	i int
@@ -738,81 +736,104 @@ func sortFast[K cmp.Ordered](items []Object, ks []K) {
 	copy(items, out)
 }
 
-// sortGeneral stable-sorts with one "<" per comparison, stopping at the first error.
+// tupleKeys reports whether every key is a non-empty Tuple (CPython's
+// keys_are_in_tuples) and, if the first elements share one exact native type,
+// returns a native "<" for them.
+func tupleKeys(keys []Object) (first func(a, b Object) (bool, error), ok bool) {
+	for _, k := range keys {
+		if t, isT := k.(Tuple); !isT || len(t) == 0 {
+			return nil, false
+		}
+	}
+	first = ltGeneric
+	switch keys[0].(Tuple)[0].(type) {
+	case Int:
+		for _, k := range keys {
+			if _, same := k.(Tuple)[0].(Int); !same {
+				return first, true
+			}
+		}
+		first = func(a, b Object) (bool, error) { return a.(Int) < b.(Int), nil }
+	case Float:
+		for _, k := range keys {
+			if _, same := k.(Tuple)[0].(Float); !same {
+				return first, true
+			}
+		}
+		first = func(a, b Object) (bool, error) { return a.(Float) < b.(Float), nil }
+	case String:
+		for _, k := range keys {
+			if _, same := k.(Tuple)[0].(String); !same {
+				return first, true
+			}
+		}
+		first = func(a, b Object) (bool, error) { return a.(String) < b.(String), nil }
+	}
+	return first, true
+}
+
+func ltGeneric(a, b Object) (bool, error) {
+	r, err := Lt(a, b)
+	if err != nil {
+		return false, err
+	}
+	return ObjectIsTrue(r)
+}
+
+// eqFast is a == b for the common native types, else rich ==.
+func eqFast(a, b Object) (bool, error) {
+	switch x := a.(type) {
+	case Int:
+		if y, ok := b.(Int); ok {
+			return x == y, nil
+		}
+	case String:
+		if y, ok := b.(String); ok {
+			return x == y, nil
+		}
+	}
+	r, err := Eq(a, b)
+	if err != nil {
+		return false, err
+	}
+	return ObjectIsTrue(r)
+}
+
+// sortGeneral stable-sorts with CPython's listsort, one "<" per comparison,
+// stopping at the first error.
 func sortGeneral(items, keys []Object) error {
 	ps := make([]sortItem, len(items))
 	for i, v := range items {
 		ps[i] = sortItem{keys[i], v}
 	}
-	var firstErr error
-	less := func(a, b sortItem) bool {
-		if firstErr != nil {
-			return false
-		}
-		r, err := Lt(a.k, b.k)
-		if err == nil {
-			var t bool
-			if t, err = ObjectIsTrue(r); err == nil {
-				return t
-			}
-		}
-		firstErr = err
-		return false
-	}
-	if len(ps) < 64 {
-		// CPython's algorithm for short lists (count_run + binary insertion), so
-		// inconsistent orderings such as NaN give the same result.
-		start := 1
-		if len(ps) > 1 {
-			start = 2
-			if less(ps[1], ps[0]) { // descending; "equal" (neither <) keeps the run going
-				neq := 0
-				for ; start < len(ps); start++ {
-					if less(ps[start], ps[start-1]) {
-						slices.Reverse(ps[start-1-neq : start])
-						neq = 0
-					} else if less(ps[start-1], ps[start]) {
-						break
-					} else {
-						neq++
-					}
+	lt := ltGeneric
+	if first, ok := tupleKeys(keys); ok { // unsafe_tuple_compare
+		lt = func(v, w Object) (bool, error) {
+			vt, wt := v.(Tuple), w.(Tuple)
+			i := 0
+			for ; i < len(vt) && i < len(wt); i++ {
+				eq, err := eqFast(vt[i], wt[i])
+				if err != nil {
+					return false, err
 				}
-				slices.Reverse(ps[start-1-neq : start])
-				slices.Reverse(ps[:start])
-			}
-			for start < len(ps) && !less(ps[start], ps[start-1]) {
-				start++
-			}
-		}
-		for ; start < len(ps); start++ {
-			pivot := ps[start]
-			l, r := 0, start
-			for l < r {
-				p := l + (r-l)>>1
-				if less(pivot, ps[p]) {
-					r = p
-				} else {
-					l = p + 1
+				if !eq {
+					break
 				}
 			}
-			copy(ps[l+1:start+1], ps[l:start])
-			ps[l] = pivot
-		}
-	} else {
-		slices.SortStableFunc(ps, func(a, b sortItem) int {
-			if less(a, b) {
-				return -1
+			if i >= len(vt) || i >= len(wt) {
+				return len(vt) < len(wt), nil
 			}
-			return 0
-		})
+			if i == 0 {
+				return first(vt[0], wt[0])
+			}
+			return ltGeneric(vt[i], wt[i])
+		}
 	}
-	if firstErr != nil {
-		return firstErr
-	}
+	err := timsort(ps, lt)
 	for i := range ps {
 		items[i] = ps[i].v
 	}
-	return nil
+	return err
 }
 
 // sortItems sorts items in place, calling keyFunc exactly once per item. On
