@@ -319,29 +319,37 @@ func islice(self py.Object, args py.Tuple) (py.Object, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(args) > 4 {
+		return nil, py.ExceptionNewf(py.TypeError, "islice expected at most 4 arguments, got %d", len(args))
+	}
+	// As CPython's islice_new: None means "no bound" for start, stop and
+	// step (rich passes islice(lines, None)); otherwise a non-negative int.
+	index := func(o py.Object, def int, msg string) (int, error) {
+		if o == py.None {
+			return def, nil
+		}
+		n, err := py.IndexInt(o)
+		if err != nil || n < 0 {
+			return 0, py.ExceptionNewf(py.ValueError, "%s", msg)
+		}
+		return n, nil
+	}
+	const indices = "Indices for islice() must be None or an integer: 0 <= x <= sys.maxsize."
 	start, stop, step := 0, -1, 1
-	switch len(args) {
-	case 2:
-		stop, err = py.IndexInt(args[1])
-	case 3:
-		start, err = py.IndexInt(args[1])
-		if err == nil {
-			stop, err = py.IndexInt(args[2])
+	if len(args) == 2 {
+		stop, err = index(args[1], -1, "Stop argument for islice() must be None or an integer: 0 <= x <= sys.maxsize.")
+	} else {
+		if start, err = index(args[1], 0, indices); err == nil {
+			stop, err = index(args[2], -1, indices)
 		}
-	case 4:
-		start, err = py.IndexInt(args[1])
-		if err == nil {
-			stop, err = py.IndexInt(args[2])
-		}
-		if err == nil {
-			step, err = py.IndexInt(args[3])
+		if err == nil && len(args) == 4 && args[3] != py.None {
+			if step, err = py.IndexInt(args[3]); err != nil || step < 1 {
+				err = py.ExceptionNewf(py.ValueError, "Step for islice() must be a positive integer or None.")
+			}
 		}
 	}
 	if err != nil {
 		return nil, err
-	}
-	if step <= 0 {
-		return nil, py.ExceptionNewf(py.ValueError, "Step for islice() must be a positive integer or None.")
 	}
 	return &isliceIter{it: it, start: start, stop: stop, step: step, index: 0}, nil
 }
@@ -364,7 +372,11 @@ func (s *isliceIter) M__iter__() (py.Object, error) { return s, nil }
 func (s *isliceIter) M__next__() (py.Object, error) {
 	if !s.dropped {
 		for i := 0; i < s.start; i++ {
-			if _, ok, err := nextOf(s.it); err != nil || !ok {
+			_, ok, err := nextOf(s.it)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
 				s.dropped = true
 				return nil, py.StopIteration
 			}

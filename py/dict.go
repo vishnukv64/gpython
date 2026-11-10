@@ -727,6 +727,12 @@ func keyNeedsObj(key Object) bool {
 	if _, isPayload := payloadOf(key); isPayload {
 		return true
 	}
+	// A proxy key (an IntEnum member, a named tuple) encodes as the object it
+	// equals, so without its own record it read back as that object:
+	// list({E.A: 1}) gave 404, not E.A.
+	if _, isProxy := key.(IDictKeyProxy); isProxy {
+		return true
+	}
 	if t, ok := key.(Tuple); ok {
 		for _, item := range t {
 			if keyNeedsObj(item) {

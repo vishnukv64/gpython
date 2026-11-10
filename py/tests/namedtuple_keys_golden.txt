@@ -1,0 +1,23 @@
+a b 1 True P(x=1, y=2) P(x=1, y=2)
+{P(x=1, y=2): 'c'}
+1 1
+None 1 2
+<E.A: 404> 2 1 <E.A: 404>
+[P(x=1, y=2), P(x=2, y=1)]
+True True
+(None,) [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+(3,) [0, 1, 2]
+(2, None) [2, 3, 4, 5, 6, 7, 8, 9]
+(2, 8, None) [2, 3, 4, 5, 6, 7]
+(None, None, None) [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+(1, None, 3) [1, 4, 7]
+(None, 5, 2) [0, 2, 4]
+(5, 2) []
+(-1,) ValueError Stop argument for islice() must be None or an integer: 0 <= x <= sys.maxsize.
+(1, -2) ValueError Indices for islice() must be None or an integer: 0 <= x <= sys.maxsize.
+(1, 5, 0) ValueError Step for islice() must be a positive integer or None.
+('x',) ValueError Stop argument for islice() must be None or an integer: 0 <= x <= sys.maxsize.
+(1.5,) ValueError Stop argument for islice() must be None or an integer: 0 <= x <= sys.maxsize.
+(1, 2, 's') ValueError Step for islice() must be a positive integer or None.
+(1, 2, 3, 4) TypeError islice expected at most 4 arguments, got 5
+propagated 'boom'

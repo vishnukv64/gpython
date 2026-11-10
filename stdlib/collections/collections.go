@@ -1751,6 +1751,19 @@ func (n *NamedTuple) Type() *py.Type {
 	return NamedTupleType
 }
 
+// DictKeyObject makes a named tuple share the dict and set entry of the plain
+// tuple it equals (P(1, 2) == (1, 2) and they hash alike), as a tuple
+// subclass does in CPython.  A class that defines its own __eq__ or __hash__
+// keys by those instead.
+func (n *NamedTuple) DictKeyObject() py.Object {
+	if n.cls != nil && (n.cls.LookupPython("__hash__") != nil || n.cls.LookupPython("__eq__") != nil) {
+		return n
+	}
+	return py.Tuple(n.values)
+}
+
+var _ py.IDictKeyProxy = (*NamedTuple)(nil)
+
 func init() {
 	NamedTupleType.Dict.Set("__len__", py.MustNewMethod("__len__", func(self py.Object, args py.Tuple) (py.Object, error) {
 		return py.Int(len(self.(*NamedTuple).values)), nil
@@ -2713,65 +2726,21 @@ var (
 	_ py.I__add__      = (*UserString)(nil)
 )
 
-// tupleHash hashes a sequence the way Python's tuple hash does: an order
-// sensitive combination of the element hashes, so that the hash of a tuple
-// equals the hash of an equal tuple and two different orders differ.
+// tupleHash is a named tuple's hash: exactly the hash of the plain tuple of
+// its values, as in CPython, where a namedtuple inherits tuple.__hash__.  It
+// goes through py.HashValue, the one hash the dict and hash() use, so a field
+// that is itself a named tuple (rich's Color holding a ColorTriplet) hashes
+// as a tuple too.  A private element hasher here had rejected it.
 func tupleHash(values []py.Object) (py.Object, error) {
-	const (
-		mult = 1000003
-		mod  = uint64(1) << 61
-	)
-	var acc uint64 = 0x345678
-	length := uint64(len(values))
+	if h, ok := py.HashValue(py.Tuple(values)); ok {
+		return py.Int(h), nil
+	}
 	for _, v := range values {
-		h, err := objectHash(v)
-		if err != nil {
-			return nil, err
-		}
-		acc = (acc ^ uint64(h)) * mult % mod
-		length--
-	}
-	acc = (acc ^ length) % mod
-	return py.Int(int64(acc)), nil
-}
-
-// objectHash is the hash of one element, through its own __hash__ or through
-// the value types that carry none.
-func objectHash(o py.Object) (int64, error) {
-	if h, ok := o.(py.I__hash__); ok {
-		res, err := h.M__hash__()
-		if err != nil {
-			return 0, err
-		}
-		if n, err := py.MakeGoInt64(res); err == nil {
-			return n, nil
+		if _, ok := py.HashValue(v); !ok {
+			return nil, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", v.Type().Name)
 		}
 	}
-	switch v := o.(type) {
-	case py.NoneType:
-		return 0, nil
-	case py.Bool:
-		if v {
-			return 1, nil
-		}
-		return 0, nil
-	case py.Int:
-		return int64(v), nil
-	case py.Float:
-		return int64(float64(v)), nil
-	case py.String:
-		var h uint64 = 14695981039346656037
-		for i := 0; i < len(v); i++ {
-			h ^= uint64(v[i])
-			h *= 1099511628211
-		}
-		return int64(h & (1<<63 - 1)), nil
-	}
-	// A type is hashable by identity, as in CPython.
-	if t, ok := o.(*py.Type); ok {
-		return int64(len(t.Name)), nil
-	}
-	return 0, py.ExceptionNewf(py.TypeError, "unhashable type: '%s'", o.Type().Name)
+	return nil, py.ExceptionNewf(py.TypeError, "unhashable type: 'tuple'")
 }
 
 // sameValues compares two value sequences element by element, which is the
