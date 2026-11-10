@@ -498,7 +498,10 @@ type dictShared struct {
 	// version counts mutations (Set, Del, Clear), read atomically by the
 	// VM's global and attribute caches.  It only ever grows, so a cache that
 	// recorded a version is valid exactly while the dict still reports it.
-	version uint64
+	// atomic.Uint64, not a bare uint64: on 386 and arm a 64-bit atomic needs
+	// 8-byte alignment, which this field's offset does not have (CI's 32-bit
+	// tests panicked with "unaligned 64-bit atomic operation").
+	version atomic.Uint64
 	// watched is set once a class namespace has been searched by an
 	// attribute inline cache; mutating a watched dict advances typeEpoch.
 	watched uint32
@@ -506,7 +509,7 @@ type dictShared struct {
 
 // bumpVersion records one mutation.  Called with mu held.
 func (s *dictShared) bumpVersion() {
-	atomic.AddUint64(&s.version, 1)
+	s.version.Add(1)
 	if atomic.LoadUint32(&s.watched) != 0 {
 		typeEpoch.Add(1)
 	}
@@ -518,7 +521,7 @@ func (d StringDict) Version() (id unsafe.Pointer, version uint64) {
 	if d.shared == nil {
 		return nil, 0
 	}
-	return unsafe.Pointer(d.shared), atomic.LoadUint64(&d.shared.version)
+	return unsafe.Pointer(d.shared), d.shared.version.Load()
 }
 
 type StringDict struct {
