@@ -261,11 +261,7 @@ func do_BINARY_POWER(vm *Vm, arg int32) error {
 }
 
 // Implements TOS = TOS1 * TOS.
-func do_BINARY_MULTIPLY(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.Mul(a, b))
-}
+func do_BINARY_MULTIPLY(vm *Vm, arg int32) error { return vm.binArith(fastMul, py.Mul) }
 
 // Implements TOS = TOS1 // TOS.
 func do_BINARY_FLOOR_DIVIDE(vm *Vm, arg int32) error {
@@ -283,46 +279,13 @@ func do_BINARY_TRUE_DIVIDE(vm *Vm, arg int32) error {
 }
 
 // Implements TOS = TOS1 % TOS.
-func do_BINARY_MODULO(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.Mod(a, b))
-}
+func do_BINARY_MODULO(vm *Vm, arg int32) error { return vm.binArith(fastMod, py.Mod) }
 
 // Implements TOS = TOS1 + TOS.
-func do_BINARY_ADD(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	// Fastpath: two ints add without going through the operator protocol.
-	//
-	// CPython does exactly this in its main loop, and the reason is visible in
-	// a profile: the general path asserts two interfaces, calls M__add__, and
-	// allocates a fresh Int for the result.  "x = x + i" in a loop pays that
-	// on every iteration, and the allocation shows up as mallocgcTiny.
-	//
-	// The fallthrough is unchanged, so a subclass, a float, or a type with
-	// its own __radd__ takes the slower path exactly as before.
-	if ai, ok := a.(py.Int); ok {
-		if bi, ok := b.(py.Int); ok {
-			sum := ai + bi
-			// Only take the fast path when the result is the same as the
-			// protocol would produce: an overflow becomes a long in CPython,
-			// and this interpreter has a BigInt behind the protocol.
-			if !(ai > 0 && bi > 0 && sum < 0 || ai < 0 && bi < 0 && sum > 0) {
-				vm.SET_TOP(sum)
-				return nil
-			}
-		}
-	}
-	return vm.setTopAndCheckErr(py.Add(a, b))
-}
+func do_BINARY_ADD(vm *Vm, arg int32) error { return vm.binArith(fastAdd, py.Add) }
 
 // Implements TOS = TOS1 - TOS.
-func do_BINARY_SUBTRACT(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.Sub(a, b))
-}
+func do_BINARY_SUBTRACT(vm *Vm, arg int32) error { return vm.binArith(fastSub, py.Sub) }
 
 // Implements TOS = TOS1[TOS].
 func do_BINARY_SUBSCR(vm *Vm, arg int32) error {
@@ -379,11 +342,7 @@ func do_INPLACE_POWER(vm *Vm, arg int32) error {
 }
 
 // Implements in-place TOS = TOS1 * TOS.
-func do_INPLACE_MULTIPLY(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.IMul(a, b))
-}
+func do_INPLACE_MULTIPLY(vm *Vm, arg int32) error { return vm.binArith(fastMul, py.IMul) }
 
 // Implements in-place TOS = TOS1 // TOS.
 func do_INPLACE_FLOOR_DIVIDE(vm *Vm, arg int32) error {
@@ -401,25 +360,13 @@ func do_INPLACE_TRUE_DIVIDE(vm *Vm, arg int32) error {
 }
 
 // Implements in-place TOS = TOS1 % TOS.
-func do_INPLACE_MODULO(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.Mod(a, b))
-}
+func do_INPLACE_MODULO(vm *Vm, arg int32) error { return vm.binArith(fastMod, py.Mod) }
 
 // Implements in-place TOS = TOS1 + TOS.
-func do_INPLACE_ADD(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.IAdd(a, b))
-}
+func do_INPLACE_ADD(vm *Vm, arg int32) error { return vm.binArith(fastAdd, py.IAdd) }
 
 // Implements in-place TOS = TOS1 - TOS.
-func do_INPLACE_SUBTRACT(vm *Vm, arg int32) error {
-	b := vm.POP()
-	a := vm.TOP()
-	return vm.setTopAndCheckErr(py.ISub(a, b))
-}
+func do_INPLACE_SUBTRACT(vm *Vm, arg int32) error { return vm.binArith(fastSub, py.ISub) }
 
 // Implements in-place TOS = TOS1 << TOS.
 func do_INPLACE_LSHIFT(vm *Vm, arg int32) error {
@@ -1307,6 +1254,48 @@ func do_BUILD_MAP(vm *Vm, count int32) error {
 }
 
 // Replaces TOS with getattr(TOS, co_names[namei]).
+// LOAD_METHOD replaces TOS with [function, self] when "TOS.name" would bind a
+// plain Python function, otherwise with [TOS.name, nil].
+func do_LOAD_METHOD(vm *Vm, namei int32) error {
+	name := vm.frame.Code.Names[namei]
+	self := vm.TOP()
+	if f := py.LookupMethod(self, name); f != nil {
+		vm.SET_TOP(f)
+		vm.PUSH(self)
+		return nil
+	}
+	res, err := py.GetAttrString(self, name)
+	if err != nil {
+		return err
+	}
+	vm.SET_TOP(res)
+	vm.PUSH(nil)
+	return nil
+}
+
+// CALL_METHOD calls the [function, self] or [callable, nil] pair below the
+// argc arguments.
+func do_CALL_METHOD(vm *Vm, argc int32) error {
+	st := vm.frame.Stack
+	n := int(argc)
+	p := len(st) - n - 2
+	fn := st[p]
+	var args py.Tuple
+	if st[p+1] != nil {
+		args = py.Tuple(st[p+1:])
+	} else {
+		copy(st[p+1:], st[p+2:])
+		args = py.Tuple(st[p+1 : p+1+n])
+	}
+	vm.frame.Stack = st[:p]
+	obj, err := callInternal(fn, args, py.StringDict{}, vm.frame)
+	if err != nil {
+		return err
+	}
+	vm.PUSH(obj)
+	return nil
+}
+
 func do_LOAD_ATTR(vm *Vm, namei int32) error {
 	return vm.setTopAndCheckErr(py.GetAttrString(vm.TOP(), vm.frame.Code.Names[namei]))
 }
@@ -1316,6 +1305,10 @@ func do_LOAD_ATTR(vm *Vm, namei int32) error {
 func do_COMPARE_OP(vm *Vm, opname int32) error {
 	b := vm.POP()
 	a := vm.TOP()
+	if r, ok := fastCompare(opname, a, b); ok {
+		vm.SET_TOP(r)
+		return nil
+	}
 	var r py.Object
 	var err error
 	switch opname {
@@ -1432,6 +1425,13 @@ func do_JUMP_FORWARD(vm *Vm, delta int32) error {
 
 // If TOS is true, sets the bytecode counter to target. TOS is popped.
 func do_POP_JUMP_IF_TRUE(vm *Vm, target int32) error {
+	if v, ok := truth(vm.TOP()); ok {
+		vm.DROP()
+		if v {
+			vm.frame.Lasti = target
+		}
+		return nil
+	}
 	b, err := py.MakeBool(vm.POP())
 	if err != nil {
 		return err
@@ -1444,6 +1444,13 @@ func do_POP_JUMP_IF_TRUE(vm *Vm, target int32) error {
 
 // If TOS is false, sets the bytecode counter to target. TOS is popped.
 func do_POP_JUMP_IF_FALSE(vm *Vm, target int32) error {
+	if v, ok := truth(vm.TOP()); ok {
+		vm.DROP()
+		if !v {
+			vm.frame.Lasti = target
+		}
+		return nil
+	}
 	b, err := py.MakeBool(vm.POP())
 	if err != nil {
 		return err
@@ -2560,18 +2567,23 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 	// popping assumed frames finish in the order they start, which threads
 	// break.  Back is set on every run, so a resumed generator points at
 	// whoever resumed it.
-	var gid uint64
+	var gs *py.GoState
 	var prevFrame *py.Frame
 	if caller != nil {
-		gid, prevFrame = caller.GID, caller
+		gs, prevFrame = caller.GS, caller
 	} else {
-		gid = py.GoroutineID()
-		prevFrame = gCurrentFrame.getFor(gid)
+		gs = gCurrentFrame.state(py.GoroutineID())
+		prevFrame = gs.Cur
 	}
 	frame.Back = prevFrame
-	frame.GID = gid
-	gCurrentFrame.setFor(gid, frame)
-	defer gCurrentFrame.setFor(gid, prevFrame)
+	frame.GS = gs
+	gs.Cur = frame
+	defer func() {
+		gs.Cur = prevFrame
+		if prevFrame == nil {
+			gCurrentFrame.drop(gs.ID)
+		}
+	}()
 
 	var vm = Vm{
 		frame:   frame,
@@ -2812,6 +2824,10 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 			err = do_BUILD_MAP(&vm, arg)
 		case LOAD_ATTR:
 			err = do_LOAD_ATTR(&vm, arg)
+		case LOAD_METHOD:
+			err = do_LOAD_METHOD(&vm, arg)
+		case CALL_METHOD:
+			err = do_CALL_METHOD(&vm, arg)
 		case COMPARE_OP:
 			err = do_COMPARE_OP(&vm, arg)
 		case IMPORT_NAME:
@@ -3384,29 +3400,38 @@ func init() {
 // is obtained unsupported-ly but is the only handle available; the map is
 // mutex-guarded, and an entry is removed when the goroutine's outermost frame
 // exits so the map cannot grow without bound.
-var gCurrentFrame = &frameSlot{frames: map[uint64]*py.Frame{}}
+var gCurrentFrame = &frameSlot{frames: map[uint64]*py.GoState{}}
 
 type frameSlot struct {
 	mu     sync.Mutex
-	frames map[uint64]*py.Frame
+	frames map[uint64]*py.GoState
 }
 
-func (f *frameSlot) get() *py.Frame { return f.getFor(py.GoroutineID()) }
-
-func (f *frameSlot) getFor(id uint64) *py.Frame {
+func (f *frameSlot) get() *py.Frame {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.frames[id]
-}
-
-func (f *frameSlot) setFor(id uint64, frame *py.Frame) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if frame == nil {
-		delete(f.frames, id)
-		return
+	if gs := f.frames[py.GoroutineID()]; gs != nil {
+		return gs.Cur
 	}
-	f.frames[id] = frame
+	return nil
+}
+
+// state returns the goroutine's state, creating it on first use.
+func (f *frameSlot) state(id uint64) *py.GoState {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	gs := f.frames[id]
+	if gs == nil {
+		gs = &py.GoState{ID: id}
+		f.frames[id] = gs
+	}
+	return gs
+}
+
+func (f *frameSlot) drop(id uint64) {
+	f.mu.Lock()
+	delete(f.frames, id)
+	f.mu.Unlock()
 }
 
 // sameObject is the "is" operator.  Interface equality panics for the

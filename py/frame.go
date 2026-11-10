@@ -23,6 +23,13 @@ type TryBlock struct {
 	Level   int          // value stack level to pop to
 }
 
+// GoState is the per-goroutine interpreter state: the frame the goroutine is
+// executing.  Only its own goroutine reads or writes Cur.
+type GoState struct {
+	ID  uint64
+	Cur *Frame
+}
+
 // A python Frame object
 type Frame struct {
 	Back            *Frame     // the frame that was executing when this one was called, or nil
@@ -73,7 +80,7 @@ type Frame struct {
 	// Python function is made on the same goroutine, so the callee reads it
 	// from here instead of asking the runtime, which costs time proportional
 	// to the depth of the Go stack.
-	GID uint64
+	GS *GoState
 
 	// PendingException is an exception to raise as soon as this frame
 	// resumes, set by generator.throw().  The VM reads it on entry and

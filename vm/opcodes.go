@@ -187,6 +187,11 @@ const (
 	EG_MATCH   OpCode = 163
 	EG_RECORD  OpCode = 164
 	EG_RERAISE OpCode = 165
+
+	// LOAD_METHOD pushes TOS.name as [function, self] when a plain Python
+	// function would bind, else [attribute, nil]; CALL_METHOD argc calls it.
+	LOAD_METHOD OpCode = 166
+	CALL_METHOD OpCode = 167
 )
 
 // Rich comparison opcodes

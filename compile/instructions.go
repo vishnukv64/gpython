@@ -186,6 +186,10 @@ func opcodeStackEffect(opcode vm.OpCode, oparg uint32) int {
 		return 1
 	case vm.LOAD_ATTR:
 		return 0
+	case vm.LOAD_METHOD:
+		return 1
+	case vm.CALL_METHOD:
+		return -int(oparg) - 1
 	case vm.COMPARE_OP:
 		return -1
 	case vm.IMPORT_NAME:

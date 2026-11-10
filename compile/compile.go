@@ -1906,6 +1906,28 @@ func (c *compiler) callHelper(n int, Args []ast.Expr, Keywords []*ast.Keyword, S
 // arguments then grow, in source order.  The keyword arguments become a flat
 // [k1, v1, k2, v2, ...] list, which keeps "**mapping" merged in source order
 // and lets CALL_FUNCTION_EX raise a duplicate-key TypeError naming the callee.
+// methodCall compiles "obj.name(args)" with positional arguments only to
+// LOAD_METHOD/CALL_METHOD, which avoids building a bound method.
+func (c *compiler) methodCall(node *ast.Call, attr *ast.Attribute) bool {
+	if attr.Ctx != ast.Load || len(node.Keywords) != 0 || node.Starargs != nil || node.Kwargs != nil || len(node.Args) > 255 {
+		return false
+	}
+	for _, arg := range node.Args {
+		if _, ok := arg.(*ast.Starred); ok {
+			return false
+		}
+	}
+	c.Expr(attr.Value)
+	c.SetLineno(attr)
+	c.OpName(vm.LOAD_METHOD, attr.Attr)
+	c.SetLineno(node)
+	for _, arg := range node.Args {
+		c.Expr(arg)
+	}
+	c.OpArg(vm.CALL_METHOD, uint32(len(node.Args)))
+	return true
+}
+
 func (c *compiler) callHelperEx(n int, Args []ast.Expr, Keywords []*ast.Keyword) {
 	c.OpArg(vm.BUILD_LIST, uint32(n))
 	for _, arg := range Args {
@@ -2564,6 +2586,9 @@ func (c *compiler) expr(expr ast.Expr) {
 		// Keywords []*Keyword
 		// Starargs Expr
 		// Kwargs   Expr
+		if attr, ok := node.Func.(*ast.Attribute); ok && c.methodCall(node, attr) {
+			break
+		}
 		c.Expr(node.Func)
 		c.callHelper(0, node.Args, node.Keywords, node.Starargs, node.Kwargs)
 	case *ast.Num:

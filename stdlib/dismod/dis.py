@@ -45,7 +45,7 @@ def _ops(*names):
 
 hasconst = _ops('LOAD_CONST')
 hasname = _ops('STORE_NAME', 'DELETE_NAME', 'STORE_ATTR', 'DELETE_ATTR', 'STORE_GLOBAL',
-               'DELETE_GLOBAL', 'LOAD_NAME', 'LOAD_ATTR', 'IMPORT_NAME', 'IMPORT_FROM',
+               'DELETE_GLOBAL', 'LOAD_NAME', 'LOAD_ATTR', 'LOAD_METHOD', 'IMPORT_NAME', 'IMPORT_FROM',
                'LOAD_GLOBAL')
 hasjrel = _ops('FOR_ITER', 'JUMP_FORWARD', 'SETUP_LOOP', 'SETUP_EXCEPT', 'SETUP_FINALLY',
                'SETUP_WITH', 'SETUP_ASYNC_WITH')

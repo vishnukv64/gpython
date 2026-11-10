@@ -611,6 +611,20 @@ func (d *classGetter) M__get__(instance, owner Object) (Object, error) {
 	return instance.Type(), nil
 }
 
+// M__set__ implements "obj.__class__ = C" for an instance of a Python class.
+func (d *classGetter) M__set__(instance, value Object) (Object, error) {
+	inst, ok := instance.(*Type)
+	if !ok || inst.Name != "" {
+		return nil, ExceptionNewf(TypeError, "__class__ assignment only supported for heap types or ModuleType subclasses")
+	}
+	t, ok := value.(*Type)
+	if !ok {
+		return nil, ExceptionNewf(TypeError, "__class__ must be set to a class, not '%s' object", value.Type().Name)
+	}
+	inst.ObjectType = t
+	return None, nil
+}
+
 var _ I__get__ = (*classGetter)(nil)
 
 // Make a new type from a name
