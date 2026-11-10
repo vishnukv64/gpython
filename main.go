@@ -192,20 +192,21 @@ func runModule(args []string) error {
 	if err != nil {
 		return py.ExceptionNewf(py.ImportError, "No module named %q", name)
 	}
-	// Resolved: argv[0] is the path, with the program's own arguments after it.
-	// sys.argv is rewritten on the live sys module, because the context has
-	// already been built and its sys.argv is what the program reads.
-	// CPython puts an ABSOLUTE path there, so it is made absolute here.
-	argvPath := path
-	if abs, err := filepath.Abs(path); err == nil {
-		argvPath = abs
-	}
-	sysArgv := append([]string{argvPath}, args[1:]...)
-	if sysMod, err := ctx.GetModule("sys"); err == nil && sysMod != nil {
-		sysMod.Globals.Set("argv", py.NewListFromStrings(sysArgv))
+	// Resolved: argv[0] is the path of the file that runs, with the program's
+	// own arguments after it.  sys.argv is rewritten on the live sys module,
+	// because the context has already been built and its sys.argv is what the
+	// program reads.  CPython puts an ABSOLUTE path there.
+	setArgv0 := func(runPath string) {
+		if abs, err := filepath.Abs(runPath); err == nil {
+			runPath = abs
+		}
+		if sysMod, err := ctx.GetModule("sys"); err == nil && sysMod != nil {
+			sysMod.Globals.Set("argv", py.NewListFromStrings(append([]string{runPath}, args[1:]...)))
+		}
 	}
 
 	if !isPkg {
+		setArgv0(path)
 		// Run as __main__ but with a spec naming the real module, which is
 		// what CPython does and what pip's __main__.py reads.
 		_, err = py.RunFileAsNamed(ctx, path, py.CompileOpts{}, "__main__", name)
@@ -222,6 +223,9 @@ func runModule(args []string) error {
 	if err != nil {
 		return py.ExceptionNewf(py.ImportError, "No module named %q", mainName)
 	}
+	// For a package the file that runs is __main__.py, not __init__.py:
+	// pip's usage line is built from argv[0].
+	setArgv0(mainPath)
 	// __name__ must be "__main__" - that is the whole point of -m, and pip's
 	// __main__.py guards on it: with the package name there, the guard was
 	// false and "gpython -m pip" printed nothing and exited 0.  The SPEC names

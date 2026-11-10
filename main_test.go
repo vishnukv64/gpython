@@ -55,6 +55,27 @@ func TestGPython(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Fatalf("stdout differ:\ngot:\n%s\nwant:\n%s\n", got, want)
 	}
+
+	// -m on a package runs its __main__.py, and argv[0] names that file (as in
+	// CPython), not the package's __init__.py: pip's usage line is built from it.
+	pkg := filepath.Join(tmp, "runme")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range map[string]string{
+		"__init__.py": "",
+		"__main__.py": "import os, sys\nprint(os.path.basename(sys.argv[0]), sys.argv[1:], __name__)\n",
+	} {
+		if err := os.WriteFile(filepath.Join(pkg, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd = exec.Command(exe, "-m", "runme", "a")
+	cmd.Dir = tmp
+	got, err = cmd.CombinedOutput()
+	if want := "__main__.py ['a'] __main__\n"; err != nil || string(bytes.ReplaceAll(got, []byte("\r\n"), []byte("\n"))) != want {
+		t.Fatalf("-m package: got %q (err %v), want %q", got, err, want)
+	}
 }
 
 func TestRunFile(t *testing.T) {
