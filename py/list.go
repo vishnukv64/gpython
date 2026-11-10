@@ -7,7 +7,8 @@
 package py
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 )
 
@@ -707,102 +708,195 @@ func (a *List) M__ne__(other Object) (Object, error) {
 	return False, nil
 }
 
-type sortable struct {
-	l        *List
-	keyFunc  Object
-	reverse  bool
-	firstErr error
+type sortItem struct{ k, v Object }
+
+type sortKV[K any] struct {
+	k K
+	i int
 }
 
-type ptrSortable struct {
-	s *sortable
+// sortFast sorts items by exact-typed keys natively; the index tiebreak makes
+// the unstable pdqsort stable.
+func sortFast[K cmp.Ordered](items []Object, ks []K) {
+	ps := make([]sortKV[K], len(items))
+	for i := range ps {
+		ps[i] = sortKV[K]{ks[i], i}
+	}
+	slices.SortFunc(ps, func(a, b sortKV[K]) int {
+		if a.k < b.k {
+			return -1
+		}
+		if a.k > b.k {
+			return 1
+		}
+		return a.i - b.i
+	})
+	out := make([]Object, len(items))
+	for j := range ps {
+		out[j] = items[ps[j].i]
+	}
+	copy(items, out)
 }
 
-func (s ptrSortable) Len() int {
-	return s.s.l.Len()
-}
-
-func (s ptrSortable) Swap(i, j int) {
-	itemI, err := s.s.l.M__getitem__(Int(i))
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-		return
+// sortGeneral stable-sorts with one "<" per comparison, stopping at the first error.
+func sortGeneral(items, keys []Object) error {
+	ps := make([]sortItem, len(items))
+	for i, v := range items {
+		ps[i] = sortItem{keys[i], v}
 	}
-	itemJ, err := s.s.l.M__getitem__(Int(j))
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-		return
-	}
-	_, err = s.s.l.M__setitem__(Int(i), itemJ)
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-	}
-	_, err = s.s.l.M__setitem__(Int(j), itemI)
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-	}
-}
-
-func (s ptrSortable) Less(i, j int) bool {
-	itemI, err := s.s.l.M__getitem__(Int(i))
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-		return false
-	}
-	itemJ, err := s.s.l.M__getitem__(Int(j))
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
-		}
-		return false
-	}
-
-	if s.s.keyFunc != None {
-		itemI, err = Call(s.s.keyFunc, Tuple{itemI}, NewStringDict())
-		if err != nil {
-			if s.s.firstErr == nil {
-				s.s.firstErr = err
-			}
+	var firstErr error
+	less := func(a, b sortItem) bool {
+		if firstErr != nil {
 			return false
 		}
-		itemJ, err = Call(s.s.keyFunc, Tuple{itemJ}, NewStringDict())
-		if err != nil {
-			if s.s.firstErr == nil {
-				s.s.firstErr = err
+		r, err := Lt(a.k, b.k)
+		if err == nil {
+			var t bool
+			if t, err = ObjectIsTrue(r); err == nil {
+				return t
 			}
-			return false
 		}
+		firstErr = err
+		return false
 	}
-
-	var cmpResult Object
-	if s.s.reverse {
-		cmpResult, err = Lt(itemJ, itemI)
+	if len(ps) < 64 {
+		// CPython's algorithm for short lists (count_run + binary insertion), so
+		// inconsistent orderings such as NaN give the same result.
+		start := 1
+		if len(ps) > 1 {
+			start = 2
+			if less(ps[1], ps[0]) { // descending; "equal" (neither <) keeps the run going
+				neq := 0
+				for ; start < len(ps); start++ {
+					if less(ps[start], ps[start-1]) {
+						slices.Reverse(ps[start-1-neq : start])
+						neq = 0
+					} else if less(ps[start-1], ps[start]) {
+						break
+					} else {
+						neq++
+					}
+				}
+				slices.Reverse(ps[start-1-neq : start])
+				slices.Reverse(ps[:start])
+			}
+			for start < len(ps) && !less(ps[start], ps[start-1]) {
+				start++
+			}
+		}
+		for ; start < len(ps); start++ {
+			pivot := ps[start]
+			l, r := 0, start
+			for l < r {
+				p := l + (r-l)>>1
+				if less(pivot, ps[p]) {
+					r = p
+				} else {
+					l = p + 1
+				}
+			}
+			copy(ps[l+1:start+1], ps[l:start])
+			ps[l] = pivot
+		}
 	} else {
-		cmpResult, err = Lt(itemI, itemJ)
+		slices.SortStableFunc(ps, func(a, b sortItem) int {
+			if less(a, b) {
+				return -1
+			}
+			return 0
+		})
 	}
+	if firstErr != nil {
+		return firstErr
+	}
+	for i := range ps {
+		items[i] = ps[i].v
+	}
+	return nil
+}
 
-	if err != nil {
-		if s.s.firstErr == nil {
-			s.s.firstErr = err
+// sortItems sorts items in place, calling keyFunc exactly once per item. On
+// error items is left a permutation of the original.
+func sortItems(items []Object, keyFunc Object, reverse bool) error {
+	keys := items
+	if keyFunc != None {
+		keys = make([]Object, len(items))
+		kw := NewStringDict()
+		for i, v := range items {
+			k, err := Call(keyFunc, Tuple{v}, kw)
+			if err != nil {
+				return err
+			}
+			keys[i] = k
 		}
-		return false
 	}
-
-	if boolResult, ok := cmpResult.(Bool); ok {
-		return bool(boolResult)
+	if len(items) < 2 {
+		return nil
 	}
-
-	return false
+	if reverse { // CPython: reverse, stable sort, reverse - keeps ties in original order
+		slices.Reverse(items)
+		if &keys[0] != &items[0] {
+			slices.Reverse(keys)
+		}
+		defer slices.Reverse(items)
+	}
+	switch keys[0].(type) {
+	case Int:
+		ks := make([]int64, len(keys))
+		for i, k := range keys {
+			x, ok := k.(Int)
+			if !ok {
+				return sortGeneral(items, keys)
+			}
+			ks[i] = int64(x)
+		}
+		if &keys[0] == &items[0] { // keys are the items: equal ints are indistinguishable
+			slices.Sort(ks)
+			for i, x := range ks {
+				items[i] = Int(x)
+			}
+			return nil
+		}
+		sortFast(items, ks)
+		return nil
+	case Float:
+		ks := make([]float64, len(keys))
+		for i, k := range keys {
+			x, ok := k.(Float)
+			if !ok || x != x {
+				return sortGeneral(items, keys)
+			}
+			ks[i] = float64(x)
+		}
+		if plain := &keys[0] == &items[0]; plain && !slices.ContainsFunc(ks, func(f float64) bool { return f == 0 }) {
+			slices.Sort(ks) // no zeros: equal floats are indistinguishable
+			for i, x := range ks {
+				items[i] = Float(x)
+			}
+			return nil
+		}
+		sortFast(items, ks)
+		return nil
+	case String:
+		ks := make([]string, len(keys))
+		for i, k := range keys {
+			x, ok := k.(String)
+			if !ok {
+				return sortGeneral(items, keys)
+			}
+			ks[i] = string(x)
+		}
+		if &keys[0] == &items[0] {
+			slices.Sort(ks)
+			for i, x := range ks {
+				items[i] = String(x)
+			}
+			return nil
+		}
+		sortFast(items, ks)
+		return nil
+	}
+	return sortGeneral(items, keys)
 }
 
 // SortInPlace sorts the given List in place using a stable sort.
@@ -820,14 +914,25 @@ func SortInPlace(l *List, kwargs StringDict, funcName string) error {
 	if reverse == nil {
 		reverse = False
 	}
-	// FIXME: requires the same bool-check like CPython (or better "|$Op" that doesn't panic on nil).
-	ok, err := ObjectIsTrue(reverse)
+	rev, err := ObjectIsTrue(reverse)
 	if err != nil {
 		return err
 	}
-	s := ptrSortable{&sortable{l, keyFunc, ok, nil}}
-	sort.Stable(s)
-	return s.s.firstErr
+	// Like CPython the list reads as empty while sorting, so a mutation by
+	// key or __lt__ is detectable.
+	l.mu.Lock()
+	items := l.Items
+	l.Items = nil
+	l.mu.Unlock()
+	err = sortItems(items, keyFunc, rev)
+	l.mu.Lock()
+	modified := l.Items != nil
+	l.Items = items
+	l.mu.Unlock()
+	if err == nil && modified {
+		return ExceptionNewf(ValueError, "list modified during sort")
+	}
+	return err
 }
 
 // snapshot copies the items under the list's lock, for a reader that must not
