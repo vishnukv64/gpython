@@ -265,19 +265,7 @@ func (a Complex) M__pow__(other, modulus Object) (Object, error) {
 		return NotImplemented, nil
 	}
 	if b, ok := convertToComplex(other); ok {
-		// A small integral exponent is repeated multiplication, as in CPython,
-		// so (1+2j)**2 is exactly (-3+4j) rather than a polar-form estimate.
-		if n := real(complex128(b)); imag(complex128(b)) == 0 && n == math.Trunc(n) && math.Abs(n) <= 100 {
-			r := complex(1, 0)
-			for i := 0; i < int(math.Abs(n)); i++ {
-				r *= complex128(a)
-			}
-			if n < 0 {
-				r = 1 / r
-			}
-			return Complex(r), nil
-		}
-		return Complex(cmplx.Pow(complex128(a), complex128(b))), nil
+		return complexPow(complex128(a), complex128(b))
 	}
 	return NotImplemented, nil
 }
@@ -288,7 +276,7 @@ func (a Complex) M__bool__() (Object, error) {
 
 func (a Complex) M__rpow__(other Object) (Object, error) {
 	if b, ok := convertToComplex(other); ok {
-		return Complex(cmplx.Pow(complex128(b), complex128(a))), nil
+		return complexPow(complex128(b), complex128(a))
 	}
 	return NotImplemented, nil
 }
@@ -372,3 +360,42 @@ func init() {
 // Check interface is satisfied
 var _ floatArithmetic = Complex(complex(0, 0))
 var _ richComparison = Complex(0)
+
+// complexPow is CPython's complex_pow: a small integral exponent is repeated
+// squaring (so (1+2j)**2 is exactly (-3+4j)), anything else goes through the
+// polar form with CPython's own operation order, which keeps results
+// bit-identical.
+func complexPow(a, b complex128) (Object, error) {
+	if b == 0 {
+		return Complex(1), nil
+	}
+	if n := real(b); imag(b) == 0 && n == math.Floor(n) && math.Abs(n) <= 100 {
+		k := int(math.Abs(n))
+		r, p := complex(1, 0), a
+		for mask := 1; mask > 0 && k >= mask; mask <<= 1 {
+			if k&mask != 0 {
+				r *= p
+			}
+			p *= p
+		}
+		if n < 0 {
+			r = 1 / r
+		}
+		return Complex(r), nil
+	}
+	if a == 0 {
+		if imag(b) != 0 || real(b) < 0 {
+			return nil, ExceptionNewf(ZeroDivisionError, "zero to a negative or complex power")
+		}
+		return Complex(0), nil
+	}
+	vabs := math.Hypot(real(a), imag(a))
+	l := math.Pow(vabs, real(b))
+	at := math.Atan2(imag(a), real(a))
+	phase := at * real(b)
+	if imag(b) != 0 {
+		l /= math.Exp(at * imag(b))
+		phase += imag(b) * math.Log(vabs)
+	}
+	return Complex(complex(l*math.Cos(phase), l*math.Sin(phase))), nil
+}

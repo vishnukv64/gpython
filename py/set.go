@@ -116,7 +116,8 @@ func init() {
 // setKey encodes a member the way dict encodes a key, so that membership uses
 // the Python hash/eq protocol rather than Go equality.
 func setKey(item Object) (string, error) {
-	return DictKey(item)
+	k, err := DictKey(item)
+	return k, unhashableAs(err, item, "set element")
 }
 
 // setAdd inserts a member, reporting an unhashable one.

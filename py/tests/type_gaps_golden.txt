@@ -1,0 +1,141 @@
+'SS'
+'ß'
+'Ss'
+'Ss'
+'SS'
+'ss'
+'FI'
+'ﬁ'
+'Fi'
+'Fi'
+'FI'
+'fi'
+'İ'
+'i̇'
+'İ'
+'İ'
+'i̇'
+'i̇'
+'Ǆ'
+'ǆ'
+'ǅ'
+'ǅ'
+'Ǆ'
+'ǆ'
+'ΑΣ'
+'ας'
+'Ας'
+'Ας'
+'ας'
+'ασ'
+'ʼN'
+'ŉ'
+'ʼN'
+'ʼN'
+'ʼN'
+'ʼn'
+'J̌'
+'ǰ'
+'J̌'
+'J̌'
+'J̌'
+'ǰ'
+OverflowError cannot convert float infinity to integer
+ValueError cannot convert float NaN to integer
+inf
+nan
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+ZeroDivisionError division by zero
+OverflowError 34 2
+OverflowError 34 2
+True
+<class 'complex'>
+[1, 1]
+1.732050808
+1.0
+ZeroDivisionError zero to a negative power
+1.4142135623730951
+{1.0: 'b'}
+{1: 'z'}
+{1}
+{0}
+{1180591620717411303424: 2}
+1
+1
+frozenset({1})
+1
+TypeError cannot use 'list' as a dict key (unhashable type: 'list')
+TypeError cannot use 'list' as a dict key (unhashable type: 'list')
+TypeError cannot use 'list' as a set element (unhashable type: 'list')
+TypeError cannot use 'list' as a set element (unhashable type: 'list')
+TypeError cannot use 'list' as a set element (unhashable type: 'list')
+TypeError cannot use 'list' as a dict key (unhashable type: 'list')
+TypeError cannot use 'dict' as a dict key (unhashable type: 'dict')
+TypeError cannot use 'list' as a dict key (unhashable type: 'list')
+TypeError cannot use 'list' as a set element (unhashable type: 'list')
+TypeError cannot use 'list' as a set element (unhashable type: 'list')
+TypeError cannot use 'list' as a dict key (unhashable type: 'list')
+TypeError cannot use 'tuple' as a dict key (unhashable type: 'list')
+'"é€😀"'
+'"\\u00e9\\u20ac\\ud83d\\ude00"'
+'{\n "é": "ü"\n}'
+TypeError Object of type object is not JSON serializable
+TypeError Object of type set is not JSON serializable
+'NaN'
+ValueError Out of range float values are not JSON compliant: nan
+JSONDecodeError Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+JSONDecodeError Expecting value: line 1 column 1 (char 0)
+JSONDecodeError Illegal trailing comma before end of array: line 1 column 3 (char 2)
+JSONDecodeError Illegal trailing comma before end of object: line 1 column 7 (char 6)
+JSONDecodeError Expecting value: line 1 column 1 (char 0)
+JSONDecodeError Expecting ':' delimiter: line 1 column 6 (char 5)
+JSONDecodeError Expecting value: line 2 column 2 (char 6)
+JSONDecodeError Unterminated string starting at: line 1 column 1 (char 0)
+JSONDecodeError Invalid \escape: line 1 column 2 (char 1)
+JSONDecodeError Extra data: line 1 column 3 (char 2)
+JSONDecodeError Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+JSONDecodeError Expecting value: line 1 column 1 (char 0)
+JSONDecodeError Invalid control character at: line 1 column 3 (char 2)
+Expecting value 3 2 9 [1,
+ 2,
+ x]
+[1]
+TypeError the JSON object must be str, bytes or bytearray, not NoneType
+2 msg f None (2, 'msg') [Errno 2] msg: 'f' FileNotFoundError(2, 'msg') <class 'FileNotFoundError'>
+FileNotFoundError 2 x None None (2, 'x') [Errno 2] x FileNotFoundError(2, 'x')
+PermissionError 13 x None None (13, 'x') [Errno 13] x PermissionError(13, 'x')
+FileExistsError 17 x None None (17, 'x') [Errno 17] x FileExistsError(17, 'x')
+PermissionError 1 x None None (1, 'x') [Errno 1] x PermissionError(1, 'x')
+OSError None None None None ()  OSError()
+OSError None None None None (5,) 5 OSError(5)
+OSError None None None None ('a',) a OSError('a')
+FileNotFoundError 2 x f g (2, 'x') [Errno 2] x: 'f' -> 'g' FileNotFoundError(2, 'x')
+BrokenPipeError 32 x None None (32, 'x') [Errno 32] x BrokenPipeError(32, 'x')
+EAGAIN BlockingIOError True True
+ETIMEDOUT TimeoutError True True
+ECHILD ChildProcessError True True
+EINTR InterruptedError True True
+ECONNREFUSED ConnectionRefusedError True True
+ESRCH ProcessLookupError True True
+EISDIR IsADirectoryError True True
+ENOTDIR NotADirectoryError True True
+FileNotFoundError 2 [Errno 2] x: 'f'
+None ('x',) x
+M 2 [Errno 2] x
+'    x'
+'      3.14'
+'a   '
+'  a  '
+ValueError Max string recursion exceeded
+KeyError 'w'
+ValueError cannot switch from automatic field numbering to manual field specification
+ValueError Negative zero coercion (z) not allowed in string format specifier
+'   a'
+'    x'
+ValueError Invalid format specifier '>{}' for object of type 'str'

@@ -15,6 +15,7 @@ package json
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -93,6 +94,10 @@ type Encoder struct {
 	itemSep   string
 	keySep    string
 	defaultFn py.Object
+	// raw is ensure_ascii=False: non-ASCII is written as it is.
+	raw bool
+	// noNaN is allow_nan=False: nan and the infinities are an error.
+	noNaN bool
 }
 
 var EncoderType = py.NewTypeX("json.JSONEncoder", "Extensible JSON encoder for Python data structures.", func(metatype *py.Type, args py.Tuple, kwargs py.StringDict) (py.Object, error) {
@@ -129,10 +134,20 @@ func (e *Encoder) configure(args py.Tuple, kwargs py.StringDict) error {
 			seps = v
 		case "default":
 			e.defaultFn = v
-		case "ensure_ascii", "check_circular", "allow_nan":
-			// Accepted and ignored: this encoder always writes ASCII-safe
-			// output, always checks for cycles, and always allows the
-			// non-finite values.
+		case "ensure_ascii":
+			t, err := py.MakeBool(v)
+			if err != nil {
+				return err
+			}
+			e.raw = t == py.False
+		case "allow_nan":
+			t, err := py.MakeBool(v)
+			if err != nil {
+				return err
+			}
+			e.noNaN = t == py.False
+		case "check_circular":
+			// Accepted and ignored: cycles are always checked.
 		default:
 			return py.ExceptionNewf(py.TypeError, "unexpected keyword argument %q", k)
 		}
@@ -219,21 +234,21 @@ func (e *Encoder) encodeValue(obj py.Object, depth int, seen map[uintptr]bool) (
 	case *py.BigInt:
 		return bigIntText(v), nil
 	case py.Float:
+		if e.noNaN && (v != v || math.IsInf(float64(v), 0)) {
+			return "", py.ExceptionNewf(py.ValueError, "Out of range float values are not JSON compliant: %s", map[string]string{NAN: "nan", INFINITY: "inf", NEG_INFINITY: "-inf"}[formatFloat(float64(v))])
+		}
 		return formatFloat(float64(v)), nil
 	case py.String:
-		return encodeString(string(v)), nil
+		return e.encodeString(string(v)), nil
 	}
 
 	// The containers are checked by protocol as well as by type, so a
 	// subclass of dict or a collections.OrderedDict serialises too.
-	if d, ok := obj.(py.IGetDict); ok {
+	if d, ok := obj.(py.IGetDict); ok && obj.Type().IsSubtype(py.StringDictType) {
 		return e.encodeDict(obj, d.GetDict(), depth, seen)
 	}
-	if obj.Type() == py.ListType || obj.Type() == py.TupleType {
+	if t := obj.Type(); t.IsSubtype(py.ListType) || t.IsSubtype(py.TupleType) {
 		return e.encodeList(obj, depth, seen)
-	}
-	if items, err := sequenceItems(obj); err == nil && items != nil {
-		return e.encodeItems(items, depth, seen)
 	}
 
 	// A custom default() may handle it, which is how a decorated class or a
@@ -275,13 +290,13 @@ func (e *Encoder) encodeDict(obj py.Object, d py.StringDict, depth int, seen map
 		var keyText string
 		switch k := key.(type) {
 		case py.String:
-			keyText = encodeString(string(k))
+			keyText = e.encodeString(string(k))
 		case py.Int:
 			// An int key is written as a quoted number.
-			keyText = encodeString(strconv.FormatInt(int64(k), 10))
+			keyText = e.encodeString(strconv.FormatInt(int64(k), 10))
 		case py.Bool, py.Float, py.NoneType:
 			if text, err := py.ReprAsString(key); err == nil {
-				keyText = encodeString(text)
+				keyText = e.encodeString(text)
 			}
 		default:
 			if e.skipkeys {
@@ -362,26 +377,6 @@ func (e *Encoder) encodeItems(items []py.Object, depth int, seen map[uintptr]boo
 	return "[\n" + strings.Join(parts, e.itemSep+"\n") + "\n" + padEnd + "]", nil
 }
 
-// sequenceItems returns the items of any other sequence, so that a list
-// subclass or a collections.deque serialises as an array.
-func sequenceItems(obj py.Object) ([]py.Object, error) {
-	iterObj, err := py.Iter(obj)
-	if err != nil {
-		return nil, err
-	}
-	items := []py.Object{}
-	for {
-		item, err := py.Next(iterObj)
-		if err != nil {
-			if py.IsException(py.StopIteration, err) {
-				return items, nil
-			}
-			return nil, err
-		}
-		items = append(items, item)
-	}
-}
-
 // formatFloat matches Python's repr of a float, with the JSON spellings of
 // the non-finite values.
 func formatFloat(f float64) string {
@@ -403,8 +398,9 @@ func formatFloat(f float64) string {
 }
 
 // encodeString writes a JSON string, escaping what must be escaped and
-// keeping everything else as printable ASCII, as CPython does by default.
-func encodeString(s string) string {
+// keeping everything else as printable ASCII, as CPython does by default
+// (ensure_ascii=False keeps non-ASCII as it is).
+func (e *Encoder) encodeString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
 	for _, r := range s {
@@ -426,7 +422,7 @@ func encodeString(s string) string {
 		default:
 			if r < 0x20 {
 				fmt.Fprintf(&b, `\u%04x`, r)
-			} else if r < 0x7f {
+			} else if r < 0x7f || e.raw {
 				b.WriteRune(r)
 			} else {
 				// Non-ASCII is written as \uXXXX, with surrogate pairs above
@@ -549,10 +545,17 @@ type decoder struct {
 }
 
 // error builds a JSONDecodeError describing the failure, as CPython does.
-func (d *decoder) error(msg string) error {
-	line, col := 1, 1
-	for i := 0; i < d.pos && i < len(d.src); i++ {
-		if d.src[i] == '\n' {
+func (d *decoder) error(msg string) error { return d.errorAt(msg, d.pos) }
+
+// errorAt is error for position bytePos, which it reports in characters.
+func (d *decoder) errorAt(msg string, bytePos int) error {
+	line, col, pos := 1, 1, 0
+	for i, r := range d.src {
+		if i >= bytePos {
+			break
+		}
+		pos++
+		if r == '\n' {
 			line++
 			col = 1
 		} else {
@@ -560,7 +563,7 @@ func (d *decoder) error(msg string) error {
 		}
 	}
 	e, err := py.ExceptionNew(JSONDecodeErrorType, py.Tuple{
-		py.String(msg), py.String(d.src), py.Int(d.pos),
+		py.String(fmt.Sprintf("%s: line %d column %d (char %d)", msg, line, col, pos)),
 	}, py.StringDict{})
 	if err != nil {
 		return err
@@ -576,7 +579,7 @@ func (d *decoder) error(msg string) error {
 	// are string keys and a string key is stored verbatim.
 	exc.Dict.Set("msg", py.String(msg))
 	exc.Dict.Set("doc", py.String(d.src))
-	exc.Dict.Set("pos", py.Int(d.pos))
+	exc.Dict.Set("pos", py.Int(pos))
 	exc.Dict.Set("lineno", py.Int(line))
 	exc.Dict.Set("colno", py.Int(col))
 	return exc
@@ -691,7 +694,12 @@ func (d *decoder) parseObject() (py.Object, error) {
 		}
 		switch d.src[d.pos] {
 		case ',':
+			comma := d.pos
 			d.pos++
+			d.skipSpace()
+			if d.pos < len(d.src) && d.src[d.pos] == '}' {
+				return nil, d.errorAt("Illegal trailing comma before end of object", comma)
+			}
 		case '}':
 			d.pos++
 			return d.applyObjectHooks(result, pairs)
@@ -733,7 +741,12 @@ func (d *decoder) parseArray() (py.Object, error) {
 		}
 		switch d.src[d.pos] {
 		case ',':
+			comma := d.pos
 			d.pos++
+			d.skipSpace()
+			if d.pos < len(d.src) && d.src[d.pos] == ']' {
+				return nil, d.errorAt("Illegal trailing comma before end of array", comma)
+			}
 		case ']':
 			d.pos++
 			return py.NewListFromItems(items), nil
@@ -744,6 +757,7 @@ func (d *decoder) parseArray() (py.Object, error) {
 }
 
 func (d *decoder) parseString() (py.Object, error) {
+	start := d.pos
 	d.pos++ // "
 	var b strings.Builder
 	for d.pos < len(d.src) {
@@ -755,7 +769,7 @@ func (d *decoder) parseString() (py.Object, error) {
 		case c == '\\':
 			d.pos++
 			if d.pos >= len(d.src) {
-				return nil, d.error("Unterminated string starting at")
+				return nil, d.errorAt("Unterminated string starting at", start)
 			}
 			switch d.src[d.pos] {
 			case '"':
@@ -782,17 +796,17 @@ func (d *decoder) parseString() (py.Object, error) {
 				b.WriteRune(r)
 				continue
 			default:
-				return nil, d.error("Invalid \\escape")
+				return nil, d.errorAt("Invalid \\escape", d.pos-1)
 			}
 			d.pos++
 		case c < 0x20:
-			return nil, d.error("Invalid control character")
+			return nil, d.error("Invalid control character at")
 		default:
 			b.WriteByte(c)
 			d.pos++
 		}
 	}
-	return nil, d.error("Unterminated string starting at")
+	return nil, d.errorAt("Unterminated string starting at", start)
 }
 
 // parseUnicodeEscape reads \uXXXX, combining a surrogate pair into one rune.

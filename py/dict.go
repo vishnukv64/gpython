@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 )
 
 const dictDoc = `dict() -> new empty dictionary
@@ -493,6 +495,30 @@ type dictShared struct {
 	// "concurrent map read and map write".  It is a lock per dict, as list has
 	// one, and it is never held while Python code runs (see find).
 	mu sync.RWMutex
+	// version counts mutations (Set, Del, Clear), read atomically by the
+	// VM's global and attribute caches.  It only ever grows, so a cache that
+	// recorded a version is valid exactly while the dict still reports it.
+	version uint64
+	// watched is set once a class namespace has been searched by an
+	// attribute inline cache; mutating a watched dict advances typeEpoch.
+	watched uint32
+}
+
+// bumpVersion records one mutation.  Called with mu held.
+func (s *dictShared) bumpVersion() {
+	atomic.AddUint64(&s.version, 1)
+	if atomic.LoadUint32(&s.watched) != 0 {
+		typeEpoch.Add(1)
+	}
+}
+
+// Version identifies this dict's storage and its mutation count, for inline
+// caches.  The id is nil for a dict that has never been written to.
+func (d StringDict) Version() (id unsafe.Pointer, version uint64) {
+	if d.shared == nil {
+		return nil, 0
+	}
+	return unsafe.Pointer(d.shared), atomic.LoadUint64(&d.shared.version)
 }
 
 type StringDict struct {
@@ -579,6 +605,7 @@ func (d *StringDict) Set(key string, value Object) {
 	// value - the interpreter has no nil value, None is a real type - so the
 	// test is unambiguous.
 	shared.mu.Lock()
+	shared.bumpVersion()
 	prev := d.m[key]
 	d.m[key] = value
 	if prev == nil {
@@ -600,6 +627,7 @@ func (d *StringDict) Del(key string) bool {
 	if _, ok := d.m[key]; !ok {
 		return false
 	}
+	d.shared.bumpVersion()
 	delete(d.m, key)
 	keys := d.shared.order
 	for i, k := range keys {
@@ -652,7 +680,7 @@ func (d *StringDict) hashSet(bucket string, key, value Object) error {
 func (d StringDict) keyCode(key Object) (string, bool, error) {
 	encoded, err := dictKey(key)
 	if err != nil {
-		return "", false, err
+		return "", false, unhashableAs(err, key, "dict key")
 	}
 	if !isHashKey(encoded) {
 		return encoded, d.Has(encoded), nil
@@ -672,7 +700,7 @@ func (d StringDict) keyCode(key Object) (string, bool, error) {
 func (d StringDict) setItem(key, value Object) error {
 	encoded, err := dictKey(key)
 	if err != nil {
-		return err
+		return unhashableAs(err, key, "dict key")
 	}
 	if isHashKey(encoded) {
 		return d.hashSet(encoded, key, value)
@@ -689,6 +717,9 @@ func (d StringDict) setItem(key, value Object) error {
 func keyNeedsObj(key Object) bool {
 	if _, isBool := key.(Bool); isBool {
 		return true
+	}
+	if f, isFloat := key.(Float); isFloat {
+		return float64(f) == math.Trunc(float64(f)) && !math.IsInf(float64(f), 0)
 	}
 	if _, isPayload := payloadOf(key); isPayload {
 		return true
@@ -854,6 +885,7 @@ func (d *StringDict) Clear() {
 	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
+	d.shared.bumpVersion()
 	for k := range d.m {
 		delete(d.m, k)
 	}
@@ -1124,6 +1156,21 @@ func appendKey(b *[]byte, key Object) error {
 			*b = append(*b, '0')
 		}
 	case Float:
+		// An integral float IS the int it equals (hash(1.0) == hash(1) and
+		// 1.0 == 1), so it takes the int's encoding and the two collapse.
+		if f := float64(k); f == math.Trunc(f) && !math.IsInf(f, 0) {
+			if f >= -(1<<63) && f < 1<<63 {
+				*b = append(*b, keyTag...)
+				*b = append(*b, 'i')
+				*b = strconv.AppendInt(*b, int64(f), 10)
+			} else {
+				bi, _ := big.NewFloat(f).Int(nil)
+				*b = append(*b, keyTag...)
+				*b = append(*b, 'I')
+				*b = append(*b, bi.String()...)
+			}
+			return nil
+		}
 		*b = append(*b, keyTag...)
 		*b = append(*b, 'f')
 		*b = strconv.AppendUint(*b, math.Float64bits(float64(k)), 16)
@@ -1433,6 +1480,19 @@ func HashValue(o Object) (int64, bool) {
 		return 0, false
 	}
 	return int64(n), true
+}
+
+// unhashableAs rewrites dict/set's "unhashable type" into CPython's
+// "cannot use 'X' as a dict key (unhashable type: 'Y')".
+func unhashableAs(err error, key Object, what string) error {
+	if e, ok := err.(*Exception); ok && e.Base == TypeError {
+		if a, ok := e.Args.(Tuple); ok && len(a) == 1 {
+			if m, ok := a[0].(String); ok && strings.HasPrefix(string(m), "unhashable type: ") {
+				return ExceptionNewf(TypeError, "cannot use '%s' as a %s (%s)", key.Type().Name, what, m)
+			}
+		}
+	}
+	return err
 }
 
 // DictKey encodes an object into the string form used to store dict keys.
@@ -1760,7 +1820,10 @@ func (d StringDict) M__iter__() (Object, error) {
 
 func (d StringDict) M__getitem__(key Object) (Object, error) {
 	encoded, ok, err := d.keyCode(key)
-	if err == nil && ok {
+	if err != nil {
+		return nil, err
+	}
+	if ok {
 		return d.GetOrNil(encoded), nil
 	}
 	return nil, keyError(key)
@@ -1769,7 +1832,7 @@ func (d StringDict) M__getitem__(key Object) (Object, error) {
 func (d StringDict) M__delitem__(key Object) (Object, error) {
 	encoded, ok, err := d.keyCode(key)
 	if err != nil {
-		return nil, keyError(key)
+		return nil, err
 	}
 	if !ok {
 		return nil, keyError(key)

@@ -384,40 +384,11 @@ characters to map to None.`))
 	}, 0, "splitlines(keepends=False) -> a list of the lines, breaking at line boundaries"))
 
 	StringType.Dict.Set("casefold", MustNewMethod("casefold", func(self Object, args Tuple) (Object, error) {
-		// Full case folding is lower() plus the extra folds.  lowerString is the
-		// one that EXPANDS where Go cannot - Go's strings.ToLower maps rune to
-		// rune, so it silently drops the combining dot that the dotted capital
-		// I folds to.  The sharp s needs the extra pass because it is a fold
-		// rather than a lower-case mapping.
-		s := lowerString(string(self.(String)))
-		if strings.ContainsRune(s, 'ß') {
-			s = strings.ReplaceAll(s, "ß", "ss")
-		}
-		return String(s), nil
+		return String(casefoldString(string(self.(String)))), nil
 	}, 0, "casefold() -> a casefolded copy, for caseless matching"))
 
 	StringType.Dict.Set("title", MustNewMethod("title", func(self Object, args Tuple) (Object, error) {
-		// Each run of ALPHABETIC characters starts uppercase and the rest are
-		// lowercase, so "they're bill's".title() is "They'Re Bill'S" - the
-		// apostrophe is not alphabetic, so the letter after it is capitalised.
-		s := string(self.(String))
-		var out strings.Builder
-		prevAlpha := false
-		for _, r := range s {
-			switch {
-			case unicode.IsLetter(r):
-				if prevAlpha {
-					out.WriteRune(unicode.ToLower(r))
-				} else {
-					out.WriteRune(unicode.ToTitle(r))
-				}
-				prevAlpha = true
-			default:
-				out.WriteRune(r)
-				prevAlpha = false
-			}
-		}
-		return String(out.String()), nil
+		return String(titleString(string(self.(String)))), nil
 	}, 0, "title() -> a titlecased copy: each word starts uppercase, the rest lowercase"))
 
 	// format(*args, **kwargs) - the format-string mini-language.
@@ -441,30 +412,11 @@ characters to map to None.`))
 	}, 0, "format_map(mapping) -> like format(**mapping), taking one mapping"))
 
 	StringType.Dict.Set("capitalize", MustNewMethod("capitalize", func(self Object, args Tuple) (Object, error) {
-		// The first character to TITLE case and EVERY OTHER character to
-		// lowercase, so "hELLO".capitalize() is "Hello".
-		s := string(self.(String))
-		if s == "" {
-			return String(""), nil
-		}
-		r := []rune(s)
-		return String(string(unicode.ToTitle(r[0])) + strings.ToLower(string(r[1:]))), nil
+		return String(capitalizeString(string(self.(String)))), nil
 	}, 0, "capitalize() -> the first character titlecased and the rest lowercased"))
 
 	StringType.Dict.Set("swapcase", MustNewMethod("swapcase", func(self Object, args Tuple) (Object, error) {
-		s := string(self.(String))
-		var out strings.Builder
-		for _, r := range s {
-			switch {
-			case unicode.IsUpper(r):
-				out.WriteRune(unicode.ToLower(r))
-			case unicode.IsLower(r):
-				out.WriteRune(unicode.ToUpper(r))
-			default:
-				out.WriteRune(r)
-			}
-		}
-		return String(out.String()), nil
+		return String(swapcaseString(string(self.(String)))), nil
 	}, 0, "swapcase() -> lowercase characters uppercased and vice versa"))
 
 	// isidentifier() says whether the string is usable as an identifier, which
@@ -1756,7 +1708,7 @@ func formatPython(format string, args Tuple, kwargs StringDict) (Object, error) 
 
 // formatPythonN is formatPython with the field-numbering state supplied, so a
 // nested spec like "{:{}d}" continues the outer's automatic numbering.
-func formatPythonN(format string, args Tuple, kwargs StringDict, autoNum *int, manual *bool) (Object, error) {
+func formatPythonN(format string, args Tuple, kwargs StringDict, autoNum *int, manual *bool, nested ...bool) (Object, error) {
 	var out strings.Builder
 	runes := []rune(format)
 	for i := 0; i < len(runes); i++ {
@@ -1781,7 +1733,7 @@ func formatPythonN(format string, args Tuple, kwargs StringDict, autoNum *int, m
 				return nil, ExceptionNewf(ValueError, "Single '{' encountered in format string")
 			}
 			body := string(runes[i+1 : j-1])
-			text, err := formatField(body, args, kwargs, autoNum, manual)
+			text, err := formatField(body, args, kwargs, autoNum, manual, len(nested) > 0)
 			if err != nil {
 				return nil, err
 			}
@@ -1841,7 +1793,7 @@ func formatPythonMapping(format string, mapping Object) (Object, error) {
 }
 
 // formatField resolves and renders one {field}.
-func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manual *bool) (string, error) {
+func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manual *bool, nested bool) (string, error) {
 	name, conv, spec := splitField(body)
 
 	// The name may be a chain: "0.attr", "0[key]" or "name.attr[0]".  The
@@ -1861,6 +1813,9 @@ func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manua
 		}
 		value = args[*autoNum]
 	} else if isDigits(name) {
+		if *autoNum >= 0 {
+			return "", ExceptionNewf(ValueError, "cannot switch from automatic field numbering to manual field specification")
+		}
 		*manual = true
 		n := 0
 		for _, r := range name {
@@ -1871,10 +1826,9 @@ func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manua
 		}
 		value = args[n]
 	} else {
-		*manual = true
 		v, ok := kwargs.Get(name)
 		if !ok {
-			return "", ExceptionNewf(KeyError, "'%s'", name)
+			return "", keyError(String(name))
 		}
 		value = v
 	}
@@ -1920,7 +1874,10 @@ func formatField(body string, args Tuple, kwargs StringDict, autoNum *int, manua
 	}
 
 	if strings.Contains(spec, "{") {
-		exp, err := formatPythonN(spec, args, kwargs, autoNum, manual)
+		if nested {
+			return "", ExceptionNewf(ValueError, "Max string recursion exceeded")
+		}
+		exp, err := formatPythonN(spec, args, kwargs, autoNum, manual, true)
 		if err != nil {
 			return "", err
 		}
@@ -2519,13 +2476,10 @@ func lowerString(s string) string {
 	if isASCII(s) {
 		return strings.ToLower(s)
 	}
+	rs := []rune(s)
 	var out strings.Builder
-	for _, r := range s {
-		if repl, ok := specialLower[r]; ok {
-			out.WriteString(string(repl))
-			continue
-		}
-		out.WriteRune(unicode.ToLower(r))
+	for i := range rs {
+		writeLower(&out, rs, i)
 	}
 	return out.String()
 }

@@ -199,7 +199,7 @@ func formatString(value, spec string) (Object, error) {
 	case f.sign != 0:
 		return nil, ExceptionNewf(ValueError, "Sign not allowed in string format specifier")
 	case f.zeroCoerc:
-		return nil, ExceptionNewf(ValueError, "Negative zero coercion (z) not allowed in format specifier")
+		return nil, ExceptionNewf(ValueError, "Negative zero coercion (z) not allowed in string format specifier")
 	case f.alt:
 		return nil, ExceptionNewf(ValueError, "Alternate form (#) not allowed in string format specifier")
 	case f.align == '=':

@@ -9,6 +9,7 @@ package py
 import (
 	"math"
 	"math/big"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -171,7 +172,7 @@ func FloatAsFloat64(obj Object) (float64, error) {
 // floatDivisionByZero is a fresh exception each time: one shared instance
 // would collect the traceback of every division by zero.
 func floatDivisionByZero() *Exception {
-	return ExceptionNewf(ZeroDivisionError, "float division by zero")
+	return ExceptionNewf(ZeroDivisionError, "division by zero")
 }
 
 // Convert an Object to an Float
@@ -282,14 +283,16 @@ func (a Float) M__itruediv__(other Object) (Object, error) {
 
 func (a Float) M__floordiv__(other Object) (Object, error) {
 	if b, ok := convertToFloat(other); ok {
-		return Float(math.Floor(float64(a / b))), nil
+		q, _, err := floatDivMod(a, b)
+		return q, err
 	}
 	return NotImplemented, nil
 }
 
 func (a Float) M__rfloordiv__(other Object) (Object, error) {
 	if b, ok := convertToFloat(other); ok {
-		return Float(math.Floor(float64(b / a))), nil
+		q, _, err := floatDivMod(b, a)
+		return q, err
 	}
 	return NotImplemented, nil
 }
@@ -298,14 +301,32 @@ func (a Float) M__ifloordiv__(other Object) (Object, error) {
 	return a.M__floordiv__(other)
 }
 
-// Does DivMod of two floating point numbers
+// floatDivMod is CPython's float_divmod: the remainder is fmod adjusted to
+// the divisor's sign, so it is exact, and the quotient is the rounded floor.
 func floatDivMod(a, b Float) (Float, Float, error) {
 	if b == 0 {
 		return 0, 0, floatDivisionByZero()
 	}
-	q := Float(math.Floor(float64(a / b)))
-	r := a - q*b
-	return q, Float(r), nil
+	mod := math.Mod(float64(a), float64(b))
+	div := (float64(a) - mod) / float64(b)
+	if mod != 0 {
+		if (b < 0) != (mod < 0) {
+			mod += float64(b)
+			div--
+		}
+	} else {
+		mod = math.Copysign(0, float64(b))
+	}
+	var q float64
+	if div != 0 {
+		q = math.Floor(div)
+		if div-q > 0.5 {
+			q++
+		}
+	} else {
+		q = math.Copysign(0, float64(a)/float64(b))
+	}
+	return Float(q), Float(mod), nil
 }
 
 func (a Float) M__mod__(other Object) (Object, error) {
@@ -347,16 +368,34 @@ func (a Float) M__pow__(other, modulus Object) (Object, error) {
 		return NotImplemented, nil
 	}
 	if b, ok := convertToFloat(other); ok {
-		return Float(math.Pow(float64(a), float64(b))), nil
+		return floatPow(a, b)
 	}
 	return NotImplemented, nil
 }
 
 func (a Float) M__rpow__(other Object) (Object, error) {
 	if b, ok := convertToFloat(other); ok {
-		return Float(math.Pow(float64(b), float64(a))), nil
+		return floatPow(b, a)
 	}
 	return NotImplemented, nil
+}
+
+// floatPow is CPython's float_pow: a finite base and exponent that overflow
+// raise OverflowError, 0.0 to a negative power raises ZeroDivisionError, and a
+// negative base with a fractional exponent gives a complex result.
+func floatPow(v, w Float) (Object, error) {
+	x, y := float64(v), float64(w)
+	if x == 0 && y < 0 {
+		return nil, ExceptionNewf(ZeroDivisionError, "zero to a negative power")
+	}
+	if x < 0 && !math.IsInf(x, 0) && !math.IsInf(y, 0) && y != math.Floor(y) {
+		return Complex(complex(x, 0)).M__pow__(Complex(complex(y, 0)), None)
+	}
+	r := math.Pow(x, y)
+	if math.IsInf(r, 0) && !math.IsInf(x, 0) && !math.IsInf(y, 0) {
+		return nil, newErrnoRangeError()
+	}
+	return Float(r), nil
 }
 
 func (a Float) M__ipow__(other, modulus Object) (Object, error) {
@@ -399,7 +438,14 @@ func (a Float) M__round__(digitsObj Object) (Object, error) {
 	if digitsObj == None {
 		// No ndigits: round to the nearest whole number and return an INT,
 		// as CPython does - round(2.5) is 2, not 2.0.
-		return Int(math.RoundToEven(float64(a))), nil
+		f := math.RoundToEven(float64(a))
+		if math.IsInf(f, 0) {
+			return nil, ExceptionNewf(OverflowError, "cannot convert float infinity to integer")
+		}
+		if math.IsNaN(f) {
+			return nil, ExceptionNewf(ValueError, "cannot convert float NaN to integer")
+		}
+		return Float(f).M__int__()
 	}
 	digits, err := MakeGoInt(digitsObj)
 	if err != nil {
@@ -411,6 +457,9 @@ func (a Float) M__round__(digitsObj Object) (Object, error) {
 	// introduces its own error and 2.675*100 lands exactly on 267.5 - so the
 	// value goes through Go's correctly rounded decimal conversion, which
 	// resolves the tie on the true value, and back.
+	if math.IsInf(float64(a), 0) || math.IsNaN(float64(a)) {
+		return a, nil
+	}
 	if digits >= 0 {
 		v, err := strconv.ParseFloat(strconv.FormatFloat(float64(a), 'f', digits, 64), 64)
 		if err != nil {
@@ -510,4 +559,15 @@ func init() {
 	FloatType.Dict.Set("real", &Property{Fget: func(s Object) (Object, error) { return s, nil }})
 	FloatType.Dict.Set("imag", &Property{Fget: func(Object) (Object, error) { return Float(0), nil }})
 	FloatType.Dict.Set("conjugate", MustNewMethod("conjugate", func(s Object) (Object, error) { return s, nil }, 0, "Return self."))
+}
+
+// newErrnoRangeError is OverflowError(34, strerror(ERANGE)) as C's math
+// functions raise it.  The text is the platform's: Linux says "Numerical
+// result out of range", macOS and Windows "Result too large".
+func newErrnoRangeError() *Exception {
+	msg := "Result too large"
+	if runtime.GOOS == "linux" {
+		msg = "Numerical result out of range"
+	}
+	return &Exception{Base: OverflowError, Args: Tuple{Int(34), String(msg)}, Dict: NewStringDict()}
 }
