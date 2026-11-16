@@ -39,7 +39,7 @@ const (
 	NAN          = "NaN"
 )
 
-var JSONDecodeErrorType = py.ExceptionType.NewType("json.JSONDecodeError", "JSON decoding error.", nil, nil)
+var JSONDecodeErrorType = py.ValueError.NewType("json.JSONDecodeError", "JSON decoding error.", nil, nil)
 
 func init() {
 	globals := py.NewStringDict()
@@ -156,24 +156,20 @@ func (e *Encoder) configure(args py.Tuple, kwargs py.StringDict) error {
 	e.sortKeys = sortKeys == py.True
 
 	if indent != py.None {
-		// CPython: a string indent is used as it is, a number is that many
-		// spaces, and None or "" means no newlines.
+		// CPython: any indent other than None turns on newlines. A string is
+		// used as it is; a number is that many spaces, and a negative number
+		// is zero spaces (newlines only, no indentation).
 		switch v := indent.(type) {
 		case py.String:
-			if v != "" {
-				e.indent = string(v)
-				e.hasIndent = true
-			}
+			e.indent = string(v)
 		default:
 			n, err := py.IndexInt(indent)
 			if err != nil {
 				return py.ExceptionNewf(py.TypeError, "indent must be an int or a string")
 			}
-			if n > 0 {
-				e.indent = strings.Repeat(" ", n)
-				e.hasIndent = true
-			}
+			e.indent = strings.Repeat(" ", max(n, 0))
 		}
+		e.hasIndent = true
 	}
 
 	if seps != py.None {
@@ -388,10 +384,16 @@ func formatFloat(f float64) string {
 	case f < -1.7976931348623157e308:
 		return NEG_INFINITY
 	}
-	text := strconv.FormatFloat(f, 'g', -1, 64)
-	// Go writes exponents as 1e+10; Python omits the plus.
-	text = strings.Replace(text, "e+", "e+", 1)
-	if !strings.ContainsAny(text, ".eE") {
+	// Python's repr: shortest round-trip digits, scientific notation only when
+	// the decimal exponent is below -4 or at least 16. Go's 'e' form has the
+	// same digits and exponent spelling (1e+16, 1e-05) as Python's.
+	sci := strconv.FormatFloat(f, 'e', -1, 64)
+	exp, _ := strconv.Atoi(sci[strings.IndexByte(sci, 'e')+1:])
+	if exp < -4 || exp >= 16 {
+		return sci
+	}
+	text := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(text, ".") {
 		text += ".0"
 	}
 	return text
