@@ -288,6 +288,10 @@ func ensureFromlist(ctx Context, mod *Module, modName string, fromlist Tuple) er
 		if _, err := ctx.GetModule(full); err == nil {
 			continue
 		}
+		// A package's fromlist must not load a submodule the host refused.
+		if err := checkImportFilter(ctx, full); err != nil {
+			return err
+		}
 		if impl := GetModuleImpl(full); impl != nil {
 			subMod, err := ctx.ModuleInit(impl)
 			if err != nil {

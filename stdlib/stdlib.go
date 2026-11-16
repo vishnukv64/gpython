@@ -469,6 +469,11 @@ func (ctx *context) GetModule(moduleName string) (*py.Module, error) {
 }
 
 // See interface py.Context defined in py/run.go
+func (ctx *context) ImportFilter() func(name string) error {
+	return ctx.opts.ImportFilter
+}
+
+// See interface py.Context defined in py/run.go
 func (ctx *context) Store() *py.ModuleStore {
 	return ctx.store
 }

@@ -15,7 +15,16 @@ import (
 // tables) is synchronised.
 const concurrentSrc = `
 import sys, io, re, json, collections, datetime, string, textwrap, itertools, functools
+import contextlib, pathlib, shutil
 sys.stdout = io.StringIO()
+with contextlib.nullcontext(): pass
+pathlib.PurePath("a/b")
+@contextlib.contextmanager
+def tagged():
+    yield 7
+@tagged()
+def probe():
+    return 42
 d = collections.OrderedDict()
 stamp = datetime.date(2026, 11, 16).isoformat()
 words = textwrap.fill(string.ascii_letters, 20)
@@ -25,7 +34,7 @@ total = 0
 for i in range(2000):
     d[str(i)] = i
     total += len(re.findall(r"\d", str(i)))
-out = json.dumps({"n": len(d), "digits": total, "stamp": stamp, "combos": combos, "sq": sq})
+out = json.dumps({"n": len(d), "digits": total, "stamp": stamp, "combos": combos, "sq": sq, "probe": probe()})
 print(out)
 result = sys.stdout.getvalue()
 `
@@ -33,7 +42,7 @@ result = sys.stdout.getvalue()
 func TestManyContextsConcurrent(t *testing.T) {
 	const workers = 8
 	const rounds = 3
-	want := `{"n": 2000, "digits": 6890, "stamp": "2026-11-16", "combos": 20, "sq": 45}` + "\n"
+	want := `{"n": 2000, "digits": 6890, "stamp": "2026-11-16", "combos": 20, "sq": 45, "probe": 42}` + "\n"
 	for r := 0; r < rounds; r++ {
 		var wg sync.WaitGroup
 		errs := make(chan error, workers)
