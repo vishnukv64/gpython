@@ -1,0 +1,5 @@
+..ab.
+*a**
+.x..
+..abc...
+KeyError 'z'
