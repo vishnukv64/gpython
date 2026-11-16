@@ -151,6 +151,10 @@ type context struct {
 	closed    bool
 	running   sync.WaitGroup
 	done      chan struct{}
+	interrupt py.InterruptFlag
+	// runDepth counts nested RunCode calls; the interrupt is cleared when it
+	// returns to zero so a late request cannot stop the next run.
+	runDepth int
 }
 
 // NewContext creates a new gpython interpreter instance context.
@@ -189,23 +193,8 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 	}
 	defer ctx.popBusy()
 
-	if impl.Code == nil && len(impl.CodeSrc) > 0 {
-		impl.Code, err = py.Compile(string(impl.CodeSrc), impl.Info.FileDesc, py.ExecMode, 0, true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if impl.Code == nil && len(impl.CodeBuf) > 0 {
-		codeBuf := bytes.NewBuffer(impl.CodeBuf)
-		obj, err := marshal.ReadObject(codeBuf)
-		if err != nil {
-			return nil, err
-		}
-		impl.Code, _ = obj.(*py.Code)
-		if impl.Code == nil {
-			return nil, py.ExceptionNewf(py.AssertionError, "Embedded code did not produce a py.Code object")
-		}
+	if err := compileModuleImpl(impl); err != nil {
+		return nil, err
 	}
 
 	module, err := ctx.Store().NewModule(ctx, impl)
@@ -228,6 +217,37 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 	}
 
 	return module, nil
+}
+
+// implCompileMu guards the lazy compile of a ModuleImpl's Code.  A ModuleImpl is
+// process-global and shared by every context, so two contexts importing the same
+// module at once would otherwise both write impl.Code.  Only the compile is
+// locked: running the module body can import other modules, which re-enter here.
+var implCompileMu sync.Mutex
+
+func compileModuleImpl(impl *py.ModuleImpl) error {
+	implCompileMu.Lock()
+	defer implCompileMu.Unlock()
+	var err error
+	if impl.Code == nil && len(impl.CodeSrc) > 0 {
+		impl.Code, err = py.Compile(string(impl.CodeSrc), impl.Info.FileDesc, py.ExecMode, 0, true)
+		if err != nil {
+			return err
+		}
+	}
+
+	if impl.Code == nil && len(impl.CodeBuf) > 0 {
+		codeBuf := bytes.NewBuffer(impl.CodeBuf)
+		obj, err := marshal.ReadObject(codeBuf)
+		if err != nil {
+			return err
+		}
+		impl.Code, _ = obj.(*py.Code)
+		if impl.Code == nil {
+			return py.ExceptionNewf(py.AssertionError, "Embedded code did not produce a py.Code object")
+		}
+	}
+	return nil
 }
 
 // See interface py.Context defined in py/run.go
@@ -349,6 +369,11 @@ func (ctx *context) Done() <-chan struct{} {
 	return ctx.done
 }
 
+// See interface py.Context defined in py/run.go
+func (ctx *context) Interrupt() *py.InterruptFlag {
+	return &ctx.interrupt
+}
+
 var defaultPaths = []py.Object{
 	py.String("."),
 }
@@ -423,6 +448,17 @@ func (ctx *context) RunCode(code *py.Code, globals, locals py.StringDict, closur
 		return nil, err
 	}
 	defer ctx.popBusy()
+
+	if ctx.runDepth == 0 {
+		ctx.interrupt.Clear()
+	}
+	ctx.runDepth++
+	defer func() {
+		ctx.runDepth--
+		if ctx.runDepth == 0 {
+			ctx.interrupt.Clear()
+		}
+	}()
 
 	return vm.EvalCode(ctx, code, globals, locals, nil, py.StringDict{}, nil, py.StringDict{}, closure)
 }

@@ -56,4 +56,7 @@ type Vm struct {
 	bareRaisedFrame *py.Frame
 	// VM access to state / modules
 	context py.Context
+	// interrupt is the host's stop request for context, tested before every
+	// instruction.
+	interrupt *py.InterruptFlag
 }

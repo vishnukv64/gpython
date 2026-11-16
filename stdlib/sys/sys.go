@@ -323,14 +323,6 @@ limit prevents infinite recursion from causing an overflow of the C
 stack and crashing Python.  The highest possible limit is platform-
 dependent.`
 
-// recursionLimit is the interpreter's Python-stack depth limit.
-//
-// The value is what getrecursionlimit() reports and setrecursionlimit()
-// changes.  tomli reads it at import time to size its own nesting guard, so it
-// has to answer with a number rather than raise - and a program that sets a
-// limit and reads it back must get what it set.
-var recursionLimit = 1000
-
 func sys_setrecursionlimit(self py.Object, args py.Tuple) (py.Object, error) {
 	var limit py.Object
 	if err := py.UnpackTuple(args, py.StringDict{}, "setrecursionlimit", 1, 1, &limit); err != nil {
@@ -343,7 +335,7 @@ func sys_setrecursionlimit(self py.Object, args py.Tuple) (py.Object, error) {
 	if int64(n) <= 0 {
 		return nil, py.ExceptionNewf(py.ValueError, "recursion limit must be positive")
 	}
-	recursionLimit = int(n)
+	py.RecursionLimit.Store(int64(n))
 	return py.None, nil
 }
 
@@ -402,7 +394,7 @@ of the Python interpreter stack.  This limit prevents infinite
 recursion from causing an overflow of the C stack and crashing Python.`
 
 func sys_getrecursionlimit(self py.Object) (py.Object, error) {
-	return py.Int(recursionLimit), nil
+	return py.Int(py.RecursionLimit.Load()), nil
 }
 
 const getsizeof_doc = `getsizeof(object, default) -> int

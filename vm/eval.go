@@ -2644,6 +2644,17 @@ func (vm *Vm) UnwindExceptHandler(frame *py.Frame, block *py.TryBlock) {
 	}
 }
 
+// interruptOf returns the interrupt flag of ctx, or a flag that is never set when
+// there is no context (frames built without one).
+func interruptOf(ctx py.Context) *py.InterruptFlag {
+	if ctx == nil {
+		return &neverInterrupted
+	}
+	return ctx.Interrupt()
+}
+
+var neverInterrupted py.InterruptFlag
+
 // Run the virtual machine on a Frame object
 //
 // FIXME figure out how we are going to signal exceptions!
@@ -2683,10 +2694,18 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 		gs = gCurrentFrame.state(py.GoroutineID())
 		prevFrame = gs.Cur
 	}
+	// Checked before any frame state is touched, so a refused frame leaves
+	// nothing to undo.  The Go stack would otherwise overflow on runaway
+	// recursion, which cannot be recovered.
+	if int64(gs.Depth) >= py.RecursionLimit.Load() {
+		return nil, py.ExceptionNewf(py.RecursionError, "maximum recursion depth exceeded")
+	}
+	gs.Depth++
 	frame.Back = prevFrame
 	frame.GS = gs
 	gs.Cur = frame
 	defer func() {
+		gs.Depth--
 		gs.Cur = prevFrame
 		if prevFrame == nil {
 			gCurrentFrame.drop(gs.ID)
@@ -2694,8 +2713,9 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 	}()
 
 	var vm = Vm{
-		frame:   frame,
-		context: frame.Context,
+		frame:     frame,
+		context:   frame.Context,
+		interrupt: interruptOf(frame.Context),
 	}
 
 	// FIXME need to do this to save the old exeption when we
@@ -2741,6 +2761,12 @@ func runFrame(frame *py.Frame, caller *py.Frame) (res py.Object, err error) {
 			pending := frame.PendingException
 			frame.PendingException = nil
 			vm.SetException(pending)
+			injected = true
+		}
+		// A host's stop request (py.InterruptFlag) is raised as KeyboardInterrupt
+		// here, in the running frame, so its own handlers see it.
+		if vm.interrupt.Requested() && vm.interrupt.Take() {
+			vm.SetException(py.MakeException(py.ExceptionNewf(py.KeyboardInterrupt, "interrupted")))
 			injected = true
 		}
 		if py.Slow.Load() {

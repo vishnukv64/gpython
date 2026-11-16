@@ -55,6 +55,10 @@ type Context interface {
 	// Done returns a signal that can be used to detect when this Context has fully closed / completed.
 	// If Close() is called while execution in progress, Done() will not signal until execution is complete.
 	Done() <-chan struct{}
+
+	// Interrupt returns the flag a host sets (Request) to stop code running on this Context.
+	// See InterruptFlag.
+	Interrupt() *InterruptFlag
 }
 
 // CompileOpts specifies options for high-level compilation.

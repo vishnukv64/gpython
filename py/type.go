@@ -323,18 +323,31 @@ func (t *Type) SetDict(d StringDict) {
 	t.Dict = d
 }
 
-// delayedReady holds types waiting to be intialised
+// delayedReady holds types waiting to be intialised.  It is guarded by readyMu,
+// except that the goroutine currently draining it (readyOwner) may touch it
+// while it re-enters the drain from Ready().
 var delayedReady = []*Type{}
 
-// delayedReadyPending records whether delayedReady has entries that arrived
-// after TypeMakeReady last drained the queue.
+// delayedReadyPending records whether delayedReady may have entries that
+// arrived after the last drain.  It is read on every type construction, so it
+// is atomic and the common case never takes readyMu.
 //
 // TypeMakeReady runs once, during this package's init, so a type declared by any
 // later-initialising package (every stdlib module) is appended to delayedReady
 // but never readied: it keeps an empty Mro and an incomplete dict copy.  Ready()
 // is idempotent, so a type made this way is readied lazily on first use instead,
 // in TypeEnsureReady.
-var delayedReadyPending bool
+var delayedReadyPending atomic.Bool
+
+// readyMu serialises drains: a goroutine that calls TypeEnsureReady while another
+// is still readying the queue waits for it, so no caller sees a type whose Mro
+// is half built.  readyOwner is the runtime goroutine id holding readyMu (0 when
+// none); a re-entry from that goroutine's own Ready() calls returns at once,
+// because the outer drain already covers the queue.
+var (
+	readyMu    sync.Mutex
+	readyOwner atomic.Uint64
+)
 
 // ensureReadyHook lets Lookup drain the delayed-ready queue without Go
 // reporting an initialisation cycle between this file and the type
@@ -357,8 +370,16 @@ func init() {
 //
 // Call MakeReady when all initialised
 func TypeDelayReady(t *Type) {
+	if readyOwner.Load() == runtimeGoID() {
+		// Queued from inside a drain on this goroutine, which holds readyMu.
+		delayedReady = append(delayedReady, t)
+		delayedReadyPending.Store(true)
+		return
+	}
+	readyMu.Lock()
 	delayedReady = append(delayedReady, t)
-	delayedReadyPending = true
+	delayedReadyPending.Store(true)
+	readyMu.Unlock()
 }
 
 // TypeEnsureReady readies every type queued since the last drain.
@@ -368,7 +389,7 @@ func TypeDelayReady(t *Type) {
 // Ready() is a no-op for an already-ready type, so calling this repeatedly is
 // cheap; the pending flag keeps the common case off the queue entirely.
 func TypeEnsureReady() error {
-	if !delayedReadyPending {
+	if !delayedReadyPending.Load() {
 		return nil
 	}
 	return TypeMakeReady()
@@ -376,14 +397,29 @@ func TypeEnsureReady() error {
 
 // TypeMakeReady readies all the types
 func TypeMakeReady() (err error) {
-	for _, t := range delayedReady {
-		err = t.Ready()
-		if err != nil {
-			return fmt.Errorf("Error initialising go type %s: %v", t.Name, err)
+	self := runtimeGoID()
+	if readyOwner.Load() == self {
+		return nil // re-entered from Ready() on the draining goroutine
+	}
+	readyMu.Lock()
+	readyOwner.Store(self)
+	defer func() {
+		readyOwner.Store(0)
+		readyMu.Unlock()
+	}()
+	for len(delayedReady) > 0 {
+		batch := delayedReady
+		delayedReady = nil
+		for i, t := range batch {
+			if err := t.Ready(); err != nil {
+				// Keep the unreadied rest queued so a later drain retries them.
+				delayedReady = append(append([]*Type{}, batch[i:]...), delayedReady...)
+				delayedReadyPending.Store(true)
+				return fmt.Errorf("Error initialising go type %s: %v", t.Name, err)
+			}
 		}
 	}
-	delayedReady = nil
-	delayedReadyPending = false
+	delayedReadyPending.Store(false)
 	return nil
 }
 
