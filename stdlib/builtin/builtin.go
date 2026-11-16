@@ -156,6 +156,7 @@ func init() {
 		py.DictEntry{Key: "NotADirectoryError", Value: py.NotADirectoryError},
 		py.DictEntry{Key: "NotImplemented", Value: py.NotImplemented},
 		py.DictEntry{Key: "NotImplementedError", Value: py.NotImplementedError},
+		py.DictEntry{Key: "RecursionError", Value: py.RecursionError},
 		py.DictEntry{Key: "OSError", Value: py.OSError},
 		py.DictEntry{Key: "OverflowError", Value: py.OverflowError},
 		py.DictEntry{Key: "PendingDeprecationWarning", Value: py.PendingDeprecationWarning},

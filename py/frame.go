@@ -6,6 +6,8 @@
 
 package py
 
+import "sync/atomic"
+
 // What kind of block this is
 type TryBlockType byte
 
@@ -26,9 +28,17 @@ type TryBlock struct {
 // GoState is the per-goroutine interpreter state: the frame the goroutine is
 // executing.  Only its own goroutine reads or writes Cur.
 type GoState struct {
-	ID  uint64
-	Cur *Frame
+	ID    uint64
+	Cur   *Frame
+	Depth int // Python frames executing on this goroutine; checked against RecursionLimit
 }
+
+// RecursionLimit is the maximum number of Python frames executing on one
+// goroutine (sys.getrecursionlimit / sys.setrecursionlimit). Exceeding it raises
+// RecursionError instead of overflowing the Go stack.
+var RecursionLimit atomic.Int64
+
+func init() { RecursionLimit.Store(1000) }
 
 // A python Frame object
 type Frame struct {

@@ -84,6 +84,7 @@ var (
 	ReferenceError         = ExceptionType.NewType("ReferenceError", "Weak ref proxy used after referent went away.", nil, nil)
 	RuntimeError           = ExceptionType.NewType("RuntimeError", "Unspecified run-time error.", nil, nil)
 	NotImplementedError    = RuntimeError.NewType("NotImplementedError", "Method or function hasn't been implemented yet.", nil, nil)
+	RecursionError         = RuntimeError.NewType("RecursionError", "Recursion limit exceeded.", nil, nil)
 	SyntaxError            = ExceptionType.NewType("SyntaxError", "Invalid syntax.", nil, nil)
 	IndentationError       = SyntaxError.NewType("IndentationError", "Improper indentation.", nil, nil)
 	// IncompleteInputError is what compile() raises, given
