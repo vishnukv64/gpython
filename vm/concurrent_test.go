@@ -14,14 +14,18 @@ import (
 // this proves the process-global state they share (module caches, init-once
 // tables) is synchronised.
 const concurrentSrc = `
-import sys, io, re, json, collections
+import sys, io, re, json, collections, datetime, string, textwrap, itertools, functools
 sys.stdout = io.StringIO()
 d = collections.OrderedDict()
+stamp = datetime.date(2026, 11, 16).isoformat()
+words = textwrap.fill(string.ascii_letters, 20)
+combos = len(list(itertools.combinations(range(6), 3)))
+sq = functools.reduce(lambda a, b: a + b, range(10))
 total = 0
 for i in range(2000):
     d[str(i)] = i
     total += len(re.findall(r"\d", str(i)))
-out = json.dumps({"n": len(d), "digits": total})
+out = json.dumps({"n": len(d), "digits": total, "stamp": stamp, "combos": combos, "sq": sq})
 print(out)
 result = sys.stdout.getvalue()
 `
@@ -29,7 +33,7 @@ result = sys.stdout.getvalue()
 func TestManyContextsConcurrent(t *testing.T) {
 	const workers = 8
 	const rounds = 3
-	want := `{"n": 2000, "digits": 6890}` + "\n"
+	want := `{"n": 2000, "digits": 6890, "stamp": "2026-11-16", "combos": 20, "sq": 45}` + "\n"
 	for r := 0; r < rounds; r++ {
 		var wg sync.WaitGroup
 		errs := make(chan error, workers)
