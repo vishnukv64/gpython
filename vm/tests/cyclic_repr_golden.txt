@@ -1,0 +1,20 @@
+list repr [[...]]
+list str [[...]]
+list self eq True
+list cross eq RecursionError
+list cross ne RecursionError
+list lt RecursionError
+list in self True
+list in cross RecursionError
+dict repr {'a': {...}}
+dict self eq True
+dict cross eq RecursionError
+tuple repr ([(...)],)
+tuple self eq True
+frozenset repr frozenset({1})
+fstring [[...]]
+format [[...]]
+user repr RecursionError
+deque repr deque([[...]])
+ordereddict repr OrderedDict({'a': ...})
+defaultdict repr defaultdict(<class 'list'>, {0: defaultdict(<class 'list'>, {...})})
