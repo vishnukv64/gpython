@@ -122,8 +122,7 @@ func TestModuleLoadedSeesFileBackedModuleBody(t *testing.T) {
 	}
 	ctx := py.NewContext(opts)
 	defer ctx.Close()
-	module, code := pytest.CompileSrc(t, ctx, "import glob
-", "filebacked")
+	module, code := pytest.CompileSrc(t, ctx, "import glob\n", "filebacked")
 	if _, err := ctx.RunCode(code, module.Globals, module.Globals, nil); err != nil {
 		t.Fatal(err)
 	}
