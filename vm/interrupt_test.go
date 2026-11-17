@@ -113,3 +113,40 @@ func TestInterruptWakesSleep(t *testing.T) {
 		t.Fatal("interrupt did not wake time.sleep")
 	}
 }
+
+// Stop ends a loop that swallows KeyboardInterrupt, and a thread the snippet
+// left running: a plain Request is consumed by the first handler that sees it.
+func TestInterruptStopCannotBeSwallowed(t *testing.T) {
+	ctx := py.NewContext(py.DefaultContextOpts())
+	defer ctx.Close()
+	src := `
+import _thread
+def spin():
+    while True:
+        try:
+            while True:
+                pass
+        except BaseException:
+            pass
+_thread.start_new_thread(spin, ())
+spin()
+`
+	module, code := pytest.CompileSrc(t, ctx, src, "swallow")
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		ctx.Interrupt().Stop()
+	}()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ctx.RunCode(code, module.Globals, module.Globals, nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "KeyboardInterrupt") {
+			t.Fatalf("want KeyboardInterrupt, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not end a loop that swallows KeyboardInterrupt")
+	}
+}
