@@ -59,6 +59,9 @@ type Context interface {
 	// Interrupt returns the flag a host sets (Request) to stop code running on this Context.
 	// See InterruptFlag.
 	Interrupt() *InterruptFlag
+
+	// ImportFilter returns the host's ContextOpts.ImportFilter, or nil.
+	ImportFilter() func(name string) error
 }
 
 // CompileOpts specifies options for high-level compilation.
@@ -98,6 +101,14 @@ var DefaultAuxSysPaths = []string{
 type ContextOpts struct {
 	SysArgs  []string // sys.argv initializer
 	SysPaths []string // sys.path initializer
+	// ImportFilter, if set, is consulted before any import of a dotted name
+	// resolves, for every dotted prefix (urllib.request consults urllib and then
+	// urllib.request).  A non-nil error refuses the import and is raised in
+	// Python as ModuleNotFoundError carrying the error text.  It runs ahead of
+	// sys.modules, sys.meta_path, the embedded registry and the file system, so
+	// Python code cannot get around it by clearing or editing those.  Nil means
+	// no restriction.
+	ImportFilter func(name string) error
 }
 
 var (

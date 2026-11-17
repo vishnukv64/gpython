@@ -402,6 +402,29 @@ func importOne(ctx Context, name string) (*Module, error) {
 	return initModuleFromPath(ctx, name, path, isPkg)
 }
 
+// checkImportFilter consults the context's ImportFilter for name and each of
+// its dotted prefixes, shortest first.  A refusal is raised as
+// ModuleNotFoundError, so the Python caller sees an ordinary failed import.
+func checkImportFilter(ctx Context, name string) error {
+	filter := ctx.ImportFilter()
+	if filter == nil {
+		return nil
+	}
+	for i := 0; i < len(name); i++ {
+		if name[i] != '.' && i != len(name)-1 {
+			continue
+		}
+		prefix := name
+		if i != len(name)-1 {
+			prefix = name[:i]
+		}
+		if err := filter(prefix); err != nil {
+			return ExceptionNewf(ModuleNotFoundError, "%s", err.Error())
+		}
+	}
+	return nil
+}
+
 // importDotted imports a name that may not have a file of its own, by
 // resolving its parent and looking the leaf up as an attribute of it.
 //
@@ -410,6 +433,12 @@ func importOne(ctx Context, name string) (*Module, error) {
 // everywhere outside this interpreter - and the same shape covers
 // "import pkg.sub" for a submodule bound onto its package.
 func importDotted(ctx Context, name string) (*Module, error) {
+	// The host's import filter comes before everything, including the store:
+	// a module already in sys.modules must not be handed back to a snippet the
+	// host refused.
+	if err := checkImportFilter(ctx, name); err != nil {
+		return nil, err
+	}
 	if module, err := ctx.GetModule(name); err == nil {
 		return module, nil
 	}

@@ -433,5 +433,3 @@ def _gcm_decorate(recreate_cm, func):
             return func(*args, **kwds)
     return inner
 
-
-_register_decorate(_gcm_decorate)
