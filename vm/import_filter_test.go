@@ -108,3 +108,26 @@ result = "|".join([first, second, third])
 		t.Fatalf("result = %v, want every instance guarded", got)
 	}
 }
+
+// A module loaded from a .py file is reported once its body has run, so the
+// host can restrict the names the body defined.
+func TestModuleLoadedSeesFileBackedModuleBody(t *testing.T) {
+	sawGlob := false
+	opts := py.DefaultContextOpts()
+	opts.ModuleLoaded = func(m *py.Module) error {
+		if m.ModuleImpl.Info.Name == "glob" && m.Globals.Has("glob") {
+			sawGlob = true
+		}
+		return nil
+	}
+	ctx := py.NewContext(opts)
+	defer ctx.Close()
+	module, code := pytest.CompileSrc(t, ctx, "import glob
+", "filebacked")
+	if _, err := ctx.RunCode(code, module.Globals, module.Globals, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !sawGlob {
+		t.Fatal("ModuleLoaded never saw glob with its body's names defined")
+	}
+}

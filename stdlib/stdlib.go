@@ -220,14 +220,22 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 	// The host sees every instance, including one made by a re-import after
 	// the snippet deleted the name from sys.modules, so a restriction it
 	// applies here cannot be shed by importing the module again.
-	if ctx.opts.ModuleLoaded != nil {
-		if err := ctx.opts.ModuleLoaded(module); err != nil {
-			delete(ctx.Store().Modules(), impl.Info.Name)
-			return nil, err
-		}
+	if err := ctx.ModuleLoaded(module); err != nil {
+		delete(ctx.Store().Modules(), impl.Info.Name)
+		return nil, err
 	}
 
 	return module, nil
+}
+
+// ModuleLoaded reports a module to the host's ContextOpts.ModuleLoaded hook.
+// A module loaded from a .py file is reported twice: by ModuleInit, empty, and
+// again by the importer once its body has run.
+func (ctx *context) ModuleLoaded(m *py.Module) error {
+	if ctx.opts.ModuleLoaded == nil {
+		return nil
+	}
+	return ctx.opts.ModuleLoaded(m)
 }
 
 // implCompileMu guards the lazy compile of a ModuleImpl's Code.  A ModuleImpl is

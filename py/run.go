@@ -114,7 +114,8 @@ type ContextOpts struct {
 	// before the importer sees it.  It is called again for every new instance:
 	// deleting a name from sys.modules and importing it again builds a fresh
 	// module, and the host must be able to restrict that one too.  A non-nil
-	// error fails the import.
+	// error fails the import.  A module loaded from a .py file is passed twice:
+	// empty, before its body runs, and again after.
 	ModuleLoaded func(m *Module) error
 }
 
