@@ -261,7 +261,10 @@ func (e *Encoder) encodeValue(obj py.Object, depth int, seen map[uintptr]bool) (
 }
 
 func (e *Encoder) encodeDict(obj py.Object, d py.StringDict, depth int, seen map[uintptr]bool) (string, error) {
-	id := identity(obj)
+	// The dict's own pointer, not identity(obj): a StringDict is a struct, for
+	// which identity reports 0, so a dict containing itself was never detected
+	// and recursed until the Go stack overflowed, which kills the process.
+	id := d.Ptr()
 	if id != 0 && seen[id] {
 		return "", py.ExceptionNewf(py.ValueError, "Circular reference detected")
 	}

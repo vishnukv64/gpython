@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vishnukv64/gpython/py"
 	"github.com/vishnukv64/gpython/stdlib/marshal"
@@ -154,7 +155,7 @@ type context struct {
 	interrupt py.InterruptFlag
 	// runDepth counts nested RunCode calls; the interrupt is cleared when it
 	// returns to zero so a late request cannot stop the next run.
-	runDepth int
+	runDepth atomic.Int32
 }
 
 // NewContext creates a new gpython interpreter instance context.
@@ -212,6 +213,16 @@ func (ctx *context) ModuleInit(impl *py.ModuleImpl) (*py.Module, error) {
 			if impl.Info.Name != "__main__" {
 				delete(ctx.Store().Modules(), impl.Info.Name)
 			}
+			return nil, err
+		}
+	}
+
+	// The host sees every instance, including one made by a re-import after
+	// the snippet deleted the name from sys.modules, so a restriction it
+	// applies here cannot be shed by importing the module again.
+	if ctx.opts.ModuleLoaded != nil {
+		if err := ctx.opts.ModuleLoaded(module); err != nil {
+			delete(ctx.Store().Modules(), impl.Info.Name)
 			return nil, err
 		}
 	}
@@ -449,13 +460,13 @@ func (ctx *context) RunCode(code *py.Code, globals, locals py.StringDict, closur
 	}
 	defer ctx.popBusy()
 
-	if ctx.runDepth == 0 {
+	// Atomic: a Python thread runs code on this context from its own
+	// goroutine, so the count is touched concurrently.
+	if ctx.runDepth.Add(1) == 1 {
 		ctx.interrupt.Clear()
 	}
-	ctx.runDepth++
 	defer func() {
-		ctx.runDepth--
-		if ctx.runDepth == 0 {
+		if ctx.runDepth.Add(-1) == 0 {
 			ctx.interrupt.Clear()
 		}
 	}()

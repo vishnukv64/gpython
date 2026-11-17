@@ -109,6 +109,13 @@ type ContextOpts struct {
 	// Python code cannot get around it by clearing or editing those.  Nil means
 	// no restriction.
 	ImportFilter func(name string) error
+	// ModuleLoaded, if set, is called with each module Context.ModuleInit
+	// builds (embedded, file-backed and __main__ alike) once its body has run,
+	// before the importer sees it.  It is called again for every new instance:
+	// deleting a name from sys.modules and importing it again builds a fresh
+	// module, and the host must be able to restrict that one too.  A non-nil
+	// error fails the import.
+	ModuleLoaded func(m *Module) error
 }
 
 var (

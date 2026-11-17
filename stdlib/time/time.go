@@ -126,7 +126,22 @@ func time_sleep(self py.Object, args py.Tuple) (py.Object, error) {
 	if secs < 0 {
 		return nil, py.ExceptionNewf(py.ValueError, "sleep length must be non-negative")
 	}
-	time.Sleep(time.Duration(secs * py.Float(time.Second)))
+	// The wait ends early when the host interrupts the context, so a cancelled
+	// run does not hold its goroutine for the rest of the sleep.  The pending
+	// request is left in place: the interpreter loop raises KeyboardInterrupt
+	// at the next instruction.
+	d := time.Duration(secs * py.Float(time.Second))
+	m, ok := self.(*py.Module)
+	if !ok || m.Context == nil {
+		time.Sleep(d)
+		return py.None, nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-m.Context.Interrupt().Wake():
+	}
 	return py.None, nil
 }
 

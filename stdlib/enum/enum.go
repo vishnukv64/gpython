@@ -18,6 +18,7 @@ package enum
 import (
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -420,7 +421,7 @@ func buildEnumClass(name string, bases []py.Object, ns py.StringDict) (py.Object
 
 	// The members cannot be stored in the class Dict: that holds py.Object
 	// values, and these are Go values.  They live in a side table instead.
-	enumDataFor[cls] = &enumData{members: members, byValue: byValue, names: memberNames, repr: cls.Dict.GetOrNil("__repr__")}
+	enumDataFor.Store(cls, &enumData{members: members, byValue: byValue, names: memberNames, repr: cls.Dict.GetOrNil("__repr__")})
 	installClassMethods(cls)
 	return cls, nil
 }
@@ -436,12 +437,17 @@ type enumData struct {
 }
 
 // enumDataFor maps an enum class to its members.  A map keyed by the class
-// is used rather than a field on Type, which is shared by every class.
-var enumDataFor = map[*py.Type]*enumData{}
+// is used rather than a field on Type, which is shared by every class.  It is a
+// sync.Map because contexts on different goroutines define enums concurrently,
+// and concurrent writes to a plain map abort the process.
+var enumDataFor sync.Map // *py.Type -> *enumData
 
 // dataOf returns the enum data for a class, if it is an enum.
 func dataOf(t *py.Type) *enumData {
-	return enumDataFor[t]
+	if d, ok := enumDataFor.Load(t); ok {
+		return d.(*enumData)
+	}
+	return nil
 }
 
 // mustInt returns the integer value of a member value, or 0 when it is not

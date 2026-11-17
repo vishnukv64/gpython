@@ -86,3 +86,30 @@ sys.setrecursionlimit(limit)
 		t.Fatalf("limit = %v, want 1000", got)
 	}
 }
+
+// time.sleep returns when the host interrupts, instead of holding the run's
+// goroutine for the whole sleep.
+func TestInterruptWakesSleep(t *testing.T) {
+	ctx := py.NewContext(py.DefaultContextOpts())
+	defer ctx.Close()
+	module, code := pytest.CompileSrc(t, ctx, "import time\ntime.sleep(60)\n", "sleeper")
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		ctx.Interrupt().Request()
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ctx.RunCode(code, module.Globals, module.Globals, nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "KeyboardInterrupt") {
+			t.Fatalf("want KeyboardInterrupt, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("interrupt did not wake time.sleep")
+	}
+}

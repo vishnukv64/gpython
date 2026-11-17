@@ -22,6 +22,7 @@ package reprlib
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -651,19 +652,19 @@ func (w *recursiveReprWrapper) Type() *py.Type { return recursiveReprWrapperType
 
 // running holds the objects currently inside a repr, keyed by identity.  A
 // recursive repr is exactly the re-entry this guards, and it is a decorator on
-// a single function's call stack, so process-global is the right scope.
-var reprRunning = map[py.Object]bool{}
+// a single function's call stack, so process-global is the right scope.  A
+// sync.Map: contexts on different goroutines call repr concurrently.
+var reprRunning sync.Map
 
 func (w *recursiveReprWrapper) M__call__(args py.Tuple, kwargs py.StringDict) (py.Object, error) {
 	if len(args) == 0 {
 		return nil, py.ExceptionNewf(py.TypeError, "recursive_repr() wrapper expects an argument")
 	}
 	key := args[0]
-	if reprRunning[key] {
+	if _, running := reprRunning.LoadOrStore(key, true); running {
 		return w.fill, nil
 	}
-	reprRunning[key] = true
-	defer delete(reprRunning, key)
+	defer reprRunning.Delete(key)
 	return py.Call(w.fn, args, kwargs)
 }
 
