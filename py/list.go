@@ -143,7 +143,7 @@ func init() {
 			return nil, ExceptionNewf(TypeError, "list.remove() takes exactly one argument (%d given)", len(args))
 		}
 		for i, item := range l.Items {
-			eq, err := Eq(item, args[0])
+			eq, err := itemsEqual(item, args[0])
 			if err != nil {
 				return nil, err
 			}
@@ -373,11 +373,19 @@ func (l *List) M__str__() (Object, error) {
 // is less.  Tuples had this and lists did not, so "[1, 2] < [1, 3]" raised
 // "unsupported operand type(s) for <" while the tuple spelling worked.
 func listOrder(a, b *List) (int, error) {
+	leave, err := compareEnter()
+	if err != nil {
+		return 0, err
+	}
+	defer leave()
 	n := len(a.Items)
 	if len(b.Items) < n {
 		n = len(b.Items)
 	}
 	for i := 0; i < n; i++ {
+		if sameItem(a.Items[i], b.Items[i]) {
+			continue
+		}
 		lt, err := Lt(a.Items[i], b.Items[i])
 		if err != nil {
 			return 0, err
@@ -451,6 +459,11 @@ func (l *List) M__ge__(other Object) (Object, error) {
 }
 
 func (l *List) M__repr__() (Object, error) {
+	leave, recursing := enterRepr(l)
+	if recursing {
+		return String("[...]"), nil
+	}
+	defer leave()
 	return Tuple(l.Items).repr("[", "]")
 }
 
@@ -639,7 +652,7 @@ func (a *List) M__rmul__(other Object) (Object, error) {
 
 func (a *List) M__contains__(item Object) (Object, error) {
 	for _, x := range a.Items {
-		eq, err := Eq(x, item)
+		eq, err := itemsEqual(x, item)
 		if err != nil {
 			return nil, err
 		}
@@ -676,12 +689,17 @@ func (a *List) M__eq__(other Object) (Object, error) {
 	// Compare snapshots taken under each list's lock: another thread may be
 	// appending, and Eq can run Python code, so the locks are not held across
 	// it.
+	leave, err := compareEnter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	as, bs := a.snapshot(), b.snapshot()
 	if len(as) != len(bs) {
 		return False, nil
 	}
 	for i := range as {
-		eq, err := Eq(as[i], bs[i])
+		eq, err := itemsEqual(as[i], bs[i])
 		if err != nil {
 			return nil, err
 		}
@@ -700,8 +718,13 @@ func (a *List) M__ne__(other Object) (Object, error) {
 	if len(a.Items) != len(b.Items) {
 		return True, nil
 	}
+	leave, err := compareEnter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	for i := range a.Items {
-		eq, err := Eq(a.Items[i], b.Items[i])
+		eq, err := itemsEqual(a.Items[i], b.Items[i])
 		if err != nil {
 			return nil, err
 		}
@@ -991,7 +1014,7 @@ func seqIndex(kind string, items []Object, args Tuple) (Object, error) {
 		}
 	}
 	for i := start; i < stop; i++ {
-		eq, err := Eq(items[i], args[0])
+		eq, err := itemsEqual(items[i], args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -1012,7 +1035,7 @@ func seqCount(kind string, items []Object, args Tuple) (Object, error) {
 	}
 	count := 0
 	for _, item := range items {
-		eq, err := Eq(item, args[0])
+		eq, err := itemsEqual(item, args[0])
 		if err != nil {
 			return nil, err
 		}

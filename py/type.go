@@ -2923,9 +2923,7 @@ func (ty *Type) M__repr__() (Object, error) {
 		// "Token.Text" because of this.  A plain subclass with none prints as
 		// its container, which is what "class L(list)" should do.
 		if fn := ty.LookupPython("__repr__"); fn != nil {
-			if res, err := Call(fn, Tuple{ty}, NewStringDict()); err == nil {
-				return res, nil
-			}
+			return Call(fn, Tuple{ty}, NewStringDict())
 		}
 		if payload, ok := payloadOf(ty); ok {
 			return Repr(payload)

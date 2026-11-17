@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/vishnukv64/gpython/py"
 )
@@ -2357,6 +2358,11 @@ func (d *Deque) M__setitem__(key, value py.Object) (py.Object, error) {
 }
 
 func (d *Deque) M__repr__() (py.Object, error) {
+	leave, ok := py.ReprEnter(unsafe.Pointer(d))
+	if !ok {
+		return py.String("[...]"), nil
+	}
+	defer leave()
 	parts, err := reprItems(d.snapshot())
 	if err != nil {
 		return nil, err
@@ -2417,6 +2423,11 @@ func (o *OrderedDict) M__contains__(item py.Object) (py.Object, error) {
 }
 
 func (o *OrderedDict) M__repr__() (py.Object, error) {
+	leave, ok := py.ReprEnter(unsafe.Pointer(o))
+	if !ok {
+		return py.String("..."), nil
+	}
+	defer leave()
 	parts := make([]string, 0, len(o.keys))
 	for _, encoded := range o.keys {
 		key, err := py.DictKeyDecode(encoded)
@@ -2560,6 +2571,15 @@ var (
 )
 
 func (d *DefaultDict) M__repr__() (py.Object, error) {
+	leave, ok := py.ReprEnter(unsafe.Pointer(d))
+	if !ok {
+		factoryStr, err := py.ReprAsString(d.defaultFactory)
+		if err != nil {
+			return nil, err
+		}
+		return py.String("defaultdict(" + factoryStr + ", {...})"), nil
+	}
+	defer leave()
 	parts := make([]string, 0, len(d.keys))
 	for _, encoded := range d.keys {
 		key, err := py.DictKeyDecode(encoded)

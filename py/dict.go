@@ -1823,6 +1823,11 @@ func (a StringDict) M__len__() (Object, error) {
 }
 
 func (a StringDict) M__repr__() (Object, error) {
+	leave, recursing := enterRepr(a)
+	if recursing {
+		return String("{...}"), nil
+	}
+	defer leave()
 	var out bytes.Buffer
 	out.WriteRune('{')
 	spacer := false
@@ -1911,6 +1916,11 @@ func (a StringDict) M__eq__(other Object) (Object, error) {
 	if a.Len() != b.Len() {
 		return False, nil
 	}
+	leave, err := compareEnter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	var eqErr error
 	same := true
 	for _, entry := range a.Items() {
@@ -1931,7 +1941,7 @@ func (a StringDict) M__eq__(other Object) (Object, error) {
 			same = false
 			break
 		}
-		res, err := Eq(entry.Value, b.GetOrNil(bv))
+		res, err := itemsEqual(entry.Value, b.GetOrNil(bv))
 		if err != nil {
 			eqErr = err
 			break

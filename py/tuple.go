@@ -82,6 +82,11 @@ func (t Tuple) M__str__() (Object, error) {
 }
 
 func (t Tuple) M__repr__() (Object, error) {
+	leave, recursing := enterRepr(t)
+	if recursing {
+		return String("(...)"), nil
+	}
+	defer leave()
 	return t.repr("(", ")")
 }
 
@@ -180,8 +185,13 @@ func (a Tuple) M__eq__(other Object) (Object, error) {
 	if len(a) != len(b) {
 		return False, nil
 	}
+	leave, err := compareEnter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	for i := range a {
-		eq, err := Eq(a[i], b[i])
+		eq, err := itemsEqual(a[i], b[i])
 		if err != nil {
 			return nil, err
 		}
@@ -200,8 +210,13 @@ func (a Tuple) M__ne__(other Object) (Object, error) {
 	if len(a) != len(b) {
 		return True, nil
 	}
+	leave, err := compareEnter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	for i := range a {
-		eq, err := Eq(a[i], b[i])
+		eq, err := itemsEqual(a[i], b[i])
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +231,15 @@ func (a Tuple) M__ne__(other Object) (Object, error) {
 // CPython's tuple lexicographic ordering: the first non-equal element decides,
 // and a proper prefix is smaller.
 func tupleOrder(a, b Tuple) (int, error) {
+	leave, err := compareEnter()
+	if err != nil {
+		return 0, err
+	}
+	defer leave()
 	for i := 0; i < len(a) && i < len(b); i++ {
+		if sameItem(a[i], b[i]) {
+			continue
+		}
 		lt, err := Lt(a[i], b[i])
 		if err != nil {
 			return 0, err

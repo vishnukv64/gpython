@@ -378,13 +378,18 @@ func (o *FrozenSet) Type() *Type {
 // receiver is the EMBEDDED field, which cannot tell what encloses it.  This
 // shadows that with the frozen spelling.
 func (o *FrozenSet) M__repr__() (Object, error) {
-	rep, err := o.Set.M__repr__()
-	if err != nil {
-		return nil, err
-	}
 	// The empty frozenset is "frozenset()", not "frozenset({})".
 	if len(o.items) == 0 {
 		return String("frozenset()"), nil
+	}
+	leave, recursing := enterRepr(o)
+	if recursing {
+		return String("frozenset(...)"), nil
+	}
+	defer leave()
+	rep, err := o.Set.reprBraces()
+	if err != nil {
+		return nil, err
 	}
 	return String("frozenset(" + string(rep.(String)) + ")"), nil
 }
@@ -423,6 +428,16 @@ func (s *Set) M__repr__() (Object, error) {
 	if len(s.items) == 0 {
 		return String("set()"), nil
 	}
+	leave, recursing := enterRepr(s)
+	if recursing {
+		return String("set(...)"), nil
+	}
+	defer leave()
+	return s.reprBraces()
+}
+
+// reprBraces is a non-empty set's members in braces; set and frozenset share it.
+func (s *Set) reprBraces() (Object, error) {
 	var out bytes.Buffer
 	out.WriteRune('{')
 	spacer := false
