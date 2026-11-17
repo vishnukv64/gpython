@@ -326,7 +326,23 @@ func (t *Type) SetDict(d StringDict) {
 // delayedReady holds types waiting to be intialised.  It is guarded by readyMu,
 // except that the goroutine currently draining it (readyOwner) may touch it
 // while it re-enters the drain from Ready().
-var delayedReady = []*Type{}
+var delayedReady = []delayedType{}
+
+// delayedType is a queued type and the goroutine that created it.  A drain
+// readies only its own goroutine's types and the ones queued during package
+// init: a type built at run time (a class statement, an enum, a namedtuple) is
+// filled in over several steps after it is queued, so another goroutine calling
+// Ready() on it races with those steps and can freeze a half-built Mro into the
+// class.  Its creator readies it on its next lookup.
+// ponytail: a type queued at run time on the init goroutine is still readied by
+// anyone; give run-time types their own constructor if a host runs Python there.
+type delayedType struct {
+	t     *Type
+	owner uint64
+}
+
+// initGoID is the goroutine package init runs on.
+var initGoID = runtimeGoID()
 
 // delayedReadyPending records whether delayedReady may have entries that
 // arrived after the last drain.  It is read on every type construction, so it
@@ -370,14 +386,15 @@ func init() {
 //
 // Call MakeReady when all initialised
 func TypeDelayReady(t *Type) {
-	if readyOwner.Load() == runtimeGoID() {
+	e := delayedType{t: t, owner: runtimeGoID()}
+	if readyOwner.Load() == e.owner {
 		// Queued from inside a drain on this goroutine, which holds readyMu.
-		delayedReady = append(delayedReady, t)
+		delayedReady = append(delayedReady, e)
 		delayedReadyPending.Store(true)
 		return
 	}
 	readyMu.Lock()
-	delayedReady = append(delayedReady, t)
+	delayedReady = append(delayedReady, e)
 	delayedReadyPending.Store(true)
 	readyMu.Unlock()
 }
@@ -407,19 +424,31 @@ func TypeMakeReady() (err error) {
 		readyOwner.Store(0)
 		readyMu.Unlock()
 	}()
-	for len(delayedReady) > 0 {
+	for {
 		batch := delayedReady
 		delayedReady = nil
-		for i, t := range batch {
-			if err := t.Ready(); err != nil {
+		var foreign []delayedType
+		progressed := false
+		for i, e := range batch {
+			if e.owner != self && e.owner != initGoID {
+				foreign = append(foreign, e)
+				continue
+			}
+			progressed = true
+			if err := e.t.Ready(); err != nil {
 				// Keep the unreadied rest queued so a later drain retries them.
-				delayedReady = append(append([]*Type{}, batch[i:]...), delayedReady...)
+				delayedReady = append(append(foreign, batch[i:]...), delayedReady...)
 				delayedReadyPending.Store(true)
-				return fmt.Errorf("Error initialising go type %s: %v", t.Name, err)
+				return fmt.Errorf("Error initialising go type %s: %v", e.t.Name, err)
 			}
 		}
+		// Entries this drain queued from inside Ready() follow the foreign ones.
+		delayedReady = append(foreign, delayedReady...)
+		if !progressed {
+			break
+		}
 	}
-	delayedReadyPending.Store(false)
+	delayedReadyPending.Store(len(delayedReady) > 0)
 	return nil
 }
 

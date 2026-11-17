@@ -16,8 +16,14 @@ import (
 // A request applies only to code running when it is delivered: the context
 // clears the flag when a run starts and when it ends, so a late request cannot
 // stop the next run.
+//
+// Stop is the request that cannot be outlived: it stays set, so code that
+// catches KeyboardInterrupt and carries on is interrupted again at its next
+// instruction, and so is every thread the context started. A host uses it when
+// it is done with the context.
 type InterruptFlag struct {
 	requested atomic.Bool
+	stopped   atomic.Bool
 
 	mu   sync.Mutex
 	wake chan struct{} // closed by Request, nil until someone waits
@@ -40,15 +46,26 @@ func (f *InterruptFlag) Requested() bool {
 	return f.requested.Load()
 }
 
-// Take clears a pending request and reports whether there was one.
+// Stop makes the request permanent: Take keeps reporting it and Clear does not
+// drop it.
+func (f *InterruptFlag) Stop() {
+	f.stopped.Store(true)
+	f.Request()
+}
+
+// Take clears a pending request and reports whether there was one. After Stop
+// there always is one.
 func (f *InterruptFlag) Take() bool {
+	if f.stopped.Load() {
+		return true
+	}
 	return f.requested.CompareAndSwap(true, false)
 }
 
 // Clear drops any pending request.
 func (f *InterruptFlag) Clear() {
 	f.mu.Lock()
-	f.requested.Store(false)
+	f.requested.Store(f.stopped.Load())
 	f.mu.Unlock()
 }
 

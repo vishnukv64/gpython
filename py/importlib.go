@@ -259,6 +259,15 @@ func initModuleFromPath(ctx Context, name, path string, isPkg bool) (*Module, er
 		return nil, err
 	}
 
+	// ModuleInit told the host about this module before its body had run, so
+	// it is told again now that the module's names exist.
+	if n, ok := ctx.(interface{ ModuleLoaded(*Module) error }); ok {
+		if err := n.ModuleLoaded(mod); err != nil {
+			delete(ctx.Store().Modules(), name)
+			return nil, err
+		}
+	}
+
 	return mod, nil
 }
 

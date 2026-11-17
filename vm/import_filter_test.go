@@ -76,3 +76,57 @@ func TestImportFilterNilAllowsEverything(t *testing.T) {
 		t.Fatalf("result = %v, want ok", got)
 	}
 }
+
+// A host restricts a module in ContextOpts.ModuleLoaded. The restriction must
+// reach the fresh instance a snippet gets by deleting the name from sys.modules
+// and importing it again, and the one importlib.reload returns.
+func TestModuleLoadedSeesEveryInstance(t *testing.T) {
+	opts := py.DefaultContextOpts()
+	opts.ModuleLoaded = func(m *py.Module) error {
+		if m.ModuleImpl.Info.Name == "os" {
+			m.Globals.Set("mkdir", py.String("guarded"))
+		}
+		return nil
+	}
+	ctx := py.NewContext(opts)
+	defer ctx.Close()
+
+	src := `
+import sys, importlib, os
+first = os.mkdir
+del sys.modules['os']
+import os
+second = os.mkdir
+third = importlib.reload(os).mkdir
+result = "|".join([first, second, third])
+`
+	module, code := pytest.CompileSrc(t, ctx, src, "moduleloaded")
+	if _, err := ctx.RunCode(code, module.Globals, module.Globals, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := module.Globals.Get("result"); got != py.String("guarded|guarded|guarded") {
+		t.Fatalf("result = %v, want every instance guarded", got)
+	}
+}
+
+// A module loaded from a .py file is reported once its body has run, so the
+// host can restrict the names the body defined.
+func TestModuleLoadedSeesFileBackedModuleBody(t *testing.T) {
+	sawGlob := false
+	opts := py.DefaultContextOpts()
+	opts.ModuleLoaded = func(m *py.Module) error {
+		if m.ModuleImpl.Info.Name == "glob" && m.Globals.Has("glob") {
+			sawGlob = true
+		}
+		return nil
+	}
+	ctx := py.NewContext(opts)
+	defer ctx.Close()
+	module, code := pytest.CompileSrc(t, ctx, "import glob\n", "filebacked")
+	if _, err := ctx.RunCode(code, module.Globals, module.Globals, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !sawGlob {
+		t.Fatal("ModuleLoaded never saw glob with its body's names defined")
+	}
+}
